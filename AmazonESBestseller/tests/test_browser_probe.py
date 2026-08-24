@@ -96,3 +96,24 @@ def test_probe_marks_external_redirect_as_unknown(tmp_path):
 
     assert events[0].access_state is AccessState.UNKNOWN
     assert "unexpected host" in events[0].reason
+
+
+def test_probe_marks_same_host_path_redirect_as_unknown(tmp_path):
+    class RedirectPage(FakePage):
+        def goto(self, url, wait_until="domcontentloaded", timeout=45000):
+            self.goto_calls.append(url)
+            self.url = "https://www.amazon.es/"
+            return FakeResponse(200)
+
+    page = RedirectPage(tmp_path)
+    store = RunStore.create(tmp_path, "same-host-redirect")
+
+    events = probe_urls(
+        page,
+        store,
+        ["https://www.amazon.es/gp/bestsellers/kitchen"],
+        delay_seconds=0,
+    )
+
+    assert events[0].access_state is AccessState.UNKNOWN
+    assert "unexpected page" in events[0].reason

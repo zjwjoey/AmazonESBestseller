@@ -77,13 +77,15 @@ def write_detail_field_availability(field_maps: list[dict[str, bool]], path: Pat
 
 
 def duplicate_summary(records: list[RankingRecord]) -> dict[str, float | int]:
-    unique_asins = len({record.asin for record in records if record.asin})
-    duplicate_records = max(len(records) - unique_asins, 0)
+    asin_records = [record for record in records if record.asin]
+    unique_asins = len({record.asin for record in asin_records})
+    duplicate_records = max(len(asin_records) - unique_asins, 0)
     return {
         "ranking_records": len(records),
         "unique_asins": unique_asins,
+        "missing_asin_records": len(records) - len(asin_records),
         "duplicate_records": duplicate_records,
-        "duplicate_rate": round(duplicate_records / len(records), 4) if records else 0.0,
+        "duplicate_rate": round(duplicate_records / len(asin_records), 4) if asin_records else 0.0,
     }
 
 
@@ -102,8 +104,8 @@ def write_category_tree(nodes, csv_path: Path, json_path: Path) -> None:
     rows = [
         {
             "level_1": "Hogar y cocina",
-            "level_2": node.category_name_es,
-            "level_3": None,
+            "level_2": node.parent_category if node.depth == 3 else node.category_name_es,
+            "level_3": node.category_name_es if node.depth == 3 else None,
             "category_name_es": node.category_name_es,
             "browse_node_id": node.browse_node_id,
             "category_url": node.category_url,
@@ -112,6 +114,11 @@ def write_category_tree(nodes, csv_path: Path, json_path: Path) -> None:
         for node in nodes
     ]
     _write_dicts(rows, csv_path, ["level_1", "level_2", "level_3", "category_name_es", "browse_node_id", "category_url", "depth"])
+    level2_nodes = [node for node in nodes if node.depth == 2]
+    children_by_parent = {}
+    for node in nodes:
+        if node.depth == 3:
+            children_by_parent.setdefault(node.parent_category, []).append(node)
     tree = {
         "name": "Hogar y cocina",
         "browse_node_id": None,
@@ -120,9 +127,17 @@ def write_category_tree(nodes, csv_path: Path, json_path: Path) -> None:
                 "name": node.category_name_es,
                 "browse_node_id": node.browse_node_id,
                 "url": node.category_url,
-                "children": [],
+                "children": [
+                    {
+                        "name": child.category_name_es,
+                        "browse_node_id": child.browse_node_id,
+                        "url": child.category_url,
+                        "children": [],
+                    }
+                    for child in children_by_parent.get(node.category_name_es, [])
+                ],
             }
-            for node in nodes
+            for node in level2_nodes
         ],
     }
     json_path.parent.mkdir(parents=True, exist_ok=True)

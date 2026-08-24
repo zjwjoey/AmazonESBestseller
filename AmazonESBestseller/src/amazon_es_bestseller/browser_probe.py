@@ -17,6 +17,14 @@ def _same_expected_host(requested_url: str, final_url: str | None) -> bool:
     return all(host == "amazon.es" or host.endswith(".amazon.es") for host in amazon_hosts)
 
 
+def _same_expected_path(requested_url: str, final_url: str | None) -> bool:
+    if not final_url:
+        return False
+    requested_path = urlparse(requested_url).path.rstrip("/") or "/"
+    final_path = urlparse(final_url).path.rstrip("/") or "/"
+    return requested_path == final_path
+
+
 def probe_urls(
     page,
     store,
@@ -46,11 +54,11 @@ def probe_urls(
             title = page.title()
             html = page.content()
             access = detect_access_state(title, visible_text_from_html(html), status)
-            if access.state is AccessState.NORMAL and not _same_expected_host(
-                requested_url,
-                final_url,
-            ):
-                access = AccessResult(AccessState.UNKNOWN, "redirected to unexpected host")
+            if access.state is AccessState.NORMAL:
+                if not _same_expected_host(requested_url, final_url):
+                    access = AccessResult(AccessState.UNKNOWN, "redirected to unexpected host")
+                elif not _same_expected_path(requested_url, final_url):
+                    access = AccessResult(AccessState.UNKNOWN, "redirected to unexpected page")
         except Exception as exc:  # Playwright errors are recorded, never retried.
             navigation_result = "error"
             access = type("ErrorResult", (), {

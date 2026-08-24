@@ -1,8 +1,12 @@
+import json
 from pathlib import Path
 
+from amazon_es_bestseller.category_discovery import CategoryNode
 from amazon_es_bestseller.models import RankingRecord
 from amazon_es_bestseller.reports import (
     build_field_availability,
+    duplicate_summary,
+    write_category_tree,
     write_detail_field_availability,
     write_ranking_csv,
 )
@@ -32,3 +36,30 @@ def test_detail_field_availability_reports_sample_presence(tmp_path: Path):
     content = path.read_text(encoding="utf-8-sig")
     assert "title,2,2,1.0,detail_pages" in content
     assert "brand,2,1,0.5,detail_pages" in content
+
+
+def test_category_tree_preserves_depth_three_parentage(tmp_path: Path):
+    nodes = [
+        CategoryNode("Baño", "https://example.test/bano", "1", "Hogar y cocina", 2, "root"),
+        CategoryNode("Accesorios", "https://example.test/accessories", "2", "Baño", 3, "bano"),
+    ]
+    csv_path = tmp_path / "category_tree.csv"
+    json_path = tmp_path / "category_tree.json"
+
+    write_category_tree(nodes, csv_path, json_path)
+
+    assert "Hogar y cocina,Baño,Accesorios" in csv_path.read_text(encoding="utf-8-sig")
+    tree = json.loads(json_path.read_text(encoding="utf-8"))
+    assert tree["children"][0]["name"] == "Baño"
+    assert tree["children"][0]["children"][0]["name"] == "Accesorios"
+
+
+def test_duplicate_summary_excludes_missing_asin_from_duplicate_count():
+    summary = duplicate_summary([
+        RankingRecord(asin="B012345678"),
+        RankingRecord(asin=None),
+    ])
+
+    assert summary["duplicate_records"] == 0
+    assert summary["duplicate_rate"] == 0.0
+    assert summary["missing_asin_records"] == 1

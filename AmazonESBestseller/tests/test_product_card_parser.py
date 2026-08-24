@@ -90,3 +90,29 @@ def test_parser_reports_presence_of_additional_sales_hints():
     assert record.availability == "En stock"
     assert record.sponsored == "true"
     assert record.badge == "Más vendido"
+
+
+def test_parser_deduplicates_nested_card_candidates():
+    html = """
+    <div data-testid="product-card">
+      <div data-asin="B012345678">
+        <span class="rank">#1</span>
+        <a href="/dp/B012345678">Producto</a>
+      </div>
+    </div>
+    """
+
+    records = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")
+
+    assert len(records) == 1
+
+
+def test_parser_deduplicates_non_nested_candidates_with_same_ranking_identity():
+    html = """
+    <div data-asin="B012345678"><span class="rank">#1</span><a href="/dp/B012345678">Producto</a></div>
+    <div data-testid="product-card"><span class="rank">#1</span><a href="/dp/B012345678">Producto</a></div>
+    """
+
+    records = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")
+
+    assert len(records) == 1

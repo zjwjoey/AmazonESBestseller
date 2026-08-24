@@ -16,6 +16,10 @@ _BLOCK_MARKERS = (
     "访问拒绝",
     "sign in to continue",
     "iniciar sesión para continuar",
+    "inicia sesión",
+    "inicia sesion",
+    "iniciar sesión",
+    "iniciar sesion",
     "login required",
 )
 

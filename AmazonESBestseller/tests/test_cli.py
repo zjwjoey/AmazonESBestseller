@@ -1,9 +1,11 @@
+import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
 from amazon_es_bestseller.category_discovery import CategoryNode
 from amazon_es_bestseller.cli import (
     _call_probe,
+    _write_detail_field_report,
     _summary_from_records,
     choose_decision,
     format_tested_pages,
@@ -13,6 +15,7 @@ from amazon_es_bestseller.cli import (
 )
 from amazon_es_bestseller.models import AccessState, ProbeEvent
 from amazon_es_bestseller.reports import write_report
+from amazon_es_bestseller.run_store import RunStore
 
 
 def blocked_probe(store, targets, delay_seconds=0, start_index=1):
@@ -167,3 +170,94 @@ def test_choose_decision_requires_complete_root_and_multi_category_evidence():
     )
 
     assert decision == "NO-GO"
+
+
+def test_choose_decision_does_not_go_without_records_from_each_category():
+    def normal_event(url: str) -> ProbeEvent:
+        return ProbeEvent(
+            requested_url=url,
+            final_url=url,
+            page_title="Normal",
+            timestamp="2026-08-24T00:00:00Z",
+            load_duration=0.1,
+            navigation_result="ok",
+            access_state=AccessState.NORMAL,
+            body_length=100,
+        )
+
+    from amazon_es_bestseller.models import RankingRecord
+
+    root_events = [
+        normal_event("https://www.amazon.es/"),
+        normal_event("https://www.amazon.es/gp/bestsellers"),
+        normal_event("https://www.amazon.es/gp/bestsellers/kitchen"),
+    ]
+    category_events = [
+        normal_event(f"https://www.amazon.es/gp/bestsellers/kitchen/{node}")
+        for node in ("1", "2", "3")
+    ]
+    root_only_records = [RankingRecord(asin="B012345678", rank=1)]
+
+    assert choose_decision(root_events, category_events, [], root_only_records) == "CONDITIONAL GO"
+
+
+def test_choose_decision_does_not_count_url_variants_as_distinct_categories():
+    def normal_event(url: str) -> ProbeEvent:
+        return ProbeEvent(
+            requested_url=url,
+            final_url=url,
+            page_title="Normal",
+            timestamp="2026-08-24T00:00:00Z",
+            load_duration=0.1,
+            navigation_result="ok",
+            access_state=AccessState.NORMAL,
+            body_length=100,
+        )
+
+    from amazon_es_bestseller.models import RankingRecord
+
+    root_events = [
+        normal_event("https://www.amazon.es/"),
+        normal_event("https://www.amazon.es/gp/bestsellers"),
+        normal_event("https://www.amazon.es/gp/bestsellers/kitchen"),
+    ]
+    category_urls = [
+        f"https://www.amazon.es/gp/bestsellers/kitchen/{index}?node=77&ref={index}"
+        for index in (1, 2, 3)
+    ]
+    category_events = [normal_event(url) for url in category_urls]
+    records = [
+        RankingRecord(asin=f"B{index:09d}", rank=1, source_url=url)
+        for index, url in enumerate(category_urls)
+    ]
+
+    assert choose_decision(root_events, category_events, [], records) == "CONDITIONAL GO"
+
+
+def test_detail_field_report_excludes_blocked_event(tmp_path: Path):
+    store = RunStore.create(tmp_path, "detail-report")
+
+    def event(url: str, state: AccessState) -> ProbeEvent:
+        return ProbeEvent(
+            requested_url=url,
+            final_url=url,
+            page_title="Detail",
+            timestamp="2026-08-24T00:00:00Z",
+            load_duration=0.1,
+            navigation_result="ok",
+            access_state=state,
+            body_length=100,
+        )
+
+    normal = event("https://www.amazon.es/dp/B012345678", AccessState.NORMAL)
+    blocked = event("https://www.amazon.es/dp/B012345679", AccessState.CHALLENGE)
+    store.save_html("page_07", '<span id="productTitle">Normal product</span>')
+    store.save_html("page_08", '<span id="productTitle">Challenge page</span>')
+
+    _write_detail_field_report(store, [normal, blocked], start_index=7)
+
+    with (store.root / "detail_field_availability.csv").open(encoding="utf-8-sig") as handle:
+        title_row = next(row for row in csv.DictReader(handle) if row["field"] == "title")
+    assert title_row["samples"] == "1"
+    assert title_row["present"] == "1"
+    store.close()

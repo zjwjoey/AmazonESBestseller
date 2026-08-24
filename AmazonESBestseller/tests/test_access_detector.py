@@ -16,3 +16,15 @@ def test_normal_page_has_no_stop_reason():
     result = detect_access_state("Amazon.es: compra online", "<main>content</main>", 200)
     assert result.state is AccessState.NORMAL
     assert result.reason is None
+
+
+def test_detects_spanish_sign_in_page():
+    result = detect_access_state("Amazon.es", "Inicia sesión para continuar", 200)
+
+    assert result.state is AccessState.BLOCKED
+
+
+def test_detects_bare_spanish_sign_in_prompt():
+    result = detect_access_state("Amazon.es", "Iniciar sesión", 200)
+
+    assert result.state is AccessState.BLOCKED

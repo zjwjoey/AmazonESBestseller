@@ -15,7 +15,12 @@ def _card_nodes(soup: BeautifulSoup):
         if node.get("data-asin") or node.find("a", href=ASIN_URL_RE)
     ]
     if nodes:
-        return nodes
+        node_ids = {id(node) for node in nodes}
+        return [
+            node
+            for node in nodes
+            if not any(id(parent) in node_ids for parent in node.parents)
+        ]
     return [anchor for anchor in soup.find_all("a", href=ASIN_URL_RE)]
 
 
@@ -43,6 +48,7 @@ def parse_product_cards(
     context = category_context or {}
     now = datetime.now(timezone.utc)
     records: list[RankingRecord] = []
+    seen_ranking_identities: set[tuple[str | None, int | None, str]] = set()
     for card in _card_nodes(soup):
         link = card if getattr(card, "name", None) == "a" else card.find("a", href=ASIN_URL_RE)
         link = link or (card.find("a", href=True) if getattr(card, "find", None) else None)
@@ -103,6 +109,10 @@ def parse_product_cards(
             if card.get("data-component-type") == "s-sponsored-label"
             else card.select_one("[data-component-type='s-sponsored-label'], [class*='s-sponsored']")
         )
+        ranking_identity = (asin, rank, product_url)
+        if ranking_identity in seen_ranking_identities:
+            continue
+        seen_ranking_identities.add(ranking_identity)
         records.append(
             RankingRecord(
                 snapshot_date=now.date().isoformat(),

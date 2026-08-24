@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .browser_probe import probe_urls
-from .category_discovery import discover_categories
+from .category_discovery import browse_node_id_from_url, discover_categories
 from .config import Settings, load_settings
 from .models import AccessState, ProbeEvent, RankingRecord
 from .page_inspector import inspect_detail_fields, inspect_html, inspect_navigation
@@ -97,7 +97,9 @@ def _write_detail_field_report(
     start_index: int,
 ) -> str:
     field_maps = []
-    for index, _event in enumerate(detail_events, start=start_index):
+    for index, event in enumerate(detail_events, start=start_index):
+        if event.access_state is not AccessState.NORMAL:
+            continue
         path = store.html_dir / f"page_{index:02d}.html"
         if path.exists():
             field_maps.append(inspect_detail_fields(path.read_text(encoding="utf-8")))
@@ -153,7 +155,19 @@ def choose_decision(
         return "CONDITIONAL GO"
     if not records:
         return "CONDITIONAL GO"
-    if len(category_events) < 3:
+    normal_category_nodes = {
+        browse_node_id_from_url(event.requested_url)
+        for event in category_events
+        if event.access_state is AccessState.NORMAL
+    }
+    if None in normal_category_nodes:
+        return "CONDITIONAL GO"
+    record_category_nodes = {
+        browse_node_id_from_url(record.source_url)
+        for record in records
+        if record.asin is not None and record.rank is not None and record.source_url is not None
+    }
+    if len(normal_category_nodes) < 3 or not normal_category_nodes <= record_category_nodes:
         return "CONDITIONAL GO"
     availability = {
         row["field"]: row["availability_rate"] for row in build_field_availability(records)
@@ -206,15 +220,12 @@ def run_reconnaissance(
         navigation = inspect_navigation(kitchen_html)
         _write_structured_data_report(store, inspection)
         discovered_categories = discover_categories(kitchen_html, settings.root_urls["kitchen"])
-        all_categories, categories = select_trial_categories(
+        discovered_categories, categories = select_trial_categories(
             discovered_categories,
             settings.max_categories,
         )
-        write_category_tree(
-            all_categories,
-            store.root / "category_tree.csv",
-            store.root / "category_tree.json",
-        )
+        all_categories = list(discovered_categories)
+        level3_categories = []
         root_records = parse_root_sample(
             kitchen_html,
             settings.root_urls["kitchen"],
@@ -246,6 +257,14 @@ def run_reconnaissance(
                 if not category_path.exists():
                     continue
                 category_html = category_path.read_text(encoding="utf-8")
+                level3_categories.extend(
+                    discover_categories(
+                        category_html,
+                        node.category_url,
+                        parent_category=node.category_name_es,
+                        depth=3,
+                    )
+                )
                 parsed_records = parse_product_cards(
                     category_html,
                     node.category_url,
@@ -263,6 +282,12 @@ def run_reconnaissance(
                     len(parsed_records),
                     sum(record.asin is not None for record in parsed_records),
                 )
+        all_categories.extend(level3_categories)
+        write_category_tree(
+            all_categories,
+            store.root / "category_tree.csv",
+            store.root / "category_tree.json",
+        )
         if category_events and all(event.access_state is AccessState.NORMAL for event in category_events):
             detail_urls = list(dict.fromkeys(record.product_url for record in records if record.product_url))[: settings.max_detail_samples]
             if detail_urls:
@@ -277,8 +302,11 @@ def run_reconnaissance(
         summary.update(
             {
                 "card_structure": f"{inspection.product_card_candidate_count} 个候选卡片",
-                "category_tree": f"{len(all_categories)} 个二级类目，另取 {len(categories)} 个进行试跑",
-                "category_count": len(all_categories),
+                "category_tree": (
+                    f"{len(discovered_categories)} 个二级类目，另取 {len(categories)} 个进行试跑；"
+                    f"从已保存的试跑页面发现 {len(level3_categories)} 个三级节点"
+                ),
+                "category_count": len(discovered_categories),
                 "category_product_counts": ", ".join(
                     f"{node.category_name_es}: {sum(record.level2_category_es == node.category_name_es for record in records)}"
                     for node in categories
@@ -295,7 +323,11 @@ def run_reconnaissance(
                     if navigation.lazy_loading_present
                     else "未发现明确懒加载标记"
                 ),
-                "level3_observation": "本轮入口页未形成可验证的三级节点；试跑范围为二级类目",
+                "level3_observation": (
+                    f"从 {len(category_events)} 个正常二级页离线发现 {len(level3_categories)} 个三级节点"
+                    if level3_categories
+                    else "已检查正常二级页，未发现可验证的三级节点"
+                ),
             }
         )
     else:

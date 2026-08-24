@@ -15,7 +15,7 @@ class CategoryNode:
     source_page: str
 
 
-def _browse_node_id(url: str) -> str | None:
+def browse_node_id_from_url(url: str) -> str | None:
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
     if query.get("node"):
@@ -27,13 +27,25 @@ def _browse_node_id(url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def discover_categories(html: str, source_page: str) -> list[CategoryNode]:
+def discover_categories(
+    html: str,
+    source_page: str,
+    *,
+    parent_category: str = "Hogar y cocina",
+    depth: int = 2,
+) -> list[CategoryNode]:
     soup = BeautifulSoup(html, "lxml")
     results: list[CategoryNode] = []
-    seen: set[str] = set()
+    seen_urls: set[str] = set()
+    seen_node_ids: set[str] = set()
     source_path = urlparse(source_page).path.rstrip("/")
     root_path = "/gp/bestsellers/kitchen"
-    for anchor in soup.find_all("a", href=True):
+    navigation_anchors = soup.select(
+        "#category-nav a[href], [class*='zg-browse'] a[href], [id*='zg-browse'] a[href]"
+    )
+    if depth > 2 and not navigation_anchors:
+        return []
+    for anchor in navigation_anchors or soup.find_all("a", href=True):
         absolute = urljoin(source_page, anchor["href"])
         parsed = urlparse(absolute)
         if (
@@ -48,17 +60,29 @@ def discover_categories(html: str, source_page: str) -> list[CategoryNode]:
             numeric_parts = [part for part in suffix.split("/") if part.isdigit()]
             if len(numeric_parts) != 1:
                 continue
+        elif depth > 2:
+            source_node_id = browse_node_id_from_url(source_page)
+            candidate_node_id = browse_node_id_from_url(absolute)
+            if not candidate_node_id or candidate_node_id == source_node_id:
+                continue
         name = " ".join(anchor.get_text(" ", strip=True).split())
-        if not name or absolute in seen:
+        browse_node_id = browse_node_id_from_url(absolute)
+        if (
+            not name
+            or absolute in seen_urls
+            or (browse_node_id is not None and browse_node_id in seen_node_ids)
+        ):
             continue
-        seen.add(absolute)
+        seen_urls.add(absolute)
+        if browse_node_id is not None:
+            seen_node_ids.add(browse_node_id)
         results.append(
             CategoryNode(
                 category_name_es=name,
                 category_url=absolute,
-                browse_node_id=_browse_node_id(absolute),
-                parent_category="Hogar y cocina",
-                depth=2,
+                browse_node_id=browse_node_id,
+                parent_category=parent_category,
+                depth=depth,
                 source_page=source_page,
             )
         )
