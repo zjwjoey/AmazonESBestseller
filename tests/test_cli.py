@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from amazon_es_bestseller.cli import run_reconnaissance
+from amazon_es_bestseller.cli import _summary_from_records, choose_decision, run_reconnaissance
 from amazon_es_bestseller.models import AccessState, ProbeEvent
 from amazon_es_bestseller.reports import write_report
 
@@ -33,3 +33,36 @@ def test_report_contains_required_final_sections(tmp_path: Path):
     content = report.read_text(encoding="utf-8")
     assert "## 11. ASIN提取成功率" in content
     assert "## 30. 是否建议进入正式开发" in content
+
+
+def test_detail_page_block_changes_go_to_conditional_go():
+    normal = ProbeEvent(
+        requested_url="https://www.amazon.es/gp/bestsellers/kitchen",
+        final_url="https://www.amazon.es/gp/bestsellers/kitchen",
+        page_title="Kitchen",
+        timestamp="2026-08-24T00:00:00Z",
+        load_duration=0.1,
+        navigation_result="ok",
+        access_state=AccessState.NORMAL,
+        body_length=100,
+    )
+    blocked = ProbeEvent(
+        requested_url="https://www.amazon.es/dp/B012345678",
+        final_url="https://www.amazon.es/dp/B012345678",
+        page_title="Robot Check",
+        timestamp="2026-08-24T00:00:00Z",
+        load_duration=0.1,
+        navigation_result="ok",
+        access_state=AccessState.CHALLENGE,
+        body_length=100,
+        reason="marker: robot check",
+    )
+    assert choose_decision([normal], [normal], [blocked], records=[]) == "CONDITIONAL GO"
+
+
+def test_summary_classifies_field_availability_for_report():
+    from amazon_es_bestseller.models import RankingRecord
+
+    summary = _summary_from_records([RankingRecord(asin="B012345678", title="Sample")])
+    assert "asin" in summary["stable_fields"]
+    assert "price" in summary["unavailable_fields"]

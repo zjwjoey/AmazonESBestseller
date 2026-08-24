@@ -28,10 +28,16 @@ def discover_categories(html: str, source_page: str) -> list[CategoryNode]:
     soup = BeautifulSoup(html, "lxml")
     results: list[CategoryNode] = []
     seen: set[str] = set()
+    source_path = urlparse(source_page).path.rstrip("/")
     for anchor in soup.find_all("a", href=True):
         absolute = urljoin(source_page, anchor["href"])
         parsed = urlparse(absolute)
-        if "/dp/" in parsed.path or "/gp/bestsellers/kitchen" not in parsed.path:
+        if (
+            "/dp/" in parsed.path
+            or "/gp/bestsellers/kitchen" not in parsed.path
+            or parsed.path.rstrip("/") == source_path
+            or parsed.fragment
+        ):
             continue
         name = " ".join(anchor.get_text(" ", strip=True).split())
         if not name or absolute in seen:

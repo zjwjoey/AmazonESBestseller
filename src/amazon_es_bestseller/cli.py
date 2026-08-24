@@ -76,6 +76,10 @@ def _summary_from_records(records: list[RankingRecord]) -> dict:
     duplicate = duplicate_summary(records)
     availability = {row["field"]: row for row in build_field_availability(records)}
 
+    stable_fields = [name for name, row in availability.items() if row["availability_rate"] >= 0.95]
+    unstable_fields = [name for name, row in availability.items() if 0 < row["availability_rate"] < 0.95]
+    unavailable_fields = [name for name, row in availability.items() if row["availability_rate"] == 0]
+
     def rate(name: str) -> str:
         row = availability.get(name)
         return f"{row['availability_rate']:.1%}" if row else "0.0%"
@@ -88,7 +92,35 @@ def _summary_from_records(records: list[RankingRecord]) -> dict:
         "rating_success_rate": rate("rating"),
         "review_success_rate": rate("review_count"),
         "monthly_bought_rate": rate("monthly_bought_text"),
+        "stable_fields": ", ".join(stable_fields) or "无",
+        "unstable_fields": ", ".join(unstable_fields) or "无",
+        "unavailable_fields": ", ".join(unavailable_fields) or "无",
+        "api_split": "页面保留榜单出现与可见字段；Creators API 后续补 Parent ASIN、品牌、Browse Node ancestry、Offers 与变体。",
     }
+
+
+def choose_decision(
+    root_events: list[ProbeEvent],
+    category_events: list[ProbeEvent],
+    detail_events: list[ProbeEvent],
+    records: list[RankingRecord],
+) -> str:
+    """Choose a conclusion from every page stage, including optional detail samples."""
+    if not root_events or any(event.access_state is not AccessState.NORMAL for event in root_events):
+        return "NO-GO"
+    if any(
+        event.access_state is not AccessState.NORMAL
+        for event in [*category_events, *detail_events]
+    ):
+        return "CONDITIONAL GO"
+    if not records:
+        return "CONDITIONAL GO"
+    asin_rate = next(
+        row["availability_rate"]
+        for row in build_field_availability(records)
+        if row["field"] == "asin"
+    )
+    return "GO" if asin_rate >= 0.95 and category_events else "CONDITIONAL GO"
 
 
 def run_reconnaissance(
@@ -190,13 +222,22 @@ def run_reconnaissance(
     write_products_csv(products, store.root / "products.csv")
     write_field_availability_csv(records, store.root / "field_availability.csv")
     summary.update(_summary_from_records(records))
-    if not root_events or any(event.access_state is not AccessState.NORMAL for event in root_events):
-        decision = "NO-GO"
-    elif not records:
-        decision = "CONDITIONAL GO"
-    else:
-        asin_rate = next(row["availability_rate"] for row in build_field_availability(records) if row["field"] == "asin")
-        decision = "GO" if asin_rate >= 0.95 and all(event.access_state is AccessState.NORMAL for event in category_events) else "CONDITIONAL GO"
+    all_events = [*root_events, *category_events, *detail_events]
+    summary["page_access_result"] = ", ".join(event.access_state.value for event in all_events)
+    restrictions = [
+        f"{event.access_state.value}: {event.reason}"
+        for event in all_events
+        if event.access_state is not AccessState.NORMAL
+    ]
+    summary["access_restriction"] = "; ".join(restrictions) or "未发现"
+    blocked_detail_count = sum(
+        event.access_state is not AccessState.NORMAL for event in detail_events
+    )
+    summary["detail_fields"] = (
+        f"已保存 {len(detail_events)} 个详情页样本；其中 {blocked_detail_count} 个受访问状态限制，"
+        "仅将可验证的字段纳入结论"
+    )
+    decision = choose_decision(root_events, category_events, detail_events, records)
     summary["decision"] = decision
     write_report(store.root, summary)
     return ReconResult(visited_page_count=visited + len(category_events) + len(detail_events), decision=decision, run_dir=store.root)
