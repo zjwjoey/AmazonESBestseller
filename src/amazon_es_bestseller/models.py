@@ -28,3 +28,50 @@ class ProbeEvent:
     access_state: AccessState
     body_length: int
     reason: str | None = None
+
+
+@dataclass
+class RankingRecord:
+    snapshot_date: str | None = None
+    snapshot_time: str | None = None
+    root_category_es: str | None = None
+    level2_category_es: str | None = None
+    level3_category_es: str | None = None
+    browse_node_id: str | None = None
+    rank: int | None = None
+    rank_text: str | None = None
+    rank_source: str | None = None
+    asin: str | None = None
+    asin_source: str | None = None
+    title: str | None = None
+    product_url: str | None = None
+    image_url: str | None = None
+    price: str | None = None
+    currency: str | None = None
+    rating: str | None = None
+    review_count: str | None = None
+    monthly_bought_text: str | None = None
+    monthly_bought_value: int | None = None
+    brand: str | None = None
+    source_url: str | None = None
+    source_category: str | None = None
+    collected_at: str | None = None
+
+
+@dataclass
+class ProductSummary:
+    asin: str
+    parent_asin: str | None = None
+    title_es: str | None = None
+    brand: str | None = None
+    price: str | None = None
+    currency: str | None = None
+    rating: str | None = None
+    review_count: str | None = None
+    monthly_bought_text: str | None = None
+    image_url: str | None = None
+    product_url: str | None = None
+    first_seen: str | None = None
+    last_seen: str | None = None
+    ranking_count: int = 0
+    best_rank: int | None = None
