@@ -8,7 +8,7 @@ from .browser_probe import probe_urls
 from .category_discovery import discover_categories
 from .config import Settings, load_settings
 from .models import AccessState, ProbeEvent, RankingRecord
-from .page_inspector import inspect_html
+from .page_inspector import inspect_html, inspect_navigation
 from .product_card_parser import build_products, parse_product_cards
 from .reports import (
     build_field_availability,
@@ -161,6 +161,7 @@ def run_reconnaissance(
     if all_root_normal and kitchen_html_path.exists():
         kitchen_html = kitchen_html_path.read_text(encoding="utf-8")
         inspection = inspect_html(kitchen_html)
+        navigation = inspect_navigation(kitchen_html)
         _write_structured_data_report(store, inspection)
         categories = discover_categories(kitchen_html, settings.root_urls["kitchen"])
         categories = categories[: settings.max_categories]
@@ -210,8 +211,16 @@ def run_reconnaissance(
                 ),
                 "max_rank_depth": max((record.rank or 0 for record in records), default=0),
                 "detail_fields": f"已保存 {len(detail_events)} 个详情页样本，待离线字段检查",
-                "pagination": "未构造 page=2 请求",
-                "lazy_loading": "未主动触发或绕过",
+                "pagination": (
+                    "存在 page=2 链接；本阶段未继续请求"
+                    if navigation.page_two_url_present
+                    else "未发现明确 page=2 链接"
+                ),
+                "lazy_loading": (
+                    "页面包含懒加载/客户端列表标记；本阶段未主动触发"
+                    if navigation.lazy_loading_present
+                    else "未发现明确懒加载标记"
+                ),
             }
         )
     else:

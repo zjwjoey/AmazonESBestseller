@@ -14,6 +14,13 @@ class PageInspection:
     candidate_selector: str
 
 
+@dataclass(frozen=True)
+class NavigationInspection:
+    pagination_present: bool
+    page_two_url_present: bool
+    lazy_loading_present: bool
+
+
 def inspect_html(html: str) -> PageInspection:
     soup = BeautifulSoup(html, "lxml")
     candidates = soup.select('[data-testid*="product-card"], [data-asin]')
@@ -37,4 +44,21 @@ def inspect_html(html: str) -> PageInspection:
         product_card_candidate_count=len(valid_candidates),
         structured_data_kinds=tuple(dict.fromkeys(kinds)),
         candidate_selector=selector,
+    )
+
+
+def inspect_navigation(html: str) -> NavigationInspection:
+    soup = BeautifulSoup(html, "lxml")
+    page_two_links = soup.select(
+        "a[href*='pg=2'], a[href*='page=2'], a[aria-label*='Page 2'], a[aria-label*='Página 2']"
+    )
+    pagination = bool(page_two_links or soup.select(".a-pagination, nav[aria-label*='pagination']"))
+    lazy_loading = bool(
+        soup.select("[data-client-recs-list], [data-csa-c-type='widget']")
+        or "lazy" in html.lower()
+    )
+    return NavigationInspection(
+        pagination_present=pagination,
+        page_two_url_present=bool(page_two_links),
+        lazy_loading_present=lazy_loading,
     )
