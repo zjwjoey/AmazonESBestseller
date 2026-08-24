@@ -15,3 +15,16 @@ class AccessState(StrEnum):
 class AccessResult:
     state: AccessState
     reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ProbeEvent:
+    requested_url: str
+    final_url: str | None
+    page_title: str | None
+    timestamp: str
+    load_duration: float
+    navigation_result: str
+    access_state: AccessState
+    body_length: int
+    reason: str | None = None
