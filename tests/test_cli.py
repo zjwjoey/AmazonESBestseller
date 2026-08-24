@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from amazon_es_bestseller.cli import _summary_from_records, choose_decision, run_reconnaissance
+from amazon_es_bestseller.cli import _summary_from_records, choose_decision, format_tested_pages, run_reconnaissance
 from amazon_es_bestseller.models import AccessState, ProbeEvent
 from amazon_es_bestseller.reports import write_report
 
@@ -66,3 +66,29 @@ def test_summary_classifies_field_availability_for_report():
     summary = _summary_from_records([RankingRecord(asin="B012345678", title="Sample")])
     assert "asin" in summary["stable_fields"]
     assert "price" in summary["unavailable_fields"]
+
+
+def test_report_page_list_includes_all_accessed_event_urls():
+    events = [
+        ProbeEvent(
+            requested_url="https://example.test/root",
+            final_url="https://example.test/root",
+            page_title="Root",
+            timestamp="2026-08-24T00:00:00Z",
+            load_duration=0.1,
+            navigation_result="ok",
+            access_state=AccessState.NORMAL,
+            body_length=1,
+        ),
+        ProbeEvent(
+            requested_url="https://example.test/category",
+            final_url="https://example.test/category",
+            page_title="Category",
+            timestamp="2026-08-24T00:00:00Z",
+            load_duration=0.1,
+            navigation_result="ok",
+            access_state=AccessState.NORMAL,
+            body_length=1,
+        ),
+    ]
+    assert format_tested_pages(events) == "https://example.test/root, https://example.test/category"

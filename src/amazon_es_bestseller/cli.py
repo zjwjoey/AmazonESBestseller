@@ -29,6 +29,10 @@ class ReconResult:
     run_dir: Path
 
 
+def format_tested_pages(events: list[ProbeEvent]) -> str:
+    return ", ".join(dict.fromkeys(event.requested_url for event in events))
+
+
 def _default_settings() -> Settings:
     return Settings(
         root_urls={
@@ -232,6 +236,7 @@ def run_reconnaissance(
     write_field_availability_csv(records, store.root / "field_availability.csv")
     summary.update(_summary_from_records(records))
     all_events = [*root_events, *category_events, *detail_events]
+    summary["tested_pages"] = format_tested_pages(all_events)
     summary["page_access_result"] = ", ".join(event.access_state.value for event in all_events)
     restrictions = [
         f"{event.access_state.value}: {event.reason}"
