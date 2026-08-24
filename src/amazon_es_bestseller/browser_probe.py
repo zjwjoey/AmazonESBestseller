@@ -5,10 +5,16 @@ from .access_detector import detect_access_state
 from .models import AccessState, ProbeEvent
 
 
-def probe_urls(page, store, targets: list[str], delay_seconds: float = 3.0) -> list[ProbeEvent]:
+def probe_urls(
+    page,
+    store,
+    targets: list[str],
+    delay_seconds: float = 3.0,
+    start_index: int = 1,
+) -> list[ProbeEvent]:
     """Visit targets once, preserving evidence and stopping on access restrictions."""
     events: list[ProbeEvent] = []
-    for index, requested_url in enumerate(targets, start=1):
+    for index, requested_url in enumerate(targets, start=start_index):
         name = f"page_{index:02d}"
         started = time.perf_counter()
         html = ""
