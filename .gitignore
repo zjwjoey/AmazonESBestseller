@@ -4,3 +4,4 @@ __pycache__/
 runs/
 playwright/.cache/
 *.py[cod]
+*.egg-info/

@@ -1,9 +1,0 @@
-pyproject.toml
-src/amazon_es_bestseller/__init__.py
-src/amazon_es_bestseller/config.py
-src/amazon_es_bestseller.egg-info/PKG-INFO
-src/amazon_es_bestseller.egg-info/SOURCES.txt
-src/amazon_es_bestseller.egg-info/dependency_links.txt
-src/amazon_es_bestseller.egg-info/requires.txt
-src/amazon_es_bestseller.egg-info/top_level.txt
-tests/test_settings.py
