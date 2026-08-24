@@ -1,8 +1,20 @@
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
-from .access_detector import detect_access_state
-from .models import AccessState, ProbeEvent
+from .access_detector import detect_access_state, visible_text_from_html
+from .models import AccessResult, AccessState, ProbeEvent
+
+
+def _same_expected_host(requested_url: str, final_url: str | None) -> bool:
+    if not final_url:
+        return False
+    requested_host = (urlparse(requested_url).hostname or "").lower()
+    final_host = (urlparse(final_url).hostname or "").lower()
+    if requested_host == final_host:
+        return True
+    amazon_hosts = {requested_host, final_host}
+    return all(host == "amazon.es" or host.endswith(".amazon.es") for host in amazon_hosts)
 
 
 def probe_urls(
@@ -14,7 +26,8 @@ def probe_urls(
 ) -> list[ProbeEvent]:
     """Visit targets once, preserving evidence and stopping on access restrictions."""
     events: list[ProbeEvent] = []
-    for index, requested_url in enumerate(targets, start=start_index):
+    for offset, requested_url in enumerate(targets):
+        index = start_index + offset
         name = f"page_{index:02d}"
         started = time.perf_counter()
         html = ""
@@ -32,7 +45,12 @@ def probe_urls(
             final_url = page.url
             title = page.title()
             html = page.content()
-            access = detect_access_state(title, html, status)
+            access = detect_access_state(title, visible_text_from_html(html), status)
+            if access.state is AccessState.NORMAL and not _same_expected_host(
+                requested_url,
+                final_url,
+            ):
+                access = AccessResult(AccessState.UNKNOWN, "redirected to unexpected host")
         except Exception as exc:  # Playwright errors are recorded, never retried.
             navigation_result = "error"
             access = type("ErrorResult", (), {
@@ -68,12 +86,13 @@ def probe_urls(
             navigation_result=navigation_result,
             access_state=access.state,
             body_length=len(html),
+            status=status,
             reason=access.reason,
         )
         store.record_event(event)
         events.append(event)
         if access.state is not AccessState.NORMAL:
             break
-        if delay_seconds > 0 and index < len(targets):
+        if delay_seconds > 0 and offset < len(targets) - 1:
             time.sleep(delay_seconds)
     return events

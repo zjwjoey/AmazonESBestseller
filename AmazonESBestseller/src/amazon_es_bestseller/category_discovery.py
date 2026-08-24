@@ -32,6 +32,7 @@ def discover_categories(html: str, source_page: str) -> list[CategoryNode]:
     results: list[CategoryNode] = []
     seen: set[str] = set()
     source_path = urlparse(source_page).path.rstrip("/")
+    root_path = "/gp/bestsellers/kitchen"
     for anchor in soup.find_all("a", href=True):
         absolute = urljoin(source_page, anchor["href"])
         parsed = urlparse(absolute)
@@ -42,6 +43,11 @@ def discover_categories(html: str, source_page: str) -> list[CategoryNode]:
             or parsed.fragment
         ):
             continue
+        if source_path == root_path:
+            suffix = parsed.path.split(root_path, 1)[-1].strip("/")
+            numeric_parts = [part for part in suffix.split("/") if part.isdigit()]
+            if len(numeric_parts) != 1:
+                continue
         name = " ".join(anchor.get_text(" ", strip=True).split())
         if not name or absolute in seen:
             continue

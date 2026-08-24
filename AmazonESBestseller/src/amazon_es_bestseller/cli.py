@@ -1,5 +1,6 @@
 import argparse
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,13 +9,14 @@ from .browser_probe import probe_urls
 from .category_discovery import discover_categories
 from .config import Settings, load_settings
 from .models import AccessState, ProbeEvent, RankingRecord
-from .page_inspector import inspect_html, inspect_navigation
+from .page_inspector import inspect_detail_fields, inspect_html, inspect_navigation
 from .product_card_parser import build_products, parse_product_cards
 from .reports import (
     build_field_availability,
     duplicate_summary,
     write_category_tree,
     write_field_availability_csv,
+    write_detail_field_availability,
     write_products_csv,
     write_ranking_csv,
     write_report,
@@ -31,6 +33,19 @@ class ReconResult:
 
 def format_tested_pages(events: list[ProbeEvent]) -> str:
     return ", ".join(dict.fromkeys(event.requested_url for event in events))
+
+
+def select_trial_categories(categories, max_categories: int):
+    """Keep the complete discovery result separate from the bounded trial set."""
+    return categories, categories[:max_categories]
+
+
+def parse_root_sample(html: str, source_url: str, max_products: int = 20) -> list[RankingRecord]:
+    return parse_product_cards(
+        html,
+        source_url,
+        {"root_category_es": "Hogar y cocina"},
+    )[:max_products]
 
 
 def _default_settings() -> Settings:
@@ -60,20 +75,37 @@ def _live_probe(store, targets, delay_seconds, headless=False, start_index=1):
             browser.close()
 
 
-def _call_probe(probe, store, targets, delay_seconds, start_index=1):
-    try:
-        return probe(store, targets, delay_seconds, start_index=start_index)
-    except TypeError:
-        return probe(store, targets, delay_seconds)
+def _call_probe(probe, store, targets, delay_seconds, start_index=1, pause_before=False):
+    if pause_before and delay_seconds > 0:
+        time.sleep(delay_seconds)
+    return probe(store, targets, delay_seconds, start_index=start_index)
 
 
 def _write_structured_data_report(store: RunStore, inspection) -> None:
     text = "# Structured data report\n\n"
     text += f"- Product card candidates: {inspection.product_card_candidate_count}\n"
     text += f"- Structured data kinds: {', '.join(inspection.structured_data_kinds) or 'none'}\n"
+    text += f"- Structured data fields: {', '.join(inspection.structured_data_fields) or 'none'}\n"
     text += f"- Candidate selector evidence: `{inspection.candidate_selector}`\n"
     text += "\nThis report describes saved HTML only; no private endpoint is called.\n"
     (store.root / "structured_data_report.md").write_text(text, encoding="utf-8")
+
+
+def _write_detail_field_report(
+    store: RunStore,
+    detail_events: list[ProbeEvent],
+    start_index: int,
+) -> str:
+    field_maps = []
+    for index, _event in enumerate(detail_events, start=start_index):
+        path = store.html_dir / f"page_{index:02d}.html"
+        if path.exists():
+            field_maps.append(inspect_detail_fields(path.read_text(encoding="utf-8")))
+    if not field_maps:
+        return "未保存可分析的详情页样本"
+    write_detail_field_availability(field_maps, store.root / "detail_field_availability.csv")
+    present = sorted(field for field in field_maps[0] if field_maps[0][field])
+    return f"已离线分析 {len(field_maps)} 个详情页样本；首个样本可观察字段：{', '.join(present) or '无'}"
 
 
 def _summary_from_records(records: list[RankingRecord]) -> dict:
@@ -110,7 +142,9 @@ def choose_decision(
     records: list[RankingRecord],
 ) -> str:
     """Choose a conclusion from every page stage, including optional detail samples."""
-    if not root_events or any(event.access_state is not AccessState.NORMAL for event in root_events):
+    if len(root_events) < 3 or any(
+        event.access_state is not AccessState.NORMAL for event in root_events
+    ):
         return "NO-GO"
     if any(
         event.access_state is not AccessState.NORMAL
@@ -119,12 +153,16 @@ def choose_decision(
         return "CONDITIONAL GO"
     if not records:
         return "CONDITIONAL GO"
-    asin_rate = next(
-        row["availability_rate"]
-        for row in build_field_availability(records)
-        if row["field"] == "asin"
+    if len(category_events) < 3:
+        return "CONDITIONAL GO"
+    availability = {
+        row["field"]: row["availability_rate"] for row in build_field_availability(records)
+    }
+    return (
+        "GO"
+        if availability.get("asin", 0) >= 0.95 and availability.get("rank", 0) >= 0.95
+        else "CONDITIONAL GO"
     )
-    return "GO" if asin_rate >= 0.95 and category_events else "CONDITIONAL GO"
 
 
 def run_reconnaissance(
@@ -167,9 +205,27 @@ def run_reconnaissance(
         inspection = inspect_html(kitchen_html)
         navigation = inspect_navigation(kitchen_html)
         _write_structured_data_report(store, inspection)
-        categories = discover_categories(kitchen_html, settings.root_urls["kitchen"])
-        categories = categories[: settings.max_categories]
-        write_category_tree(categories, store.root / "category_tree.csv", store.root / "category_tree.json")
+        discovered_categories = discover_categories(kitchen_html, settings.root_urls["kitchen"])
+        all_categories, categories = select_trial_categories(
+            discovered_categories,
+            settings.max_categories,
+        )
+        write_category_tree(
+            all_categories,
+            store.root / "category_tree.csv",
+            store.root / "category_tree.json",
+        )
+        root_records = parse_root_sample(
+            kitchen_html,
+            settings.root_urls["kitchen"],
+            max_products=min(20, settings.max_products_per_category),
+        )
+        records.extend(root_records)
+        store.log_info(
+            "page=page_03 page_type=root category=Hogar y cocina cards=%s asins=%s",
+            len(root_records),
+            sum(record.asin is not None for record in root_records),
+        )
         category_targets = [node.category_url for node in categories]
         if category_targets:
             category_events = _call_probe(
@@ -178,21 +234,34 @@ def run_reconnaissance(
                 category_targets,
                 settings.page_delay_seconds,
                 start_index=4,
+                pause_before=True,
             )
-            for index, node in enumerate(categories[: len(category_events)], start=4):
+            for index, (node, event) in enumerate(
+                zip(categories, category_events),
+                start=4,
+            ):
+                if event.access_state is not AccessState.NORMAL:
+                    continue
                 category_path = store.html_dir / f"page_{index:02d}.html"
                 if not category_path.exists():
                     continue
                 category_html = category_path.read_text(encoding="utf-8")
-                records.extend(
-                    parse_product_cards(
-                        category_html,
-                        node.category_url,
-                        {
-                            "level2_category_es": node.category_name_es,
-                            "browse_node_id": node.browse_node_id,
-                        },
-                    )[: settings.max_products_per_category]
+                parsed_records = parse_product_cards(
+                    category_html,
+                    node.category_url,
+                    {
+                        "level2_category_es": node.category_name_es,
+                        "browse_node_id": node.browse_node_id,
+                    },
+                )
+                parsed_records = parsed_records[: settings.max_products_per_category]
+                records.extend(parsed_records)
+                store.log_info(
+                    "page=page_%02d page_type=category category=%s cards=%s asins=%s",
+                    index,
+                    node.category_name_es,
+                    len(parsed_records),
+                    sum(record.asin is not None for record in parsed_records),
                 )
         if category_events and all(event.access_state is AccessState.NORMAL for event in category_events):
             detail_urls = list(dict.fromkeys(record.product_url for record in records if record.product_url))[: settings.max_detail_samples]
@@ -203,12 +272,13 @@ def run_reconnaissance(
                     detail_urls,
                     settings.page_delay_seconds,
                     start_index=4 + len(category_events),
+                    pause_before=True,
                 )
         summary.update(
             {
                 "card_structure": f"{inspection.product_card_candidate_count} 个候选卡片",
-                "category_tree": f"{len(categories)} 个二级类目",
-                "category_count": len(categories),
+                "category_tree": f"{len(all_categories)} 个二级类目，另取 {len(categories)} 个进行试跑",
+                "category_count": len(all_categories),
                 "category_product_counts": ", ".join(
                     f"{node.category_name_es}: {sum(record.level2_category_es == node.category_name_es for record in records)}"
                     for node in categories
@@ -225,6 +295,7 @@ def run_reconnaissance(
                     if navigation.lazy_loading_present
                     else "未发现明确懒加载标记"
                 ),
+                "level3_observation": "本轮入口页未形成可验证的三级节点；试跑范围为二级类目",
             }
         )
     else:
@@ -247,14 +318,25 @@ def run_reconnaissance(
     blocked_detail_count = sum(
         event.access_state is not AccessState.NORMAL for event in detail_events
     )
+    detail_summary = _write_detail_field_report(
+        store,
+        detail_events,
+        start_index=4 + len(category_events),
+    )
     summary["detail_fields"] = (
-        f"已保存 {len(detail_events)} 个详情页样本；其中 {blocked_detail_count} 个受访问状态限制，"
+        f"{detail_summary}；其中 {blocked_detail_count} 个受访问状态限制，"
         "仅将可验证的字段纳入结论"
     )
     decision = choose_decision(root_events, category_events, detail_events, records)
     summary["decision"] = decision
     write_report(store.root, summary)
-    return ReconResult(visited_page_count=visited + len(category_events) + len(detail_events), decision=decision, run_dir=store.root)
+    result = ReconResult(
+        visited_page_count=visited + len(category_events) + len(detail_events),
+        decision=decision,
+        run_dir=store.root,
+    )
+    store.close()
+    return result
 
 
 def main(argv=None) -> int:

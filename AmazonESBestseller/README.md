@@ -17,9 +17,9 @@ python -m playwright install chromium
 python -m amazon_es_bestseller.cli run --config config/settings.yaml
 ```
 
-运行会依次探测首页、Best Sellers 根页和厨房入口页；只有三页均为 `NORMAL` 才会继续最多 3 个真实发现的二级类目，每类最多保留页面自然呈现的 50 条商品，并最多保存 5 个详情页样本。
+运行会依次探测首页、Best Sellers 根页和厨房入口页；只有三页均为 `NORMAL` 才会继续最多 3 个真实发现的二级类目，每类最多保留页面自然呈现的 50 条商品，并最多保存 5 个详情页样本。配置加载时会强制这些上限：页面间隔至少 3 秒、最多 3 个试跑类目、每类最多 50 条商品、最多 5 个详情样本。
 
-每次运行产物位于 `runs/YYYYMMDD_HHMMSS/`，包括 HTML、截图、访问事件、类目树、榜单记录、按 ASIN 聚合的商品表、字段可用率和 `report.md`。
+每次运行产物位于 `runs/YYYYMMDD_HHMMSS/`，包括 HTML、截图、访问事件、完整发现类目树、榜单记录、按 ASIN 聚合的商品表、榜单字段可用率、详情页字段可用率、结构化数据报告和 `report.md`。详情页只做保存页面后的离线字段侦察，不调用私有接口。
 
 ## 访问边界
 

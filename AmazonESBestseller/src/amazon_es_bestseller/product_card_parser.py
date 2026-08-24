@@ -12,7 +12,7 @@ def _card_nodes(soup: BeautifulSoup):
     nodes = [
         node
         for node in soup.select('[data-testid*="product-card"], [data-asin]')
-        if node.find("a", href=ASIN_URL_RE)
+        if node.get("data-asin") or node.find("a", href=ASIN_URL_RE)
     ]
     if nodes:
         return nodes
@@ -44,12 +44,14 @@ def parse_product_cards(
     now = datetime.now(timezone.utc)
     records: list[RankingRecord] = []
     for card in _card_nodes(soup):
-        link = card.find("a", href=ASIN_URL_RE)
+        link = card if getattr(card, "name", None) == "a" else card.find("a", href=ASIN_URL_RE)
+        link = link or (card.find("a", href=True) if getattr(card, "find", None) else None)
         if link is None:
             continue
         product_url = urljoin(source_url, link.get("href", ""))
         asin_match = ASIN_URL_RE.search(product_url)
-        asin = asin_match.group(1).upper() if asin_match else None
+        dom_asin = card.get("data-asin") if getattr(card, "get", None) else None
+        asin = asin_match.group(1).upper() if asin_match else (dom_asin.upper() if dom_asin else None)
         rank_node = card.select_one(".rank, [data-rank]")
         rank_text = _text(rank_node)
         rank_source = "visible_text" if rank_text else None
@@ -81,16 +83,26 @@ def parse_product_cards(
                 next_span = rating_node.find_next("span")
                 review_count = _text(next_span)
         card_text = _text(card) or ""
-        monthly = re.search(r"([^\n]{1,30}comprados[^\n]{0,40})", card_text, re.IGNORECASE)
+        monthly = re.search(
+            r"(\d[\d.,]*(?:\s+(?:mil|mill(?:ón|ones)))?\+?\s+comprados\b[^.]{0,80})",
+            card_text,
+            re.IGNORECASE,
+        )
         monthly_text = monthly.group(1).strip() if monthly else None
         monthly_value = None
         if monthly_text:
-            value_match = re.search(r"(\d[\d.,]*)", monthly_text)
-            if value_match:
-                try:
-                    monthly_value = int(value_match.group(1).replace(".", "").replace(",", ""))
-                except ValueError:
-                    monthly_value = None
+            if not re.search(r"\b(?:mil|mill(?:ón|ones))\b", monthly_text, re.IGNORECASE):
+                value_match = re.search(r"(\d[\d.,]*)", monthly_text)
+                if value_match:
+                    try:
+                        monthly_value = int(value_match.group(1).replace(".", "").replace(",", ""))
+                    except ValueError:
+                        monthly_value = None
+        sponsored_node = (
+            card
+            if card.get("data-component-type") == "s-sponsored-label"
+            else card.select_one("[data-component-type='s-sponsored-label'], [class*='s-sponsored']")
+        )
         records.append(
             RankingRecord(
                 snapshot_date=now.date().isoformat(),
@@ -103,7 +115,7 @@ def parse_product_cards(
                 rank_text=rank_text,
                 rank_source=rank_source,
                 asin=asin,
-                asin_source="product_url" if asin else None,
+                asin_source=("product_url" if asin_match else "dom_attribute") if asin else None,
                 title=title,
                 product_url=product_url,
                 image_url=image_url,
@@ -113,6 +125,17 @@ def parse_product_cards(
                 review_count=review_count,
                 monthly_bought_text=monthly_text,
                 monthly_bought_value=monthly_value,
+                prime=_first_text(card, (".a-icon-prime", "[class*='prime']")),
+                discount=_first_text(card, (".savingsPercentage", "[class*='discount']")),
+                original_price=_first_text(card, (".a-text-price", "[class*='original-price']")),
+                current_price=price,
+                coupon=_first_text(card, (".coupon", "[class*='coupon']")),
+                deal=_first_text(card, (".deal", "[class*='deal']")),
+                availability=_first_text(card, (".availability", "[class*='availability']")),
+                sponsored="true" if sponsored_node is not None else None,
+                badge=_first_text(card, (".a-badge-text", "[class*='badge']")),
+                variant_text=_first_text(card, ("[class*='variant']",)),
+                delivery_text=_first_text(card, ("[class*='delivery']", "[class*='arrives']")),
                 source_url=source_url,
                 source_category=context.get("level2_category_es"),
                 collected_at=now.isoformat(),

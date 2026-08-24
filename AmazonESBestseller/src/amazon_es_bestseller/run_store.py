@@ -16,6 +16,7 @@ class RunStore:
         self.parsed_dir = root / "parsed"
         self.logs_dir = root / "logs"
         self.events_path = root / "access_events.csv"
+        self.logger = logging.getLogger(f"amazon_es_bestseller.run.{root.name}")
 
     @classmethod
     def create(cls, base_dir: Path, run_id: str) -> "RunStore":
@@ -33,12 +34,20 @@ class RunStore:
             store.logs_dir,
         ):
             directory.mkdir(parents=True, exist_ok=False)
-        logging.basicConfig(
-            filename=store.logs_dir / "run.log",
-            level=logging.INFO,
-            format="%(asctime)s %(levelname)s %(message)s",
-        )
+        store.logger.setLevel(logging.INFO)
+        store.logger.propagate = False
+        handler = logging.FileHandler(store.logs_dir / "run.log", encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        store.logger.addHandler(handler)
         return store
+
+    def log_info(self, message: str, *args) -> None:
+        self.logger.info(message, *args)
+
+    def close(self) -> None:
+        for handler in self.logger.handlers[:]:
+            handler.close()
+            self.logger.removeHandler(handler)
 
     def save_html(self, name: str, html: str, failure: bool = False) -> Path:
         directory = self.failures_dir if failure else self.html_dir
@@ -60,11 +69,13 @@ class RunStore:
             if write_header:
                 writer.writeheader()
             writer.writerow(asdict(event))
-        logging.info(
-            "%s %s state=%s cards=%s reason=%s",
+        self.logger.info(
+            "%s %s status=%s state=%s body_length=%s duration=%.3f reason=%s",
             event.requested_url,
             event.navigation_result,
+            event.status,
             event.access_state.value,
             event.body_length,
+            event.load_duration,
             event.reason or "",
         )

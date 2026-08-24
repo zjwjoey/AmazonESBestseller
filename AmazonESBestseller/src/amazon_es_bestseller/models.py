@@ -27,6 +27,7 @@ class ProbeEvent:
     navigation_result: str
     access_state: AccessState
     body_length: int
+    status: int | None = None
     reason: str | None = None
 
 
@@ -53,6 +54,17 @@ class RankingRecord:
     monthly_bought_text: str | None = None
     monthly_bought_value: int | None = None
     brand: str | None = None
+    prime: str | None = None
+    discount: str | None = None
+    original_price: str | None = None
+    current_price: str | None = None
+    coupon: str | None = None
+    deal: str | None = None
+    availability: str | None = None
+    sponsored: str | None = None
+    badge: str | None = None
+    variant_text: str | None = None
+    delivery_text: str | None = None
     source_url: str | None = None
     source_category: str | None = None
     collected_at: str | None = None

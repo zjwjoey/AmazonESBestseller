@@ -56,6 +56,26 @@ def write_field_availability_csv(records: list[RankingRecord], path: Path) -> Pa
     return _write_dicts(build_field_availability(records), path)
 
 
+def write_detail_field_availability(field_maps: list[dict[str, bool]], path: Path) -> Path:
+    fields_seen = sorted({field for mapping in field_maps for field in mapping})
+    total = len(field_maps)
+    rows = [
+        {
+            "field": field,
+            "samples": total,
+            "present": sum(mapping.get(field, False) for mapping in field_maps),
+            "availability_rate": round(
+                sum(mapping.get(field, False) for mapping in field_maps) / total, 4
+            )
+            if total
+            else 0.0,
+            "source": "detail_pages",
+        }
+        for field in fields_seen
+    ]
+    return _write_dicts(rows, path, ["field", "samples", "present", "availability_rate", "source"])
+
+
 def duplicate_summary(records: list[RankingRecord]) -> dict[str, float | int]:
     unique_asins = len({record.asin for record in records if record.asin})
     duplicate_records = max(len(records) - unique_asins, 0)

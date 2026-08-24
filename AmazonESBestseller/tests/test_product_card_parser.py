@@ -40,3 +40,53 @@ def test_parser_handles_observed_amazon_card_semantic_prefixes():
     assert record.price == "10,95 €"
     assert record.review_count == "8.170"
     assert record.rank_source == "visible_text"
+
+
+def test_parser_fallback_accepts_anchor_only_product_cards():
+    html = '<a href="/sample/dp/B012345678">Anchor-only product</a>'
+
+    records = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")
+
+    assert len(records) == 1
+    assert records[0].asin == "B012345678"
+
+
+def test_parser_does_not_convert_unhandled_spanish_magnitude():
+    html = """
+    <div data-asin="B012345678">
+      <span class="rank">#1</span>
+      <a href="/sample/dp/B012345678">Producto</a>
+      <span>1 mil+ comprados el mes pasado</span>
+    </div>
+    """
+
+    record = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")[0]
+
+    assert record.monthly_bought_text == "1 mil+ comprados el mes pasado"
+    assert record.monthly_bought_value is None
+
+
+def test_parser_reports_presence_of_additional_sales_hints():
+    html = """
+    <div data-asin="B012345678" data-component-type="s-sponsored-label">
+      <span class="a-icon-prime">Prime</span>
+      <span class="savingsPercentage">-20%</span>
+      <span class="a-text-price">25,00 €</span>
+      <span class="coupon">Cupón 5%</span>
+      <span class="deal">Oferta del día</span>
+      <span class="availability">En stock</span>
+      <span class="a-badge-text">Más vendido</span>
+      <a href="/sample/dp/B012345678">Producto</a>
+    </div>
+    """
+
+    record = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")[0]
+
+    assert record.prime == "Prime"
+    assert record.discount == "-20%"
+    assert record.original_price == "25,00 €"
+    assert record.coupon == "Cupón 5%"
+    assert record.deal == "Oferta del día"
+    assert record.availability == "En stock"
+    assert record.sponsored == "true"
+    assert record.badge == "Más vendido"

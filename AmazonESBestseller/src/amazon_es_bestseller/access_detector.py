@@ -1,5 +1,7 @@
 import re
 
+from bs4 import BeautifulSoup
+
 from .models import AccessResult, AccessState
 
 
@@ -16,6 +18,17 @@ _BLOCK_MARKERS = (
     "iniciar sesión para continuar",
     "login required",
 )
+
+
+def visible_text_from_html(html: str | None) -> str:
+    """Return user-visible text while excluding hidden widgets and scripts."""
+    soup = BeautifulSoup(html or "", "lxml")
+    for node in soup.select(
+        "script, style, [hidden], [aria-hidden='true'], .aok-hidden, "
+        "[style*='display:none'], [style*='display: none']"
+    ):
+        node.decompose()
+    return " ".join(soup.get_text(" ", strip=True).split())
 
 
 def detect_access_state(

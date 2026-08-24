@@ -26,3 +26,14 @@ def test_discovery_extracts_browse_node_from_kitchen_path():
     html = '<a href="/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1">Almacenamiento</a>'
     nodes = discover_categories(html, "https://www.amazon.es/gp/bestsellers/kitchen")
     assert nodes[0].browse_node_id == "2165211031"
+
+
+def test_discovery_ignores_nested_category_links_from_root():
+    html = """
+    <a href="/gp/bestsellers/kitchen/2165211031">Direct</a>
+    <a href="/gp/bestsellers/kitchen/2165211031/123456">Nested</a>
+    """
+
+    nodes = discover_categories(html, "https://www.amazon.es/gp/bestsellers/kitchen")
+
+    assert [node.category_name_es for node in nodes] == ["Direct"]

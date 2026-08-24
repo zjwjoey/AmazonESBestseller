@@ -3,6 +3,7 @@ from pathlib import Path
 from amazon_es_bestseller.models import RankingRecord
 from amazon_es_bestseller.reports import (
     build_field_availability,
+    write_detail_field_availability,
     write_ranking_csv,
 )
 
@@ -20,3 +21,14 @@ def test_field_availability_reports_null_counts():
     assert asin_row["records"] == 2
     assert asin_row["non_null"] == 1
     assert asin_row["null"] == 1
+
+
+def test_detail_field_availability_reports_sample_presence(tmp_path: Path):
+    path = write_detail_field_availability(
+        [{"title": True, "brand": False}, {"title": True, "brand": True}],
+        tmp_path / "detail_field_availability.csv",
+    )
+
+    content = path.read_text(encoding="utf-8-sig")
+    assert "title,2,2,1.0,detail_pages" in content
+    assert "brand,2,1,0.5,detail_pages" in content
