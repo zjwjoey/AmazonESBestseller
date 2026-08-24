@@ -1,0 +1,9 @@
+root_urls:
+  home: https://www.amazon.es/
+  bestsellers: https://www.amazon.es/gp/bestsellers
+  kitchen: https://www.amazon.es/gp/bestsellers/kitchen
+page_delay_seconds: 3
+max_categories: 3
+max_products_per_category: 50
+max_detail_samples: 5
+headless: false

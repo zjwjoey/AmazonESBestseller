@@ -1,0 +1,8 @@
+.worktrees/
+.venv/
+__pycache__/
+.pytest_cache/
+runs/
+playwright/.cache/
+*.py[cod]
+*.egg-info/
