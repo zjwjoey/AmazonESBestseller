@@ -21,6 +21,9 @@ def _browse_node_id(url: str) -> str | None:
     if query.get("node"):
         return query["node"][0]
     match = re.search(r"/zgbs/[^/]+/(\d+)", parsed.path)
+    if match:
+        return match.group(1)
+    match = re.search(r"/gp/bestsellers/kitchen/(\d+)(?:/|$)", parsed.path)
     return match.group(1) if match else None
 
 

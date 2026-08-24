@@ -57,14 +57,29 @@ def parse_product_cards(
         if rank_match is None:
             rank_match = re.search(r"(?:#|n\.º\s*)(\d+)", _text(card) or "", re.IGNORECASE)
             rank_text = rank_match.group(0) if rank_match else None
+            rank_source = "visible_text" if rank_match else None
         rank = int(rank_match.group(1)) if rank_match else None
-        title = _first_text(card, (".title", "[data-testid='product-title']"))
+        title = _first_text(
+            card,
+            (".title", "[data-testid='product-title']", "div[class*='line-clamp']"),
+        )
         title = title or _text(link)
         image = card.find("img")
         image_url = image.get("src") if image else None
-        price = _first_text(card, (".price", ".a-price .a-offscreen"))
+        price = _first_text(
+            card,
+            (".price", ".a-price .a-offscreen", "span[class*='p13n-sc-price']", ".a-color-price"),
+        )
         rating = _first_text(card, (".rating", ".a-icon-alt"))
-        review_count = _first_text(card, (".review-count", "[aria-label*='opiniones']"))
+        review_count = _first_text(
+            card,
+            (".review-count", "[aria-label*='opiniones']", ".a-icon-row .a-size-small"),
+        )
+        if review_count is None:
+            rating_node = card.select_one(".a-icon-alt")
+            if rating_node is not None:
+                next_span = rating_node.find_next("span")
+                review_count = _text(next_span)
         card_text = _text(card) or ""
         monthly = re.search(r"([^\n]{1,30}comprados[^\n]{0,40})", card_text, re.IGNORECASE)
         monthly_text = monthly.group(1).strip() if monthly else None
