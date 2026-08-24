@@ -7,3 +7,6 @@ def test_project_files_are_isolated_under_amazon_es_bestseller():
     assert (project_root / "pyproject.toml").is_file()
     assert (project_root / "src").is_dir()
     assert (project_root / "tests").is_dir()
+    assert not (repo_root / "pyproject.toml").exists()
+    assert not (repo_root / "src").exists()
+    assert not (repo_root / "config").exists()
