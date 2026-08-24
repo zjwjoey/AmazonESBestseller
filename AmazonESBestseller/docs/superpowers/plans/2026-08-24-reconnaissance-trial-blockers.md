@@ -227,7 +227,7 @@ Run: `git diff --check origin/main...HEAD; git status --short; git diff --stat o
 
 Expected: only scoped source, tests, and approved documentation changes are present.
 
-- [ ] **Step 3: Commit and push**
+- [x] **Step 3: Commit and push**
 
 Run: `git add src tests docs; git commit -m "fix: harden reconnaissance trial evidence"; git push origin feature/amazon-es-reconnaissance`
 
