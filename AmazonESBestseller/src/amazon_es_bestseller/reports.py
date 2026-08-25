@@ -33,12 +33,12 @@ def write_products_csv(products: list[ProductSummary], path: Path) -> Path:
     )
 
 
-def build_field_availability(records: list[RankingRecord]) -> list[dict]:
-    total = len(records)
+def _availability_rows(items, item_fields, source: str) -> list[dict]:
+    total = len(items)
     rows = []
-    for field in fields(RankingRecord):
+    for field in item_fields:
         name = field.name
-        non_null = sum(getattr(record, name) is not None for record in records)
+        non_null = sum(getattr(item, name) is not None for item in items)
         rows.append(
             {
                 "field": name,
@@ -46,14 +46,25 @@ def build_field_availability(records: list[RankingRecord]) -> list[dict]:
                 "non_null": non_null,
                 "null": total - non_null,
                 "availability_rate": round(non_null / total, 4) if total else 0.0,
-                "source": "ranking_records",
+                "source": source,
             }
         )
     return rows
 
 
-def write_field_availability_csv(records: list[RankingRecord], path: Path) -> Path:
-    return _write_dicts(build_field_availability(records), path)
+def build_field_availability(
+    records: list[RankingRecord], products: list[ProductSummary] | None = None
+) -> list[dict]:
+    rows = _availability_rows(records, fields(RankingRecord), "ranking_records")
+    if products is not None:
+        rows.extend(_availability_rows(products, fields(ProductSummary), "products"))
+    return rows
+
+
+def write_field_availability_csv(
+    records: list[RankingRecord], path: Path, products: list[ProductSummary] | None = None
+) -> Path:
+    return _write_dicts(build_field_availability(records, products), path)
 
 
 def write_detail_field_availability(field_maps: list[dict[str, bool]], path: Path) -> Path:
@@ -100,10 +111,10 @@ REPORT_HEADINGS = [
 ]
 
 
-def write_category_tree(nodes, csv_path: Path, json_path: Path) -> None:
+def write_category_tree(nodes, csv_path: Path, json_path: Path, root_name: str = "Hogar y cocina") -> None:
     rows = [
         {
-            "level_1": "Hogar y cocina",
+            "level_1": root_name,
             "level_2": node.parent_category if node.depth == 3 else node.category_name_es,
             "level_3": node.category_name_es if node.depth == 3 else None,
             "category_name_es": node.category_name_es,
@@ -120,7 +131,7 @@ def write_category_tree(nodes, csv_path: Path, json_path: Path) -> None:
         if node.depth == 3:
             children_by_parent.setdefault(node.parent_category, []).append(node)
     tree = {
-        "name": "Hogar y cocina",
+        "name": root_name,
         "browse_node_id": None,
         "children": [
             {

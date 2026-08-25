@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from amazon_es_bestseller.category_discovery import CategoryNode
-from amazon_es_bestseller.models import RankingRecord
+from amazon_es_bestseller.models import ProductSummary, RankingRecord
 from amazon_es_bestseller.reports import (
     build_field_availability,
     duplicate_summary,
@@ -25,6 +25,18 @@ def test_field_availability_reports_null_counts():
     assert asin_row["records"] == 2
     assert asin_row["non_null"] == 1
     assert asin_row["null"] == 1
+
+
+def test_field_availability_includes_product_detail_fields_when_supplied():
+    rows = build_field_availability(
+        [RankingRecord(asin="B012345678")],
+        [ProductSummary(asin="B012345678", details="brand: Casa")],
+    )
+
+    details_row = next(row for row in rows if row["field"] == "details")
+    assert details_row["source"] == "products"
+    assert details_row["records"] == 1
+    assert details_row["non_null"] == 1
 
 
 def test_detail_field_availability_reports_sample_presence(tmp_path: Path):

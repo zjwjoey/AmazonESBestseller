@@ -6,11 +6,13 @@ from amazon_es_bestseller.category_discovery import CategoryNode
 from amazon_es_bestseller.cli import (
     _call_probe,
     _write_detail_field_report,
+    parse_discovery_page,
     _summary_from_records,
     choose_decision,
     format_tested_pages,
     parse_root_sample,
     run_reconnaissance,
+    select_detail_records,
     select_trial_categories,
 )
 from amazon_es_bestseller.models import AccessState, ProbeEvent
@@ -133,6 +135,37 @@ def test_category_trial_keeps_full_discovery_result():
 
     assert len(all_nodes) == 5
     assert len(trial_nodes) == 3
+
+
+def test_detail_sampling_round_robins_across_leaf_categories():
+    from amazon_es_bestseller.models import RankingRecord
+
+    records = [
+        RankingRecord(asin="B000000001", product_url="https://www.amazon.es/dp/B000000001", leaf_category="Cocina"),
+        RankingRecord(asin="B000000002", product_url="https://www.amazon.es/dp/B000000002", leaf_category="Cocina"),
+        RankingRecord(asin="B000000003", product_url="https://www.amazon.es/dp/B000000003", leaf_category="Baño"),
+        RankingRecord(asin="B000000004", product_url="https://www.amazon.es/dp/B000000004", leaf_category="Limpieza"),
+    ]
+
+    selected = select_detail_records(records, max_detail_samples=3)
+
+    assert [record.asin for record in selected] == ["B000000001", "B000000003", "B000000004"]
+
+
+def test_discovery_page_with_children_does_not_emit_parent_as_leaf_ranking():
+    node = CategoryNode(
+        "Baño", "https://www.amazon.es/gp/bestsellers/kitchen/1", "1",
+        "Hogar y cocina", 2, "root",
+    )
+    html = """
+    <nav id="category-nav"><a href="/gp/bestsellers/kitchen/2">Accesorios de baño</a></nav>
+    <div data-asin="B012345678"><span class="rank">#1</span><a href="/dp/B012345678">Producto</a></div>
+    """
+
+    children, records = parse_discovery_page(html, node)
+
+    assert [child.category_name_es for child in children] == ["Accesorios de baño"]
+    assert records == []
 
 
 def test_root_sample_parser_preserves_root_category_context():

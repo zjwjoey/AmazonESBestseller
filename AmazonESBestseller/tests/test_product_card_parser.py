@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from amazon_es_bestseller.models import RankingRecord
+from amazon_es_bestseller.detail_parser import ProductDetail
 from amazon_es_bestseller.product_card_parser import build_products, parse_product_cards
 
 
@@ -63,7 +64,7 @@ def test_parser_does_not_convert_unhandled_spanish_magnitude():
     record = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")[0]
 
     assert record.monthly_bought_text == "1 mil+ comprados el mes pasado"
-    assert record.monthly_bought_value is None
+    assert record.monthly_bought_value == 1000
 
 
 def test_parser_reports_presence_of_additional_sales_hints():
@@ -84,7 +85,7 @@ def test_parser_reports_presence_of_additional_sales_hints():
 
     assert record.prime == "Prime"
     assert record.discount == "-20%"
-    assert record.original_price == "25,00 €"
+    assert record.original_price == 25.0
     assert record.coupon == "Cupón 5%"
     assert record.deal == "Oferta del día"
     assert record.availability == "En stock"
@@ -116,3 +117,84 @@ def test_parser_deduplicates_non_nested_candidates_with_same_ranking_identity():
     records = parse_product_cards(html, "https://www.amazon.es/gp/bestsellers/kitchen")
 
     assert len(records) == 1
+
+
+def test_parser_emits_canonical_prices_discount_monthly_lower_bound_and_leaf_index():
+    html = """
+    <div data-asin="B012345678">
+      <span class="rank">#1</span>
+      <a href="/sample/dp/B012345678?ref=tracking">Producto</a>
+      <span class="a-text-price">19,99 €</span>
+      <span class="a-price"><span class="a-offscreen">14,99 €</span></span>
+      <span>1 mil+ comprados el mes pasado</span>
+    </div>
+    """
+
+    record = parse_product_cards(
+        html,
+        "https://www.amazon.es/gp/bestsellers/kitchen/123",
+        {"leaf_category": "Baño", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/kitchen/123"},
+    )[0]
+
+    assert record.index == 1
+    assert record.category_rank == 1
+    assert record.category_l1 == "Hogar y cocina"
+    assert record.leaf_category == "Baño"
+    assert record.product_url == "https://www.amazon.es/dp/B012345678"
+    assert record.original_price == 19.99
+    assert record.current_price == 14.99
+    assert record.discount_rate == 25.01
+    assert record.monthly_bought_raw == "1 mil+ comprados el mes pasado"
+    assert record.monthly_bought_min == 1000
+
+
+def test_build_products_merges_saved_detail_fields_by_asin():
+    records = [
+        RankingRecord(
+            asin="B012345678",
+            title="Ranking title",
+            current_price=12.99,
+            original_price=19.99,
+            discount_rate=35.02,
+            product_url="https://www.amazon.es/dp/B012345678",
+        )
+    ]
+    details = {
+        "B012345678": ProductDetail(
+            asin="B012345678",
+            parent_asin="B099999999",
+            details_json={"brand": "Casa"},
+            details="brand: Casa",
+            specification="Color: Azul",
+            date_first_available="2024-01-02",
+            date_first_available_raw="2 de enero de 2024",
+            candidate_fields={"seller": "Amazon"},
+        )
+    }
+
+    products = build_products(records, details)
+
+    assert products[0].parent_asin == "B099999999"
+    assert products[0].current_price == 12.99
+    assert products[0].details_json == '{"brand": "Casa"}'
+    assert products[0].date_first_available == "2024-01-02"
+
+
+def test_build_products_backfills_brand_and_marks_self_reported_parent_asin():
+    record = RankingRecord(asin="B012345678", title="Ranking title")
+    detail = ProductDetail(
+        asin="B012345678",
+        parent_asin="B012345678",
+        details_json={"brand": "Casa"},
+        details="brand: Casa",
+        specification=None,
+        date_first_available=None,
+        date_first_available_raw=None,
+        candidate_fields={},
+    )
+
+    product = build_products([record], {record.asin: detail})[0]
+
+    assert product.brand == "Casa"
+    assert product.parent_asin == "B012345678"
+    assert product.parent_asin_status == "self_reported_unconfirmed"

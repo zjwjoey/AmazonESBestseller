@@ -1,4 +1,5 @@
 import re
+import json
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 
@@ -39,6 +40,25 @@ def _first_text(card, selectors: tuple[str, ...]) -> str | None:
     return None
 
 
+def _parse_eur_amount(text: str | None) -> float | None:
+    if not text or "€" not in text:
+        return None
+    match = re.search(r"(\d[\d.]*?(?:,\d{2})?|\d+(?:\.\d{2})?)\s*€", text)
+    if not match:
+        return None
+    value = match.group(1)
+    try:
+        if "," in value:
+            return float(value.replace(".", "").replace(",", "."))
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _canonical_product_url(asin: str | None, fallback_url: str) -> str:
+    return f"https://www.amazon.es/dp/{asin}" if asin else fallback_url
+
+
 def parse_product_cards(
     html: str,
     source_url: str,
@@ -54,10 +74,11 @@ def parse_product_cards(
         link = link or (card.find("a", href=True) if getattr(card, "find", None) else None)
         if link is None:
             continue
-        product_url = urljoin(source_url, link.get("href", ""))
-        asin_match = ASIN_URL_RE.search(product_url)
+        linked_url = urljoin(source_url, link.get("href", ""))
+        asin_match = ASIN_URL_RE.search(linked_url)
         dom_asin = card.get("data-asin") if getattr(card, "get", None) else None
         asin = asin_match.group(1).upper() if asin_match else (dom_asin.upper() if dom_asin else None)
+        product_url = _canonical_product_url(asin, linked_url)
         rank_node = card.select_one(".rank, [data-rank]")
         rank_text = _text(rank_node)
         rank_source = "visible_text" if rank_text else None
@@ -97,13 +118,23 @@ def parse_product_cards(
         monthly_text = monthly.group(1).strip() if monthly else None
         monthly_value = None
         if monthly_text:
-            if not re.search(r"\b(?:mil|mill(?:ón|ones))\b", monthly_text, re.IGNORECASE):
-                value_match = re.search(r"(\d[\d.,]*)", monthly_text)
-                if value_match:
-                    try:
-                        monthly_value = int(value_match.group(1).replace(".", "").replace(",", ""))
-                    except ValueError:
-                        monthly_value = None
+            value_match = re.search(r"(\d[\d.,]*)", monthly_text)
+            if value_match:
+                try:
+                    base_value = int(value_match.group(1).replace(".", "").replace(",", ""))
+                    monthly_value = (
+                        base_value * 1000
+                        if re.search(r"\bmil\b", monthly_text, re.IGNORECASE)
+                        else base_value
+                    )
+                except ValueError:
+                    monthly_value = None
+        original_price_text = _first_text(card, (".a-text-price", "[class*='original-price']"))
+        current_price_value = _parse_eur_amount(price)
+        original_price_value = _parse_eur_amount(original_price_text)
+        discount_rate = None
+        if original_price_value and current_price_value is not None:
+            discount_rate = round((original_price_value - current_price_value) / original_price_value * 100, 2)
         sponsored_node = (
             card
             if card.get("data-component-type") == "s-sponsored-label"
@@ -115,15 +146,21 @@ def parse_product_cards(
         seen_ranking_identities.add(ranking_identity)
         records.append(
             RankingRecord(
+                index=len(records) + 1,
                 snapshot_date=now.date().isoformat(),
                 snapshot_time=now.time().isoformat(timespec="seconds"),
                 root_category_es=context.get("root_category_es", "Hogar y cocina"),
                 level2_category_es=context.get("level2_category_es"),
                 level3_category_es=context.get("level3_category_es"),
+                category_l1=context.get("category_l1", "Hogar y cocina"),
+                category_l2=context.get("category_l2", context.get("level2_category_es")),
+                category_l3=context.get("category_l3", context.get("level3_category_es")),
+                leaf_category=context.get("leaf_category", context.get("level3_category_es")),
                 browse_node_id=context.get("browse_node_id"),
                 rank=rank,
                 rank_text=rank_text,
                 rank_source=rank_source,
+                category_rank=rank,
                 asin=asin,
                 asin_source=("product_url" if asin_match else "dom_attribute") if asin else None,
                 title=title,
@@ -135,10 +172,13 @@ def parse_product_cards(
                 review_count=review_count,
                 monthly_bought_text=monthly_text,
                 monthly_bought_value=monthly_value,
+                monthly_bought_raw=monthly_text,
+                monthly_bought_min=monthly_value,
                 prime=_first_text(card, (".a-icon-prime", "[class*='prime']")),
                 discount=_first_text(card, (".savingsPercentage", "[class*='discount']")),
-                original_price=_first_text(card, (".a-text-price", "[class*='original-price']")),
-                current_price=price,
+                original_price=original_price_value,
+                current_price=current_price_value,
+                discount_rate=discount_rate,
                 coupon=_first_text(card, (".coupon", "[class*='coupon']")),
                 deal=_first_text(card, (".deal", "[class*='deal']")),
                 availability=_first_text(card, (".availability", "[class*='availability']")),
@@ -148,13 +188,16 @@ def parse_product_cards(
                 delivery_text=_first_text(card, ("[class*='delivery']", "[class*='arrives']")),
                 source_url=source_url,
                 source_category=context.get("level2_category_es"),
+                ranking_source_url=context.get("ranking_source_url", source_url),
                 collected_at=now.isoformat(),
             )
         )
     return records
 
 
-def build_products(records: list[RankingRecord]) -> list[ProductSummary]:
+def build_products(records: list[RankingRecord], details_by_asin=None) -> list[ProductSummary]:
+    """Collapse ranking appearances to products and enrich only saved detail samples."""
+    details_by_asin = details_by_asin or {}
     grouped: dict[str, ProductSummary] = {}
     for record in records:
         if not record.asin:
@@ -165,7 +208,10 @@ def build_products(records: list[RankingRecord]) -> list[ProductSummary]:
                 asin=record.asin,
                 title_es=record.title,
                 price=record.price,
+                original_price=record.original_price,
+                current_price=record.current_price,
                 currency=record.currency,
+                discount_rate=record.discount_rate,
                 rating=record.rating,
                 review_count=record.review_count,
                 monthly_bought_text=record.monthly_bought_text,
@@ -188,7 +234,10 @@ def build_products(records: list[RankingRecord]) -> list[ProductSummary]:
         for field, value in (
             ("title_es", record.title),
             ("price", record.price),
+            ("original_price", record.original_price),
+            ("current_price", record.current_price),
             ("currency", record.currency),
+            ("discount_rate", record.discount_rate),
             ("rating", record.rating),
             ("review_count", record.review_count),
             ("monthly_bought_text", record.monthly_bought_text),
@@ -197,4 +246,24 @@ def build_products(records: list[RankingRecord]) -> list[ProductSummary]:
         ):
             if getattr(product, field) is None and value is not None:
                 setattr(product, field, value)
+    for asin, product in grouped.items():
+        detail = details_by_asin.get(asin)
+        if detail is None:
+            continue
+        product.parent_asin = detail.parent_asin or product.parent_asin
+        product.parent_asin_status = (
+            "self_reported_unconfirmed"
+            if detail.parent_asin == product.asin
+            else "confirmed"
+            if detail.parent_asin
+            else "not_observed"
+        )
+        detail_brand = detail.details_json.get("brand")
+        if product.brand is None and isinstance(detail_brand, str):
+            product.brand = detail_brand
+        product.details_json = json.dumps(detail.details_json, ensure_ascii=False, sort_keys=True)
+        product.details = detail.details
+        product.specification = detail.specification
+        product.date_first_available = detail.date_first_available
+        product.date_first_available_raw = detail.date_first_available_raw
     return list(grouped.values())

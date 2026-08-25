@@ -2,8 +2,12 @@ root_urls:
   home: https://www.amazon.es/
   bestsellers: https://www.amazon.es/gp/bestsellers
   kitchen: https://www.amazon.es/gp/bestsellers/kitchen
+  diy: https://www.amazon.es/gp/bestsellers/tools
 page_delay_seconds: 3
 max_categories: 3
 max_products_per_category: 50
 max_detail_samples: 5
+max_breadth_discovery_pages: 5
+max_breadth_leaf_categories: 5
+max_breadth_detail_samples: 100
 headless: false

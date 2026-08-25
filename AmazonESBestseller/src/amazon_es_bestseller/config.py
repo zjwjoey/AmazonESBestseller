@@ -13,6 +13,9 @@ class Settings:
     max_products_per_category: int
     max_detail_samples: int
     headless: bool
+    max_breadth_discovery_pages: int = 5
+    max_breadth_leaf_categories: int = 5
+    max_breadth_detail_samples: int = 100
 
 
 def load_settings(path: Path) -> Settings:
@@ -24,6 +27,9 @@ def load_settings(path: Path) -> Settings:
         max_products_per_category=int(raw["max_products_per_category"]),
         max_detail_samples=int(raw["max_detail_samples"]),
         headless=bool(raw["headless"]),
+        max_breadth_discovery_pages=int(raw.get("max_breadth_discovery_pages", 5)),
+        max_breadth_leaf_categories=int(raw.get("max_breadth_leaf_categories", 5)),
+        max_breadth_detail_samples=int(raw.get("max_breadth_detail_samples", 100)),
     )
     if settings.page_delay_seconds < 3:
         raise ValueError("page_delay_seconds violates reconnaissance hard limit: minimum is 3")
@@ -35,12 +41,21 @@ def load_settings(path: Path) -> Settings:
         )
     if settings.max_detail_samples > 5:
         raise ValueError("max_detail_samples violates reconnaissance hard limit: maximum is 5")
+    if settings.max_breadth_discovery_pages > 10:
+        raise ValueError("max_breadth_discovery_pages violates breadth hard limit: maximum is 10")
+    if settings.max_breadth_leaf_categories > 10:
+        raise ValueError("max_breadth_leaf_categories violates breadth hard limit: maximum is 10")
+    if settings.max_breadth_detail_samples > 100:
+        raise ValueError("max_breadth_detail_samples violates breadth hard limit: maximum is 100")
     if any(
         value < 0
         for value in (
             settings.max_categories,
             settings.max_products_per_category,
             settings.max_detail_samples,
+            settings.max_breadth_discovery_pages,
+            settings.max_breadth_leaf_categories,
+            settings.max_breadth_detail_samples,
         )
     ):
         raise ValueError("reconnaissance limits cannot be negative")

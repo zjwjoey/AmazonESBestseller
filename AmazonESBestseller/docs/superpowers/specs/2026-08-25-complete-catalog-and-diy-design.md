@@ -9,7 +9,7 @@ Produce two independently auditable Amazon.es datasets: 150 complete Home/Kitche
 - Reprocess the existing `runs/20260825_215400` Home/Kitchen artifacts offline before making additional requests.
 - Visit only the 50 Home/Kitchen product detail URLs that are still missing saved detail pages.
 - Download each dataset's existing main image serially from the observed `image_url`; do not revisit product pages to find alternative images.
-- Collect DIY/Tools from `https://www.amazon.es/gp/bestsellers/diy`: discover at most five diverse deepest observed category pages, retain 50 unique SKUs, visit every retained SKU detail page, and download every retained SKU main image.
+- Collect DIY/Tools from `https://www.amazon.es/gp/bestsellers/2454133031` (the Browse Node advertised by Amazon.es for Bricolaje y herramientas): discover at most five diverse deepest observed category pages, retain 50 unique SKUs, visit every retained SKU detail page, and download every retained SKU main image.
 
 ## Data Contract
 
@@ -21,7 +21,7 @@ Produce two independently auditable Amazon.es datasets: 150 complete Home/Kitche
 
 ## Access and Recovery
 
-- Use one Playwright browser/page for Amazon HTML. Maintain a delay of at least three seconds between request starts.
+- Home/Kitchen continuation uses one Playwright page. At the user's explicit request, DIY/Tools uses two concurrent pages in batches of two, with a three-second pause between batches; it stops scheduling after a non-normal batch.
 - Image requests are single-threaded with the same delay; an image failure is recorded once and is never retried automatically.
 - Page access restrictions or uncertain navigation stop that active stage immediately. Existing saved evidence remains valid and is never discarded.
 - Each continuation has its own evidence directory; outputs identify their source run and do not hide partial completion.

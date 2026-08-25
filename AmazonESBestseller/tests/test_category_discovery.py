@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from amazon_es_bestseller.category_discovery import discover_categories
+from amazon_es_bestseller.category_discovery import CategoryNode, discover_categories, select_leaf_trial_nodes
 
 
 def test_discovery_preserves_real_category_url_and_node_id():
@@ -26,6 +26,23 @@ def test_discovery_extracts_browse_node_from_kitchen_path():
     html = '<a href="/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1">Almacenamiento</a>'
     nodes = discover_categories(html, "https://www.amazon.es/gp/bestsellers/kitchen")
     assert nodes[0].browse_node_id == "2165211031"
+
+
+def test_discovery_supports_the_diy_bestseller_root():
+    html = '<a href="/gp/bestsellers/diy/123456">Herramientas manuales</a>'
+
+    nodes = discover_categories(html, "https://www.amazon.es/gp/bestsellers/diy")
+
+    assert nodes[0].category_name_es == "Herramientas manuales"
+    assert nodes[0].browse_node_id == "123456"
+
+
+def test_discovery_supports_a_numeric_bestseller_root_node():
+    html = '<a href="/gp/bestsellers/2454133031/123456">Herramientas manuales</a>'
+
+    nodes = discover_categories(html, "https://www.amazon.es/gp/bestsellers/2454133031")
+
+    assert nodes[0].browse_node_id == "123456"
 
 
 def test_discovery_ignores_nested_category_links_from_root():
@@ -98,3 +115,15 @@ def test_depth_three_discovery_requires_a_confirmed_navigation_container():
     )
 
     assert nodes == []
+
+
+def test_select_leaf_trial_nodes_round_robins_across_level_two_branches():
+    branch_nodes = {
+        "Baño": [CategoryNode("Toallas", "https://example.test/1", "1", "Baño", 3, "source"), CategoryNode("Alfombras", "https://example.test/2", "2", "Baño", 3, "source")],
+        "Cocina": [CategoryNode("Utensilios", "https://example.test/3", "3", "Cocina", 3, "source")],
+        "Textiles": [CategoryNode("Sábanas", "https://example.test/4", "4", "Textiles", 3, "source")],
+    }
+
+    selected = select_leaf_trial_nodes(branch_nodes, max_leaf_categories=4)
+
+    assert [branch for branch, _node in selected] == ["Baño", "Cocina", "Textiles", "Baño"]

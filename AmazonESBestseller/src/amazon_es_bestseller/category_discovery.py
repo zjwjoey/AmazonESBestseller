@@ -15,6 +15,23 @@ class CategoryNode:
     source_page: str
 
 
+def select_leaf_trial_nodes(
+    branch_nodes: dict[str, list[CategoryNode]],
+    max_leaf_categories: int,
+) -> list[tuple[str, CategoryNode]]:
+    """Choose deepest observed candidates round-robin across level-2 branches."""
+    remaining = {branch: list(nodes) for branch, nodes in branch_nodes.items() if nodes}
+    selected: list[tuple[str, CategoryNode]] = []
+    while remaining and len(selected) < max_leaf_categories:
+        for branch in list(remaining):
+            if len(selected) >= max_leaf_categories:
+                break
+            selected.append((branch, remaining[branch].pop(0)))
+            if not remaining[branch]:
+                del remaining[branch]
+    return selected
+
+
 def browse_node_id_from_url(url: str) -> str | None:
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
@@ -23,7 +40,7 @@ def browse_node_id_from_url(url: str) -> str | None:
     match = re.search(r"/zgbs/[^/]+/(\d+)", parsed.path)
     if match:
         return match.group(1)
-    match = re.search(r"/gp/bestsellers/kitchen/(\d+)(?:/|$)", parsed.path)
+    match = re.search(r"/gp/bestsellers/[^/]+/(\d+)(?:/|$)", parsed.path)
     return match.group(1) if match else None
 
 
@@ -39,7 +56,8 @@ def discover_categories(
     seen_urls: set[str] = set()
     seen_node_ids: set[str] = set()
     source_path = urlparse(source_page).path.rstrip("/")
-    root_path = "/gp/bestsellers/kitchen"
+    path_parts = source_path.split("/")
+    root_path = "/".join(path_parts[:4])
     navigation_anchors = soup.select(
         "#category-nav a[href], [class*='zg-browse'] a[href], [id*='zg-browse'] a[href]"
     )
@@ -50,7 +68,7 @@ def discover_categories(
         parsed = urlparse(absolute)
         if (
             "/dp/" in parsed.path
-            or "/gp/bestsellers/kitchen" not in parsed.path
+            or root_path not in parsed.path
             or parsed.path.rstrip("/") == source_path
             or parsed.fragment
         ):
