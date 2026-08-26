@@ -84,8 +84,8 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
     """榜单+详情串行采集；rankings.json/details.json 稳定输出到 out_dir 根。"""
     if args.offline:
         parser.error("collect 需要联网，不能与 --offline 同用")
-    if not args.urls:
-        parser.error("collect 需要 --urls 指定至少一个榜单页 URL")
+    if not args.urls and not args.rankings_file:
+        parser.error("collect 需要 --urls 或 --rankings-file")
     from .access.browser import BrowserSession
     from .collection.detail import collect_details
     from .collection.planning import DetailState, build_plan, collect_asins
@@ -93,7 +93,20 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
 
     out_dir = str(Path(args.out_dir).resolve())
     with BrowserSession(headless=not args.headful) as session:
-        rankings = collect_rankings(args.urls, session, out_dir)
+        rankings = (_load_json(args.rankings_file) if args.rankings_file
+                    else collect_rankings(args.urls, session, out_dir))
+        if args.rankings_only:
+            _save_json(rankings, str(Path(out_dir) / "rankings.json"))
+            print("collect rankings-only 完成：榜单 %d 条 → %s" %
+                  (len(rankings), Path(out_dir) / "rankings.json"))
+            return
+        if args.manifest:
+            manifest = _load_json(args.manifest)
+            manifest_records = manifest.get("records", []) if isinstance(manifest, dict) else manifest
+            allowed = {str(r.get("asin") or "").strip().upper() for r in manifest_records if isinstance(r, dict)}
+            rankings = [r for r in rankings if str(r.get("asin") or "").strip().upper() in allowed]
+            if not rankings:
+                raise SystemExit("manifest 与榜单记录没有可匹配的 ASIN")
         state = DetailState(Path(out_dir) / "state" / "details_state.json")
         plan = build_plan(rankings, state)
         details = collect_details(collect_asins(plan), session, out_dir)
@@ -304,6 +317,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="榜单页 URL（/zgbs/<NODE>）")
     c.add_argument("--out-dir", default=str(OUTPUTS), help="输出目录（默认 outputs/）")
     c.add_argument("--headful", action="store_true", help="有头浏览器（默认 headless）")
+    c.add_argument("--rankings-only", action="store_true", help="只采集榜单页，不访问详情页")
+    c.add_argument("--rankings-file", default="", help="复用已保存榜单 JSON，仅访问 manifest 中详情")
+    c.add_argument("--manifest", default="", help="详情采集 ASIN manifest JSON（与 --rankings-file 配合）")
     c.set_defaults(func=lambda a, p=c: cmd_collect(a, p))
 
     s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")
