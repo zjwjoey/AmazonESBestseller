@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""QA 聚合与统计（docs/QA_RULES.md §59-§63/§78）。
+"""QA 聚合与统计（docs/QA_RULES.md §28 状态 / §29 缺失数据）。
 
 D4：单条记录的最终状态按优先级 SOURCE_CONFLICT > FAIL > WARN > PASS 取最高。
 """
@@ -30,7 +30,7 @@ _VALIDATORS = (
     lambda r: v.validate_monthly_bought(r),
 )
 
-#: D4 聚合优先级（QA_RULES §59）
+#: D4 聚合优先级（QA_RULES §28 状态）
 _D4_RANK = {
     QAStatus.SOURCE_CONFLICT: 4,
     QAStatus.FAIL: 3,
@@ -38,7 +38,7 @@ _D4_RANK = {
     QAStatus.PASS: 1,
 }
 
-#: 填充率统计字段（QA_RULES §57）
+#: 填充率统计字段（QA_RULES §29 缺失数据）
 FILL_FIELDS = (
     'asin', 'current_price', 'original_price', 'brand', 'image_url',
     'monthly_bought_min', 'spec_v2', 'date_first_available',
@@ -64,7 +64,7 @@ def run_qa(record: Mapping) -> dict:
 
 
 def qa_summary(records: List[Mapping]) -> dict:
-    """整批记录 QA 汇总（QA_RULES §78）+ 关键字段填充率（§57）。"""
+    """整批记录 QA 汇总（QA_RULES §28）+ 关键字段填充率（§29）。"""
     status_counts = Counter()
     for r in records:
         status_counts[run_qa(r)['qa_status']] += 1

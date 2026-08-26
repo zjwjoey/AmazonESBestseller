@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""QA 纯校验函数（docs/QA_RULES.md §1-§79）。
+"""QA 纯校验函数（docs/QA_RULES.md，30 规则版；严重度 P0-P3 见 §1）。
 
 每个校验函数返回 ``(QAStatus, list[QaIssue])``：
   - PASS / 无 issue：记录无此维度问题；
   - WARN：仅 P2/P3 issue（缺失、占位、演示层问题）；
   - FAIL：含 P0/P1 issue（身份、单位错配、品牌误判等）。
 
-issue code 优先用 QA_RULES §79 的全集；补充码（§79 注明 "may include"，
-可扩展）：
-  RATING_INVALID / REVIEW_COUNT_INVALID / MONTHLY_BOUGHT_UNPARSEABLE
+issue code 是**实现契约**：全集由 test_regressions.py 的
+test_regression_all_issue_codes_implemented 钉死，不再是文档编号目录。
+补充码可扩展：RATING_INVALID / REVIEW_COUNT_INVALID / MONTHLY_BOUGHT_UNPARSEABLE。
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def _issue(code, severity, field, message) -> QaIssue:
 
 
 def validate_asin(asin) -> Tuple[QAStatus, List[QaIssue]]:
-    """ASIN 格式（QA_RULES §3）：缺失或不合规 → FAIL ASIN_INVALID P0。"""
+    """ASIN 格式（QA_RULES §2）：缺失或不合规 → FAIL ASIN_INVALID P0。"""
     a = normalize_asin(asin)
     if not _ASIN_RE.match(a):
         return QAStatus.FAIL, [_issue(
@@ -84,7 +84,7 @@ def _asin_from_url(url) -> Optional[str]:
 
 
 def validate_url_asin(asin, url) -> Tuple[QAStatus, List[QaIssue]]:
-    """URL 携带同一 ASIN（QA_RULES §4）：指向不同 ASIN → FAIL URL_ASIN_MISMATCH P0。"""
+    """URL 携带同一 ASIN（QA_RULES §2）：指向不同 ASIN → FAIL URL_ASIN_MISMATCH P0。"""
     a = normalize_asin(asin)
     u = _asin_from_url(url)
     if u and a and u != a:
@@ -95,7 +95,7 @@ def validate_url_asin(asin, url) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_image_asin(asin, image_asin=None) -> Tuple[QAStatus, List[QaIssue]]:
-    """图片归属 ASIN（QA_RULES §51）：已核对的 image_asin 与记录不符 → FAIL P0。"""
+    """图片归属 ASIN（QA_RULES §21）：已核对的 image_asin 与记录不符 → FAIL P0。"""
     a = normalize_asin(asin)
     ia = normalize_asin(image_asin)
     if a and ia and ia != a:
@@ -107,7 +107,7 @@ def validate_image_asin(asin, image_asin=None) -> Tuple[QAStatus, List[QaIssue]]
 
 def validate_price(current_price, original_price=None, currency=None,
                    discount_rate=None) -> Tuple[QAStatus, List[QaIssue]]:
-    """价格有效性（QA_RULES §16-§18）。"""
+    """价格有效性（QA_RULES §7）。"""
     issues: List[QaIssue] = []
     cur = parse_price(current_price)
     if current_price not in (None, '') and cur is None:
@@ -116,7 +116,7 @@ def validate_price(current_price, original_price=None, currency=None,
             '现价无法解析为 >0 的有效金额: %r' % (current_price,)))
     if currency and str(currency).strip().upper() != 'EUR':
         issues.append(_issue('PRICE_INVALID', 'P1', 'currency', '货币非 EUR'))
-    # 折扣必须有原价证据且原价 > 现价（§17-§18，禁止重建）
+    # 折扣必须有原价证据且原价 > 现价（QA_RULES §7，禁止重建）
     if discount_rate not in (None, '', 0, '0', '0.0'):
         orig = parse_price(original_price)
         if orig is None or (cur is not None and orig <= cur):
@@ -135,7 +135,7 @@ def _parse_rating_num(s: str) -> Optional[float]:
 
 
 def validate_rating(rating_raw) -> Tuple[QAStatus, List[QaIssue]]:
-    """评分范围 0-5（QA_RULES §20）：越界/无法解析 → FAIL RATING_INVALID P1。"""
+    """评分范围 0-5（QA_RULES §8）：越界/无法解析 → FAIL RATING_INVALID P1。"""
     if rating_raw in (None, ''):
         return QAStatus.PASS, []
     m = re.match(r'^([\d.,]+)', str(rating_raw).strip())
@@ -167,7 +167,7 @@ def _to_int_spanish(s: str) -> Optional[int]:
 
 
 def validate_review_count(raw) -> Tuple[QAStatus, List[QaIssue]]:
-    """评论数数值化（QA_RULES §21）：西语千分位点须当千位，非小数。"""
+    """评论数数值化（QA_RULES §8）：西语千分位点须当千位，非小数。"""
     if raw in (None, ''):
         return QAStatus.PASS, []
     m = re.match(r'^([\d.,]+)', str(raw).strip())
@@ -202,7 +202,7 @@ def validate_brand(brand, brand_raw=None) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """规格单位/占位/件数（QA_RULES §38/§40-§45）。"""
+    """规格单位/占位/件数（QA_RULES §12/§13）。"""
     issues: List[QaIssue] = []
     details = record.get('details_json')
     if isinstance(details, str):
@@ -229,7 +229,7 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
                 issues.append(_issue(
                     'SPEC_SUSPICIOUS_VALUE', 'P2', 'spec',
                     '尺寸疑似占位值: %s' % (v,)))
-        # 件数冲突（§38）：标题显式 N 件套 vs 泛型 package 数量 1
+        # 件数冲突（§12）：标题显式 N 件套 vs 泛型 package 数量 1
         title_es = record.get('title_es_raw') or ''
         m = re.search(r'(\d+)\s*(?:piezas?|unidades?|uds\.?|artículos?)\b', title_es, re.I)
         if m and int(m.group(1)) > 1:
@@ -239,7 +239,7 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
                     'SPEC_QUANTITY_CONFLICT', 'P1', 'spec',
                     '标题 %s 件套被泛型 package 数量 1 覆盖' % m.group(1)))
     spec_str = record.get('spec_v2') or record.get('specification') or ''
-    # 变体冲突（§37/§44）：选中变体容量应反映到规格输出
+    # 变体冲突（§19/§12）：选中变体容量应反映到规格输出
     variant = record.get('selected_variation_raw')
     if variant:
         vm = _VARIANT_CAP_RE.match(str(variant).strip())
@@ -256,7 +256,7 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_rank_separation(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """榜单排名与详情 BSR 隔离（QA_RULES §9/§72）：绝不混用。"""
+    """榜单排名与详情 BSR 隔离（QA_RULES §5/§12）：绝不混用。"""
     br = record.get('bestseller_rank')
     if br in (None, ''):
         return QAStatus.PASS, []
@@ -293,7 +293,7 @@ def validate_rank_separation(record) -> Tuple[QAStatus, List[QaIssue]]:
         return QAStatus.FAIL, [_issue(
             'RANK_BSR_MIXED', 'P0', 'bestseller_rank',
             '榜单排名 %s 被详情 BSR 污染' % br_int)]
-    # §10：排名存在但来源上下文缺失 → WARN（不臆造来源）
+    # 排名存在但来源上下文缺失 → WARN（不臆造来源）
     if not (record.get('ranking_source_url') or record.get('collected_at')):
         return QAStatus.WARN, [_issue(
             'RANK_SOURCE_MISSING', 'P2', 'bestseller_rank',
@@ -302,7 +302,7 @@ def validate_rank_separation(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_category(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """类目层级（QA_RULES §13/§15/§73）。"""
+    """类目层级（QA_RULES §6）。"""
     issues: List[QaIssue] = []
     l2 = record.get('category_l2')
     l3 = record.get('category_l3')
@@ -321,7 +321,7 @@ def validate_category(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_bilingual_match(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """中西对照：残留拉丁文本（§32-§33）与品牌重复（§30）。"""
+    """中西对照：残留拉丁文本与品牌重复（QA_RULES §3/§16）。"""
     title_zh = record.get('title_zh') or record.get('title_zh_cn') or ''
     if not title_zh:
         return QAStatus.PASS, []
@@ -346,12 +346,12 @@ def validate_bilingual_match(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_source_conflict(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """标题 vs 细节证据商品类型冲突（QA_RULES §29/§58/§63）。"""
+    """标题 vs 细节证据商品类型冲突（QA_RULES §20）。"""
     title_es = record.get('title_es_raw')
     pt_title = detect_product_type(title_es) if title_es else None
     if not pt_title:
         return QAStatus.PASS, []
-    # §2：记录的商品类型（业务派生字段）与标题证据矛盾 → P0
+    # 记录的商品类型（业务派生字段）与标题证据矛盾 → P0
     recorded_pt = record.get('product_type')
     if recorded_pt and recorded_pt != pt_title:
         return QAStatus.FAIL, [_issue(
@@ -370,7 +370,7 @@ def validate_source_conflict(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_monthly_bought(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """月购下限与原始文本一致（QA_RULES §22/§56）。"""
+    """月购下限与原始文本一致（QA_RULES §9）。"""
     raw = record.get('monthly_bought_raw')
     mn = record.get('monthly_bought_min')
     if raw in (None, ''):
