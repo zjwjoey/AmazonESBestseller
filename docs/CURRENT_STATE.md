@@ -33,6 +33,13 @@ Spanish/Chinese sheets. Field coverage: current_price 467/496, brand 456/496, im
 475/496, leaf_category 466/496, browse_node_id 466/496, spec_v2 395/496 (80%),
 product_details_zh 469/496, feature_bullets_zh 475/496.
 
+**Repeat-run validation (2026-08-26, same day):** a 2nd run over the same 19 ranking pages
+re-collected 570 rankings / re-collected 31 incremental ASINs (incomplete ones) and resumed
+the other 465 from saved HTML. QA stayed identical — **0 P0 / 0 P1**, same per-field coverage
+— and ASIN set matched 496/496 with **0 field drift** on `bestseller_rank`, `current_price`,
+`brand`, `image_url`, `leaf_category`, `browse_node_id`. The re-exported workbook
+(`选品清单_496_v2.xlsx`) keeps the 3-sheet / 26-column / bilingual-aligned contract.
+
 ## 4. Newly frozen product-detail direction
 
 The project no longer treats a small predefined `specification` field as equivalent to the complete product detail.
