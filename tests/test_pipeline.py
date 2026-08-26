@@ -84,6 +84,28 @@ def test_enrich_spec_from_modern_attributes():
     assert "件" in p["spec_v2"]                     # Número de artículos → 4 件
 
 
+def test_enrich_preserves_spanish_core_spec_from_modern_attributes():
+    attrs = [
+        {"section": "product_overview", "label_raw": "Tamaño",
+         "value_raw": "Cama 90 x 190 x 40 cm"},
+    ]
+    d = dict(DETAIL[0], details_json=None, attributes=attrs)
+    p = enrich_products(RANKING, [d])[0]
+    assert p["specification_es"] == "Tamaño: Cama 90 x 190 x 40 cm"
+
+
+def test_enrich_fills_missing_category_depth_from_detail_breadcrumb():
+    d = dict(DETAIL[0], detail_category_trail=[
+        "Hogar y cocina", "Muebles", "Dormitorio", "Protectores de colchón"])
+    ranking = dict(RANKING[0], category_l2=None, category_l3=None,
+                   leaf_category=None)
+    p = enrich_products([ranking], [d])[0]
+    assert p["category_l1"] == "Hogar y cocina"  # ranking context remains preferred
+    assert p["category_l2"] == "Muebles"
+    assert p["category_l3"] == "Dormitorio"
+    assert p["leaf_category"] == "Protectores de colchón"
+
+
 def test_enrich_spec_and_product_type():
     p = enrich_products(RANKING, DETAIL)[0]
     assert p["spec_v2"] != ""

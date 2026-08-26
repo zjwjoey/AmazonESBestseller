@@ -44,6 +44,27 @@ _DATE_SECTIONS = ("#detailBulletsWrapper_feature_div", "#detailBullets_feature_d
                   "#productDetails_detailBullets_sections1", "#prodDetails")
 
 _IMAGE_SELECTORS = ("#landingImage", "#imgBlkFront", "#imageBlock_feature_div img")
+_DETAIL_CATEGORY_SKIP = {
+    "los más vendidos", "más vendidos", "los mas vendidos", "mas vendidos",
+    "best sellers", "best-sellers", "cualquier departamento",
+}
+
+
+def _detail_category_trail(soup) -> list[str]:
+    """Visible product breadcrumb, root → leaf, as raw Spanish evidence."""
+    container = soup.select_one("#wayfinding-breadcrumbs_feature_div")
+    if container is None:
+        return []
+    trail = []
+    seen = set()
+    for a in container.select("a"):
+        name = _clean(a.get_text(" ", strip=True))
+        key = name.casefold()
+        if not name or key in _DETAIL_CATEGORY_SKIP or key in seen:
+            continue
+        seen.add(key)
+        trail.append(name)
+    return trail
 
 
 def _parent_asin(soup) -> str:
@@ -370,6 +391,7 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "date_first_available_raw": _first_available_date_raw(soup),
         "product_url": _product_url(asin),
         "image_url": _main_image_url(soup),
+        "detail_category_trail": _detail_category_trail(soup),
         # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
         "attributes": _collect_attributes(soup),
         "feature_bullets_raw": _feature_bullets_raw(soup),

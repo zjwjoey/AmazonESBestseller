@@ -106,9 +106,10 @@ def test_es_sheet_aligned_and_ordered(tmp_path, export_records):
     assert es_asins == zh_asins == ['B075JJRFVV', 'B078C6QR1C', 'B07RN64P2R']
     # 商品名称（西语）
     assert ws_es.cell(row=3, column=4).value == 'Fiambrera de cristal con 4 piezas'
-    # 当前选中规格 / 变体（西语）有值；核心规格西语暂留空；完整详情/卖点西语无原始数据留空
+    # 当前选中规格 / 变体与核心规格（西语）均来自 canonical 证据字段；
+    # 完整详情/卖点西语无原始数据时留空
     assert ws_es.cell(row=3, column=17).value == 'Fiambrera - Set 4 Estándar'
-    assert ws_es.cell(row=3, column=18).value in (None, '')   # 核心规格（西语）
+    assert ws_es.cell(row=3, column=18).value == 'Tamaño: Estándar / Número de piezas: 4'
     assert ws_es.cell(row=3, column=19).value in (None, '')   # 完整商品详情（西语原文）无数据
     assert ws_es.cell(row=3, column=20).value in (None, '')   # 商品卖点（西语原文）无数据
 

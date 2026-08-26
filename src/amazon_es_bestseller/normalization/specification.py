@@ -333,3 +333,91 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
         if m and int(m.group(1)) > 1:
             parts.append('%s只' % m.group(1))
     return ' / '.join(parts)
+
+
+# ---------- 西语规格展示 ----------
+# 仅保留页面明确给出的“版本选择”相关字段；不把品牌、材质等完整详情
+# 塞进核心规格列。标签和值均保留西语原文，便于回溯页面证据。
+_ES_CORE_KEYS = {
+    'capacidad', 'capacidad_de_salida', 'volumen_de_almacenamiento',
+    'volumen_del_tanque', 'volumen_liquido', 'tamano', 'talla',
+    'talla_dimensiones', 'numero_de_articulos', 'numero_de_piezas',
+    'numero_de_unidades', 'numero_de_etiquetas', 'numero_de_productos',
+    'numero_de_paquetes', 'numero_de_sets',
+    'total_del_paquete_segun_la_medida_elegida_para_referenciar_precio',
+    'cantidad_de_compartimentos', 'potencia', 'voltaje', 'tension',
+}
+
+_ES_CORE_GROUPS = {
+    'capacity': 'capacity', 'capacidad_de_salida': 'capacity',
+    'volumen_de_almacenamiento': 'capacity', 'volumen_del_tanque': 'capacity',
+    'volumen_liquido': 'capacity', 'tamano': 'size', 'talla': 'size',
+    'talla_dimensiones': 'size', 'numero_de_articulos': 'count',
+    'numero_de_piezas': 'count', 'numero_de_unidades': 'count',
+    'numero_de_etiquetas': 'count', 'numero_de_productos': 'count',
+    'numero_de_sets': 'count', 'cantidad_de_compartimentos': 'compartments',
+    'potencia': 'power', 'voltaje': 'voltage', 'tension': 'voltage',
+}
+
+
+def _is_es_core_key(key: str) -> bool:
+    return key in _ES_CORE_KEYS or key.startswith('dimensiones_')
+
+
+def _es_core_group(key: str) -> str | None:
+    if key.startswith('dimensiones_'):
+        return 'dimension'
+    return _ES_CORE_GROUPS.get(key)
+
+
+def _is_generic_one_count(key: str, value: str) -> bool:
+    if not (key.startswith('numero_de_') or key.startswith('total_del_paquete')):
+        return False
+    return bool(re.match(r'^1(?:[.,]0)?(?:\s+conteo)?$', value.strip(), re.I))
+
+
+def build_spec_es(attributes=None, details=None, variant=None) -> str:
+    """Build a compact Spanish core-spec display from explicit page evidence.
+
+    ``attributes`` is preferred because it retains the original Spanish label.
+    ``details`` is a compatibility fallback for legacy normalized records.  A
+    selected variation is only used when no recognized attribute is available;
+    no value is inferred from rank, price, or a translated Chinese summary.
+    """
+    parts = []
+    seen = set()
+    seen_groups = set()
+    for attr in attributes or []:
+        if not isinstance(attr, dict):
+            continue
+        label = str(attr.get('label_raw') or '').strip()
+        value = str(attr.get('value_raw') or '').strip()
+        key = _normalize_spec_label(label)
+        group = _es_core_group(key)
+        if not label or not value or not _is_es_core_key(key) or group is None:
+            continue
+        if group in seen_groups:
+            continue
+        if _is_generic_one_count(key, value):
+            continue
+        dedupe = (key, value.casefold())
+        if dedupe in seen:
+            continue
+        seen.add(dedupe)
+        seen_groups.add(group)
+        parts.append('%s: %s' % (label, value))
+
+    if not parts and isinstance(details, dict):
+        for key, value in details.items():
+            key_norm = _normalize_spec_label(key)
+            value = str(value or '').strip()
+            group = _es_core_group(key_norm)
+            if (not value or not _is_es_core_key(key_norm) or group is None
+                    or group in seen_groups or _is_generic_one_count(key_norm, value)):
+                continue
+            seen_groups.add(group)
+            parts.append('%s: %s' % (key, value))
+
+    if parts:
+        return ' / '.join(parts)
+    return str(variant or '').strip()

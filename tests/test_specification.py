@@ -10,6 +10,7 @@ from amazon_es_bestseller.normalization.specification import (
     set_count,
     resolve_package_count,
     build_spec_v2,
+    build_spec_es,
 )
 
 
@@ -27,6 +28,29 @@ def test_capacity_30l_variant_beats_technical():
     out = build_spec_v2({'capacidad': '20 litros'}, variant='30L')
     assert '30升' in out
     assert '20升' not in out
+
+
+def test_build_spec_es_preserves_explicit_spanish_spec_evidence():
+    attrs = [
+        {"label_raw": "Tamaño", "value_raw": "Cama 90 x 190 x 40 cm"},
+        {"label_raw": "Número de Artículos", "value_raw": "1"},
+    ]
+    out = build_spec_es(attrs)
+    assert "Tamaño: Cama 90 x 190 x 40 cm" in out
+    assert "Número de Artículos: 1" not in out
+
+
+def test_build_spec_es_deduplicates_dimension_and_package_metadata():
+    attrs = [
+        {"label_raw": "Tamaño", "value_raw": "2 Unidades de 70 cm"},
+        {"label_raw": "Dimensiones del producto", "value_raw": "70l. x 35an. centímetros"},
+        {"label_raw": "Dimensiones del artículo L x A", "value_raw": "70l. x 35an. centímetros"},
+        {"label_raw": "Total del paquete según la medida elegida para referenciar precio",
+         "value_raw": "2.0 Conteo"},
+    ]
+    out = build_spec_es(attrs)
+    assert out.count("Dimensiones") == 1
+    assert "Total del paquete" not in out
 
 
 # ---------- 回归：尺寸 ----------

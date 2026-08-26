@@ -61,6 +61,7 @@ monthly_bought_min
 
 selected_variation_raw
 selected_variation_zh
+specification_es
 
 image_url
 product_url
@@ -73,6 +74,7 @@ seller
 
 detail_bsr_raw
 detail_bsr_segments
+detail_category_trail
 
 first_seen
 last_seen
@@ -130,6 +132,11 @@ product_details_zh
 `product_details_normalized` is an optional structured normalized representation.
 
 `product_details_zh` is a human-readable Chinese rendering of the collected details. It is a display/derived field, not the raw source of truth.
+
+`detail_category_trail` preserves the visible Amazon detail-page breadcrumb from
+root to leaf. When the ranking page exposes only a top-level category, the
+normalizer may use this explicit trail only to fill missing product category
+depth; existing ranking-page category values remain authoritative.
 
 ## 8. Feature bullets
 

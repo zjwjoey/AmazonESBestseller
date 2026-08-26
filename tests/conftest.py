@@ -157,6 +157,7 @@ def export_records() -> list[dict]:
             "bestseller_rank": 1,
             "selected_variation_raw": "Fiambrera - Set 4 Estándar",
             "spec_v2": "4件套",
+            "specification_es": "Tamaño: Estándar / Número de piezas: 4",
             "date_first_available": "2023-10-28",
             "seller_raw": "Tatay",
             "product_url": "https://www.amazon.es/dp/B078C6QR1C",

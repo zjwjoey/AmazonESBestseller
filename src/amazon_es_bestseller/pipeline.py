@@ -21,11 +21,12 @@ from typing import Dict, List, Mapping, Optional
 from .models import merge_ranking_and_detail, normalize_asin
 from .normalization.brand import clean_brand, normalize_brand_case
 from .normalization.bsr import detail_bsr_segments
-from .normalization.category import category_zh
+from .normalization.category import category_levels, category_zh
 from .normalization.dates import parse_es_date
 from .normalization.monthly_bought import parse_monthly_bought
 from .normalization.price import CURRENCY, discount_rate, parse_price
-from .normalization.specification import attributes_to_spec_dict, build_spec_v2
+from .normalization.specification import (
+    attributes_to_spec_dict, build_spec_es, build_spec_v2)
 from .translation.full_detail import (
     render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
 from .translation.product_type import detect_product_type
@@ -117,6 +118,9 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["spec_v2"] = build_spec_v2(
         details, variant=out.get("selected_variation_raw"),
         title_es=out.get("title_es_raw"))
+    out["specification_es"] = build_spec_es(
+        attributes=out.get("attributes"), details=details,
+        variant=out.get("selected_variation_raw"))
 
     out["detail_bsr_segments"] = detail_bsr_segments(out.get("detail_bsr_raw"))
     out["monthly_bought_min"] = parse_monthly_bought(out.get("monthly_bought_raw"))
@@ -131,6 +135,17 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
 
     title_es = out.get("title_es_raw")
     out["product_type"] = detect_product_type(title_es) if title_es else None
+
+    # A root ranking page may expose only L1.  When deeper levels are absent,
+    # use the explicit product-detail breadcrumb as a secondary source; never
+    # overwrite a ranking-context value already present.
+    detail_trail = out.get("detail_category_trail")
+    if isinstance(detail_trail, (list, tuple)):
+        dl1, dl2, dl3, dleaf = category_levels(detail_trail)
+        for key, value in (("category_l1", dl1), ("category_l2", dl2),
+                           ("category_l3", dl3), ("leaf_category", dleaf)):
+            if not out.get(key) and value:
+                out[key] = value
 
     # 类目中文（派生层）：只映射有把握的，未知保留西语原文（不臆造）
     l1 = out.get("category_l1")

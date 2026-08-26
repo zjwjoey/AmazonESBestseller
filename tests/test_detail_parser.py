@@ -88,6 +88,18 @@ def test_parse_missing_new_fields_empty():
     assert d["product_url"] == "https://www.amazon.es/dp/B078C6QR1C"
 
 
+def test_parse_detail_category_breadcrumb_trail():
+    html = """
+    <div id="wayfinding-breadcrumbs_feature_div">
+      <ul><li><a>Hogar y cocina</a></li><li><a>Muebles</a></li>
+      <li><a>Dormitorio</a></li><li><a>Protectores de colchón</a></li></ul>
+    </div>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["detail_category_trail"] == [
+        "Hogar y cocina", "Muebles", "Dormitorio", "Protectores de colchón"]
+
+
 def test_parent_asin_malformed_not_trusted():
     html = '<input type="hidden" id="parentASIN" value="no-es-asin">'
     d = parse_detail_page(html, "B078C6QR1C")

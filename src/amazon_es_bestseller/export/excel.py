@@ -161,7 +161,7 @@ def _es_values(rec: Mapping, seq: int) -> List:
         rec.get('leaf_category') or '',              # 细分类目
         rec.get('bestseller_rank') or '',            # 畅销榜排名
         rec.get('selected_variation_raw') or '',     # 当前选中规格 / 变体（西语）
-        '',                                          # 核心规格（西语）→ 规格派生，暂留空
+        rec.get('specification_es') or '',           # 核心规格（西语）
         rec.get('product_details_es') or '',         # 完整商品详情（西语原文）
         rec.get('feature_bullets_es') or '',         # 商品卖点（西语原文）
         rec.get('date_first_available') or '',       # 首次上架日期
