@@ -46,6 +46,10 @@ _FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.IGNORECASE | re.DOTAL
 class TranslationError(RuntimeError):
     """Raised internally for a retryable or malformed translation response."""
 
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
 
 def _default_transport(url: str, headers: Mapping[str, str], payload: Mapping[str, Any], timeout: float) -> dict:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -56,7 +60,8 @@ def _default_transport(url: str, headers: Mapping[str, str], payload: Mapping[st
     except error.HTTPError as exc:
         # Preserve status for retry classification without ever echoing headers
         # (which may contain the bearer token).
-        raise TranslationError("HTTP %s" % exc.code) from exc
+        raise TranslationError("HTTP %s" % exc.code,
+                               retryable=(exc.code == 429 or exc.code >= 500)) from exc
     except (error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
         raise TranslationError(type(exc).__name__) from exc
 
@@ -186,7 +191,7 @@ class DeepSeekTranslator:
         if not asin:
             return {"asin": "", "translation_status": "failed", "translation_error": "missing asin"}
         cached = self.cache.get(asin)
-        if cached is not None:
+        if cached is not None and cached.get("translation_status") == "success":
             return dict(cached)
         last_error = "unknown error"
         for attempt in range(self.max_retries + 1):
@@ -196,6 +201,8 @@ class DeepSeekTranslator:
                 return dict(result)
             except Exception as exc:  # bounded retry; failure is isolated per ASIN
                 last_error = str(exc) or type(exc).__name__
+                if isinstance(exc, TranslationError) and not exc.retryable:
+                    break
                 if attempt < self.max_retries and self.backoff_seconds:
                     time.sleep(self.backoff_seconds * (2**attempt))
         result = {"asin": asin, "translation_status": "failed", "translation_error": last_error}
@@ -208,4 +215,3 @@ class DeepSeekTranslator:
             results.append(self.translate_record(record))
             self.save_cache()
         return results
-
