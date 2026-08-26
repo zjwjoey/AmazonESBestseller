@@ -19,6 +19,12 @@ def lunchbag_html() -> str:
 
 
 @pytest.fixture
+def delonghi_html() -> str:
+    """无损全量详情 fixture：productOverview + prodDetails + feature-bullets + 描述。"""
+    return read_html("product_delonghi.html")
+
+
+@pytest.fixture
 def captcha_html() -> str:
     return read_html("product_captcha.html")
 

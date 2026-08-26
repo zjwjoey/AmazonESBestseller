@@ -88,6 +88,143 @@ def _product_url(asin: str) -> str:
     return ""
 
 
+# ---------- 无损全量详情：Product Attribute 模型（DATA_MODEL §4-§8） ----------
+
+_OVERVIEW_SEL = "#productOverview_feature_div"              # Resumen del producto（Key/Value 表）
+_PROD_DETAILS_SEL = "#prodDetails"                           # Detalles técnicos（th/td 表）
+_FEATURE_BULLETS_SEL = "#feature-bullets"                    # Acerca de este producto（卖点）
+_PROD_DESC_SEL = "#productDescription_feature_div"           # Descripción del producto
+_DETAIL_BULLETS_WRAPPER_SEL = "#detailBulletsWrapper_feature_div"   # 顶部细节子弹（n.º/日期等）
+_ADDITIONAL_SELS = ("#detailBullets_feature_div",            # dt/dd 形式附加信息
+                    "#productDetails_detailBullets_sections1")  # th/td 形式附加信息
+
+
+def _attr_row(section: str, label: str, value: str, position: int, source: str) -> dict:
+    """Product Attribute 单行（DATA_MODEL §4）：section/label_raw/value_raw/position/source。"""
+    return {"section": section, "label_raw": label, "value_raw": value,
+            "position": position, "source": source}
+
+
+def _overview_attributes(soup) -> list:
+    """product_overview：Resumen del producto 表，td.a-span3(label)+td.a-span9(value)。"""
+    rows = []
+    po = soup.select_one(_OVERVIEW_SEL)
+    if po is None:
+        return rows
+    i = 0
+    for tr in po.select("table tr"):
+        tds = tr.select("td")
+        if len(tds) < 2:
+            continue
+        label = _clean(tds[0].get_text(" ", strip=True))
+        value = _clean(tds[1].get_text(" ", strip=True))
+        if label and value:
+            rows.append(_attr_row("product_overview", label, value, i, "productOverview"))
+            i += 1
+    return rows
+
+
+def _is_excluded_detail_table(table) -> bool:
+    """旧版布局中 #prodDetails 嵌套的附加信息/反馈表 → 由其他 section 处理，跳过。"""
+    tid = table.get("id") or ""
+    return tid.startswith("productDetails_detailBullets") or "feedback" in tid
+
+
+def _prod_details_attributes(soup) -> list:
+    """technical_details：#prodDetails 下所有 th.prodDetSectionEntry+td.prodDetAttrValue 行。
+
+    跳过嵌套的 ``productDetails_detailBullets*``（归 additional_information）与
+    ``*feedback*``（客户反馈，非商品属性）表，避免同一行被两个 section 重复捕获。
+    """
+    rows = []
+    pd = soup.select_one(_PROD_DETAILS_SEL)
+    if pd is None:
+        return rows
+    i = 0
+    for table in pd.select("table"):
+        if _is_excluded_detail_table(table):
+            continue
+        for tr in table.select("tr"):
+            th = tr.select_one("th")
+            td = tr.select_one("td")
+            if th is None or td is None:
+                continue  # 表头行（colspan 无值）等非属性行
+            label = _clean(th.get_text(" ", strip=True))
+            value = _clean(td.get_text(" ", strip=True))
+            if label and value:
+                rows.append(_attr_row("technical_details", label, value, i, "prodDetails"))
+                i += 1
+    return rows
+
+
+def _additional_attributes(soup) -> list:
+    """additional_information：dt/dd 或 th/td 形式的附加信息（首个存在的 section）。"""
+    rows = []
+    for sel, mode in ((_ADDITIONAL_SELS[0], "dl"), (_ADDITIONAL_SELS[1], "table")):
+        el = soup.select_one(sel)
+        if el is None:
+            continue
+        i = 0
+        if mode == "dl":
+            for dt, dd in zip(el.select("dt"), el.select("dd")):
+                label = _clean(dt.get_text(" ", strip=True))
+                value = _clean(dd.get_text(" ", strip=True))
+                if label and value:
+                    rows.append(_attr_row("additional_information", label, value, i, "detailBullets"))
+                    i += 1
+        else:
+            for tr in el.select("tr"):
+                th = tr.select_one("th")
+                td = tr.select_one("td")
+                if th is None or td is None:
+                    continue
+                label = _clean(th.get_text(" ", strip=True))
+                value = _clean(td.get_text(" ", strip=True))
+                if label and value:
+                    rows.append(_attr_row("additional_information", label, value, i, "detailBulletsSections"))
+                    i += 1
+        if rows:
+            break  # 只取第一个存在的附加信息区
+    return rows
+
+
+def _collect_attributes(soup) -> list:
+    """全部 Product Attribute 行（product_overview → technical_details → additional_information）。"""
+    return (_overview_attributes(soup) + _prod_details_attributes(soup)
+            + _additional_attributes(soup))
+
+
+def _feature_bullets_raw(soup) -> list:
+    """feature_bullets_raw：#feature-bullets 下所有非空卖点文本（DATA_MODEL §8）。"""
+    fb = soup.select_one(_FEATURE_BULLETS_SEL)
+    if fb is None:
+        return []
+    bullets = []
+    for li in fb.select("li"):
+        t = _clean(li.get_text(" ", strip=True))
+        if t:
+            bullets.append(t)
+    return bullets
+
+
+def _product_description_raw(soup) -> str:
+    """product_description_raw：#productDescription_feature_div 正文。"""
+    return _text(soup, _PROD_DESC_SEL)
+
+
+def _detail_bullets_raw(soup) -> list:
+    """other_visible_details：#detailBulletsWrapper_feature_div 的 li 子弹（n.º 排名/日期等证据）。"""
+    el = soup.select_one(_DETAIL_BULLETS_WRAPPER_SEL)
+    if el is None:
+        return []
+    out = []
+    for li in el.select("li"):
+        t = _clean(li.get_text(" ", strip=True))
+        if t:
+            out.append(t)
+    return out
+
+
 def parse_detail_page(html: str, asin: str) -> dict:
     """详情页 HTML → 原始详情字段（只读证据层，不做业务推断）。
 
@@ -187,6 +324,11 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "date_first_available_raw": _first_available_date_raw(soup),
         "product_url": _product_url(asin),
         "image_url": _main_image_url(soup),
+        # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
+        "attributes": _collect_attributes(soup),
+        "feature_bullets_raw": _feature_bullets_raw(soup),
+        "product_description_raw": _product_description_raw(soup),
+        "detail_bullets_raw": _detail_bullets_raw(soup),
     }
 
 

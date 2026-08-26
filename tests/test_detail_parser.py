@@ -120,6 +120,109 @@ def test_image_url_fallback_to_data_old_hires():
     assert d["image_url"] == "https://m.media-amazon.com/images/I/99z._SL1500_.jpg"
 
 
+# ---------- 无损全量详情：Product Attribute 模型（DATA_MODEL §4-§8） ----------
+
+def test_full_detail_overview_attributes(delonghi_html):
+    d = parse_detail_page(delonghi_html, "B008YETL18")
+    overview = [a for a in d["attributes"] if a["section"] == "product_overview"]
+    assert len(overview) == 4
+    assert overview[0] == {"section": "product_overview", "label_raw": "Marca",
+                           "value_raw": "De'Longhi", "position": 0, "source": "productOverview"}
+    assert overview[2]["label_raw"] == "Aroma"
+    assert overview[2]["value_raw"] == "Limón"
+
+
+def test_full_detail_technical_details_attributes(delonghi_html):
+    d = parse_detail_page(delonghi_html, "B008YETL18")
+    tech = [a for a in d["attributes"] if a["section"] == "technical_details"]
+    assert len(tech) == 3
+    assert tech[1] == {"section": "technical_details", "label_raw": "Capacidad",
+                       "value_raw": "500 mililitros", "position": 1, "source": "prodDetails"}
+
+
+def test_full_detail_position_resets_per_section(delonghi_html):
+    d = parse_detail_page(delonghi_html, "B008YETL18")
+    for sec in ("product_overview", "technical_details"):
+        sub = [a for a in d["attributes"] if a["section"] == sec]
+        assert [a["position"] for a in sub] == list(range(len(sub)))
+
+
+def test_full_detail_feature_bullets(delonghi_html):
+    d = parse_detail_page(delonghi_html, "B008YETL18")
+    assert len(d["feature_bullets_raw"]) == 3
+    assert d["feature_bullets_raw"][0].startswith("SOLUCIÓN SUAVE DE DESCALCIFICACIÓN")
+
+
+def test_full_detail_product_description(delonghi_html):
+    d = parse_detail_page(delonghi_html, "B008YETL18")
+    assert d["product_description_raw"].startswith("El descalcificador EcoDecalk")
+
+
+def test_full_detail_detail_bullets_wrapper(delonghi_html):
+    d = parse_detail_page(delonghi_html, "B008YETL18")
+    assert any("n.º 5 en Hogar y cocina" in b for b in d["detail_bullets_raw"])
+    assert any("Fecha de primera disponibilidad: 17 mayo 2021" in b for b in d["detail_bullets_raw"])
+
+
+def test_full_detail_additional_information_dl():
+    html = """
+    <html><body>
+      <div id="detailBullets_feature_div">
+        <dl>
+          <dt>Fabricante</dt><dd>De'Longhi Appliances</dd>
+          <dt>Número de modelo</dt><dd>DLSC500</dd>
+        </dl>
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B008YETL18")
+    add = [a for a in d["attributes"] if a["section"] == "additional_information"]
+    assert len(add) == 2
+    assert add[0]["label_raw"] == "Fabricante"
+    assert add[0]["value_raw"] == "De'Longhi Appliances"
+    assert add[0]["source"] == "detailBullets"
+    assert [a["position"] for a in add] == [0, 1]
+
+
+def test_full_detail_nested_db_sections_no_double_capture():
+    # 旧版布局：#prodDetails 内嵌套 techSpec + detailBullets 两张 section 表。
+    # detailBullets 行只应作为 additional_information 出现一次，绝不重复成 technical_details。
+    html = """
+    <html><body>
+      <div id="prodDetails">
+        <div id="productDetails_db_sections">
+          <table id="productDetails_techSpec_sections1">
+            <tr><th>Capacidad</th><td>500 mililitros</td></tr>
+          </table>
+          <table id="productDetails_detailBullets_sections1">
+            <tr><th>Fecha de lanzamiento</th><td>28 de octubre de 2023</td></tr>
+            <tr><th>Fabricante</th><td>De'Longhi Appliances</td></tr>
+          </table>
+        </div>
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B008YETL18")
+    tech = [a for a in d["attributes"] if a["section"] == "technical_details"]
+    add = [a for a in d["attributes"] if a["section"] == "additional_information"]
+    assert len(tech) == 1
+    assert tech[0]["label_raw"] == "Capacidad"
+    assert len(add) == 2
+    assert add[0]["label_raw"] == "Fecha de lanzamiento"
+    assert add[0]["source"] == "detailBulletsSections"
+    # 全表唯一：Fecha de lanzamiento 不得出现在 technical_details
+    assert not any(a["label_raw"] == "Fecha de lanzamiento" and a["section"] == "technical_details"
+                   for a in d["attributes"])
+
+
+def test_full_detail_missing_sections_empty():
+    d = parse_detail_page("<html><body><p>hola</p></body></html>", "B078C6QR1C")
+    assert d["attributes"] == []
+    assert d["feature_bullets_raw"] == []
+    assert d["product_description_raw"] == ""
+    assert d["detail_bullets_raw"] == []
+
+
 def test_verify_asin_on_page_ok():
     assert verify_asin_on_page("https://www.amazon.es/dp/B078C6QR1C", "B078C6QR1C") is True
     assert verify_asin_on_page("https://www.amazon.es/dp/B078C6QR1C", "b078c6qr1c") is True

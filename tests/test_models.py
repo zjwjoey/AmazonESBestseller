@@ -54,6 +54,13 @@ def test_detail_raw_keys_separate_bsr():
     assert "bestseller_rank" not in DETAIL_RAW_KEYS
 
 
+def test_detail_raw_keys_include_full_detail():
+    # 无损全量详情契约（DATA_MODEL §4-§8）
+    for k in ("attributes", "feature_bullets_raw", "product_description_raw",
+              "detail_bullets_raw"):
+        assert k in DETAIL_RAW_KEYS
+
+
 def test_normalize_asin():
     assert normalize_asin("b078c6qr1c") == "B078C6QR1C"
     assert normalize_asin(" B078C6QR1C ") == "B078C6QR1C"

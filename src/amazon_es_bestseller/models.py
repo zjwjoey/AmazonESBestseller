@@ -63,7 +63,7 @@ PRODUCT_KEYS = (
     "date_first_available",
 )
 
-#: 详情原始证据键（docs/ARCHITECTURE.md §21）
+#: 详情原始证据键（docs/ARCHITECTURE.md §21 / DATA_MODEL §4-§8）
 DETAIL_RAW_KEYS = (
     "asin",
     "parent_asin",
@@ -81,6 +81,11 @@ DETAIL_RAW_KEYS = (
     "detail_bsr_raw",
     "image_url",
     "product_url",
+    # 无损全量详情（DATA_MODEL §4-§8）
+    "attributes",
+    "feature_bullets_raw",
+    "product_description_raw",
+    "detail_bullets_raw",
 )
 
 
