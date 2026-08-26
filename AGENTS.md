@@ -1,427 +1,149 @@
 # AmazonESBestseller — Agent Development Rules
 
-## 1. Purpose of this file
+Last updated: 2026-08-26
 
-This file defines the permanent development rules for AI coding agents working on the `AmazonESBestseller` repository.
+## 1. Purpose
 
-Applicable agents include, but are not limited to:
+This file defines permanent development rules for AI coding agents working on `AmazonESBestseller`.
 
-* Codex
-* Claude Code
-* DeepSeek
-* Cursor agents
-* other automated coding agents
+Read this file before modifying code. This repository already contains a working Amazon.es bestseller collection workflow and real collected output. Do not treat the project as greenfield.
 
-Read this file before modifying code.
-
-This repository already contains a **working Amazon.es bestseller collection workflow and real collected output**.
-
-Do not treat the project as a greenfield prototype.
-
-The primary development principle is:
+Primary principle:
 
 > Preserve verified working behavior first, then improve it incrementally.
 
----
+## 2. Project goal
 
-# 2. Project purpose
+The project collects publicly visible Amazon.es Best Sellers and product-detail information for internal product-selection research.
 
-`AmazonESBestseller` collects publicly visible bestseller and product information from:
+Long-term target:
 
-`https://www.amazon.es`
+- major Amazon.es physical-product categories;
+- approximately 6,000–10,000 unique ASINs;
+- ranking records with source context;
+- full product-detail evidence;
+- Spanish/Chinese business output;
+- repeatable QA.
 
-The long-term goal is to build an internal Amazon Spain bestseller research dataset covering major physical-product categories.
+## 3. Data Layer and Display Layer are different
 
-Expected scale:
-
-* several thousand ranking records
-* approximately 6,000–10,000 unique product ASINs in later stages
-
-The data is intended for:
-
-* Spanish-market product research
-* category research
-* price-band research
-* bestseller analysis
-* specification analysis
-* assortment / product selection
-* future comparison with other European retailers
-* future AI-assisted assortment analysis
-
-This is not intended to become a general-purpose Amazon crawler.
-
----
-
-# 3. Current project status
-
-The project has already successfully produced real Amazon.es product data.
-
-Verified capabilities include:
-
-* Amazon.es Best Sellers data collection
-* ASIN extraction
-* bestseller rank collection
-* product title extraction
-* product URL extraction
-* image URL extraction
-* current price extraction
-* rating and review extraction
-* product-detail-page enrichment
-* brand extraction
-* Parent ASIN extraction for many products
-* technical detail extraction
-* Amazon BSR extraction
-* specification normalization
-* first-available-date extraction where present
-* Spanish product table generation
-* Chinese product table generation
-* category planning table generation
-* Excel image embedding
-* Chinese translation / normalization experiments
-* offline data auditing
-
-Existing real outputs must be treated as evidence of working behavior.
-
-Do not assume a feature is absent merely because it is implemented through scripts rather than a polished package structure.
-
----
-
-# 4. Current development phase
-
-The project has passed the pure reconnaissance stage.
-
-Current phase:
-
-> Stabilize and engineer the already-working collection pipeline.
-
-The next priority is NOT immediately expanding to all Amazon categories.
-
-Priority order:
-
-1. stabilize current collection behavior;
-2. freeze business field definitions;
-3. improve data-quality validation;
-4. convert one-off scripts into reusable modules where justified;
-5. add regression tests;
-6. validate complete collection of one major category;
-7. validate a second major category;
-8. expand to additional physical-product categories;
-9. only then increase scale toward 6,000–10,000 unique ASINs.
-
----
-
-# 5. Core development principle
-
-## Never rewrite a working path without evidence that rewriting is necessary.
-
-Agents must prefer:
-
-> small, reversible, testable changes
-
-over:
-
-> large architecture rewrites.
-
-Do not refactor solely because the current implementation is not aesthetically ideal.
-
-A stable script that produces correct data is more valuable than a cleaner architecture that changes behavior.
-
----
-
-# 6. Mandatory workflow before code changes
-
-Before modifying business logic:
-
-1. read the relevant existing code;
-2. identify the current data flow;
-3. inspect existing real output if relevant;
-4. identify the smallest necessary change;
-5. identify possible regression risks;
-6. add or update tests where practical;
-7. only then modify implementation.
-
-For high-risk changes involving:
-
-* ranking
-* ASIN identity
-* prices
-* category hierarchy
-* specifications
-* translation
-* image association
-* Excel export
-
-the agent must explicitly compare old and new behavior.
-
----
-
-# 7. Do not modify unrelated code
-
-Every task should have a bounded scope.
-
-Do not:
-
-* rewrite unrelated modules;
-* rename large portions of the repository unnecessarily;
-* introduce a new framework without a requirement;
-* replace working libraries merely for style;
-* add databases unless explicitly requested;
-* add web UI unless explicitly requested;
-* introduce distributed workers unless explicitly required;
-* add proxy systems;
-* add anti-detection systems;
-* add CAPTCHA solving;
-* add browser fingerprint bypass systems.
-
-Keep the project focused.
-
----
-
-# 8. Amazon access safety rules
-
-Amazon access must remain conservative.
-
-Allowed principles:
-
-* serial access;
-* low frequency;
-* one controlled browser session where appropriate;
-* explicit delays;
-* stop on access restrictions;
-* save evidence for abnormal responses.
-
-If any page shows:
-
-* HTTP 403
-* HTTP 429
-* Robot Check
-* CAPTCHA
-* access denied
-* forced login caused by access restrictions
-* other obvious challenge pages
-
-the program should stop or mark the run as restricted according to the current access policy.
-
-Do not implement:
-
-* CAPTCHA bypass
-* proxy rotation
-* cookie rotation
-* account rotation
-* browser fingerprint spoofing
-* stealth plugins intended to bypass access controls
-* automatic CAPTCHA clicking
-* aggressive retries
-
-Do not weaken existing access-safety behavior without explicit approval.
-
----
-
-# 9. ASIN is the primary product identity
-
-The canonical Amazon product identity is:
-
-`ASIN`
-
-Example:
-
-`B078C6QR1C`
-
-ASIN must be preserved throughout:
-
-* ranking collection
-* detail enrichment
-* deduplication
-* translation
-* image handling
-* Excel export
-* historical tracking
-
-Never use:
-
-* product title
-* row number
-* image URL
-* rank
-
-as a replacement for ASIN identity.
-
----
-
-# 10. Parent ASIN
-
-`parent_asin` identifies variant families where available.
-
-Examples:
-
-* color variants
-* size variants
-* capacity variants
-* package variants
-
-Parent ASIN is useful for backend analysis.
-
-Do not use Parent ASIN as a replacement for child ASIN.
-
-Each purchasable child ASIN must retain its own identity.
-
-If Parent ASIN cannot be confirmed:
-
-> store null / empty.
-
-Do not guess it.
-
----
-
-# 11. Ranking records and product records are different entities
-
-This distinction is fundamental.
-
-## Ranking record
-
-Represents:
-
-> one ASIN appearing in one Amazon ranking context.
-
-Example:
+This project MUST distinguish:
 
 ```text
-ASIN BXXXXXXXXX
-Home & Kitchen #35
+Amazon source
+    ↓
+Data Layer
+    ↓
+Normalization / Translation / QA
+    ↓
+Display Layer
 ```
 
-and:
+### Data Layer
+
+Goal:
+
+> Preserve as much publicly visible product-detail evidence as possible without losing fields.
+
+The product-detail collector must NOT depend on a fixed specification whitelist. If Amazon exposes a new visible Key/Value attribute that is not yet recognized, preserve it as raw data.
+
+Recommended raw attribute shape:
 
 ```text
-ASIN BXXXXXXXXX
-Food Storage #8
+section
+label_raw
+value_raw
+position
+source
 ```
 
-are two valid ranking records.
+The data layer may contain Product Overview, Technical Details, Additional Information, selected variation, feature bullets, product description, A+ text where collected, BSR, date first available and other visible Key/Value attributes.
 
-They are not duplicates.
+### Display Layer
 
-Therefore:
+Goal:
 
-> Do not deduplicate ranking records solely by ASIN.
+> Let the user understand one SKU quickly.
 
----
+The default Excel display layer uses a fixed business schema. Do not confuse display fields with the full raw data model.
 
-## Product record
+## 4. Full product-detail extraction rule
 
-Represents:
+The collector should preserve all useful publicly visible detail fields dynamically.
 
-> one ASIN and its relatively stable product information.
+Do NOT design detail collection as only capacity, dimensions, weight, material, power and voltage.
 
-Examples:
-
-* title
-* brand
-* product URL
-* image URL
-* price
-* details
-* specification
-* first-available date
-
-Product records may be deduplicated by ASIN.
-
----
-
-# 12. Bestseller rank and Detail BSR must never be mixed
-
-There are at least two different ranking concepts.
-
-## `bestseller_rank`
-
-Source:
-
-> Amazon Best Sellers ranking page.
-
-Meaning:
-
-> position on the specific ranking page currently being collected.
-
-Usually values such as:
+Instead:
 
 ```text
-1
-2
-3
-...
-100
+Amazon detail page
+    ↓
+lossless detail collection
+    ↓
+raw detail store
+    ↓
+normalization
+    ↓
+translation
+    ↓
+display summaries
 ```
 
-depending on page depth.
+Unknown attributes should remain available in raw form.
 
----
+## 5. Specification is a derived field
 
-## `detail_bsr`
+`核心规格` / `specification` is NOT the complete product detail. It is a compact summary derived from the full detail data.
 
-Source:
+Preferred evidence priority:
 
-> Amazon product detail page.
+1. selected variation;
+2. exact product title;
+3. explicit package description;
+4. reliable detail fields;
+5. generic technical fields.
 
-Meaning:
+Do not allow generic values such as `quantity=1` to override explicit title/variant evidence.
 
-> Amazon Best Sellers Rank displayed in product details.
+## 6. Full product details and feature bullets are different
 
-It may contain values such as:
+Do not merge these concepts.
 
-```text
-233
-5000
-180285
-```
+Complete product details are structured facts such as material, dimensions, capacity, weight, model, color, package count, voltage, power, compatibility, country of origin, certifications and other visible Key/Value fields.
 
-These are not the same as ranking-page position.
+Feature bullets are Amazon `Acerca de este producto` / About this item bullet content.
 
-Never populate:
+## 7. ASIN is the primary product identity
 
-`bestseller_rank`
+Canonical product identity: `ASIN`.
 
-using:
+ASIN must be preserved across ranking collection, detail enrichment, deduplication, translation, image handling, Excel export and future historical tracking.
 
-`detail_bsr`.
+Never use title, rank, row number or image URL as a replacement for ASIN identity.
 
-Never label Detail BSR as the ranking-page position.
+## 8. Parent ASIN
 
----
+`parent_asin` identifies a confirmed variation family where available. Preserve when confirmed, do not infer, child ASIN remains the product identity, and null is valid.
 
-# 13. Internal index is not Amazon rank
+## 9. Ranking records and product records are different
 
-An internal row/index number is only:
+A ranking record represents one ASIN appearing in one Amazon ranking context. Same ASIN may have multiple ranking records. Do not deduplicate ranking records by ASIN alone.
 
-`index`
+A product record represents one ASIN and its product information. Product table should normally have one row per ASIN.
 
-It exists for display or local ordering.
+## 10. Bestseller rank and Detail BSR must never be mixed
 
-Example:
+`bestseller_rank` comes from Amazon Best Sellers ranking pages.
 
-```text
-1
-2
-3
-...
-```
+`detail_bsr` comes from Amazon product detail pages.
 
-It must not be treated as an Amazon rank unless the source explicitly confirms that ranking position.
+Never populate bestseller rank from Detail BSR and never fabricate BSR from ranking-page position.
 
-DOM order alone is not sufficient evidence when Amazon does not expose an explicit ranking value.
+## 11. Category hierarchy
 
----
+Use Amazon evidence such as Best Sellers category navigation, breadcrumb, Browse Node, ranking source URL and structured page data.
 
-# 14. Category hierarchy rules
-
-Amazon categories should come from actual Amazon evidence such as:
-
-* Best Sellers category navigation
-* breadcrumb
-* Browse Node
-* ranking-page source
-* structured page data
-
-Potential hierarchy:
+Canonical concepts:
 
 ```text
 category_l1
@@ -431,244 +153,47 @@ leaf_category
 browse_node_id
 ```
 
-Do not invent category levels.
+Do not invent hierarchy or duplicate one category into deeper levels merely to fill cells.
 
-Do not create a fake leaf category simply because the product title suggests one.
+## 12. Price definitions
 
-Example:
+`current_price` is only the current price explicitly displayed by Amazon.
 
-A coffee-machine cleaning tablet may logically belong to:
+`original_price` is only a clearly displayed struck-through/list price.
 
-`Coffee Machine Cleaning Tablets`
+`discount_rate` is calculated only when both current and original price are valid.
 
-but if Amazon only confirms:
+Do not reconstruct missing prices. Coupons, Prime discounts and promotional text must not silently change canonical current price.
 
-`Coffee Machine Accessories`
+## 13. Monthly bought
 
-then the stored Amazon category must remain:
+Preserve `monthly_bought_raw` and `monthly_bought_min`. The parsed value is a lower bound, not exact monthly sales.
 
-`Coffee Machine Accessories`
+Never infer monthly bought from ratings, reviews or rank.
 
-until a real leaf node is discovered.
+## 14. Preserve raw evidence
 
----
-
-# 15. Never duplicate category values to simulate depth
-
-Do not create:
-
-```text
-L2 = Coffee Accessories
-L3 = Coffee Accessories
-leaf = Coffee Accessories
-```
-
-just to fill empty fields.
-
-If a deeper category is unknown:
-
-> leave it empty.
-
-Missing data is preferable to fabricated hierarchy.
-
----
-
-# 16. Multi-category products
-
-The same ASIN may appear in multiple Amazon ranking categories.
-
-Do NOT store this as:
-
-```text
-Home & Kitchen / DIY & Tools
-```
-
-inside one category field.
-
-Instead create multiple ranking records:
-
-```text
-ASIN × Home & Kitchen ranking
-ASIN × DIY & Tools ranking
-```
-
-The product itself remains one ASIN.
-
----
-
-# 17. Browse Node ID
-
-Where available, preserve:
-
-`browse_node_id`
-
-along with:
-
-* category name
-* ranking source URL
-* ranking position
-* collection timestamp
-
-Do not guess Browse Node IDs.
-
----
-
-# 18. Price definitions are frozen
-
-Price semantics must remain strict.
-
-## `current_price`
-
-Only the current price explicitly displayed on Amazon.
-
-Do not adjust it using:
-
-* coupons
-* Prime discounts
-* promotional text
-* cashback
-* voucher values
-
-unless future requirements explicitly change this definition.
-
----
-
-## `original_price`
-
-Only a clearly displayed struck-through/list price.
-
-Do not manufacture original price from:
-
-* discount percentages
-* historical data
-* external sites
-* assumptions
-
----
-
-## `discount_rate`
-
-Only calculate when both values exist:
-
-```text
-(current_price != null)
-AND
-(original_price != null)
-```
-
-Formula:
-
-```text
-(original_price - current_price) / original_price
-```
-
-Otherwise:
-
-> null.
-
----
-
-# 19. Monthly bought field
-
-Amazon may show text such as:
-
-```text
-100+ comprados el mes pasado
-500+ comprados el mes pasado
-1 mil+ comprados el mes pasado
-```
-
-Store two fields when available:
-
-`monthly_bought_raw`
-
-Original displayed text.
-
-Example:
-
-```text
-1 mil+ comprados el mes pasado
-```
-
-and:
-
-`monthly_bought_min`
-
-Parsed lower bound.
-
-Example:
-
-```text
-1000
-```
-
-This is a lower bound, not exact sales.
-
-Never infer monthly purchases from:
-
-* review count
-* rating
-* rank
-* BSR
-
----
-
-# 20. Preserve raw evidence
-
-Raw values must be retained wherever practical.
-
-For important transformed fields, prefer:
-
-```text
-raw field
-+
-normalized field
-```
+Important transformations should preserve raw + normalized + business presentation.
 
 Examples:
 
 ```text
-title_es_raw
-title_zh
-
-date_first_available_raw
-date_first_available
-
-monthly_bought_raw
-monthly_bought_min
-
-details_json
-details_summary_zh
+title_es_raw → title_zh
+date_first_available_raw → date_first_available
+detail_attributes_raw → product_details_zh
 ```
 
-Do not destroy raw evidence simply because a normalized version exists.
+Chinese output must never overwrite Spanish/raw evidence.
 
----
+## 15. Brand rules
 
-# 21. Spanish data is the evidence layer
+Brand must come from reliable evidence such as Amazon byline, explicit brand field, structured detail or reliable manufacturer/brand data.
 
-The Spanish-language source data represents the closest available business evidence from Amazon.es.
+Forbidden generic fallback: first word of title.
 
-Chinese data is a derived business layer.
+Missing brand is better than false brand.
 
-Therefore:
-
-> Chinese translation or normalization must never overwrite the original Spanish source values.
-
-If Chinese and Spanish values conflict:
-
-1. preserve Spanish raw data;
-2. mark the derived field as suspect;
-3. investigate;
-4. do not silently rewrite the raw record.
-
----
-
-# 22. Chinese product-name rules
-
-Chinese product names are intended for internal assortment research.
-
-They are NOT literal full-title translations.
+## 16. Chinese product-name rules
 
 Preferred format:
 
@@ -676,765 +201,107 @@ Preferred format:
 核心商品类型 + 关键规格/数量 + 必要兼容型号
 ```
 
-Examples:
+Product-type correctness has higher priority than fluent wording.
+
+Known historical error classes that must not regress include thermal lunch bag → lunch box, reusable container → disposable container, cleaning tablets → portafilter, mini chainsaw → chain lubricant, trimmer line → trimmer machine and portafilter → tamper.
+
+## 17. Specification QA principles
+
+Type-check units.
+
+Dimensions: `mm / cm / m`
+
+Capacity: `ml / L`
+
+Weight: `g / kg`
+
+Known regression cases include `9L → 25.4L`, `30L → 20L`, `10×15cm → 10×10mm`.
+
+## 18. Image rules
+
+Image association must be traceable by product identity.
+
+Preferred flow:
 
 ```text
-玻璃保鲜盒 8件套
-床垫保护套 90×190×40厘米
-咖啡机除垢液 2×250毫升
-儿童3格便当盒
-Dedica EC680/EC685兼容滤杯手柄
+ASIN → image_url → local/original image → Excel row
 ```
 
----
+When original quality is required, do not recompress. Display resizing is allowed.
 
-# 23. Brand and Chinese product name have separate responsibilities
+## 19. Default Excel Export Contract
 
-If a reliable brand already exists in the:
+When the user requests Excel export and does not explicitly provide another schema, agents MUST use the frozen project export contract.
 
-`brand`
+Default workbook sheet order:
 
-field,
+1. `类目规划`
+2. `西班牙语选品清单`
+3. `中文选品清单`
 
-do not unnecessarily repeat it in:
+Do not silently add, remove, rename or reorder core columns unless the user explicitly requests a schema change.
 
-`title_zh`.
+## 20. Default Chinese export fields
 
-Example:
-
-Brand:
+The canonical order is:
 
 ```text
-Tatay
+01 图片
+02 序号
+03 ASIN
+04 Parent ASIN
+05 商品名称（中文）
+06 品牌
+07 当前售价
+08 划线原价
+09 折扣率
+10 评分
+11 评论数
+12 月购买量
+13 一级类目
+14 二级类目
+15 三级类目
+16 细分类目
+17 畅销榜排名
+18 当前选中规格 / 变体
+19 核心规格（中文）
+20 完整商品详情（中文）
+21 商品卖点（中文）
+22 首次上架日期
+23 卖家
+24 商品链接
+25 图片链接
+26 备注
 ```
 
-Preferred Chinese title:
+There is no default `配送方式` field.
 
-```text
-冷切肉保鲜盒 3件套
-```
+The previous separate fields `选品状态` and `研究备注` are replaced by one human field: `备注`.
 
-instead of:
+## 21. Human notes must never be overwritten
 
-```text
-Tatay Fresh 冷切肉保鲜盒 3件套
-```
+`备注` is human-owned business data. On re-collection, re-translation, QA or re-export, preserve existing notes by ASIN. Do not clear or replace them automatically.
 
----
+## 22. Exporter responsibility
 
-# 24. Exception: compatibility brands/models must remain
+The Excel exporter should primarily format already processed data. It must not become the main place where the program guesses brand, guesses categories, invents rank, identifies product type or repairs ASIN mismatches.
 
-Do not remove a brand/model when it describes compatibility.
+## 23. Parser changes require regression tests
 
-Example:
+Whenever a real parser/translation bug is fixed: reproduce it with a fixture, write a failing test, fix the implementation, verify the test passes, and keep the fixture.
 
-```text
-适用于 Dyson V15 的吸尘器支架
-```
+Prefer saved offline fixtures over repeated live Amazon access.
 
-Here `Dyson V15` is not the product's own brand.
+## 24. Amazon access safety
 
-It is compatibility information and must remain.
+Keep access conservative. On 403, 429, Robot Check, CAPTCHA, access denied or challenge pages, record the condition and stop according to current access policy.
 
-Likewise:
+Do not add CAPTCHA bypass, proxy rotation, cookie rotation, account rotation or stealth bypass systems by default.
 
-```text
-De'Longhi Dedica EC680/EC685兼容滤杯手柄
-```
+## 25. Final rules
 
----
+When choosing between complete but uncertain and incomplete but correct, choose incomplete but correct.
 
-# 25. Chinese titles must not contain unnecessary foreign-language marketing text
+When choosing between full raw detail preservation and dropping unfamiliar fields, preserve the raw detail.
 
-Ordinary marketing or descriptive phrases should be translated or removed.
-
-Examples that should normally not remain untranslated:
-
-```text
-Wash & Protect
-Spot & Stain
-FreshStart
-Adventure
-EasySpray
-```
-
-unless they are verified official product series and materially useful for identification.
-
----
-
-# 26. Allowed Latin text in Chinese titles
-
-Do not blindly remove all Latin characters.
-
-Allowed examples include:
-
-## Model numbers
-
-```text
-EC685
-G807
-MS622718
-```
-
-## Interfaces / standards
-
-```text
-USB-C
-E27
-SDS Plus
-HSS
-HEPA
-LED
-ABS
-PTFE
-BPA
-TÜV
-```
-
-## Compatibility models
-
-```text
-Dyson V15
-Dreame X20 Pro
-```
-
-## Recognizable product ecosystems
-
-```text
-Nespresso Original
-Dolce Gusto
-```
-
----
-
-# 27. Product-type correctness has higher priority than translation fluency
-
-The most serious translation error is:
-
-> identifying the wrong type of product.
-
-Known historical errors must be treated as regression cases.
-
-Examples previously observed include:
-
-* thermal lunch bag translated as lunch box;
-* portafilter translated as coffee tamper;
-* mini chainsaw translated as chainsaw lubricant;
-* trimmer line translated as cordless grass trimmer;
-* cleaning tablets translated as portafilter;
-* reusable containers translated as disposable containers.
-
-Any future translation logic must prevent these classes of errors.
-
----
-
-# 28. Chinese title must agree with image and Spanish title
-
-Where image data is available, use the following consistency rule:
-
-```text
-Spanish title
-      +
-product image
-      +
-technical details
-      ↓
-Chinese product type
-```
-
-If:
-
-```text
-Spanish title ≠ image ≠ details
-```
-
-or there is another obvious contradiction:
-
-do not guess.
-
-Mark:
-
-`SOURCE_CONFLICT`
-
-or equivalent QA state.
-
----
-
-# 29. Brand extraction rules
-
-Do not use:
-
-> first word of product title
-
-as a generic brand fallback.
-
-This previously creates false brands such as ordinary nouns.
-
-Brand should come from reliable evidence such as:
-
-* Amazon brand/byline field
-* product details
-* known structured field
-* clearly identified manufacturer/brand data
-
-If brand cannot be reliably identified:
-
-> leave empty.
-
-Missing brand is better than false brand.
-
----
-
-# 30. Brand cleaning
-
-Remove presentation labels such as:
-
-```text
-Marca:
-Visita la tienda de
-```
-
-and invisible Unicode characters where safe.
-
-Preserve canonical brand spelling.
-
-Where practical, normalize case consistently.
-
-Example:
-
-```text
-KRUPS
-Krups
-krups
-```
-
-should eventually map to a canonical form.
-
-Do not alter brand identity based on assumptions.
-
----
-
-# 31. Specification field purpose
-
-`specification`
-
-must answer:
-
-> Which exact version/specification is the customer buying?
-
-It is not a dump of every Amazon technical field.
-
-Good examples:
-
-```text
-90×190×40厘米
-500毫升
-2×250毫升
-65瓦 / USB-C
-18V 4.0Ah / 2块
-8件套 / 320–1200毫升
-```
-
----
-
-# 32. Specification precedence
-
-When several Amazon fields conflict, use evidence priority.
-
-Recommended order:
-
-1. current selected variation;
-2. exact product title;
-3. explicit package description;
-4. reliable product-detail specification;
-5. generic technical-detail fields.
-
-Do not let a generic field such as:
-
-```text
-quantity = 1
-```
-
-override an explicit product title such as:
-
-```text
-14-piece set
-```
-
----
-
-# 33. Specification type validation
-
-Dimensions must use dimension units.
-
-Examples:
-
-```text
-mm
-cm
-m
-```
-
-Capacity must use volume units.
-
-Examples:
-
-```text
-ml
-L
-```
-
-Weight must use mass units.
-
-Examples:
-
-```text
-g
-kg
-```
-
-Invalid mappings such as:
-
-```text
-capacity = 30 cm
-capacity = 992 g
-```
-
-must fail validation.
-
-Do not display them as valid specifications.
-
----
-
-# 34. Known specification regression cases
-
-Past output exposed errors such as:
-
-```text
-9L → 25.4L
-30L → 20L
-10×15cm → 10×10mm
-```
-
-Future parser changes must include regression tests for these patterns or equivalent fixtures.
-
----
-
-# 35. Details and specification are different
-
-`specification`
-
-answers:
-
-> What variant is this?
-
-`details`
-
-or:
-
-`details_summary`
-
-answers:
-
-> What useful characteristics does this product have?
-
-Useful details may include:
-
-* material
-* special features
-* waterproof
-* washable
-* dishwasher safe
-* microwave safe
-* freezer safe
-* certifications
-* package structure
-* use case
-* country of origin where useful
-
-Do not place every detail inside the product title.
-
----
-
-# 36. First available date
-
-If Amazon provides:
-
-`Date First Available`
-
-preserve:
-
-```text
-date_first_available_raw
-```
-
-and normalize to:
-
-```text
-YYYY-MM-DD
-```
-
-where parsing is reliable.
-
-If absent:
-
-> leave null.
-
-Do not substitute first-seen crawler date for Amazon listing date.
-
----
-
-# 37. Image rules
-
-Image association must be based on ASIN/product record identity.
-
-Do not rely solely on:
-
-> image position = row position.
-
-For exported product tables:
-
-* preserve original `image_url`;
-* ensure product URL and image URL belong to the same ASIN record;
-* if images are embedded into Excel, maintain one product image per row.
-
-Do not silently reuse a different product's image.
-
----
-
-# 38. Image quality
-
-When the requirement is to retain original image quality:
-
-* do not recompress;
-* do not resample the underlying file;
-* adjusting Excel display size is allowed;
-* preserve original image bytes where practical.
-
----
-
-# 39. Excel business output principles
-
-The human-facing workbook should remain readable.
-
-Avoid turning the primary Chinese selection sheet into a 50–100 column database export.
-
-The human workflow primarily needs:
-
-```text
-图片
-序号
-ASIN
-商品名称
-品牌
-当前售价
-原价
-折扣率
-评分
-月购买量
-一级类目
-二级类目
-三级类目
-细分类目
-畅销榜排名
-规格
-商品详情摘要
-首次上架日期
-商品链接
-图片链接
-选品状态
-研究备注
-```
-
-Technical fields belong in backend/raw data where needed.
-
----
-
-# 40. Human fields must never be overwritten
-
-Fields such as:
-
-```text
-选品状态
-研究备注
-```
-
-belong to human users.
-
-Future exports must preserve existing values by ASIN.
-
-Never overwrite them with blank values during regeneration.
-
----
-
-# 41. QA is part of the product
-
-A run is not complete merely because an Excel file was generated.
-
-Validation should include, where applicable:
-
-* ASIN uniqueness in product table;
-* ranking-record duplicates preserved correctly;
-* product link contains expected ASIN;
-* image URL association;
-* price parsing;
-* rank source validity;
-* category source validity;
-* brand validity;
-* specification unit validation;
-* Chinese product-type consistency;
-* missing-field statistics.
-
----
-
-# 42. Parser changes require regression tests
-
-Whenever a parsing bug is fixed:
-
-> add a test that reproduces the old failure.
-
-Do not only patch the current data.
-
-Examples:
-
-If:
-
-```text
-30L
-```
-
-was previously parsed as:
-
-```text
-20L
-```
-
-create a fixture/test ensuring it cannot regress.
-
-If:
-
-```text
-portafiltro
-```
-
-was translated as:
-
-```text
-压粉器
-```
-
-add a title-normalization QA case.
-
-Real production errors are valuable test fixtures.
-
----
-
-# 43. Tests should prefer offline fixtures
-
-Do not repeatedly access Amazon to test parser logic.
-
-Preferred workflow:
-
-```text
-real page captured once
-       ↓
-saved HTML / JSON fixture
-       ↓
-offline parser tests
-```
-
-Network access should verify integration behavior, not serve as the normal unit-test mechanism.
-
----
-
-# 44. Do not silently fix missing data by guessing
-
-The following are unacceptable:
-
-```text
-missing monthly_bought
-→ infer from review count
-
-missing leaf category
-→ infer from product title
-
-missing original price
-→ estimate from discount
-
-missing rank
-→ use row number
-
-missing brand
-→ use first title word
-```
-
-Missing values should remain missing until real evidence exists.
-
----
-
-# 45. Configuration over hard-coded local paths
-
-Existing scripts may contain historical absolute paths.
-
-When refactoring reusable functionality, prefer configuration or CLI arguments over new hard-coded paths.
-
-Do not break existing working scripts solely to remove their path constants.
-
-Migration should be incremental.
-
----
-
-# 46. Historical scripts
-
-Some scripts in the repository are historical experiment or transformation scripts.
-
-Examples may include:
-
-* one-off CSV builders
-* workbook migrations
-* translation-generation scripts
-* audit scripts
-* temporary data repair scripts
-
-Do not assume every script belongs to the future production pipeline.
-
-Before deleting or rewriting one:
-
-1. identify what output it produced;
-2. determine whether another component replaces it;
-3. preserve useful behavior or historical evidence.
-
----
-
-# 47. No premature architecture expansion
-
-Do not add by default:
-
-* PostgreSQL
-* Redis
-* Celery
-* Kafka
-* distributed workers
-* microservices
-* web dashboard
-* cloud deployment
-* authentication system
-
-These may be appropriate later.
-
-They are not current requirements unless explicitly requested.
-
----
-
-# 48. Definition of a good change
-
-A high-quality contribution should:
-
-1. solve the stated problem;
-2. preserve verified existing behavior;
-3. minimize unrelated changes;
-4. add validation for new logic;
-5. keep raw evidence;
-6. improve reproducibility;
-7. reduce future ambiguity;
-8. update documentation when behavior or data contracts change.
-
----
-
-# 49. Definition of an unacceptable change
-
-Do not submit a change that:
-
-* rewrites large working areas without necessity;
-* silently changes field semantics;
-* mixes Bestseller rank and Detail BSR;
-* invents categories;
-* guesses missing values;
-* destroys raw Spanish data;
-* overwrites manual selection notes;
-* introduces anti-bot bypass behavior;
-* reduces data quality merely to improve fill rate;
-* makes the program harder to reproduce;
-* modifies unrelated files without reason.
-
----
-
-# 50. Documentation synchronization
-
-If a code change modifies any frozen business definition, update the relevant documentation.
-
-Examples:
-
-Ranking semantics change:
-
-> update `docs/DATA_MODEL.md`.
-
-QA rule changes:
-
-> update `docs/QA_RULES.md`.
-
-Architecture or workflow changes:
-
-> update `docs/ARCHITECTURE.md`.
-
-Current verified status changes:
-
-> update `docs/CURRENT_STATE.md`.
-
-Do not allow code and documentation to silently diverge.
-
----
-
-# 51. Current priority for coding agents
-
-Unless the user explicitly changes direction, current priorities are:
-
-1. preserve the already-working crawler;
-2. document the real current pipeline;
-3. improve regression coverage;
-4. stabilize product-name and specification QA;
-5. formalize category/ranking evidence;
-6. improve missing important fields such as monthly-bought data when technically available;
-7. validate repeatable collection on one complete major category;
-8. validate a second category;
-9. expand only after stability is proven.
-
----
-
-# 52. Final rule
-
-When uncertain between:
-
-> a clever transformation that fills more fields
-
-and:
-
-> leaving a field empty because evidence is insufficient,
-
-choose:
-
-> **evidence over completeness.**
-
-When uncertain between:
-
-> a large refactor
-
-and:
-
-> a small verified change,
-
-choose:
-
-> **small verified change.**
-
-When uncertain between:
-
-> improving appearance
-
-and:
-
-> preserving data correctness,
-
-choose:
-
-> **data correctness.**
+When choosing between a large refactor and a small verified change, choose the small verified change.

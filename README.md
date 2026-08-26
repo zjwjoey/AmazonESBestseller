@@ -2,718 +2,155 @@
 
 Amazon.es 畅销商品采集与选品研究项目。
 
-目标是从 Amazon 西班牙站的 Best Sellers 榜单中采集真实畅销商品，并形成可用于内部选品、类目研究、价格研究和后续 AI 分析的结构化商品数据库。
+目标是从 Amazon 西班牙站 Best Sellers 和商品详情页采集真实商品数据，形成可用于内部选品、类目研究、价格研究和后续 AI 分析的结构化数据集。
 
 当前项目已经能够真实运行，并已产出 Amazon.es 商品数据和中西双语 Excel。
 
----
+## 1. Project Goal
 
-# 1. Project Goal
+长期目标：建立 Amazon.es 主要实体商品类目的畅销商品数据库。
 
-长期目标：
+预计后续规模：约 6,000～10,000 个唯一 ASIN、多榜单 ranking records、完整商品详情、中西双语业务展示、可重复 QA 与导出。
 
-> 建立 Amazon.es 主要实体商品类目的畅销商品数据库。
+## 2. Core Architecture Principle
 
-预计第一阶段规模：
-
-```text
-约 6,000～10,000 个唯一 ASIN
-```
-
-主要用途：
-
-* 西班牙市场选品
-* Amazon 畅销商品研究
-* 类目结构研究
-* 价格带研究
-* 商品规格研究
-* 新品/老品研究
-* 后续与其他欧洲零售渠道比较
-* 后续 AI 选品分析
-
-本项目不是通用 Amazon 爬虫。
-
----
-
-# 2. Current Status
-
-当前状态：
-
-> **真实采集已跑通，正在从可运行脚本向稳定、可测试、可重复运行的正式采集系统演进。**
-
-已经验证：
-
-* ✅ Amazon.es Best Sellers 页面访问
-* ✅ Amazon.es 商品详情页访问
-* ✅ ASIN 提取
-* ✅ Best Sellers 排名采集
-* ✅ 商品标题采集
-* ✅ 商品链接采集
-* ✅ 图片链接采集
-* ✅ 当前价格采集
-* ✅ 评分采集
-* ✅ 评论数采集
-* ✅ 品牌采集
-* ✅ Parent ASIN 部分采集
-* ✅ Amazon Detail BSR 采集
-* ✅ 商品技术详情采集
-* ✅ 商品规格整理
-* ✅ 上架时间部分采集
-* ✅ 西班牙语选品表生成
-* ✅ 中文选品表生成
-* ✅ 商品图片嵌入 Excel
-* ✅ 类目规划表
-* ✅ 中文翻译/规格清洗
-* ✅ 数据完整度审计
-
-当前仍需完善：
-
-* 🟡 中文商品品名 QA
-* 🟡 规格解析 QA
-* 🟡 品牌误识别防护
-* 🟡 类目层级完整度
-* 🟡 Best Sellers ranking source 追踪
-* 🟡 Browse Node
-* 🟡 月购买量
-* 🟡 划线原价覆盖
-* 🟡 自动化 regression tests
-* ⬜ 全类目规模化
-* ⬜ 6,000～10,000 ASIN 稳定生产
-
-详细状态：
-
-`docs/CURRENT_STATE.md`
-
----
-
-# 3. Current Data Scale
-
-当前真实样本约：
+项目正式区分：
 
 ```text
-193～200 个 Amazon.es 商品
+数据层 ≠ 展示层
 ```
 
-其中已经筛选出：
+### 数据层
+
+目标：尽可能无损保存 Amazon 页面公开展示的商品信息。
+
+商品详情采集不采用固定规格字段白名单。Amazon 新出现的 Key/Value 属性，即使当前程序不认识，也应尽可能保存原始字段和值。
+
+### 展示层
+
+目标：一个 SKU 一行，让人快速看懂商品。
+
+Excel 不需要把全部动态字段展开成几百列。完整动态详情通过 `完整商品详情` 字段统一展示。
+
+## 3. Current Status
+
+已经验证：Amazon.es Best Sellers 页面访问、商品详情页访问、ASIN、Best Sellers 排名、商品标题、商品链接、图片链接、当前价格、评分、评论数、品牌、Parent ASIN 部分采集、Detail BSR、技术详情、规格整理、上架时间部分采集、西班牙语选品表、中文选品表、图片嵌入 Excel、类目规划、中文翻译/规格清洗、数据审计。
+
+仍需完善：动态全量详情采集工程化、中文商品类型 QA、规格解析 QA、品牌误识别防护、类目层级完整度、Browse Node、月购买量、划线原价覆盖、regression tests、全类目规模化和 6,000～10,000 ASIN 稳定生产。
+
+详细状态见 `docs/CURRENT_STATE.md`。
+
+## 4. Product Detail Strategy
+
+商品详情页应按“全量原始详情”处理，而不是只抽取固定几个规格字段。
+
+建议保留的详情区块包括 Product Overview、Technical Details、Additional Information、selected variation、About this item / feature bullets、Product Description、A+ text where collected、BSR、Date First Available 和其他 visible Key/Value fields。
+
+完整原始详情属于数据层。`核心规格` 只是完整详情数据的一个派生摘要。
+
+## 5. Default Excel Export
+
+当用户要求“按项目默认规则导出 Excel”且没有指定其他表结构时，默认输出三张表：
+
+1. `类目规划`
+2. `西班牙语选品清单`
+3. `中文选品清单`
+
+## 6. Default Chinese Product Sheet
+
+`中文选品清单` 默认一 SKU 一行，共 26 列：
 
 ```text
-100 个质量较高、可以直接用于内部选品研究的 SKU
+01 图片
+02 序号
+03 ASIN
+04 Parent ASIN
+05 商品名称（中文）
+06 品牌
+07 当前售价
+08 划线原价
+09 折扣率
+10 评分
+11 评论数
+12 月购买量
+13 一级类目
+14 二级类目
+15 三级类目
+16 细分类目
+17 畅销榜排名
+18 当前选中规格 / 变体
+19 核心规格（中文）
+20 完整商品详情（中文）
+21 商品卖点（中文）
+22 首次上架日期
+23 卖家
+24 商品链接
+25 图片链接
+26 备注
 ```
 
-这 100 个 SKU 已完成：
+默认不包含 `配送方式`。
 
-* 中文/西语 ASIN 一一对应
-* 商品链接一致性检查
-* 图片链接一致性检查
-* 中文品名检查
-* 品牌检查
-* 当前价格检查
-* 规格检查
-* 商品图片嵌入
+以前的 `选品状态` 和 `研究备注` 已合并为 `备注`。
 
----
+## 7. Meaning of the Detail Display Fields
 
-# 4. Current Output Workbook
+### 当前选中规格 / 变体
 
-当前业务输出主要采用三张工作表：
+Amazon 当前 SKU 实际选中的规格或变体，例如 30 L、Rosa / 900 ml、Pack de 2。
 
-```text
-类目规划
-西班牙语选品清单
-中文选品清单
-```
+### 核心规格
 
----
+用于快速扫表，例如 `4件套 / 1升 / 17×3.2×25.2厘米`。它不是全部商品详情。
 
-## 类目规划
+### 完整商品详情
 
-用于管理：
+把数据层采集到的动态 Key/Value 详情整理成中文可读文本。Amazon 抓到多少有效详情，就尽可能展示多少。
 
-* Amazon 一级类目
-* 西班牙语类目名称
-* 中文类目名称
-* 类目优先级
-* 研究建议
+### 商品卖点
 
----
+来自 Amazon `Acerca de este producto` / About this item bullet points。不要与结构化详情混为一谈。
 
-## 西班牙语选品清单
+## 8. Spanish Sheet
 
-作为接近 Amazon 原始信息的业务证据层。
+`西班牙语选品清单` 与中文表保持相同 SKU 集合和相同业务逻辑。重点对应字段使用西语原始/整理内容，包括商品名称、当前选中规格/变体、核心规格、完整商品详情、商品卖点。
 
-主要包含：
+中文表和西语表必须按 ASIN 一一对应。西语表默认不要求嵌入图片。
 
-* 序号
-* ASIN
-* 西班牙语商品名称
-* 品牌
-* 当前售价
-* 划线原价
-* 折扣率
-* 评分
-* 月购买量
-* 类目层级
-* 畅销榜排名
-* 商品规格
-* 上架时间
-* 商品链接
-* 图片链接
+## 9. Ranking Rule
 
-当前不要求嵌入商品图片。
+Best Sellers 排名来自 Amazon Best Sellers 页面，Detail BSR 来自商品详情页，两者绝对不能混用。
 
----
+完整定义见 `docs/DATA_MODEL.md`。
 
-## 中文选品清单
+## 10. Product Identity
 
-用于内部选品研究。
+核心商品主键：`ASIN`。
 
-主要包含：
+ASIN 用于商品去重、ranking 关联、detail enrichment、图片关联、翻译关联、Excel 对应和历史追踪。
 
-* 商品图片
-* 序号
-* ASIN
-* 中文商品名称
-* 品牌
-* 当前售价
-* 划线原价
-* 折扣率
-* 评分
-* 月购买量
-* 类目层级
-* 畅销榜排名
-* 中文规格
-* 商品详情摘要
-* 上架时间
-* 商品链接
-* 图片链接
-* 选品状态
-* 研究备注
-
----
-
-# 5. Core Data Model
+## 11. Data Quality Principle
 
 核心原则：
 
 ```text
-Ranking Record
-≠
-Product Record
+correctness > traceability > completeness
 ```
 
----
+宁可为空，也不要填一个看起来完整但错误的数据。
 
-## Product
+详细 QA 见 `docs/QA_RULES.md`。
 
-一条商品记录对应：
+## 12. Documentation
+
+核心文档：`AGENTS.md`、`docs/CURRENT_STATE.md`、`docs/DATA_MODEL.md`、`docs/QA_RULES.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`。
+
+## 13. Project Principle
 
 ```text
-1 ASIN
+Data Layer: 尽可能无损
+Display Layer: 快速可读
+QA: 宁缺毋错
 ```
 
-例如：
-
-```text
-ASIN
-title
-brand
-price
-image
-details
-specification
-```
-
----
-
-## Ranking Record
-
-一条排行榜记录对应：
-
-```text
-1 ASIN
-×
-1 ranking context
-```
-
-同一个 ASIN 可以同时出现在多个 Amazon 排行榜。
-
-这是正常数据。
-
-不要因为 ASIN 相同而删除这些排名记录。
-
-完整字段定义：
-
-`docs/DATA_MODEL.md`
-
----
-
-# 6. Important Ranking Rule
-
-项目中存在两个完全不同的排名概念。
-
-## Best Sellers Rank
-
-来自：
-
-```text
-Amazon Best Sellers 页面
-```
-
-例如：
-
-```text
-#1
-#12
-#38
-```
-
-代表商品在当前榜单的位置。
-
----
-
-## Detail BSR
-
-来自：
-
-```text
-Amazon 商品详情页
-```
-
-例如：
-
-```text
-n.º 233 en Hogar y cocina
-```
-
-或者：
-
-```text
-180285
-```
-
-两者绝对不能混用。
-
-详细定义：
-
-`docs/DATA_MODEL.md`
-
----
-
-# 7. Product Identity
-
-核心商品主键：
-
-```text
-ASIN
-```
-
-示例：
-
-```text
-B078C6QR1C
-```
-
-ASIN 用于：
-
-* 商品去重
-* 排名关联
-* Detail enrichment
-* 图片关联
-* 翻译关联
-* Excel 中西文对应
-* 历史追踪
-
-不要使用：
-
-* 商品名称
-* 图片 URL
-* Excel 行号
-
-替代 ASIN。
-
----
-
-# 8. Price Rules
-
-价格定义已经冻结。
-
-## Current Price
-
-只保存：
-
-> Amazon 页面实际显示的当前价格。
-
----
-
-## Original Price
-
-只保存：
-
-> Amazon 明确显示的划线原价。
-
----
-
-## Discount Rate
-
-只有：
-
-```text
-current_price
-+
-original_price
-```
-
-同时存在时计算：
-
-```text
-(original_price - current_price) / original_price
-```
-
-Coupon、Prime、Promotion 等优惠信息不能自动改写正式价格字段。
-
----
-
-# 9. Chinese Product Name
-
-中文商品名称不是 Amazon 原始标题的逐字翻译。
-
-目标格式：
-
-```text
-核心商品类型
-+
-关键规格/数量
-+
-必要兼容型号
-```
-
-例如：
-
-```text
-儿童3格便当盒
-玻璃保鲜盒 12件套
-咖啡机除垢液 2×250毫升
-SDS Plus混凝土钻头 14×160毫米
-Dedica EC680/EC685兼容滤杯手柄
-```
-
-品牌已经有独立字段时：
-
-通常不重复写入中文商品名。
-
-详细 QA 规则：
-
-`docs/QA_RULES.md`
-
----
-
-# 10. Specifications
-
-规格主要回答：
-
-> 消费者实际购买的是哪个规格？
-
-例如：
-
-```text
-90×190×40厘米
-500毫升
-2×250毫升
-18V 4.0Ah / 2块
-8件套 / 320–1200毫升
-```
-
-规格不是所有技术详情的堆叠。
-
-已知历史错误包括：
-
-```text
-9L → 25.4L
-30L → 20L
-10×15cm → 10×10mm
-```
-
-这些问题必须通过 regression tests 防止再次出现。
-
----
-
-# 11. Raw Evidence
-
-项目遵循：
-
-```text
-Raw
-↓
-Normalized
-↓
-Business Presentation
-```
-
-例如：
-
-```text
-西班牙语 Amazon 原始标题
-↓
-商品类型识别
-↓
-中文商品名称
-```
-
-原始数据不得因为中文翻译而被覆盖。
-
----
-
-# 12. Development Rules
-
-所有 AI Coding Agent 在修改代码前必须阅读：
-
-`AGENTS.md`
-
-其中包括：
-
-* 不推倒重写已验证流程
-* 优先最小 diff
-* 不猜缺失字段
-* 不混淆排名
-* 不覆盖原始数据
-* 不覆盖人工备注
-* parser 修复必须增加 regression test
-* 不增加 CAPTCHA bypass / stealth / proxy rotation 等绕过机制
-
----
-
-# 13. QA Rules
-
-项目质量标准位于：
-
-`docs/QA_RULES.md`
-
-核心原则：
-
-```text
-correctness
->
-traceability
->
-completeness
-```
-
-即：
-
-> 宁可为空，也不要填一个看起来完整但错误的数据。
-
----
-
-# 14. Repository Documentation
-
-核心长期文档：
-
-```text
-AGENTS.md
-
-docs/
-├── CURRENT_STATE.md
-├── DATA_MODEL.md
-├── QA_RULES.md
-├── ARCHITECTURE.md
-└── ROADMAP.md
-```
-
----
-
-## AGENTS.md
-
-AI Coding Agent 永久开发规则。
-
----
-
-## CURRENT_STATE.md
-
-当前真实开发状态。
-
-会随着项目推进更新。
-
----
-
-## DATA_MODEL.md
-
-字段定义和数据关系。
-
----
-
-## QA_RULES.md
-
-数据质量和 regression rules。
-
----
-
-## ARCHITECTURE.md
-
-真实程序架构和数据流。
-
----
-
-## ROADMAP.md
-
-开发阶段、当前目标和未来扩展顺序。
-
----
-
-# 15. Historical Documents
-
-仓库中已经存在早期 reconnaissance 设计和实施计划。
-
-这些文档记录了项目早期探索过程。
-
-历史设计可以作为参考，但：
-
-> 当前真实代码和当前状态优先。
-
-不要因为历史计划与当前程序结构不同，就强制重写现有工作代码。
-
----
-
-# 16. Running the Project
-
-当前仓库仍处于从工作脚本向统一正式 CLI 整理的阶段。
-
-因此：
-
-> 不要在 README 中虚构不存在的统一运行命令。
-
-在正式 CLI 冻结前：
-
-请根据当前实际工作脚本运行项目。
-
-当统一入口稳定后，本节应更新为正式命令，例如未来可能类似：
-
-```text
-collect
-enrich
-qa
-export
-```
-
-但不要在命令真正实现前把它们写成已完成能力。
-
----
-
-# 17. Current Development Priority
-
-当前优先级：
-
-```text
-P0
-数据正确性
-```
-
-包括：
-
-* 中文商品类型
-* 品牌
-* 规格
-* 排名语义
-
-然后：
-
-```text
-P1
-Regression Tests
-```
-
-然后：
-
-```text
-P1
-Ranking / Category Traceability
-```
-
-然后：
-
-```text
-P2
-重要缺失字段
-```
-
-包括：
-
-* monthly bought
-* Browse Node
-* leaf category
-* original price
-
-最后才进入：
-
-```text
-大规模类目扩展
-```
-
----
-
-# 18. Recommended Expansion Sequence
-
-建议扩展顺序：
-
-```text
-Hogar y cocina
-        ↓
-完整跑通
-        ↓
-重复运行验证
-        ↓
-Bricolaje y herramientas
-        ↓
-完整跑通
-        ↓
-两个一级类目稳定
-        ↓
-继续扩主要实体商品类目
-        ↓
-6,000～10,000 unique ASIN
-```
-
-不要一开始直接全站并发扩大。
-
----
-
-# 19. Out of Scope for Now
-
-除非明确提出需求，目前不优先：
-
-* PostgreSQL
-* Redis
-* Celery
-* Kafka
-* 微服务
-* Web Dashboard
-* SaaS
-* 云端部署
-* 高并发抓取
-* 多机器 Worker
-* Proxy rotation
-* CAPTCHA solving
-* Anti-detection bypass
-
-保持项目简单、稳定、可验证。
-
----
-
-# 20. Project Principle
-
-这个项目最终追求的不是：
-
-> 抓最多的数据。
-
-而是：
-
-> 得到足够多、足够准确、能够真正用于选品决策的 Amazon.es 畅销商品数据。
-
-核心原则：
-
-```text
-Evidence over completeness.
-
-Correctness over appearance.
-
-Small verified changes over large rewrites.
-```
+最终目标不是抓最多的数据，而是得到足够多、足够准确、能真正支持选品判断的 Amazon.es 商品数据。

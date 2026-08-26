@@ -2,540 +2,41 @@
 
 Last updated: 2026-08-26
 
-This document defines the canonical business data model for the `AmazonESBestseller` project.
+This document defines the canonical data model and the default Excel export contract for `AmazonESBestseller`.
 
-The purpose is to ensure that:
+Field semantics in this document should not be changed silently.
 
-* collection;
-* enrichment;
-* normalization;
-* translation;
-* QA;
-* Excel export;
-* future database migration
+## 1. Core model
 
-all use the same field semantics.
-
-Field meanings in this document should not be changed casually.
-
-If a field definition must change, update this document together with the code.
-
----
-
-# 1. Core modeling principle
-
-The project contains two fundamentally different types of data:
-
-## A. Ranking data
-
-Represents:
-
-> one product appearing in one Amazon ranking context.
-
-## B. Product data
-
-Represents:
-
-> one ASIN and its relatively stable product information.
-
-These must remain separate.
-
----
-
-# 2. Primary product identity
-
-## `asin`
-
-Type:
-
-`string`
-
-Example:
+The project contains at least three distinct concepts:
 
 ```text
-B078C6QR1C
+Product
+Ranking Record
+Product Attribute
 ```
 
-Definition:
+Product = one logical record per ASIN.
 
-> Amazon Standard Identification Number for the exact purchasable product/variation.
+Ranking Record = one ASIN appearing in one Amazon ranking context.
 
-Rules:
+Product Attribute = one visible product-detail Key/Value fact associated with an ASIN.
 
-* required whenever a product is accepted;
-* canonical product key;
-* exactly one product record per ASIN;
-* may appear in multiple ranking records;
-* never replace with title, URL, row index or image URL.
+This third model is essential for full dynamic product-detail extraction.
 
----
+## 2. Primary identity
 
-# 3. Parent ASIN
+### `asin`
 
-## `parent_asin`
+Exact purchasable Amazon product/variation identity. ASIN is the canonical product key.
 
-Type:
+### `parent_asin`
 
-`string | null`
+Confirmed Amazon variation-family parent. Child ASIN remains the canonical SKU identity.
 
-Definition:
+## 3. Product record
 
-> Amazon parent variation-family identifier when reliably available.
-
-Use cases:
-
-* color families;
-* size families;
-* package-size variants;
-* capacity variants;
-* model variants.
-
-Rules:
-
-* backend field;
-* preserve when confirmed;
-* do not infer;
-* null is valid;
-* child ASIN remains the real product identity.
-
----
-
-# 4. Ranking record identity
-
-A ranking record represents:
-
-```text
-ASIN
-+
-ranking context
-+
-collection time
-```
-
-Recommended logical identity:
-
-```text
-asin
-+ browse_node_id / ranking_source_url
-+ bestseller_rank
-+ collected_at
-```
-
-Do not deduplicate ranking records by ASIN alone.
-
----
-
-# 5. Product record identity
-
-A product record represents:
-
-```text
-one ASIN
-```
-
-Recommended identity:
-
-```text
-asin
-```
-
-Product data can be enriched over time.
-
----
-
-# 6. Ranking record model
-
-Recommended canonical fields:
-
-```text
-index
-asin
-
-category_l1
-category_l2
-category_l3
-leaf_category
-
-browse_node_id
-
-bestseller_rank
-
-monthly_bought_raw
-monthly_bought_min
-
-ranking_source_url
-collected_at
-```
-
-Optional future fields may be added only when evidence justifies them.
-
----
-
-# 7. `index`
-
-Type:
-
-`integer | null`
-
-Definition:
-
-> internal display or local ordering number.
-
-This is NOT automatically an Amazon ranking.
-
-Example:
-
-```text
-1
-2
-3
-```
-
-Rules:
-
-* may reset within a ranking page/category;
-* used for spreadsheet readability;
-* must not substitute for `bestseller_rank`.
-
----
-
-# 8. `bestseller_rank`
-
-Type:
-
-`integer | null`
-
-Definition:
-
-> explicit position of the product on the specific Amazon Best Sellers ranking page being collected.
-
-Source:
-
-Amazon Best Sellers page.
-
-Example:
-
-```text
-1
-7
-38
-100
-```
-
-Rules:
-
-* must be tied to ranking context;
-* must not come from product-detail BSR;
-* must not be invented from DOM order unless the page explicitly confirms that order as rank;
-* null if not reliable.
-
----
-
-# 9. `detail_bsr`
-
-Type:
-
-`integer | string | structured object | null`
-
-Definition:
-
-> Amazon Best Sellers Rank shown on the product detail page.
-
-This is different from `bestseller_rank`.
-
-Example:
-
-```text
-233
-180285
-```
-
-or raw:
-
-```text
-n.º 233 en Hogar y cocina
-```
-
-Recommended storage:
-
-```text
-detail_bsr_raw
-detail_bsr_segments
-```
-
-Do not expose `detail_bsr` as the main human-facing ranking unless explicitly requested.
-
----
-
-# 10. `detail_bsr_raw`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> full Amazon detail-page BSR text as captured.
-
-Example:
-
-```text
-n.º 233 en Hogar y cocina (Ver el Top 100...)
-n.º 4 en Juegos de recipientes
-```
-
-Preserve raw text whenever available.
-
----
-
-# 11. `detail_bsr_segments`
-
-Type:
-
-`array | json | null`
-
-Definition:
-
-Structured interpretation of detail BSR.
-
-Example:
-
-```json
-[
-  {
-    "category": "Hogar y cocina",
-    "rank": 233
-  },
-  {
-    "category": "Juegos de recipientes",
-    "rank": 4
-  }
-]
-```
-
-This is useful for analysis.
-
-Do not automatically treat these categories as the product's canonical category hierarchy.
-
----
-
-# 12. Category hierarchy
-
-Canonical fields:
-
-```text
-category_l1
-category_l2
-category_l3
-leaf_category
-browse_node_id
-```
-
-All should represent actual Amazon category evidence.
-
----
-
-# 13. `category_l1`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> first-level Amazon category relevant to the ranking context.
-
-Example:
-
-```text
-Hogar y cocina
-```
-
-Chinese business layer may store a translated equivalent separately if needed.
-
-Do not combine multiple categories in one field.
-
-Bad:
-
-```text
-家居与厨房 / DIY及工具
-```
-
-Instead create multiple ranking records.
-
----
-
-# 14. `category_l2`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> confirmed second-level category.
-
-Leave null when unavailable.
-
-Do not copy `category_l1` merely to fill the field.
-
----
-
-# 15. `category_l3`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> confirmed third-level category.
-
-Leave null when unavailable.
-
----
-
-# 16. `leaf_category`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> confirmed lowest category / Best Sellers node used for the ranking context.
-
-This field is especially important for selection research.
-
-Rules:
-
-* must come from Amazon evidence;
-* do not infer from title;
-* do not copy L3 just to fill it;
-* null is valid.
-
----
-
-# 17. `browse_node_id`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> Amazon Browse Node identifier for the category/ranking context.
-
-Rules:
-
-* preserve exact value;
-* do not guess;
-* always associate it with category and ranking source;
-* potentially critical for repeatable category crawling.
-
----
-
-# 18. `ranking_source_url`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> URL of the ranking page that produced this ranking record.
-
-This is mandatory evidence for reliable ranking interpretation.
-
-Example:
-
-```text
-https://www.amazon.es/gp/bestsellers/...
-```
-
-Prefer normalized URLs when practical.
-
----
-
-# 19. `collected_at`
-
-Type:
-
-`datetime`
-
-Recommended format:
-
-```text
-YYYY-MM-DDTHH:MM:SS
-```
-
-Definition:
-
-> time at which the ranking/product data was collected.
-
-Ranking records should always retain collection time.
-
----
-
-# 20. Monthly bought
-
-Canonical fields:
-
-```text
-monthly_bought_raw
-monthly_bought_min
-```
-
----
-
-# 21. `monthly_bought_raw`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> exact publicly displayed Amazon monthly-purchase text.
-
-Example:
-
-```text
-100+ comprados el mes pasado
-1 mil+ comprados el mes pasado
-```
-
-Do not translate or alter the raw source field.
-
----
-
-# 22. `monthly_bought_min`
-
-Type:
-
-`integer | null`
-
-Definition:
-
-> parsed lower bound from `monthly_bought_raw`.
-
-Examples:
-
-```text
-100+ → 100
-500+ → 500
-1 mil+ → 1000
-```
-
-This is not exact sales volume.
-
-Never label it as exact monthly sales.
-
----
-
-# 23. Product data model
-
-Recommended canonical product fields:
+Recommended conceptual fields:
 
 ```text
 asin
@@ -544,8 +45,8 @@ parent_asin
 title_es_raw
 title_zh
 
-brand
 brand_raw
+brand
 
 current_price
 original_price
@@ -555,18 +56,20 @@ discount_rate
 rating
 review_count
 
+monthly_bought_raw
+monthly_bought_min
+
+selected_variation_raw
+selected_variation_zh
+
 image_url
 product_url
 
-details_json
-details_raw
-details_summary_zh
-
-specification
-specification_zh
-
-date_first_available
 date_first_available_raw
+date_first_available
+
+seller_raw
+seller
 
 detail_bsr_raw
 detail_bsr_segments
@@ -575,1289 +78,352 @@ first_seen
 last_seen
 ```
 
-Additional technical fields may exist in backend storage.
+Full dynamic details should not be flattened into a permanently fixed list of product columns.
 
----
+## 4. Product Attribute model
 
-# 24. Spanish title
-
-## `title_es_raw`
-
-Type:
-
-`string`
-
-Definition:
-
-> original Spanish Amazon product title as collected.
-
-Rules:
-
-* preserve source wording;
-* do not overwrite with cleaned title;
-* considered evidence layer;
-* changes across future runs may be tracked.
-
----
-
-# 25. Chinese title
-
-## `title_zh`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> concise Chinese internal-selection title derived from source evidence.
-
-This is a business-layer field.
-
-It is NOT a literal full translation.
-
-Preferred format:
+Canonical conceptual shape:
 
 ```text
-核心商品类型 + 关键规格/数量 + 必要兼容型号
+asin
+section
+label_raw
+value_raw
+position
+source
+
+normalized_key
+normalized_value
+
+label_zh
+value_zh
 ```
 
-Examples:
+Unknown/new Amazon fields must still be preservable through `label_raw` + `value_raw`.
+
+## 5. Detail sections
+
+`section` may include values conceptually equivalent to product_overview, technical_details, additional_information, selected_variation, feature_bullets, product_description, a_plus and other_visible_details.
+
+Exact implementation names may vary, but source sections should remain distinguishable.
+
+## 6. Raw detail preservation
+
+The data layer should preserve full publicly visible Key/Value evidence where practical.
+
+Do not require a field to match a predefined list such as material, capacity, dimensions, weight, power or voltage before storing it.
+
+The normalization layer may recognize only some attributes. The raw layer should preserve more.
+
+## 7. Full product details
+
+Conceptual fields:
 
 ```text
-儿童3格便当盒
-玻璃保鲜盒 12件套
-咖啡机除垢液 2×250毫升
-SDS Plus混凝土钻头 14×160毫米
-Dedica EC680/EC685兼容滤杯手柄
+product_details_raw
+product_details_normalized
+product_details_zh
 ```
 
----
+`product_details_raw` is a lossless or near-lossless representation of all collected structured detail attributes.
 
-# 26. Chinese title rules
+`product_details_normalized` is an optional structured normalized representation.
 
-`title_zh` should:
+`product_details_zh` is a human-readable Chinese rendering of the collected details. It is a display/derived field, not the raw source of truth.
 
-* clearly identify product type;
-* remain concise;
-* avoid unnecessary brand duplication;
-* preserve essential compatibility/model information;
-* translate ordinary foreign-language marketing words;
-* retain necessary standards/model codes.
+## 8. Feature bullets
 
-Do not store advertising claims inside the title.
-
----
-
-# 27. Brand fields
-
-Canonical fields:
+Canonical concepts:
 
 ```text
-brand_raw
-brand
+feature_bullets_raw
+feature_bullets_zh
 ```
 
----
+`feature_bullets_raw` is Amazon About this item / `Acerca de este producto` bullet text.
 
-# 28. `brand_raw`
+`feature_bullets_zh` is Chinese business translation.
 
-Type:
+Feature bullets must remain separate from structured product details.
 
-`string | null`
+## 9. Selected variation
 
-Definition:
-
-> brand field exactly as collected.
-
-Examples:
+Canonical concepts:
 
 ```text
-Marca: Tatay
-Visita la tienda de Bissell
+selected_variation_raw
+selected_variation_zh
 ```
 
-Preserve source for traceability.
+This is the currently selected SKU option/variation shown by Amazon, for example `30 L`, `Rosa / 900 ml`, `Pack de 2`.
 
----
+This is a high-priority evidence source for specification resolution.
 
-# 29. `brand`
+## 10. Core specification
 
-Type:
-
-`string | null`
-
-Definition:
-
-> cleaned canonical brand.
-
-Examples:
-
-```text
-Tatay
-BISSELL
-KRUPS
-```
-
-Clean only when evidence is reliable.
-
-Do not use first title word as generic fallback.
-
----
-
-# 30. Manufacturer
-
-Optional fields:
-
-```text
-manufacturer_raw
-manufacturer
-```
-
-Manufacturer and brand are not always the same.
-
-Do not merge automatically.
-
----
-
-# 31. Current price
-
-## `current_price`
-
-Type:
-
-`decimal | null`
-
-Definition:
-
-> Amazon's currently displayed purchase price.
-
-Example:
-
-```text
-9.99
-```
-
-Store numeric value separately from presentation.
-
----
-
-# 32. Price raw
-
-Optional:
-
-```text
-current_price_raw
-```
-
-Example:
-
-```text
-9,99 €
-```
-
-Useful for traceability.
-
----
-
-# 33. Original price
-
-## `original_price`
-
-Type:
-
-`decimal | null`
-
-Definition:
-
-> explicitly displayed struck-through/list price.
-
-Only capture when directly shown.
-
-Do not reconstruct.
-
----
-
-# 34. Currency
-
-## `currency`
-
-Type:
-
-`string`
-
-Expected value for Amazon.es:
-
-```text
-EUR
-```
-
-Do not store currency symbol inside numeric price fields.
-
----
-
-# 35. Discount rate
-
-## `discount_rate`
-
-Type:
-
-`decimal | null`
-
-Formula:
-
-```text
-(original_price - current_price) / original_price
-```
-
-Requirements:
-
-```text
-original_price > 0
-current_price != null
-```
-
-Otherwise null.
-
----
-
-# 36. Coupons and promotions
-
-Potential backend fields:
-
-```text
-coupon_raw
-prime_price_raw
-promotion_raw
-deal_raw
-```
-
-These must not alter `current_price` unless future business definitions explicitly change.
-
----
-
-# 37. Rating
-
-## `rating`
-
-Type:
-
-`decimal | null`
-
-Example:
-
-```text
-4.6
-```
-
-Rating is a secondary research signal.
-
-Do not use it to infer sales.
-
----
-
-# 38. Review count
-
-## `review_count`
-
-Type:
-
-`integer | null`
-
-Example:
-
-```text
-156032
-```
-
-Do not infer:
-
-* monthly sales;
-* bestseller rank;
-* sales volume
-
-from review count.
-
----
-
-# 39. Product URL
-
-## `product_url`
-
-Type:
-
-`string`
-
-Canonical preferred format:
-
-```text
-https://www.amazon.es/dp/{ASIN}
-```
-
-Example:
-
-```text
-https://www.amazon.es/dp/B078C6QR1C
-```
-
-Remove nonessential tracking parameters when normalizing.
-
----
-
-# 40. Image URL
-
-## `image_url`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> product image source URL associated with the ASIN.
-
-Rules:
-
-* preserve even if workbook also embeds image;
-* image is presentation;
-* image URL is data.
-
----
-
-# 41. Embedded image
-
-Embedded images are export/presentation artifacts.
-
-They are not primary product data fields.
-
-Association rule:
-
-```text
-image
-↔ ASIN
-```
-
-Do not rely only on row position.
-
----
-
-# 42. Raw details
-
-## `details_json`
-
-Type:
-
-`json | null`
-
-Definition:
-
-> structured raw/near-raw technical details collected from Amazon detail page.
-
-This may contain many heterogeneous fields.
-
-Example categories:
-
-* material;
-* dimensions;
-* capacity;
-* model;
-* package count;
-* special features;
-* country;
-* certifications;
-* power;
-* voltage.
-
-Preserve as backend evidence.
-
----
-
-# 43. `details_raw`
-
-Type:
-
-`string | json | null`
-
-Definition:
-
-> unnormalized source detail content.
-
-Use where needed for audit or parser improvement.
-
----
-
-# 44. Details summary
-
-## `details_summary_zh`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> concise Chinese business summary based only on factual source data.
-
-Useful information may include:
-
-* material;
-* key functions;
-* package structure;
-* washable;
-* waterproof;
-* microwave safe;
-* freezer safe;
-* certifications;
-* use case;
-* country of origin.
-
-Do not invent marketing claims.
-
----
-
-# 45. Specification
-
-Canonical source/normalized fields:
+Canonical concepts:
 
 ```text
 specification
 specification_zh
 ```
 
----
+Definition: compact purchasing-specification summary derived from full source evidence.
 
-# 46. `specification`
+It is NOT the complete detail record.
 
-Type:
+Evidence priority: selected variation > exact title > explicit package description > reliable detail attributes > generic technical fields.
 
-`string | structured object | null`
+## 11. Ranking record model
 
-Definition:
-
-> normalized purchasing specification.
-
-Purpose:
-
-> identify which version/variant the buyer is actually purchasing.
-
-It should NOT be a complete dump of all technical data.
-
----
-
-# 47. `specification_zh`
-
-Type:
-
-`string | null`
-
-Definition:
-
-> Chinese presentation form of the normalized specification.
-
-Examples:
+Recommended fields:
 
 ```text
-90×190×40厘米
-500毫升
-2×250毫升
-18V 4.0Ah / 2块
-8件套 / 320–1200毫升
-```
-
----
-
-# 48. Specification source priority
-
-When conflicting values exist:
-
-1. selected variation;
-2. exact product title;
-3. explicit package description;
-4. reliable detail specification;
-5. generic technical data.
-
-Do not let low-confidence generic fields override explicit title/variation data.
-
----
-
-# 49. Dimension fields
-
-If structured storage is added later, recommended:
-
-```text
-length
-width
-height
-dimension_unit
-```
-
-Do not confuse with:
-
-* capacity;
-* weight;
-* volume.
-
----
-
-# 50. Capacity fields
-
-Recommended:
-
-```text
-capacity_value
-capacity_unit
-```
-
-Accepted examples:
-
-```text
-500 ml
-1 L
-```
-
-Do not accept length or mass units.
-
----
-
-# 51. Weight fields
-
-Recommended:
-
-```text
-weight_value
-weight_unit
-```
-
-Accepted examples:
-
-```text
-320 g
-2.5 kg
-```
-
----
-
-# 52. Package count
-
-Potential fields:
-
-```text
-package_count
-container_count
-piece_count
-set_count
-```
-
-Do not force all Amazon quantity fields into one concept.
-
-Examples:
-
-```text
-7 containers + 7 lids
-```
-
-may be:
-
-```text
-14 pieces
-```
-
-but not necessarily:
-
-```text
-14 products
-```
-
-Preserve semantics.
-
----
-
-# 53. Date first available
-
-Canonical fields:
-
-```text
-date_first_available_raw
-date_first_available
-```
-
----
-
-# 54. `date_first_available_raw`
-
-Type:
-
-`string | null`
-
-Example:
-
-```text
-28 octubre 2023
-```
-
-Preserve exact source.
-
----
-
-# 55. `date_first_available`
-
-Type:
-
-`date | null`
-
-Format:
-
-```text
-YYYY-MM-DD
-```
-
-Example:
-
-```text
-2023-10-28
-```
-
-Do not replace missing Amazon listing date with crawler first-seen date.
-
----
-
-# 56. First seen / last seen
-
-Canonical fields:
-
-```text
-first_seen
-last_seen
-```
-
-Definition:
-
-> when this crawler first/most recently observed the ASIN.
-
-These are crawler lifecycle timestamps.
-
-They are NOT Amazon listing date.
-
----
-
-# 57. Seller fields
-
-Potential backend fields:
-
-```text
-seller
-sold_by_amazon
-fulfilled_by_amazon
-```
-
-These are useful future research fields but not mandatory main-table fields.
-
----
-
-# 58. Availability
-
-Potential field:
-
-```text
-availability_raw
-```
-
-Example:
-
-```text
-En stock
-Agotado temporalmente
-```
-
-Do not interpret temporary unavailability as permanent delisting without explicit lifecycle logic.
-
----
-
-# 59. Chinese business table
-
-Recommended human-facing Chinese fields:
-
-```text
-图片
-序号
-ASIN
-商品名称
-品牌
-当前售价
-划线原价
-折扣率
-评分
-月购买量
-一级类目
-二级类目
-三级类目
-细分类目
-畅销榜排名
-规格
-商品详情摘要
-首次上架日期
-商品链接
-图片链接
-选品状态
-研究备注
-```
-
-Not every field is required to be non-null.
-
-Correctness is more important than fill rate.
-
----
-
-# 60. Spanish business table
-
-Recommended Spanish-facing/evidence-oriented fields:
-
-```text
-序号
-ASIN
-商品名称（西语原文）
-品牌
-当前售价
-划线原价
-折扣率
-评分
-月购买量
-一级类目
-二级类目
-三级类目
-细分类目
-畅销榜排名
-规格（西语/原始）
-首次上架日期
-商品链接
-图片链接
-```
-
-No embedded image is required unless explicitly requested.
-
----
-
-# 61. Category planning table
-
-Category planning is not product data.
-
-Recommended fields may include:
-
-```text
-category_name_zh
-category_name_es
-priority
-recommendation
-notes
-```
-
-It is a planning layer.
-
-Do not mix category planning rows into the product table.
-
----
-
-# 62. Manual fields
-
-Canonical manual fields:
-
-```text
-selection_status
-research_notes
-```
-
-Chinese workbook labels:
-
-```text
-选品状态
-研究备注
-```
-
----
-
-# 63. `selection_status`
-
-Recommended allowed values:
-
-```text
-待评估
-重点关注
-暂不考虑
-已研究
-```
-
-Future values may be added deliberately.
-
----
-
-# 64. `research_notes`
-
-Free-text human field.
-
-Must be preserved across regenerated exports using ASIN matching.
-
----
-
-# 65. Raw vs normalized rule
-
-For important transformations, prefer:
-
-```text
-RAW
-↓
-NORMALIZED
-↓
-BUSINESS PRESENTATION
-```
-
-Example:
-
-```text
-title_es_raw
-↓
-normalized product type
-↓
-title_zh
-```
-
-Another example:
-
-```text
-date_first_available_raw
-↓
-date_first_available
-```
-
-Do not collapse all three layers when traceability matters.
-
----
-
-# 66. Missing values
-
-Use:
-
-```text
-null / empty
-```
-
-when evidence is absent.
-
-Never fill missing values with:
-
-```text
-待补充
-未知
-N/A
-0
-```
-
-inside canonical machine data unless a presentation layer explicitly requires it.
-
-A real numeric zero is different from missing.
-
----
-
-# 67. Data confidence
-
-Future versions may optionally add:
-
-```text
-field_confidence
-source_type
-qa_status
-```
-
-but only if they materially improve quality control.
-
-Do not add dozens of confidence columns to the human-facing workbook.
-
----
-
-# 68. Recommended QA status
-
-Potential backend field:
-
-```text
-qa_status
-```
-
-Possible values:
-
-```text
-PASS
-WARN
-FAIL
-SOURCE_CONFLICT
-```
-
-Meaning:
-
-* `PASS`: usable
-* `WARN`: incomplete but not clearly incorrect
-* `FAIL`: known invalid derived data
-* `SOURCE_CONFLICT`: source fields contradict each other
-
----
-
-# 69. Product-table uniqueness
-
-Product table:
-
-```text
-ASIN unique
-```
-
-Expected:
-
-```text
-one row per ASIN
-```
-
-If duplicates exist:
-
-investigate before export.
-
----
-
-# 70. Ranking-table multiplicity
-
-Ranking table:
-
-```text
-ASIN may repeat
-```
-
-Expected:
-
-```text
-one row per ASIN × ranking context
-```
-
-This is correct behavior.
-
-Do not treat it as duplication error.
-
----
-
-# 71. Image duplication
-
-Different ASINs may legitimately share:
-
-* the same product image;
-* the same parent product image;
-* similar URLs.
-
-Therefore:
-
-same image URL ≠ automatic duplicate product.
-
-It is only a QA signal.
-
----
-
-# 72. Translation does not change identity
-
-Translating or shortening a title must not affect:
-
-* ASIN;
-* product URL;
-* image URL;
-* rank;
-* category;
-* price.
-
-Chinese text is a derived field only.
-
----
-
-# 73. Historical compatibility
-
-Legacy fields may currently exist, such as:
-
-```text
-price
-best_rank
-specification_legacy
-```
-
-When migrating:
-
-* preserve historical values where useful;
-* rename clearly;
-* do not silently reinterpret old values.
-
-Example:
-
-```text
-best_rank_legacy
-```
-
-is preferable to pretending it equals the new canonical `bestseller_rank`.
-
----
-
-# 74. Future database mapping
-
-This model should map naturally into at least:
-
-## `products`
-
-Primary key:
-
-```text
+index
 asin
-```
-
-## `ranking_records`
-
-Foreign key:
-
-```text
-asin
-```
-
-## `product_snapshots`
-
-Optional future table for time-varying product fields.
-
-## `manual_selection`
-
-Optional future table for user-edited research state.
-
----
-
-# 75. Recommended future product table
-
-Conceptual example:
-
-```text
-products
---------
-asin PK
-parent_asin
-
-title_es_raw
-title_zh
-
-brand
-brand_raw
-
-product_url
-image_url
-
-details_json
-specification
-specification_zh
-
-date_first_available
-date_first_available_raw
-```
-
----
-
-# 76. Recommended future ranking table
-
-```text
-ranking_records
----------------
-id PK
-asin FK
-
 category_l1
 category_l2
 category_l3
 leaf_category
-
 browse_node_id
-
 bestseller_rank
-
 monthly_bought_raw
 monthly_bought_min
-
 ranking_source_url
 collected_at
 ```
 
----
+Same ASIN may appear in multiple ranking records.
 
-# 77. Time-varying product fields
+## 12. Bestseller rank vs Detail BSR
 
-Some product fields can change:
+`bestseller_rank` comes from Amazon Best Sellers page.
 
-* current price;
-* original price;
-* rating;
-* review count;
-* seller;
-* availability.
+`detail_bsr_raw` comes from Amazon product detail page.
 
-Long-term, consider storing these in snapshots rather than overwriting history.
+Never merge these fields.
 
-Example future model:
+## 13. Category hierarchy
+
+Canonical concepts:
 
 ```text
-product_snapshots
------------------
-asin
-collected_at
-current_price
-original_price
-rating
-review_count
-seller
-availability
+category_l1
+category_l2
+category_l3
+leaf_category
+browse_node_id
 ```
 
-This is a future design option, not an immediate requirement.
+All category levels must come from actual Amazon evidence. Unknown deeper levels remain null.
 
----
+## 14. Price fields
 
-# 78. Static vs dynamic fields
+`current_price` = Amazon currently displayed purchase price.
 
-Relatively stable:
+`original_price` = explicit struck-through/list price.
 
-* ASIN
-* Parent ASIN
-* product title
-* brand
-* main image
-* first available date
-* technical details
+`currency` default for Amazon.es = EUR.
 
-Dynamic:
+`discount_rate` only valid when both price fields exist and are valid.
 
-* current price
-* original price
-* rating
-* review count
-* seller
-* availability
-* monthly bought
-* ranking position
+## 15. Rating and reviews
 
-Do not design future update logic as if all fields were equally static.
+`rating` is normalized numeric rating.
 
----
+`review_count` is normalized review count.
 
-# 79. Ranking history
+Do not infer monthly sales from review count.
 
-Each ranking crawl should append new ranking observations.
+## 16. Monthly bought
 
-Do not overwrite prior ranking records if historical analysis is desired.
+Preserve `monthly_bought_raw` and `monthly_bought_min`. The parsed value is a lower bound, not exact sales volume.
 
-Future analyses may include:
+## 17. Date fields
 
-* ranking movement;
-* new entrants;
-* disappearing products;
-* category persistence.
+Preserve `date_first_available_raw` and `date_first_available`.
 
----
+Do not substitute crawler `first_seen` for Amazon listing date.
 
-# 80. Product history
+## 18. Seller
 
-Future product snapshots may enable:
+Preserve `seller_raw` and `seller`.
 
-* price changes;
-* review growth;
-* rating movement;
-* availability changes.
+Seller is included in the default human display.
 
-Do not implement this prematurely unless requested, but keep the model compatible.
+`配送方式` is not part of the default Excel display contract.
 
----
+## 19. Human notes
 
-# 81. Chinese selection-table goal
+Canonical field: `notes`.
 
-The Chinese table should optimize:
+Chinese label: `备注`.
 
-> human decision speed.
+This replaces the older separate concepts `selection_status` and `research_notes`.
 
-The main user should be able to understand:
+Notes are human-owned data and must survive regeneration by ASIN.
+
+# 20. Default Excel Export Contract
+
+When the user requests Excel export without specifying another schema, the exporter MUST use this contract.
+
+Default workbook:
+
+1. `类目规划`
+2. `西班牙语选品清单`
+3. `中文选品清单`
+
+Product sheets use one SKU = one row.
+
+The full dynamic detail data remains in the data layer and is rendered into fixed display columns rather than expanded into hundreds of columns.
+
+## 21. Chinese product sheet — frozen 26 columns
+
+Exact default order:
 
 ```text
-what is it?
-what does it look like?
-what price?
-what category?
-what rank?
-what specification?
-what are the useful features?
-how old is the listing?
+01 图片
+02 序号
+03 ASIN
+04 Parent ASIN
+05 商品名称（中文）
+06 品牌
+07 当前售价
+08 划线原价
+09 折扣率
+10 评分
+11 评论数
+12 月购买量
+13 一级类目
+14 二级类目
+15 三级类目
+16 细分类目
+17 畅销榜排名
+18 当前选中规格 / 变体
+19 核心规格（中文）
+20 完整商品详情（中文）
+21 商品卖点（中文）
+22 首次上架日期
+23 卖家
+24 商品链接
+25 图片链接
+26 备注
 ```
 
-without reading the raw Spanish title.
+This schema is frozen until the user explicitly requests a change.
 
----
+## 22. Chinese column mapping
 
-# 82. Backend-data goal
+| Excel column | Canonical source |
+|---|---|
+| 图片 | image associated with ASIN |
+| 序号 | display index |
+| ASIN | asin |
+| Parent ASIN | parent_asin |
+| 商品名称（中文） | title_zh |
+| 品牌 | brand |
+| 当前售价 | current_price |
+| 划线原价 | original_price |
+| 折扣率 | discount_rate |
+| 评分 | rating |
+| 评论数 | review_count |
+| 月购买量 | monthly_bought display |
+| 一级类目 | category_l1 |
+| 二级类目 | category_l2 |
+| 三级类目 | category_l3 |
+| 细分类目 | leaf_category |
+| 畅销榜排名 | bestseller_rank |
+| 当前选中规格 / 变体 | selected_variation_zh/raw |
+| 核心规格（中文） | specification_zh |
+| 完整商品详情（中文） | product_details_zh |
+| 商品卖点（中文） | feature_bullets_zh |
+| 首次上架日期 | date_first_available |
+| 卖家 | seller |
+| 商品链接 | product_url |
+| 图片链接 | image_url |
+| 备注 | notes |
 
-Backend data should optimize:
+## 23. Spanish product sheet
 
-> traceability and future reprocessing.
+The Spanish sheet should be business-equivalent and ASIN-aligned with the Chinese sheet.
 
-It may remain more verbose.
-
-Important raw fields must not be removed merely because they are not currently displayed.
-
----
-
-# 83. Do not optimize for fill rate alone
-
-A field being non-null does not mean it is correct.
-
-Priority:
+Recommended corresponding content:
 
 ```text
-correct
->
-traceable
->
-complete
+序号
+ASIN
+Parent ASIN
+商品名称（西语）
+品牌
+当前售价
+划线原价
+折扣率
+评分
+评论数
+月购买量
+一级类目
+二级类目
+三级类目
+细分类目
+畅销榜排名
+当前选中规格 / 变体（西语）
+核心规格（西语）
+完整商品详情（西语原文）
+商品卖点（西语原文）
+首次上架日期
+卖家
+商品链接
+图片链接
+备注
 ```
+
+The Spanish sheet does not require embedded images by default.
+
+Chinese and Spanish product sheets must use the same ASIN set and deterministic ordering.
+
+## 24. Complete product-detail display
+
+`完整商品详情（中文）` is a rendered human-readable field built from the dynamic detail attributes.
+
+Different SKUs may contain different attribute sets. The column is fixed; its content is dynamic.
+
+## 25. Raw vs display rule
 
 Example:
 
-A blank brand is better than a false brand.
+```text
+label_raw = Material
+value_raw = Polipropileno
+↓
+完整商品详情（中文） = 材质：聚丙烯
+```
 
-A blank leaf category is better than an invented leaf category.
+If translation/normalization is wrong, the raw source must remain available for repair.
 
----
+## 26. Excel is not the canonical raw database
 
-# 84. Data contract change policy
+Excel is a business display artifact.
 
-Any change that affects the meaning of:
+Preferred direction:
 
-* `asin`
-* `bestseller_rank`
-* `detail_bsr`
-* category fields
-* price fields
-* monthly bought
-* specification
-* Chinese product name
-* manual fields
+```text
+structured raw/normalized data → Excel
+```
 
-must:
+## 27. Missing values
 
-1. be explicitly documented;
-2. include migration considerations;
-3. include regression validation;
-4. avoid silent reinterpretation.
+Canonical machine data should use null/empty values when evidence is missing.
 
----
+Do not fabricate rank, category, brand, original price, monthly bought or details.
 
-# 85. Final canonical principle
+## 28. Data contract change policy
 
-Every derived field should answer:
+Any change to the 26 default Chinese columns, sheet names/order, notes field, rank semantics, category semantics, specification semantics or full-detail semantics requires explicit user approval, documentation update, code/schema update and regression validation.
 
-> What source evidence produced this value?
+## 29. Final principle
 
-If that question cannot be answered reliably:
+The data layer should be more complete than the display layer.
 
-> the field should probably remain null or be marked for review.
+The display layer should be more readable than the data layer.
 
-The data model prioritizes:
-
-> evidence, identity, traceability and correctness over superficial completeness.
+Both must remain traceable by ASIN.
