@@ -84,6 +84,30 @@ def test_zh_column_mapping(tmp_path, export_records):
     assert row3[25] == '月购看涨（人工）'                   # 备注
 
 
+def test_zh_sheet_uses_ds_display_overlay_without_changing_es_sheet(tmp_path, export_records):
+    records = [dict(r) for r in export_records]
+    target = next(r for r in records if r['asin'] == 'B078C6QR1C')
+    target.update({
+        'title_zh': 'DS 中文名称',
+        'category_l1_zh': '中文一级类目',
+        'category_l2_zh': '中文二级类目',
+        'category_l3_zh': '中文三级类目',
+        'leaf_category_zh': '中文细分类目',
+        'selected_variation_zh': 'DS 变体',
+        'specification_zh': 'DS 规格',
+        'product_details_zh': 'DS 详情',
+        'feature_bullets_zh': 'DS 卖点',
+    })
+    wb = export_workbook(records, out_path=str(tmp_path / 'out.xlsx'))
+    ws_zh = wb['中文选品清单']
+    ws_es = wb['西班牙语选品清单']
+    row3 = _zh_row(ws_zh, 3)
+    assert row3[4:6] == ['DS 中文名称', 'Tatay']
+    assert row3[12:16] == ['中文一级类目', '中文二级类目', '中文三级类目', '中文细分类目']
+    assert row3[17:21] == ['DS 变体', 'DS 规格', 'DS 详情', 'DS 卖点']
+    assert ws_es.cell(row=3, column=4).value == 'Fiambrera de cristal con 4 piezas'
+
+
 def test_zh_detail_cols_empty_without_raw_detail(tmp_path, export_records):
     """无原始全量详情数据（attributes/卖点）→ 列 20/21 留空不臆造（QA_RULES §29）。"""
     wb = export_workbook(export_records, out_path=str(tmp_path / "out.xlsx"))

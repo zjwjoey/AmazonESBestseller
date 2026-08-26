@@ -107,6 +107,18 @@ def _title_zh(rec: Mapping, translations: Optional[Mapping]) -> str:
     return ''
 
 
+def _zh_field(rec: Mapping, translations: Optional[Mapping], key: str, fallback: str = '') -> str:
+    """Read one translated display field, falling back to the Spanish value."""
+    value = rec.get(key)
+    if value not in (None, ''):
+        return str(value)
+    asin = str(rec.get('asin') or '').strip().upper()
+    tr = (translations or {}).get(asin) if asin else None
+    if isinstance(tr, dict) and tr.get(key) not in (None, ''):
+        return str(tr[key])
+    return str(fallback or '')
+
+
 # ---------- 行值（只读 canonical 字段，渲染不改源记录） ----------
 
 def _zh_values(rec: Mapping, seq: int, translations: Optional[Mapping]) -> List:
@@ -124,13 +136,13 @@ def _zh_values(rec: Mapping, seq: int, translations: Optional[Mapping]) -> List:
         rec.get('rating') or '',                     # 10 评分
         rec.get('review_count') or '',               # 11 评论数
         rec.get('monthly_bought_min') or '',         # 12 月购买量
-        rec.get('category_l1') or '',                # 13 一级类目
-        rec.get('category_l2') or '',                # 14 二级类目
-        rec.get('category_l3') or '',                # 15 三级类目
-        rec.get('leaf_category') or '',              # 16 细分类目
+        _zh_field(rec, translations, 'category_l1_zh', rec.get('category_l1')),  # 13 一级类目
+        _zh_field(rec, translations, 'category_l2_zh', rec.get('category_l2')),  # 14 二级类目
+        _zh_field(rec, translations, 'category_l3_zh', rec.get('category_l3')),  # 15 三级类目
+        _zh_field(rec, translations, 'leaf_category_zh', rec.get('leaf_category')),  # 16 细分类目
         rec.get('bestseller_rank') or '',            # 17 畅销榜排名
-        rec.get('selected_variation_raw') or '',     # 18 当前选中规格 / 变体
-        rec.get('spec_v2') or '',                    # 19 核心规格（中文）
+        _zh_field(rec, translations, 'selected_variation_zh', rec.get('selected_variation_raw')),  # 18 当前选中规格 / 变体
+        _zh_field(rec, translations, 'specification_zh', rec.get('spec_v2')),  # 19 核心规格（中文）
         rec.get('product_details_zh') or '',         # 20 完整商品详情（中文）
         rec.get('feature_bullets_zh') or '',         # 21 商品卖点（中文）
         rec.get('date_first_available') or '',       # 22 首次上架日期

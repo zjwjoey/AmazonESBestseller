@@ -116,6 +116,72 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
           % (len(rankings), len(details), len(plan["collect"])))
 
 
+# ---------- select-quota（离线） ----------
+
+def cmd_select_quota(args) -> None:
+    """根据已采集榜单和审核过的 URL 配置生成 150/50 manifest。"""
+    from .collection.quota import annotate_groups, normalize_group, select_quota
+
+    rankings = _load_json(args.rankings)
+    config = _load_json(args.config)
+    rows = config.get("categories", []) if isinstance(config, dict) else config
+    if not isinstance(rows, list) or not rows:
+        raise SystemExit("类目配置必须是非空数组: %s" % args.config)
+    quotas: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        group = normalize_group(row.get("category_group") or row.get("group"))
+        if not group:
+            raise SystemExit("类目配置缺少 group: %r" % row)
+        try:
+            quota = int(row.get("quota"))
+        except (TypeError, ValueError):
+            raise SystemExit("类目配置 quota 必须是整数: %r" % row)
+        quotas[group] = quotas.get(group, 0) + quota
+    tagged = annotate_groups(rankings, rows)
+    try:
+        selected = select_quota(tagged, quotas)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    records = [item for group in quotas for item in selected[group]]
+    summary = {group: len(selected[group]) for group in quotas}
+    summary["total"] = len(records)
+    _save_json({"summary": summary, "records": records}, args.out)
+    print("select-quota 完成：家居 %d、DIY %d、总计 %d → %s"
+          % (summary.get("hogar", 0), summary.get("diy", 0), len(records), args.out))
+
+
+# ---------- translate-ds（联网 API） ----------
+
+def cmd_translate_ds(args) -> None:
+    """按 ASIN 顺序调用 DS，输出 ASIN → 翻译结果映射。"""
+    from .translation.ds import DeepSeekTranslator
+
+    products = _load_json(args.products)
+    if not isinstance(products, list):
+        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
+    translator = DeepSeekTranslator(
+        endpoint=args.endpoint or None,
+        model=args.model or None,
+        cache_path=args.cache or args.out,
+        max_retries=args.max_retries,
+        backoff_seconds=args.backoff_seconds,
+        timeout=args.timeout,
+    )
+    output: dict[str, dict] = {}
+    for product in products:
+        result = translator.translate_record(product)
+        asin = str(result.get("asin") or product.get("asin") or "").strip().upper()
+        if asin:
+            output[asin] = result
+        translator.save_cache()
+    _save_json(output, args.out)
+    success = sum(1 for r in output.values() if r.get("translation_status") == "success")
+    failed = len(output) - success
+    print("translate-ds 完成：成功 %d、失败 %d、总计 %d → %s" % (success, failed, len(output), args.out))
+
+
 # ---------- enrich（离线） ----------
 
 def cmd_enrich(args) -> None:
@@ -240,6 +306,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--headful", action="store_true", help="有头浏览器（默认 headless）")
     c.set_defaults(func=lambda a, p=c: cmd_collect(a, p))
 
+    s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")
+    s.add_argument("--rankings", required=True, help="榜单记录 JSON")
+    s.add_argument("--config", required=True, help="类目配置 JSON")
+    s.add_argument("--out", required=True, help="配额 manifest JSON")
+    s.set_defaults(func=cmd_select_quota)
+
     e = sub.add_parser("enrich", help="离线：榜单+详情 → 规范化+中文派生商品表")
     e.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"),
                    help="榜单记录 JSON")
@@ -250,6 +322,17 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--translations", default="", help="翻译表 JSON（ASIN → {title_zh}）")
     e.add_argument("--out", default=str(OUTPUTS / "products.json"), help="输出商品表 JSON")
     e.set_defaults(func=cmd_enrich)
+
+    t = sub.add_parser("translate-ds", help="联网：调用 DeepSeek API 翻译中文显示字段")
+    t.add_argument("--products", required=True, help="规范化商品 JSON 数组")
+    t.add_argument("--cache", default="", help="翻译缓存 JSON（默认写入 --out）")
+    t.add_argument("--out", required=True, help="ASIN → 翻译结果 JSON")
+    t.add_argument("--endpoint", default="", help="完整 API endpoint（默认 DeepSeek chat/completions）")
+    t.add_argument("--model", default="", help="模型名（默认 deepseek-chat）")
+    t.add_argument("--max-retries", type=int, default=2)
+    t.add_argument("--backoff-seconds", type=float, default=1.0)
+    t.add_argument("--timeout", type=float, default=60.0)
+    t.set_defaults(func=cmd_translate_ds)
 
     q = sub.add_parser("qa", help="离线：商品表 → QA 结果")
     q.add_argument("--products", default=str(OUTPUTS / "products.json"))

@@ -143,6 +143,27 @@ def test_enrich_title_zh_from_translations():
     assert enrich_products(RANKING, DETAIL)[0]["title_zh"] == ""
 
 
+def test_enrich_applies_ds_translation_without_changing_spanish_source():
+    tr = {
+        "B078C6QR1C": {
+            "title_zh": "床垫保护垫",
+            "category_l2_zh": "收纳与整理",
+            "selected_variation_zh": "4件套",
+            "specification_zh": "90×190厘米",
+            "product_details_zh": "材质：玻璃",
+            "feature_bullets_zh": "防水",
+        }
+    }
+    p = enrich_products(RANKING, DETAIL, translations=tr)[0]
+    assert p["title_es_raw"] == "Fiambrera de cristal con 4 piezas"
+    assert p["title_zh"] == "床垫保护垫"
+    assert p["category_l2_zh"] == "收纳与整理"
+    assert p["selected_variation_zh"] == "4件套"
+    assert p["specification_zh"] == "90×190厘米"
+    assert p["product_details_zh"] == "材质：玻璃"
+    assert p["feature_bullets_zh"] == "防水"
+
+
 def test_enrich_deterministic_order_by_asin():
     r2 = dict(RANKING[0], asin="B075JJRFVV", bestseller_rank=2)
     d2 = dict(DETAIL[0], asin="B075JJRFVV", current_price_raw="16,98 €")

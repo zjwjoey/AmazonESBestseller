@@ -154,7 +154,22 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["leaf_category_zh"] = category_zh(leaf)
 
     tr = (translations or {}).get(asin) or {}
-    out["title_zh"] = (tr.get("title_zh") or "") if isinstance(tr, dict) else ""
+    if isinstance(tr, dict):
+        # DS is an optional display-layer overlay.  Only non-empty approved
+        # fields are copied; every Spanish/raw field above remains untouched.
+        if tr.get("title_zh"):
+            out["title_zh"] = str(tr["title_zh"]).strip()
+        else:
+            out["title_zh"] = out.get("title_zh") or ""
+        for key in (
+            "category_l1_zh", "category_l2_zh", "category_l3_zh", "leaf_category_zh",
+            "selected_variation_zh", "specification_zh", "product_details_zh",
+            "feature_bullets_zh",
+        ):
+            if tr.get(key) not in (None, ""):
+                out[key] = str(tr[key]).strip()
+    else:
+        out["title_zh"] = out.get("title_zh") or ""
     return out
 
 

@@ -21,8 +21,48 @@ def test_cli_help_lists_subcommands(capsys):
         main(["--help"])
     assert ei.value.code == 0
     out = capsys.readouterr().out
-    for cmd in ("collect", "enrich", "qa", "audit-fields", "export"):
+    for cmd in ("collect", "enrich", "qa", "audit-fields", "export", "select-quota", "translate-ds"):
         assert cmd in out
+
+
+def test_cli_select_quota_writes_grouped_manifest(tmp_path):
+    rankings = tmp_path / "rankings.json"
+    config = tmp_path / "config.json"
+    out = tmp_path / "manifest.json"
+    rankings.write_text(json.dumps([
+        {"asin": "h1", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/kitchen/"},
+        {"asin": "d1", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/diy/"},
+    ]), encoding="utf-8")
+    config.write_text(json.dumps([
+        {"group": "hogar", "url": "https://www.amazon.es/gp/bestsellers/kitchen/", "quota": 1},
+        {"group": "diy", "url": "https://www.amazon.es/gp/bestsellers/diy/", "quota": 1},
+    ]), encoding="utf-8")
+    assert main(["select-quota", "--rankings", str(rankings), "--config", str(config), "--out", str(out)]) == 0
+    manifest = json.loads(out.read_text(encoding="utf-8"))
+    assert manifest["summary"] == {"hogar": 1, "diy": 1, "total": 2}
+    assert [r["asin"] for r in manifest["records"]] == ["H1", "D1"]
+
+
+def test_cli_translate_ds_writes_asin_map(tmp_path, monkeypatch):
+    products = tmp_path / "products.json"
+    out = tmp_path / "translations.json"
+    products.write_text(json.dumps([{"asin": "b1", "title_es_raw": "Taladro"}], ensure_ascii=False), encoding="utf-8")
+
+    class FakeTranslator:
+        def __init__(self, **kwargs):
+            pass
+
+        def translate_record(self, record):
+            return {"asin": record["asin"].upper(), "title_zh": "电钻", "translation_status": "success"}
+
+        def save_cache(self):
+            pass
+
+    import amazon_es_bestseller.translation.ds as ds
+    monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
+    assert main(["translate-ds", "--products", str(products), "--out", str(out)]) == 0
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert saved["B1"]["title_zh"] == "电钻"
 
 
 def test_cli_audit_fields_writes_json_and_markdown(tmp_path, capsys):
