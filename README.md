@@ -36,7 +36,7 @@ Excel 不需要把全部动态字段展开成几百列。完整动态详情通�
 
 已经验证：Amazon.es Best Sellers 页面访问、商品详情页访问、ASIN、Best Sellers 排名、商品标题、商品链接、图片链接、当前价格、评分、评论数、品牌、Parent ASIN 部分采集、Detail BSR、技术详情、规格整理、上架时间部分采集、西班牙语选品表、中文选品表、图片嵌入 Excel、类目规划、中文翻译/规格清洗、数据审计。
 
-仍需完善：动态全量详情采集工程化、中文商品类型 QA、规格解析 QA、品牌误识别防护、类目层级完整度、Browse Node、月购买量、划线原价覆盖、regression tests、全类目规模化和 6,000～10,000 ASIN 稳定生产。
+当前主链已包含详情身份/访问门禁、动态详情、月购买量 raw 提取、划线原价语义校验、QA、备注保护和三表导出。尚未承诺的是全类目规模化和 6,000～10,000 ASIN 稳定生产。
 
 详细状态见 `docs/CURRENT_STATE.md`。
 
@@ -141,11 +141,24 @@ correctness > traceability > completeness
 
 详细 QA 见 `docs/QA_RULES.md`。
 
+## 13. Installation and offline verification
+
+```powershell
+python -m pip install -e ".[test]"
+python -m playwright install chromium   # only when live browser collection is explicitly needed
+amazon-es --help
+python -m pytest -q -rs
+```
+
+`collect` uses low-frequency serial browser access. `enrich`、`qa` 和 `export` are offline.
+Live collection tests run only when `RUN_LIVE=1` is explicitly set. The project does not
+provide CAPTCHA, proxy-rotation or stealth bypass behavior.
+
 ## 12. Documentation
 
 核心文档：`AGENTS.md`、`docs/CURRENT_STATE.md`、`docs/DATA_MODEL.md`、`docs/QA_RULES.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`。
 
-## 13. Project Principle
+## 14. Project Principle
 
 ```text
 Data Layer: 尽可能无损

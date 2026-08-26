@@ -81,6 +81,44 @@ def _main_image_url(soup) -> str:
     return ""
 
 
+_MONTHLY_RE = re.compile(
+    r"([\d.,]+\s*(?:mil|k)?\s*\+)\s+comprados\s+el\s+mes\s+pasado",
+    re.I)
+
+
+def _monthly_bought_raw(soup) -> str:
+    """可见的上月购买文案 → 数字下限原文；无证据返回空。"""
+    selectors = ("#social-proofing-faceout", ".social-proofing-faceout")
+    texts = []
+    for sel in selectors:
+        for el in soup.select(sel):
+            texts.append(_clean(el.get_text(" ", strip=True)))
+    body = soup.find("body")
+    if body is not None:
+        texts.append(_clean(body.get_text(" ", strip=True)))
+    for text in texts:
+        m = _MONTHLY_RE.search(text)
+        if m:
+            return re.sub(r"\s+", " ", m.group(1)).strip()
+    return ""
+
+
+def _struck_price(soup) -> str:
+    """只从明确 data-a-strike=true 的划线价格中取原价。"""
+    for container in soup.select(
+            "#corePrice_feature_div .a-text-price, "
+            "#corePriceDisplay_desktop_feature_div .a-text-price"):
+        marked = container.get("data-a-strike")
+        marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
+        offscreen = container.select_one(".a-offscreen")
+        if offscreen is not None:
+            value = _clean(offscreen.get_text(" ", strip=True))
+            if (str(marked).lower() == "true" or marked_parent is not None
+                    or ("€" in value and "/" not in value)):
+                return value
+    return ""
+
+
 def _product_url(asin: str) -> str:
     """商品链接：由 ASIN 确定性派生（非业务推断）；ASIN 非法 → 空。"""
     a = str(asin or "").strip()
@@ -245,10 +283,8 @@ def parse_detail_page(html: str, asin: str) -> dict:
                 or soup.select_one(".priceToPay .a-offscreen"))
     current_price_raw = _clean(price_el.get_text(" ", strip=True)) if price_el else ""
 
-    # 划线价（原价）——仅取 corePrice 区域的 .a-text-price
-    list_el = (soup.select_one("#corePrice_feature_div .a-text-price .a-offscreen")
-               or soup.select_one("#corePriceDisplay_desktop_feature_div .a-text-price .a-offscreen"))
-    original_price_raw = _clean(list_el.get_text(" ", strip=True)) if list_el else ""
+    # 划线价（原价）——必须有明确 data-a-strike=true 证据
+    original_price_raw = _struck_price(soup)
 
     # 评分
     rating_el = (soup.select_one("#acrPopover .a-icon-alt")
@@ -312,6 +348,7 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "title_es_raw": _text(soup, "#productTitle"),
         "current_price_raw": current_price_raw,
         "original_price_raw": original_price_raw,
+        "monthly_bought_raw": _monthly_bought_raw(soup),
         "rating_raw": rating_raw,
         "review_count_raw": review_count_raw,
         "availability_raw": availability_raw,
@@ -369,15 +406,30 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
     failed: List[str] = []
     for asin in asins:
         path = os.path.join(html_dir, asin + ".html")
+        meta_path = os.path.splitext(path)[0] + ".meta.json"
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 html = f.read()
-            if CAPTCHA_RE.search(html[:300]):
+            meta = {}
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, encoding="utf-8") as f:
+                        meta = json.load(f)
+                except (OSError, ValueError):
+                    meta = {}
+            cached_status = meta.get("status_code", 200)
+            state = detect_access_status(cached_status, html)
+            if state.value != "NORMAL":
                 raise AccessStopError(
-                    "已落盘证据受限（CHALLENGE），ASIN %s，按策略停止" % asin)
+                    "已落盘证据受限（%s），ASIN %s，按策略停止" % (state.value, asin))
+            require_normal_access(state, "缓存 HTML，ASIN %s" % asin)
+            cached_url = meta.get("final_url") or ""
+            if cached_url and not verify_asin_on_page(cached_url, asin):
+                raise AccessStopError(
+                    "缓存详情页 ASIN 不一致，请求 %s，最终 URL %s" % (asin, cached_url))
             rec = parse_detail_page(html, asin)
-            rec["status_code"] = None
-            rec["access_state"] = "NORMAL"
+            rec["status_code"] = meta.get("status_code")
+            rec["access_state"] = state.value
             rec["resumed_from_html"] = True
             details.append(rec)
             continue
@@ -392,6 +444,13 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             state = detect_access_status(status, html)
             require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
                                   % (status, asin, len(details)))
+            final_url = str(getattr(session.page, "url", "") or "")
+            if final_url and not verify_asin_on_page(final_url, asin):
+                raise AccessStopError(
+                    "详情页 ASIN 不一致，请求 %s，最终 URL %s" % (asin, final_url))
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({"status_code": status, "final_url": final_url,
+                           "access_state": state.value}, f, ensure_ascii=False, indent=2)
             rec = parse_detail_page(html, asin)
             rec["status_code"] = status
             rec["access_state"] = state.value

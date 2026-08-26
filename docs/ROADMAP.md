@@ -625,8 +625,7 @@ Before every regeneration:
 preserve by ASIN:
 
 ```text
-选品状态
-研究备注
+备注
 ```
 
 This is mandatory before the workbook becomes a long-term operating tool.
@@ -637,9 +636,9 @@ This is mandatory before the workbook becomes a long-term operating tool.
 
 Status:
 
-> ⬜ MAJOR MILESTONE
+> ✅ COMPLETED (validated run evidence is recorded in CURRENT_STATE.md)
 
-This should be the first true end-to-end category validation.
+This is the first validated end-to-end category run; repeatability and additional categories remain future work.
 
 Required pipeline:
 

@@ -270,7 +270,7 @@ def merge_manual_fields(records: List[Mapping], prev_workbook=None) -> List[Mapp
             continue
         for rec in out:
             a = str(rec.get('asin', '')).strip().upper()
-            if a in manual:
+            if a in manual and _notes_of(rec) == '':
                 rec['备注'] = manual[a]
         break
     return out

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+from io import BytesIO
 import json
 import shutil
 import sys
@@ -42,6 +43,38 @@ def _save_json(data, path: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _load_category_planning(path: Optional[str]):
+    if not path:
+        return None
+    data = _load_json(path)
+    if not isinstance(data, list):
+        raise SystemExit("类目规划 JSON 顶层必须是数组: %s" % path)
+    return data
+
+
+def _load_images_by_asin(directory: Optional[str], records: list) -> dict:
+    if not directory:
+        return {}
+    root = Path(directory)
+    if not root.is_dir():
+        print("警告：图片目录不存在，跳过内嵌图片: %s" % directory)
+        return {}
+    out = {}
+    for record in records:
+        asin = str(record.get("asin") or "").strip().upper()
+        if not asin:
+            continue
+        for suffix in (".png", ".jpg", ".jpeg"):
+            path = root / (asin + suffix)
+            if path.exists():
+                try:
+                    out[asin] = (BytesIO(path.read_bytes()), 70, 70)
+                except OSError as exc:
+                    print("警告：无法读取图片 %s：%s" % (path, exc))
+                break
+    return out
 
 
 # ---------- collect（联网） ----------
@@ -156,11 +189,15 @@ def cmd_export(args) -> None:
         raise SystemExit("\n".join(lines))
 
     translations = _load_json(args.translations) if args.translations else None
+    images_by_asin = _load_images_by_asin(args.images_dir, products)
+    category_planning = _load_category_planning(args.category_planning)
     prev_workbook = None
     if args.prev_workbook:
         import openpyxl
         prev_workbook = openpyxl.load_workbook(args.prev_workbook)
     wb = export_workbook(products, translations=translations,
+                         images_by_asin=images_by_asin,
+                         category_planning=category_planning,
                          prev_workbook=prev_workbook, out_path=args.out)
     print("export 完成：%s（%s 条商品，%d 张表）" % (args.out, len(products), len(wb.sheetnames)))
 
@@ -202,6 +239,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--products", default=str(OUTPUTS / "products.json"))
     x.add_argument("--translations", default="")
     x.add_argument("--prev-workbook", default="", help="前版工作簿（按 ASIN 保留备注）")
+    x.add_argument("--images-dir", default="", help="本地图片目录（<ASIN>.png/.jpg/.jpeg）")
+    x.add_argument("--category-planning", default="", help="类目规划 JSON（字典行数组或二维数组）")
     x.add_argument("--out", default=str(OUTPUTS / "选品清单.xlsx"))
     x.add_argument("--force", action="store_true",
                    help="跳过 QA 硬门禁（存在 P0/P1 也导出，保留上游证据）")

@@ -11,7 +11,9 @@ from typing import Optional
 from ..models import AccessState
 
 #: 与 extract_details.js line 48 完全一致：页面前 300 字符命中即判定验证码挑战
-CAPTCHA_RE = re.compile(r'Captcha|Type the characters|resolver el captcha', re.IGNORECASE)
+CAPTCHA_RE = re.compile(
+    r'Captcha|Type the characters|resolver el captcha|robot check|'
+    r'access denied|unusual traffic|rate exceeded', re.IGNORECASE)
 
 
 class AccessStopError(RuntimeError):

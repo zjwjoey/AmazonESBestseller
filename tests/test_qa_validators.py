@@ -100,6 +100,12 @@ def test_validate_price_no_discount_ok():
     assert validate_price("16,98", original_price="", discount_rate="") == (QAStatus.PASS, [])
 
 
+def test_validate_price_rejects_present_equal_original():
+    status, issues = validate_price(14.99, 14.99, "EUR", None)
+    assert status == QAStatus.FAIL
+    assert any(i.code == "PRICE_INVALID" for i in issues)
+
+
 # ---------- 评分 ----------
 def test_validate_rating_ok():
     assert validate_rating("4,5 de 5 estrellas (3873)") == (QAStatus.PASS, [])
@@ -344,14 +350,30 @@ def test_validate_monthly_bought_ok():
 def test_validate_monthly_bought_unparseable():
     r = {"monthly_bought_raw": "abc", "monthly_bought_min": ""}
     status, issues = validate_monthly_bought(r)
-    assert status == QAStatus.FAIL
+    assert status == QAStatus.WARN
     assert issues[0].code == "MONTHLY_BOUGHT_UNPARSEABLE"
 
 
 def test_validate_monthly_bought_inconsistent():
     r = {"monthly_bought_raw": "100+", "monthly_bought_min": "200"}
     status, issues = validate_monthly_bought(r)
-    assert status == QAStatus.FAIL
+    assert status == QAStatus.WARN
+
+
+def test_validate_monthly_bought_inconsistency_is_warning():
+    status, issues = validate_monthly_bought({
+        "monthly_bought_raw": "100+", "monthly_bought_min": 50})
+    assert status == QAStatus.WARN
+    assert issues[0].severity == "P2"
+
+
+def test_validate_source_conflict_reads_attributes():
+    status, issues = validate_source_conflict({
+        "title_es_raw": "Producto reutilizable",
+        "attributes": [{"label_raw": "Tipo", "value_raw": "Tamper"}],
+        "product_type": "可重复使用"})
+    assert status == QAStatus.SOURCE_CONFLICT
+    assert issues[0].code == "SOURCE_CONFLICT"
 
 
 # ---------- 聚合 run_qa ----------

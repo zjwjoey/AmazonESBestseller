@@ -235,3 +235,25 @@ def test_verify_asin_on_page_mismatch():
 def test_verify_asin_on_page_missing():
     assert verify_asin_on_page(None, "B078C6QR1C") is False
     assert verify_asin_on_page("https://www.amazon.es/dp/B078C6QR1C", "") is False
+
+
+def test_struck_price_excludes_unit_price():
+    html = """
+    <div id="corePrice_feature_div">
+      <div class="a-price"><span class="a-offscreen">14,99 €</span></div>
+      <span class="a-text-price"><span class="a-offscreen">3,04 EUR/kg</span></span>
+    </div>
+    <div id="corePriceDisplay_desktop_feature_div">
+      <span class="a-text-price" data-a-strike="true">
+        <span class="a-offscreen">19,99 €</span>
+      </span>
+    </div>
+    """
+    parsed = parse_detail_page(html, "B078C6QR1C")
+    assert parsed["current_price_raw"] == "14,99 €"
+    assert parsed["original_price_raw"] == "19,99 €"
+
+
+def test_monthly_bought_is_preserved_from_visible_text():
+    html = '<div id="social-proofing-faceout">1,5 mil+ comprados el mes pasado</div>'
+    assert parse_detail_page(html, "B078C6QR1C")["monthly_bought_raw"] == "1,5 mil+"

@@ -116,6 +116,12 @@ def validate_price(current_price, original_price=None, currency=None,
             '现价无法解析为 >0 的有效金额: %r' % (current_price,)))
     if currency and str(currency).strip().upper() != 'EUR':
         issues.append(_issue('PRICE_INVALID', 'P1', 'currency', '货币非 EUR'))
+    if original_price not in (None, ''):
+        orig = parse_price(original_price)
+        if orig is None or (cur is not None and orig <= cur):
+            issues.append(_issue(
+                'PRICE_INVALID', 'P1', 'original_price',
+                '原价缺少有效证据或原价≤现价'))
     # 折扣必须有原价证据且原价 > 现价（QA_RULES §7，禁止重建）
     if discount_rate not in (None, '', 0, '0', '0.0'):
         orig = parse_price(original_price)
@@ -371,7 +377,7 @@ def validate_source_conflict(record) -> Tuple[QAStatus, List[QaIssue]]:
             'TITLE_PRODUCT_TYPE_MISMATCH', 'P0', 'product_type',
             '记录的商品类型 %s 与标题证据 %s 不一致' % (recorded_pt, pt_title))]
     evidence = (record.get('details_json') or record.get('summary_v2')
-                or record.get('spec_v2') or '')
+                or record.get('spec_v2') or record.get('attributes') or '')
     if isinstance(evidence, dict):
         evidence = json.dumps(evidence, ensure_ascii=False)
     pt_ev = detect_product_type(evidence)
@@ -390,11 +396,11 @@ def validate_monthly_bought(record) -> Tuple[QAStatus, List[QaIssue]]:
         return QAStatus.PASS, []
     parsed = parse_monthly_bought(raw)
     if parsed is None:
-        return QAStatus.FAIL, [_issue(
+        return QAStatus.WARN, [_issue(
             'MONTHLY_BOUGHT_UNPARSEABLE', 'P2', 'monthly_bought_min',
             '月购文本存在但无法解析: %r' % (raw,))]
     if mn not in (None, '') and int(mn) != parsed:
-        return QAStatus.FAIL, [_issue(
+        return QAStatus.WARN, [_issue(
             'MONTHLY_BOUGHT_UNPARSEABLE', 'P2', 'monthly_bought_min',
             '月购下限 %s 与原始文本解析 %s 不一致' % (mn, parsed))]
     return QAStatus.PASS, []
