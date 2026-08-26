@@ -123,3 +123,71 @@ def test_asin_uppercased():
     records = parse_bestsellers_page(html, SRC, T)
     assert records[0]["asin"] == "B078C6QR1C"
     assert records[0]["bestseller_rank"] == 9
+
+
+# ---------- 现代 Amazon.es 页面结构（2026-08-26 真实页面核实） ----------
+# 排名徽章 → span.zg-bdg-text（旧 a-badge-text 已下线）；类目层级 → unv 父级链 +
+# h1 "Los más vendidos en X"；URL 节点 → /gp/bestsellers/<slug>/<NODE>/
+MODERN_TOP_HTML = """
+<html><body>
+  <h1 class="a-size-large a-spacing-medium a-text-bold">Los más vendidos en Hogar y cocina</h1>
+  <ul class="_p13n-zg-nav-tree-all_style_zg-browse-group__88fbz">
+    <li><span><a href="/gp/bestsellers/ref=zg_bs_unv_kitchen_0_2">Cualquier departamento</a></span></li>
+  </ul>
+  <div id="gridItemRoot" class="_cDEzb_grid-column_2hIsc">
+    <div data-asin="B078C6QR1C">
+      <div class="zg-bdg-ctr"><span class="zg-bdg-text">#1</span></div>
+      <a href="/Utopia-Protector/dp/B078C6QR1C/ref=zg_bs_g_kitchen">Protector</a>
+    </div>
+  </div>
+  <div id="gridItemRoot">
+    <div data-asin="B07RN64P2R">
+      <div class="zg-bdg-ctr"><span class="zg-bdg-text">#2</span></div>
+      <a href="/Lunchbag/dp/B07RN64P2R/ref=zg_bs_g_kitchen">Lunch bag</a>
+    </div>
+  </div>
+</body></html>
+"""
+
+MODERN_SUB_HTML = """
+<html><body>
+  <h1 class="a-size-large">Los más vendidos en Almacenamiento y organización</h1>
+  <ul class="_p13n-zg-nav-tree-all_style_zg-browse-group__88fbz">
+    <li><span><a href="/gp/bestsellers/ref=zg_bs_unv_kitchen_0_3359926031_2">Cualquier departamento</a></span></li>
+    <li><span><a href="/gp/bestsellers/kitchen/ref=zg_bs_unv_kitchen_1_3359926031_1">Hogar y cocina</a></span></li>
+  </ul>
+  <div id="gridItemRoot">
+    <div data-asin="B07RN64P2R">
+      <div class="zg-bdg-ctr"><span class="zg-bdg-text">#1</span></div>
+      <a href="/Lunchbag/dp/B07RN64P2R/ref=zg_bs_g_kitchen">Lunch bag</a>
+    </div>
+  </div>
+</body></html>
+"""
+
+
+def test_modern_top_page_rank_category_node_none():
+    """现代顶级页：zg-bdg-text 徽章 → rank；unv 只含根 → 类目=Hogar y cocina；URL 无节点 → node None。"""
+    url = "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_nav_kitchen_0"
+    records = parse_bestsellers_page(MODERN_TOP_HTML, url, T)
+    assert len(records) == 2
+    assert records[0]["bestseller_rank"] == 1
+    assert records[1]["bestseller_rank"] == 2
+    assert records[0]["category_l1"] == "Hogar y cocina"
+    assert records[0]["category_l2"] is None
+    assert records[0]["browse_node_id"] is None          # 顶级页无节点号，不臆造
+    assert records[0]["asin"] == "B078C6QR1C"
+
+
+def test_modern_subcategory_page_full_trail_and_node():
+    """现代子类页：unv 父级链 + h1 当前类目 → Hogar y cocina > Almacenamiento y organización；
+    /gp/bestsellers/<slug>/<NODE>/ URL → browse_node_id。"""
+    url = "https://www.amazon.es/gp/bestsellers/kitchen/3359926031/ref=zg_bs_nav_kitchen_1"
+    records = parse_bestsellers_page(MODERN_SUB_HTML, url, T)
+    r = records[0]
+    assert r["bestseller_rank"] == 1
+    assert r["browse_node_id"] == "3359926031"
+    assert r["category_l1"] == "Hogar y cocina"
+    assert r["category_l2"] == "Almacenamiento y organización"
+    assert r["category_l3"] is None
+    assert r["leaf_category"] == "Almacenamiento y organización"

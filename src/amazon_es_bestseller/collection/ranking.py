@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """畅销榜页面纯解析（离线）。
 
-bestseller_rank 只取显式徽章 ``span.a-badge-text``（QA_RULES §11）：
-无徽章 → None，DOM 顺序单独存 ``index``，绝不把第 N 行当 Amazon 第 N 名。
-同一 ASIN 出现在多个榜单页时保留多条记录（§7），不去重。
+bestseller_rank 只取显式徽章（旧 ``span.a-badge-text`` / 现代 ``span.zg-bdg-text``，
+QA_RULES §11）：无徽章 → None，DOM 顺序单独存 ``index``，绝不把第 N 行当
+Amazon 第 N 名。同一 ASIN 出现在多个榜单页时保留多条记录（§7），不去重。
 
 类目为一等字段（B1，QA_RULES §6/§13）：browse_node_id 取自榜单 URL 的
 ``/zgbs/<NODE>``（URL 缺失时回退到面包屑最深类目链接）；category_l1..l3 /
@@ -23,24 +23,55 @@ from bs4 import BeautifulSoup
 from ..access.detector import detect_access_status, require_normal_access
 from ..normalization.category import category_levels
 
-#: 榜单 URL 节点号：/Best-Sellers-<slug>/zgbs/<NODE>
+#: 榜单 URL 节点号：旧式 /zgbs/<NODE> 或现代 /gp/bestsellers/<slug>/<NODE>/
 _ZGBS_NODE_RE = re.compile(r"/zgbs/(\d+)")
+_NODE_URL_RE = re.compile(r"/gp/bestsellers/[^/\"']+/(\d+)")
 
-#: 面包屑容器候选（优先级从高到低）
+#: 面包屑容器候选（旧结构回退，优先级从高到低）
 _BREADCRUMB_SELECTORS = ("#zg_browseRoot", "#browseNodeCrumbs", "ol.zg_hrsr")
 
 #: 面包屑根链接文本（不是类目层级，剔除）
 _BREADCRUMB_SKIP = {
     "los más vendidos", "más vendidos", "los mas vendidos", "mas vendidos",
-    "best sellers", "best-sellers",
+    "best sellers", "best-sellers", "cualquier departamento",
 }
+
+#: 现代类目层级链：unv_ 链接（父级类目）+ h1 当前类目标题
+_UNV_SEL = 'a[href*="zg_bs_unv_"]'
+_H1_CURRENT_RE = re.compile(r"Los más vendidos en\s+(.+)$", re.I)
+
+
+def _category_trail_modern(soup) -> list:
+    """现代页面类目路径：unv 父级链 + h1 当前类目（无证据 → []，回退旧结构）。"""
+    trail: list = []
+    last = None
+    for a in soup.select(_UNV_SEL):
+        name = a.get_text(" ", strip=True)
+        if not name or name.lower() in _BREADCRUMB_SKIP:
+            continue
+        if name.lower() == last:
+            continue
+        last = name.lower()
+        trail.append(name)
+    # 当前类目：类目标题 "Los más vendidos en X"（页头导航 h1 是 "…de Amazon"，跳过）
+    for h1 in soup.select("h1"):
+        m = _H1_CURRENT_RE.search(h1.get_text(" ", strip=True))
+        if m:
+            cur = m.group(1).strip()
+            if cur and cur.lower() not in {t.lower() for t in trail}:
+                trail.append(cur)
+            break
+    return trail
 
 
 def _extract_category_trail(soup) -> list[str]:
-    """面包屑容器内 ``/zgbs/`` 链接文本 → 根→叶类目路径（无证据 → []）。
+    """类目路径：现代 unv+h1 优先，旧 ``/zgbs/`` 面包屑回退（无证据 → []）。
 
-    剔除根链接（"Los más vendidos"）与连续重复（当前页/父级同名重复）。
+    剔除根链接（"Los más vendidos" / "Cualquier departamento"）与连续重复。
     """
+    modern = _category_trail_modern(soup)
+    if modern:
+        return modern
     container = None
     for sel in _BREADCRUMB_SELECTORS:
         container = soup.select_one(sel)
@@ -62,9 +93,12 @@ def _extract_category_trail(soup) -> list[str]:
 
 
 def _browse_node_id(source_url, soup) -> Optional[str]:
-    """榜单节点号：首选 source_url 的 ``/zgbs/<NODE>``；否则取面包屑最深类目链接节点。"""
+    """榜单节点号：URL 旧式/现代节点号优先；否则取面包屑最深类目链接节点。"""
     if source_url:
         m = _ZGBS_NODE_RE.search(str(source_url))
+        if m:
+            return m.group(1)
+        m = _NODE_URL_RE.search(str(source_url))
         if m:
             return m.group(1)
     container = None
@@ -99,7 +133,7 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
         m = re.search(r"/dp/([A-Z0-9]{10})", a.get("href", ""), re.I)
         if not m:
             continue
-        badge = item.select_one("span.a-badge-text")
+        badge = item.select_one("span.a-badge-text, span.zg-bdg-text")
         rank = None
         if badge is not None:
             bm = re.match(r"#\s*(\d+)", badge.get_text(" ", strip=True))
