@@ -69,7 +69,8 @@ def test_enrich_qa_export_offline_chain(tmp_path, capsys):
     assert main(["export", "--products", str(prod_out), "--out", str(xlsx_out)]) == 0
     import openpyxl
     wb = openpyxl.load_workbook(xlsx_out)
-    assert wb.sheetnames == ["选品清单", "排行榜记录", "后台数据", "类目规划", "商品名称中文对照"]
+    # B3x 新契约：3 张表
+    assert wb.sheetnames == ["类目规划", "西班牙语选品清单", "中文选品清单"]
 
 
 def test_enrich_missing_input_file(tmp_path):

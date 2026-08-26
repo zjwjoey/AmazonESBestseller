@@ -216,7 +216,17 @@ def test_regression_detail_parser_via_lunchbag(lunchbag_html):
     assert d["brand_raw"] == "Utopia Bedding"
 
 
-def test_regression_excel_structure(tiny_records):
-    wb = export_workbook(tiny_records)
-    assert wb.sheetnames == ['选品清单', '排行榜记录', '后台数据', '类目规划', '商品名称中文对照']
-    assert wb['选品清单']['S4'] is not None
+def test_regression_excel_structure(export_records):
+    """默认导出契约钉死：3 表顺序 + 中文表 26 列冻结（DATA_MODEL §20-§21）。"""
+    wb = export_workbook(export_records)
+    assert wb.sheetnames == ['类目规划', '西班牙语选品清单', '中文选品清单']
+    zh = wb['中文选品清单']
+    header = [zh.cell(row=1, column=c).value for c in range(1, 27)]
+    assert header == [
+        '图片', '序号', 'ASIN', 'Parent ASIN', '商品名称（中文）', '品牌',
+        '当前售价', '划线原价', '折扣率', '评分', '评论数', '月购买量',
+        '一级类目', '二级类目', '三级类目', '细分类目', '畅销榜排名',
+        '当前选中规格 / 变体', '核心规格（中文）', '完整商品详情（中文）',
+        '商品卖点（中文）', '首次上架日期', '卖家', '商品链接', '图片链接', '备注',
+    ]
+    assert zh['A2'] is not None
