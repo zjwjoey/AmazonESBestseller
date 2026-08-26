@@ -162,6 +162,14 @@ def test_export_qa_gate_blocks_on_p0(tmp_path, capsys):
     assert not (tmp_path / "out.xlsx").exists()     # 未产出 Excel
 
 
+def test_qa_diagnostic_does_not_crash_on_windows_code_page(tmp_path):
+    products = tmp_path / "products.json"
+    out = tmp_path / "qa.json"
+    products.write_text(json.dumps(_blocked_products(), ensure_ascii=False), encoding="utf-8")
+    assert main(["qa", "--products", str(products), "--out", str(out)]) == 0
+    assert out.exists()
+
+
 def test_export_qa_gate_force_bypasses(tmp_path):
     """--force：跳过 QA 门禁强制导出（明确授权，不静默）。"""
     prod_out = tmp_path / "products.json"

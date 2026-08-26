@@ -29,6 +29,16 @@ from typing import List, Mapping, Optional
 OUTPUTS = Path("outputs")
 
 
+def _safe_print(*parts) -> None:
+    """Print diagnostics without letting a narrow Windows code page abort QA."""
+    text = " ".join(str(part) for part in parts)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        sys.stdout.write(text.encode(encoding, errors="replace").decode(encoding) + "\n")
+
+
 def _load_json(path: Optional[str]) -> list:
     if not path:
         return []
@@ -241,9 +251,9 @@ def cmd_qa(args) -> None:
     print("QA：%s" % summary)
     print("QA 结果 → %s" % args.out)
     if p0p1:
-        print("!! P0/P1 问题 %d 条：" % len(p0p1))
+        _safe_print("!! P0/P1 问题 %d 条：" % len(p0p1))
         for asin, code, msg in p0p1[:20]:
-            print("   %s %s: %s" % (asin, code, msg))
+            _safe_print("   %s %s: %s" % (asin, code, msg))
     else:
         print("0 P0 / 0 P1 OK")   # 不用 ✓（U+2713）：GBK 控制台无法编码
 
