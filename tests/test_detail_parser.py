@@ -52,6 +52,19 @@ def test_parse_missing_fields_empty():
     assert d["brand_raw"] == ""
 
 
+def test_brand_no_title_first_word_fallback():
+    # 无 #bylineInfo → brand_raw 为空，绝不取标题首词当品牌（QA_RULES §10）
+    html = """
+    <html><body>
+      <div id="productTitle">Toallas de algodón 100%</div>
+      <div id="corePrice_feature_div"><div class="a-price"><span class="a-offscreen">9,99 €</span></div></div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["title_es_raw"] == "Toallas de algodón 100%"
+    assert d["brand_raw"] == ""
+
+
 def test_verify_asin_on_page_ok():
     assert verify_asin_on_page("https://www.amazon.es/dp/B078C6QR1C", "B078C6QR1C") is True
     assert verify_asin_on_page("https://www.amazon.es/dp/B078C6QR1C", "b078c6qr1c") is True

@@ -150,10 +150,30 @@ def test_validate_brand_false_positive():
 
 
 def test_validate_brand_raw_uncleaned_prefix():
-    # QA_RULES §25：显示前缀未清理 → 不干净证据
+    # 显示前缀未清理 → 不干净证据
     status, issues = validate_brand("Tatay", "Marca: Tatay")
     assert status == QAStatus.FAIL
     assert issues[0].code == "BRAND_FALSE_POSITIVE"
+
+
+def test_validate_brand_false_positive_expanded():
+    # 真实标题首词证据：普通西语名词不得当品牌
+    for b in ("Toallas", "Renovador", "Recambios", "Lote", "Set", "Pack"):
+        status, issues = validate_brand(b)
+        assert status == QAStatus.FAIL, b
+        assert issues[0].code == "BRAND_FALSE_POSITIVE"
+
+
+def test_validate_brand_long_phrase_suspicious():
+    # 标题片段误判：超过 4 词或含停用词 → FAIL
+    status, issues = validate_brand("Juego de sábanas de algodón egipcio")
+    assert status == QAStatus.FAIL
+    assert issues[0].code == "BRAND_FALSE_POSITIVE"
+
+
+def test_validate_brand_real_brand_not_flagged():
+    assert validate_brand("Todocama") == (QAStatus.PASS, [])
+    assert validate_brand("Haberdashery Online") == (QAStatus.PASS, [])
 
 
 # ---------- 规格 ----------

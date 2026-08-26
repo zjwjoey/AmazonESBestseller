@@ -17,6 +17,7 @@ import re
 from typing import List, Optional, Tuple
 
 from ..models import QAStatus, QaIssue, normalize_asin
+from ..normalization.brand import is_brand_suspicious
 from ..normalization.monthly_bought import parse_monthly_bought
 from ..normalization.price import parse_price
 from ..normalization.specification import (
@@ -29,12 +30,7 @@ from ..translation.product_type import detect_product_type
 
 _ASIN_RE = re.compile(r'^[A-Z0-9]{10}$')
 
-#: 疑似品牌误判的西语普通名词（QA_RULES §24/§71：宁缺毋滥）
-BRAND_FALSE_POSITIVE = {
-    'limpiador', 'limpiadora', 'barrera', 'brazo', 'sombrerete', 'marca',
-}
-
-#: 中文标题允许保留的拉丁词（QA_RULES §33：型号/接口/标准/生态名）
+#: 中文标题允许保留的拉丁词（型号/接口/标准/生态名）
 TITLE_WHITELIST = {
     'USB', 'E27', 'SDS', 'HEPA', 'HSS', 'PTFE', 'ABS', 'BPA',
     'Dyson', 'Dedica', 'Nespresso', 'Original', 'Dolce', 'Gusto',
@@ -188,15 +184,15 @@ def validate_review_count(raw) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_brand(brand, brand_raw=None) -> Tuple[QAStatus, List[QaIssue]]:
-    """品牌证据（QA_RULES §23-§25）。"""
+    """品牌证据（QA_RULES §10：宁缺毋假，缺失优于误判）。"""
     b = (brand or '').strip()
     if not b:
         return QAStatus.WARN, [_issue(
             'BRAND_MISSING', 'P2', 'brand', '品牌缺失（缺失优于误判）')]
-    if b.lower() in BRAND_FALSE_POSITIVE:
+    if is_brand_suspicious(b):
         return QAStatus.FAIL, [_issue(
             'BRAND_FALSE_POSITIVE', 'P1', 'brand',
-            '品牌为西语普通名词，疑似标题首词误判: %r' % (b,))]
+            '品牌为西语普通名词或标题片段，疑似误判: %r' % (b,))]
     rb = (brand_raw or '').strip()
     if rb and ('Marca:' in rb or 'Visita la tienda de' in rb):
         return QAStatus.FAIL, [_issue(
