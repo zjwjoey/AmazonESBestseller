@@ -110,6 +110,55 @@ def _main_image_url(soup) -> str:
     return ""
 
 
+def _selected_variation(soup) -> str:
+    """Extract explicitly selected variation values from legacy and modern twisters."""
+    values = []
+
+    for sel in ("#variation_name .selection",
+                "#twister-plus-name-feature .selection",
+                ".twister-plus-buying-options-price-data .selection"):
+        el = soup.select_one(sel)
+        if el is not None:
+            value = _clean(el.get_text(" ", strip=True))
+            if value:
+                values.append(value)
+                break
+
+    # Modern swatch twisters mark selected values with a button class.  Restrict
+    # IDs to variation dimensions so quantity/media controls cannot leak in.
+    swatch_sel = ('#twister_feature_div span.a-button-selected[id^="color_name_"], '
+                  '#twister_feature_div span.a-button-selected[id^="size_name_"], '
+                  '#twister_feature_div span.a-button-selected[id^="style_name_"], '
+                  '#twister_feature_div span.a-button-selected[id^="pattern_name_"]')
+    for swatch in soup.select(swatch_sel):
+        title = swatch.select_one('.swatch-title-text-display')
+        if title is not None:
+            value = _clean(title.get_text(" ", strip=True))
+        else:
+            image = swatch.select_one('img[alt]')
+            value = _clean(image.get('alt')) if image is not None else ''
+        if value:
+            values.append(value)
+
+    # Modern dropdown twisters expose the chosen option via ``dropdownSelect``
+    # (and sometimes a selected attribute), scoped to native variation selects.
+    for option in soup.select(
+            'select[id^="native_dropdown_selected_"] option.dropdownSelect, '
+            'select[id^="native_dropdown_selected_"] option[selected]'):
+        value = _clean(option.get_text(" ", strip=True))
+        if value:
+            values.append(value)
+
+    out = []
+    seen = set()
+    for value in values:
+        key = value.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(value)
+    return ' / '.join(out)
+
+
 _MONTHLY_RE = re.compile(
     r"([\d.,]+\s*(?:mil|k)?\s*\+)\s+comprados\s+el\s+mes\s+pasado",
     re.I)
@@ -365,11 +414,8 @@ def parse_detail_page(html: str, asin: str) -> dict:
         brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
         brand_raw = _clean(brand_raw)
 
-    # 已选规格（变体）
-    var_el = (soup.select_one("#variation_name .selection")
-              or soup.select_one("#twister-plus-name-feature .selection")
-              or soup.select_one(".twister-plus-buying-options-price-data .selection"))
-    selected_variation_raw = _clean(var_el.get_text(" ", strip=True)) if var_el else ""
+    # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
+    selected_variation_raw = _selected_variation(soup)
 
     return {
         "asin": asin,

@@ -30,6 +30,11 @@ def test_capacity_30l_variant_beats_technical():
     assert '20升' not in out
 
 
+def test_build_spec_v2_extracts_dimensions_embedded_in_size_label():
+    out = build_spec_v2({'tamano': 'Cama 90 x 190 x 40 cm'})
+    assert out == '90×190×40厘米'
+
+
 def test_build_spec_es_preserves_explicit_spanish_spec_evidence():
     attrs = [
         {"label_raw": "Tamaño", "value_raw": "Cama 90 x 190 x 40 cm"},

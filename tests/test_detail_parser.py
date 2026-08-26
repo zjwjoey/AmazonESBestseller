@@ -100,6 +100,27 @@ def test_parse_detail_category_breadcrumb_trail():
         "Hogar y cocina", "Muebles", "Dormitorio", "Protectores de colchón"]
 
 
+def test_parse_modern_selected_variation_values():
+    html = """
+    <div id="twister_feature_div">
+      <span id="color_name_9" class="a-button a-button-selected">
+        <img alt="Gris" src="x.jpg">
+      </span>
+      <span id="size_name_6" class="a-button a-button-selected">
+        <span class="swatch-title-text-display">Cama 150 | 2 Fundas Almohada 50x75 cm</span>
+      </span>
+      <div id="variation_size_name">
+        <select id="native_dropdown_selected_size_name">
+          <option class="dropdownSelect" selected="">Cama 90 x 190 x 40 cm</option>
+        </select>
+      </div>
+    </div>
+    """
+    d = parse_detail_page(html, "B075JJRFVV")
+    assert d["selected_variation_raw"] == (
+        "Gris / Cama 150 | 2 Fundas Almohada 50x75 cm / Cama 90 x 190 x 40 cm")
+
+
 def test_parent_asin_malformed_not_trusted():
     html = '<input type="hidden" id="parentASIN" value="no-es-asin">'
     d = parse_detail_page(html, "B078C6QR1C")

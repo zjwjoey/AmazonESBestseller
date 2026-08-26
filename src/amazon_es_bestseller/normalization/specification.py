@@ -91,6 +91,11 @@ _DIM_RE5 = re.compile(r'^([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|m
 _DIM_RE6 = re.compile(r'^([\d.]+)\s*l\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
 # §40：10×15cm 二维简式（历史回归：10×15cm → 10×10mm 必须永不重现）
 _DIM_RE2D = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*(centímetros|milímetros|metros|cm|mm|m)?', re.I)
+_DIM_FRAGMENT_RE = re.compile(
+    r'((?:[\d.,]+)\s*(?:l\.)?\s*x\s*(?:[\d.,]+)\s*(?:an\.)?\s*x\s*'
+    r'(?:[\d.,]+)\s*(?:al\.)?\s*(?:centímetros|milímetros|metros|cm|mm|m)?|'
+    r'(?:[\d.,]+)\s*x\s*(?:[\d.,]+)\s*'
+    r'(?:centímetros|milímetros|metros|cm|mm|m)?)', re.I)
 _UNIT_CN = {'centímetros': '厘米', 'milímetros': '毫米', 'metros': '米', 'cm': '厘米', 'mm': '毫米', 'm': '米', '': ''}
 
 
@@ -283,6 +288,14 @@ def _pick_dimension(d):
         v = d.get(k)
         if v:
             return v
+    # Amazon often prefixes a concrete size with text, e.g.
+    # ``Tamaño: Cama 90 x 190 x 40 cm``.  Extract only the explicit numeric
+    # dimension fragment; never infer a dimension from unrelated title text.
+    size = d.get('tamano')
+    if size:
+        m = _DIM_FRAGMENT_RE.search(str(size))
+        if m:
+            return m.group(1).strip()
     return None
 
 
