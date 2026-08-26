@@ -27,8 +27,74 @@ def _text(soup, sel) -> str:
     return _clean(el.get_text(" ", strip=True)) if el is not None else ""
 
 
+# ---------- B4 低成本扩展：parent ASIN / 首次上架日期 / 图片 ----------
+
+_ASIN_RE = re.compile(r"[A-Z0-9]{10}", re.I)   # flags 编译进正则，调用时不传
+_PARENT_ASIN_SELECTORS = ("input#parentASIN", 'input[name="parentASIN"]')
+
+# 首次上架日期（西语标签；raw 归一为 parse_es_date 接受的 "D M YYYY"）
+_AVAIL_DATE_RE = re.compile(
+    r"(?:fecha de primera disponibilidad|primera fecha disponible|fecha de lanzamiento)"
+    r"\s*:?\s*(\d{1,2})\s+(?:de\s+)?([a-záéíóúñü]+)[,\s]*(?:de\s+)?(\d{4})",
+    re.I)
+_DATE_SECTIONS = ("#detailBulletsWrapper_feature_div", "#detailBullets_feature_div",
+                  "#productDetails_detailBullets_sections1", "#prodDetails")
+
+_IMAGE_SELECTORS = ("#landingImage", "#imgBlkFront", "#imageBlock_feature_div img")
+
+
+def _parent_asin(soup) -> str:
+    """隐藏域 parentASIN → 10 位 ASIN；值不合法 → 空（缺失→空，不臆造）。"""
+    for sel in _PARENT_ASIN_SELECTORS:
+        el = soup.select_one(sel)
+        if el is None:
+            continue
+        v = str(el.get("value") or "").strip()
+        if _ASIN_RE.fullmatch(v):
+            return v.upper()
+    return ""
+
+
+def _first_available_date_raw(soup) -> str:
+    """详情页首次上架日期 → "D M YYYY"（供 parse_es_date 解析）；无 → 空。"""
+    for sel in _DATE_SECTIONS:
+        txt = _text(soup, sel)
+        m = _AVAIL_DATE_RE.search(txt)
+        if m:
+            return "%s %s %s" % (m.group(1), m.group(2).lower(), m.group(3))
+    return ""
+
+
+def _main_image_url(soup) -> str:
+    """主图 URL（src 优先，data-old-hires 回退）；无 http 图 → 空。"""
+    for sel in _IMAGE_SELECTORS:
+        img = soup.select_one(sel)
+        if img is None:
+            continue
+        src = str(img.get("src") or "").strip()
+        if src.startswith("http"):
+            return src
+        hi = str(img.get("data-old-hires") or "").strip()
+        if hi.startswith("http"):
+            return hi
+    return ""
+
+
+def _product_url(asin: str) -> str:
+    """商品链接：由 ASIN 确定性派生（非业务推断）；ASIN 非法 → 空。"""
+    a = str(asin or "").strip()
+    if _ASIN_RE.fullmatch(a):
+        return "https://www.amazon.es/dp/%s" % a.upper()
+    return ""
+
+
 def parse_detail_page(html: str, asin: str) -> dict:
-    """详情页 HTML → 原始详情字段（只读证据层，不做业务推断）。"""
+    """详情页 HTML → 原始详情字段（只读证据层，不做业务推断）。
+
+    B4 低成本扩展：``parent_asin``（隐藏域，值不合法→空）、
+    ``date_first_available_raw``（归一为 parse_es_date 接受的 "D M YYYY"）、
+    ``product_url``（由 ASIN 确定性派生）、``image_url``（主图 src/高分辨率回退）。
+    """
     soup = BeautifulSoup(html, "lxml")
     body = soup.find("body")
     page_text = _clean(body.get_text(" ", strip=True)) if body is not None else ""
@@ -117,6 +183,10 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "selected_variation_raw": selected_variation_raw,
         "sold_by_amazon": sold_by_amazon,
         "fulfilled_by_amazon": fulfilled_by_amazon,
+        "parent_asin": _parent_asin(soup),
+        "date_first_available_raw": _first_available_date_raw(soup),
+        "product_url": _product_url(asin),
+        "image_url": _main_image_url(soup),
     }
 
 

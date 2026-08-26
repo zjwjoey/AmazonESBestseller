@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """collection/detail.py 测试：选择器与 extract_details.js 一致，离线。"""
+import datetime
+
 from amazon_es_bestseller.collection.detail import parse_detail_page, verify_asin_on_page
+from amazon_es_bestseller.normalization.dates import parse_es_date
 
 
 def test_parse_lunchbag_full(lunchbag_html):
@@ -63,6 +66,58 @@ def test_brand_no_title_first_word_fallback():
     d = parse_detail_page(html, "B078C6QR1C")
     assert d["title_es_raw"] == "Toallas de algodón 100%"
     assert d["brand_raw"] == ""
+
+
+def test_parse_lunchbag_b4_new_fields(lunchbag_html):
+    """B4 低成本扩展：parent ASIN / 首次上架日期 / 商品链接 / 图片链接。"""
+    d = parse_detail_page(lunchbag_html, "B075JJRFVV")
+    assert d["parent_asin"] == "B075JJRFXW"
+    assert d["date_first_available_raw"] == "28 octubre 2023"
+    assert d["product_url"] == "https://www.amazon.es/dp/B075JJRFVV"
+    assert d["image_url"] == "https://m.media-amazon.com/images/I/81x.jpg"
+    # raw 与 parse_es_date 对齐 → 首次上架日期可派生（导出列 22）
+    assert parse_es_date(d["date_first_available_raw"]) == datetime.date(2023, 10, 28)
+
+
+def test_parse_missing_new_fields_empty():
+    d = parse_detail_page("<html><body><p>hola</p></body></html>", "B078C6QR1C")
+    assert d["parent_asin"] == ""
+    assert d["date_first_available_raw"] == ""
+    assert d["image_url"] == ""
+    # product_url 由合法 ASIN 确定性派生（非业务推断）
+    assert d["product_url"] == "https://www.amazon.es/dp/B078C6QR1C"
+
+
+def test_parent_asin_malformed_not_trusted():
+    html = '<input type="hidden" id="parentASIN" value="no-es-asin">'
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["parent_asin"] == ""      # 值不合法 → 空，不臆造
+
+
+def test_available_date_from_details_table():
+    # 经典产品参数表 dt/dd 形式："Fecha de lanzamiento: 28 de octubre de 2023"
+    html = """
+    <html><body>
+      <table id="productDetails_detailBullets_sections1">
+        <tr><th>Fecha de lanzamiento</th><td>28 de octubre de 2023</td></tr>
+      </table>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["date_first_available_raw"] == "28 octubre 2023"
+
+
+def test_image_url_fallback_to_data_old_hires():
+    html = """
+    <html><body>
+      <div id="imageBlock_feature_div">
+        <img id="landingImage" src="data:image/gif;base64,AAA"
+             data-old-hires="https://m.media-amazon.com/images/I/99z._SL1500_.jpg">
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["image_url"] == "https://m.media-amazon.com/images/I/99z._SL1500_.jpg"
 
 
 def test_verify_asin_on_page_ok():
