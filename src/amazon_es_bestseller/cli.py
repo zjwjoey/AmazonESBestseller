@@ -179,7 +179,7 @@ def cmd_audit_fields(args) -> None:
     details = _load_json(args.details) if args.details else []
     rankings = _load_json(args.rankings) if args.rankings else []
     report = audit_field_closure(products, details=details, rankings=rankings,
-                                 html_dir=args.html_dir or None)
+                                 html_dir=args.html_dir or None, run_dir=args.run_dir or None)
     write_report(report, args.out, args.md_out or None)
     s = report["summary"]
     print("Field Closure Audit：%d SKU、%d 字段；PASS %d / SOURCE_MISSING %d / PARSER_MISSED %d / MAPPING_MISSED %d / DERIVED_MISSING %d"
@@ -261,6 +261,7 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--details", default=str(OUTPUTS / "details.json"), help="详情 raw JSON（可选）")
     a.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"), help="榜单 raw JSON（可选）")
     a.add_argument("--html-dir", default="", help="保存的详情 HTML 目录（可选，用于识别 PARSER_MISSED）")
+    a.add_argument("--run-dir", default="", help="采集 run 根目录（可选，自动读取 ranking_*.html 作为类目来源）")
     a.add_argument("--out", default=str(OUTPUTS / "field_closure.json"))
     a.add_argument("--md-out", default="", help="Markdown 输出路径（默认与 JSON 同名 .md）")
     a.set_defaults(func=cmd_audit_fields)

@@ -32,6 +32,8 @@ def _text(soup, sel) -> str:
 
 _ASIN_RE = re.compile(r"[A-Z0-9]{10}", re.I)   # flags 编译进正则，调用时不传
 _PARENT_ASIN_SELECTORS = ("input#parentASIN", 'input[name="parentASIN"]')
+_PARENT_ASIN_JSON_RE = re.compile(
+    r"[\"']parentAsin[\"']\s*:\s*[\"']([A-Z0-9]{10})[\"']", re.I)
 
 # 首次上架日期（西语标签；raw 归一为 parse_es_date 接受的 "D M YYYY"）
 _AVAIL_DATE_RE = re.compile(
@@ -51,6 +53,12 @@ def _parent_asin(soup) -> str:
         if el is None:
             continue
         v = str(el.get("value") or "").strip()
+        if _ASIN_RE.fullmatch(v):
+            return v.upper()
+    # Modern detail pages may expose the confirmed family ASIN in an explicit
+    # page-state JSON object instead of the legacy hidden input.
+    for match in _PARENT_ASIN_JSON_RE.finditer(str(soup)):
+        v = match.group(1).strip()
         if _ASIN_RE.fullmatch(v):
             return v.upper()
     return ""

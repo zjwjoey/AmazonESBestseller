@@ -81,8 +81,8 @@ _HTML_PATTERNS = {
     "title_zh": (r"id=[\"']producttitle",),
     "brand": (r"bylineinfo", r"\bmarca\b", r"\bbrand\b"),
     "current_price": (r"coreprice", r"pricetopay", r"a-price"),
-    "original_price": (r"data-a-strike\s*=", r"priceblock_listprice", r"listprice"),
-    "discount_rate": (r"data-a-strike\s*=", r"listprice"),
+    "original_price": (r"(?:corePrice_feature_div|corePriceDisplay_desktop_feature_div)[\s\S]{0,6000}data-a-strike\s*=\s*[\"']true[\"']",),
+    "discount_rate": (r"(?:corePrice_feature_div|corePriceDisplay_desktop_feature_div)[\s\S]{0,6000}data-a-strike\s*=\s*[\"']true[\"']",),
     "rating": (r"acrpopover", r"averagecustomerreviews", r"estrellas"),
     "review_count": (r"acrcustomerreviewtext", r"opiniones de clientes"),
     "monthly_bought_min": (r"comprados el mes pasado", r"comprado[s]? el último mes"),
@@ -91,7 +91,8 @@ _HTML_PATTERNS = {
     "category_l3": (r"breadcrumb", r"zgbs", r"browse node", r"browse_node"),
     "leaf_category": (r"breadcrumb", r"zgbs", r"browse node", r"browse_node"),
     "bestseller_rank": (r"best sellers rank", r"más vendidos", r"n\.?º\s*[\d.,]+\s+en"),
-    "selected_variation_raw": (r"variation", r"twister", r"seleccionado"),
+    "selected_variation_raw": (r"id\s*=\s*[\"']variation_name[\"']",
+                                r"id\s*=\s*[\"']twister-plus-name-feature[\"']"),
     "spec_v2": (r"productdetails", r"proddetails", r"capacidad", r"dimensiones", r"tamaño"),
     "product_details_zh": (r"productdetails", r"proddetails", r"technical details", r"características"),
     "feature_bullets_zh": (r"feature-bullets", r"about this item", r"acerca de este producto"),
@@ -152,6 +153,22 @@ def _find_html(html_dir: Optional[str | Path], asin: str) -> str:
             except OSError:
                 return ""
     return ""
+
+
+def _read_ranking_html(ranking_html_dir: Optional[str | Path]) -> str:
+    """Read ranking-page HTML only; detail-page breadcrumbs are not ranking evidence."""
+    if not ranking_html_dir:
+        return ""
+    root = Path(ranking_html_dir)
+    if not root.is_dir():
+        return ""
+    chunks = []
+    for path in sorted(root.rglob("ranking_*.html")):
+        try:
+            chunks.append(path.read_text(encoding="utf-8", errors="ignore"))
+        except OSError:
+            continue
+    return "\n".join(chunks)
 
 
 def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapping,
@@ -327,9 +344,11 @@ def _audit_one(field: str, asin: str, record: Mapping, detail: Mapping,
 
 def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[Mapping]] = None,
                         rankings: Optional[Iterable[Mapping]] = None,
-                        html_dir: Optional[str | Path] = None) -> dict:
+                        html_dir: Optional[str | Path] = None,
+                        run_dir: Optional[str | Path] = None) -> dict:
     """Audit products without mutating any input mapping."""
     products = list(products or [])
+    ranking_html = _read_ranking_html(run_dir or html_dir)
     details_by = {normalize_asin(d.get("asin")): d for d in (details or []) if normalize_asin(d.get("asin"))}
     rankings_by = {normalize_asin(r.get("asin")): r for r in (rankings or []) if normalize_asin(r.get("asin"))}
     records: list[dict] = []
@@ -338,8 +357,15 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
         detail = details_by.get(asin, {})
         ranking = rankings_by.get(asin, {})
         html = _find_html(html_dir, asin)
+        # When a run directory is supplied, category evidence comes only from
+        # ranking_*.html, while detail HTML remains available for other fields.
+        if run_dir and ranking_html:
+            html_for_category = ranking_html
+        else:
+            html_for_category = html
         for field in _FIELD_ORDER:
-            records.append(_audit_one(field, asin, product, detail, ranking, html).to_dict())
+            records.append(_audit_one(field, asin, product, detail, ranking,
+                                      html_for_category if field.startswith("category_") or field == "leaf_category" else html).to_dict())
     counts = {c: sum(1 for r in records if r["classification"] == c)
               for c in (SOURCE_MISSING, PARSER_MISSED, MAPPING_MISSED, DERIVED_MISSING)}
     counts["pass"] = sum(1 for r in records if r["classification"] == PASS)

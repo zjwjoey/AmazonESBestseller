@@ -94,6 +94,12 @@ def test_parent_asin_malformed_not_trusted():
     assert d["parent_asin"] == ""      # 值不合法 → 空，不臆造
 
 
+def test_parent_asin_from_explicit_page_json():
+    html = '<script type="a-state">{"parentAsin":"B0H1HDXMFF"}</script>'
+    d = parse_detail_page(html, "B0H1H86BF3")
+    assert d["parent_asin"] == "B0H1HDXMFF"
+
+
 def test_available_date_from_details_table():
     # 经典产品参数表 dt/dd 形式："Fecha de lanzamiento: 28 de octubre de 2023"
     html = """

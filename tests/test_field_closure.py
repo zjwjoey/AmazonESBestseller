@@ -102,10 +102,36 @@ def test_category_source_without_canonical_is_parser_missed():
     assert _issue(audit_field_closure([p], rankings=[r]), p["asin"], "category_l1")["classification"] == "PARSER_MISSED"
 
 
+def test_run_dir_uses_ranking_html_for_category_evidence(tmp_path):
+    p = _base_product()
+    (tmp_path / "ranking_00.html").write_text(
+        '<div id="zg_browseRoot"><a href="/zgbs/1">Hogar y cocina</a>'
+        '<a href="/zgbs/2">Utensilios</a></div>', encoding="utf-8")
+    report = audit_field_closure([p], rankings=[{"asin": p["asin"], "bestseller_rank": 1}], run_dir=tmp_path)
+    assert _issue(report, p["asin"], "category_l1")["classification"] == "PARSER_MISSED"
+
+
 def test_category_deeper_level_without_deeper_source_is_source_missing():
     p = _base_product(category_l1="Hogar y cocina")
     report = audit_field_closure([p], rankings=[{"asin": p["asin"], "category_l1": "Hogar y cocina"}])
     assert _issue(report, p["asin"], "category_l2")["classification"] == "SOURCE_MISSING"
+
+
+def test_generic_variation_script_is_not_selected_variation_evidence(tmp_path):
+    p = _base_product()
+    (tmp_path / "B000000001.html").write_text(
+        '<script>var variationConfig = {"variation":"other"}</script>', encoding="utf-8")
+    report = audit_field_closure([p], html_dir=tmp_path)
+    assert _issue(report, p["asin"], "selected_variation_raw")["classification"] == "SOURCE_MISSING"
+
+
+def test_unrelated_struck_variation_price_is_not_original_price_evidence(tmp_path):
+    p = _base_product(original_price=None, original_price_raw="")
+    (tmp_path / "B000000001.html").write_text(
+        '<span class="apex-basisprice-value" data-a-strike="true"><span class="a-offscreen">22,99€</span></span>',
+        encoding="utf-8")
+    report = audit_field_closure([p], html_dir=tmp_path)
+    assert _issue(report, p["asin"], "original_price")["classification"] == "SOURCE_MISSING"
 
 
 def test_audit_does_not_mutate_records_and_output_is_deterministic():
