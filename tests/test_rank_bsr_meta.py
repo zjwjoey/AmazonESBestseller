@@ -37,14 +37,31 @@ def _build_output_path():
     return None
 
 
+def _iter_executable_lines(source):
+    """逐行产出非注释/非 docstring 的代码行（状态机跳过多行 docstring）。"""
+    in_doc = None  # None | '"""' | "'''"
+    for line in source.splitlines():
+        stripped = line.lstrip()
+        if in_doc:
+            if in_doc in line:
+                in_doc = None  # 闭合行；后续同行的代码极罕见，忽略
+            continue
+        if stripped.startswith("#"):
+            continue
+        if stripped.startswith(('"""', "'''")):
+            delim = stripped[:3]
+            if stripped.count(delim) < 2:  # 单行 docstring 整行跳过
+                in_doc = delim
+            continue
+        yield line
+
+
 def test_regression_no_rank_to_bsr_fabrication_in_src():
     """生产代码不得构造 BSR 文本（类目字面量 = 臆造）。"""
     hits = []
     for path in _src_py_files():
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            stripped = line.lstrip()
-            if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
-                continue  # 注释/docstring 不含执行逻辑
+        for lineno, line in enumerate(_iter_executable_lines(
+                path.read_text(encoding="utf-8")), 1):
             if _FABRICATION_RE.search(line):
                 hits.append((str(path.relative_to(SRC_ROOT)), lineno, line.strip()))
     assert not hits, "生产代码不得构造 BSR 文本: %r" % hits
