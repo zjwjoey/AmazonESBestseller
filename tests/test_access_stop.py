@@ -98,3 +98,67 @@ def test_collect_normal_still_writes(tmp_path):
     details = collect_details(["B008YETL18"], session, str(tmp_path))
     assert details[0]["access_state"] == "NORMAL"
     assert (tmp_path / "details.json").exists()
+
+
+class _FakeSessionFlaky:
+    """goto 按 ASIN 抛异常（模拟瞬时加载超时）或返回固定状态码/HTML。"""
+
+    def __init__(self, status, html, fail_on=()):
+        self._status = status
+        self._html = html
+        self._fail_on = set(fail_on)
+        self.goto_calls = []
+        self.page = _FakePage(html)
+
+    def goto(self, url):
+        self.goto_calls.append(url)
+        if url.rsplit("/", 1)[-1] in self._fail_on:
+            raise TimeoutError("Page.goto: Timeout 45000ms exceeded.")
+        return self._status
+
+    def wait_for_product_page(self):
+        pass
+
+    def wait_for_price_text(self):
+        pass
+
+    def wait_between_requests(self):
+        pass
+
+
+def test_collect_details_resume_from_existing_html(tmp_path):
+    """断点续采：已落盘非受限 HTML → 离线恢复，不再发请求（幂等）。"""
+    from amazon_es_bestseller.collection.detail import collect_details
+    (tmp_path / "html").mkdir()
+    (tmp_path / "html" / "B008YETL18.html").write_text(NORMAL_HTML, encoding="utf-8")
+    # 若 resume 失效去请求，goto 对该 ASIN 必抛 → 测试即失败
+    session = _FakeSessionFlaky(200, NORMAL_HTML, fail_on={"B008YETL18"})
+    details = collect_details(["B008YETL18"], session, str(tmp_path))
+    assert len(details) == 1
+    assert details[0]["resumed_from_html"] is True
+    assert details[0]["access_state"] == "NORMAL"
+    assert session.goto_calls == []          # 未发任何请求
+    assert (tmp_path / "details.json").exists()
+
+
+def test_collect_details_resume_detects_captcha_html(tmp_path):
+    """断点续采发现已落盘证据受限 → AccessStopError，不把挑战页当成功恢复。"""
+    from amazon_es_bestseller.collection.detail import collect_details
+    (tmp_path / "html").mkdir()
+    (tmp_path / "html" / "B008YETL18.html").write_text(CHALLENGE_HTML, encoding="utf-8")
+    with pytest.raises(AccessStopError) as ei:
+        collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
+    assert "已落盘证据受限" in str(ei.value)
+    assert not (tmp_path / "details.json").exists()
+
+
+def test_collect_details_timeout_isolates_and_continues(tmp_path):
+    """失败隔离：单个 ASIN goto 超时 → 记失败继续，不毁整批；失败页无证据落盘。"""
+    from amazon_es_bestseller.collection.detail import collect_details
+    session = _FakeSessionFlaky(200, NORMAL_HTML, fail_on={"B0CK2B7GW5"})
+    details = collect_details(["B0CK2B7GW5", "B008YETL18"], session, str(tmp_path))
+    assert [d["asin"] for d in details] == ["B008YETL18"]   # 超时 ASIN 隔离
+    assert len(session.goto_calls) == 2                      # 第二个照常请求
+    assert not (tmp_path / "html" / "B0CK2B7GW5.html").exists()  # 失败页无落盘
+    assert (tmp_path / "html" / "B008YETL18.html").exists()
+    assert (tmp_path / "details.json").exists()

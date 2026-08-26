@@ -14,7 +14,8 @@ from typing import List, Optional
 
 from bs4 import BeautifulSoup
 
-from ..access.detector import CAPTCHA_RE, detect_access_status, require_normal_access
+from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
+                               require_normal_access)
 
 
 def _clean(t) -> str:
@@ -351,28 +352,61 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
     访问门禁（ARCHITECTURE §6/§67）：受限页（CHALLENGE/BLOCKED/RATE_LIMITED/
     NETWORK_ERROR/UNKNOWN）HTML 先落盘保留证据，随即抛 AccessStopError——
     challenge 页绝不空解析进结果，details.json 不写出（不产出不可信详情）。
+
+    断点续采（幂等恢复）：已落盘且非受限的 html/<ASIN>.html 直接离线恢复，
+    不再发请求——重跑命令天然只补缺失 ASIN。resume 判定只看 CAPTCHA 信号
+    （无 HTTP 状态码可依；正常落盘页是此前通过 gate 的 NORMAL 证据）。
+    网关超时发生在写 HTML 之前 → 失败 ASIN 无落盘文件 → 重跑必重采。
+
+    失败隔离（瞬时网络故障）：单个 ASIN 的 goto 抛异常（如页面加载超时）
+    记入失败并继续，不让一个慢页毁掉整批；访问受限仍由 require_normal_access
+    抛 AccessStopError，不吞、不重试、不绕过。
     """
     html_dir = os.path.join(str(out_dir), "html")
     os.makedirs(html_dir, exist_ok=True)
 
     details: List[dict] = []
+    failed: List[str] = []
     for asin in asins:
-        status = session.goto("https://www.amazon.es/dp/" + asin)
-        session.wait_for_product_page()
-        session.wait_for_price_text()
-        time.sleep(1.5)
-        html = session.page.content()
-        with open(os.path.join(html_dir, asin + ".html"), "w", encoding="utf-8") as f:
-            f.write(html)  # 先保留证据，再判定访问状态
-        state = detect_access_status(status, html)
-        require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
-                              % (status, asin, len(details)))
-        rec = parse_detail_page(html, asin)
-        rec["status_code"] = status
-        rec["access_state"] = state.value
-        details.append(rec)
-        session.wait_between_requests()
+        path = os.path.join(html_dir, asin + ".html")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                html = f.read()
+            if CAPTCHA_RE.search(html[:300]):
+                raise AccessStopError(
+                    "已落盘证据受限（CHALLENGE），ASIN %s，按策略停止" % asin)
+            rec = parse_detail_page(html, asin)
+            rec["status_code"] = None
+            rec["access_state"] = "NORMAL"
+            rec["resumed_from_html"] = True
+            details.append(rec)
+            continue
+        try:
+            status = session.goto("https://www.amazon.es/dp/" + asin)
+            session.wait_for_product_page()
+            session.wait_for_price_text()
+            time.sleep(1.5)
+            html = session.page.content()
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(html)  # 先保留证据，再判定访问状态
+            state = detect_access_status(status, html)
+            require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
+                                  % (status, asin, len(details)))
+            rec = parse_detail_page(html, asin)
+            rec["status_code"] = status
+            rec["access_state"] = state.value
+            details.append(rec)
+            session.wait_between_requests()
+        except AccessStopError:
+            raise  # 访问受限：按策略停止，受限页证据已落盘
+        except Exception as exc:
+            failed.append(asin)  # 瞬时网络故障：失败隔离，不重试不绕过
+            print("详情采集失败 ASIN %s：%s（跳过，重跑将补齐）"
+                  % (asin, type(exc).__name__))
 
     with open(os.path.join(str(out_dir), "details.json"), "w", encoding="utf-8") as f:
         json.dump(details, f, ensure_ascii=False, indent=2)
+    if failed:
+        print("详情采集完成：%d 成功 / %d 失败（重跑自动补齐缺失）"
+              % (len(details), len(failed)))
     return details
