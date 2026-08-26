@@ -163,10 +163,15 @@ def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapp
         if _attribute_brand(_attributes(record, detail)):
             evidence.append("attributes:Marca/Brand")
     elif field.startswith("category_") or field == "leaf_category":
-        for key in ("category_path_raw", "category_l1", "category_l2", "category_l3",
-                    "leaf_category", "browse_node_id", "ranking_source_url"):
-            if _has(ranking.get(key)) or _has(record.get(key)):
-                evidence.append(key)
+        # A single root category is not evidence that deeper levels exist.  A
+        # breadcrumb/path or browse node is evidence for parsing missing levels;
+        # a ranking URL alone is only context, not category content.
+        if _has(ranking.get(field)) or _has(record.get(field)):
+            evidence.append(field)
+        if _has(ranking.get("category_path_raw")) or _has(ranking.get("browse_node_id")):
+            evidence.append("ranking.category_path")
+        if html and any(re.search(p, html, re.I) for p in _HTML_PATTERNS.get(field, ())):
+            evidence.append("html:category_path")
     elif field == "bestseller_rank":
         if _has(ranking.get("bestseller_rank")) or (_has(record.get("bestseller_rank")) and
                                                     (_has(record.get("ranking_source_url")) or _has(record.get("collected_at")))):

@@ -102,6 +102,12 @@ def test_category_source_without_canonical_is_parser_missed():
     assert _issue(audit_field_closure([p], rankings=[r]), p["asin"], "category_l1")["classification"] == "PARSER_MISSED"
 
 
+def test_category_deeper_level_without_deeper_source_is_source_missing():
+    p = _base_product(category_l1="Hogar y cocina")
+    report = audit_field_closure([p], rankings=[{"asin": p["asin"], "category_l1": "Hogar y cocina"}])
+    assert _issue(report, p["asin"], "category_l2")["classification"] == "SOURCE_MISSING"
+
+
 def test_audit_does_not_mutate_records_and_output_is_deterministic():
     p1 = _base_product(asin="B000000002")
     p2 = _base_product(asin="B000000001")
