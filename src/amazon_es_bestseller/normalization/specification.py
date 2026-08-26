@@ -11,9 +11,51 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Optional
 
 from .text import dec_comma, strip_zero_width
+
+# ---------- 全量详情 attributes → 规格 dict 适配（无损模型 → 旧式 spec 输入） ----------
+#: 归一化 label → spec snake_case key 的同义别名（件数/格数多写法聚合）
+_SPEC_ALIASES = {
+    'numero_de_pieza': 'numero_de_piezas',
+    'numero_de_productos': 'numero_de_piezas',
+    'numero_de_unidades': 'numero_de_piezas',
+    'numero_de_paquetes': 'numero_de_piezas',
+    'numero_de_compartimentos': 'cantidad_de_compartimentos',
+    'cantidad_de_compartimentos': 'cantidad_de_compartimentos',
+}
+
+
+def _normalize_spec_label(raw) -> str:
+    """西语 label → 无重音小写下划线形式（"Número de artículos"→"numero_de_articulos"）。
+
+    去重音（á→a/ñ→n）、括号仅作分隔、空格/斜杠/连字符 → 下划线。归一化后大多
+    直接命中 build_spec_v2 的现成 key（numero_de_articulos / tamano / capacidad /
+    dimensiones_del_producto / tension / potencia ...）。
+    """
+    s = unicodedata.normalize('NFD', str(raw or '').lower())
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = s.replace('(', ' ').replace(')', ' ')
+    s = re.sub(r'[\s/\-]+', '_', s)
+    return re.sub(r'_+', '_', s).strip('_')
+
+
+def attributes_to_spec_dict(attributes) -> dict:
+    """无损全量详情 attributes → 规格 snake_case dict（build_spec_v2 输入）。
+
+    新模型 attributes = [{section, label_raw, value_raw, ...}]（DATA_MODEL §4）；
+    build_spec_v2 接受旧式 label→value dict。取第一个非空值，同义别名聚合。
+    """
+    out: dict = {}
+    for a in attributes or []:
+        key = _normalize_spec_label(a.get('label_raw'))
+        key = _SPEC_ALIASES.get(key, key)
+        val = (a.get('value_raw') or '').strip()
+        if key and val and key not in out:
+            out[key] = val
+    return out
 
 # ---------- 容量 ----------
 _CAP_TERMS = [
@@ -217,6 +259,7 @@ _DIM_KEYS = (
     'dimensiones_del_articulo_largo_x_ancho_x_alto', 'dimensiones_del_producto',
     'dimensiones_articulo', 'dimensiones_del_articulo_l_x_a',
     'dimensiones_del_articulo_ancho_x_alto',
+    'dimensiones_del_articulo_profundidad_x_ancho_x_alto',
 )
 #: 变体容量：30L / 300 ml / 30 l
 _VARIANT_CAP_RE = re.compile(r'^([\d.,]+)\s*[mM]?[lL]\s*$')

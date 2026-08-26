@@ -170,7 +170,7 @@ def validate_review_count(raw) -> Tuple[QAStatus, List[QaIssue]]:
     """评论数数值化（QA_RULES §8）：西语千分位点须当千位，非小数。"""
     if raw in (None, ''):
         return QAStatus.PASS, []
-    m = re.match(r'^([\d.,]+)', str(raw).strip())
+    m = re.match(r'^\(?\s*([\d.,]+)', str(raw).strip())
     if not m:
         return QAStatus.FAIL, [_issue(
             'REVIEW_COUNT_INVALID', 'P1', 'review_count',
@@ -256,7 +256,14 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_rank_separation(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """榜单排名与详情 BSR 隔离（QA_RULES §5/§12）：绝不混用。"""
+    """榜单排名与详情 BSR 隔离（QA_RULES §5/§12）：绝不混用。
+
+    混用判定：bestseller_rank **缺少独立榜单来源**（ranking_source_url /
+    collected_at）且数值恰好出现在 detail_bsr_segments —— 这才可疑为来自
+    详情 BSR 的旧构造模式。有榜单来源上下文时，同一商品在两个不同榜单
+    上下文中排名数值碰巧相等（如既是某子类榜单第 1、详情 BSR 也是第 1）
+    是合法现象，不做数值比较。
+    """
     br = record.get('bestseller_rank')
     if br in (None, ''):
         return QAStatus.PASS, []
@@ -289,12 +296,13 @@ def validate_rank_separation(record) -> Tuple[QAStatus, List[QaIssue]]:
         elif isinstance(raw, (int, float)):
             ranks.append(int(raw))
 
-    if br_int in ranks:
+    has_source = bool(record.get('ranking_source_url') or record.get('collected_at'))
+    if not has_source and br_int in ranks:
         return QAStatus.FAIL, [_issue(
             'RANK_BSR_MIXED', 'P0', 'bestseller_rank',
-            '榜单排名 %s 被详情 BSR 污染' % br_int)]
+            '榜单排名 %s 无独立榜单来源且与详情 BSR 数值重合，疑似污染' % br_int)]
     # 排名存在但来源上下文缺失 → WARN（不臆造来源）
-    if not (record.get('ranking_source_url') or record.get('collected_at')):
+    if not has_source:
         return QAStatus.WARN, [_issue(
             'RANK_SOURCE_MISSING', 'P2', 'bestseller_rank',
             '排名缺少来源上下文（ranking_source_url / collected_at）')]

@@ -55,6 +55,35 @@ def test_enrich_normalizes_fields():
     assert p["采集类目中文"] == "收纳盒套装"
 
 
+def test_enrich_review_count_modern_paren_format():
+    # 现代页面评论数 "(8.819)"（括号包裹）→ 3873 类比解析为 8819，不落 None
+    d = dict(DETAIL[0], review_count_raw="(8.819)")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["review_count"] == 8819
+
+
+def test_enrich_spec_from_modern_attributes():
+    # 现代无损全量模型：无 details_json，规格取自 attributes（2026-08-26 真实
+    # B000KGEVB8 结构：Capacidad/Tamaño/Dimensiones/Número de artículos）
+    attrs = [
+        {"section": "product_overview", "label_raw": "Capacidad", "value_raw": "2 litros",
+         "position": 0, "source": "productOverview"},
+        {"section": "technical_details", "label_raw": "Capacidad de salida", "value_raw": "2 litros",
+         "position": 0, "source": "prodDetails"},
+        {"section": "technical_details", "label_raw": "Dimensiones del artículo (ancho x alto)",
+         "value_raw": "21an. x 11al. centímetros", "position": 1, "source": "prodDetails"},
+        {"section": "technical_details", "label_raw": "Tamaño", "value_raw": "2 Litre",
+         "position": 2, "source": "prodDetails"},
+        {"section": "technical_details", "label_raw": "Número de artículos", "value_raw": "4",
+         "position": 3, "source": "prodDetails"},
+    ]
+    d = dict(DETAIL[0], details_json=None, attributes=attrs)
+    p = enrich_products(RANKING, [d])[0]
+    assert p["spec_v2"] != ""                       # 规格不再全空
+    assert "升" in p["spec_v2"]                     # Capacidad → 2 升
+    assert "件" in p["spec_v2"]                     # Número de artículos → 4 件
+
+
 def test_enrich_spec_and_product_type():
     p = enrich_products(RANKING, DETAIL)[0]
     assert p["spec_v2"] != ""

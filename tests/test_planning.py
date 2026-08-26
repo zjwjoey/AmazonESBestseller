@@ -149,3 +149,20 @@ def test_detail_state_handles_missing_corrupt(tmp_path):
     path.write_text("{corrupt", encoding="utf-8")
     st3 = DetailState(path)
     assert len(st3) == 0  # 损坏状态不崩溃
+
+
+def test_detail_state_records_full_cache_not_incremental():
+    """records() 返回全量缓存：resume 场景下 update 只覆盖本次 ASIN，旧记录保留。
+
+    cmd_collect 用它重建 details.json——直接覆盖成"本次增量"会丢已缓存详情。
+    """
+    st = DetailState(":memory:")
+    st.update([{"asin": "B078C6QR1C", "title_es_raw": "Protector", "current_price_raw": "12,62 €"},
+               {"asin": "B075JJRFVV", "title_es_raw": "Fiambrera", "current_price_raw": "9,99 €"}])
+    # 第二轮 resume 只重采 1 个（增量），其余已缓存记录必须仍在
+    st.update([{"asin": "B078C6QR1C", "title_es_raw": "Protector v2", "current_price_raw": "13,50 €"}])
+    recs = st.records()
+    assert [r["asin"] for r in recs] == ["B075JJRFVV", "B078C6QR1C"]  # 按 ASIN 排序
+    assert st.records()[1]["title_es_raw"] == "Protector v2"          # 增量覆盖生效
+    assert st.records()[0]["title_es_raw"] == "Fiambrera"             # 未重采记录保留
+    assert all("collected_at" in r for r in recs)

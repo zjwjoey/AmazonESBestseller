@@ -183,7 +183,9 @@ def test_regression_d4_aggregation_priority():
     assert run_qa(clean)["qa_status"] == "PASS"
     warn = dict(clean, brand="")
     assert run_qa(warn)["qa_status"] == "WARN"
+    # 旧构造模式：无独立榜单来源 + 数值与详情 BSR 重合 → 混用 FAIL
     fail = dict(clean, bestseller_rank="180285", detail_bsr_segments=[("", 180285)])
+    fail.pop("ranking_source_url", None)
     assert run_qa(fail)["qa_status"] == "FAIL"
     conflict = dict(fail, details_json={"fiambrera": "de cristal"})
     assert run_qa(conflict)["qa_status"] == "SOURCE_CONFLICT"

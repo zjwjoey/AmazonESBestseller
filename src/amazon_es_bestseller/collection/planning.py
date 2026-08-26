@@ -84,6 +84,14 @@ class DetailState:
             json.dumps(self._data, ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8")
 
+    def records(self) -> List[dict]:
+        """全部状态记录（detail records，含 collected_at），按 ASIN 排序。
+
+        cmd_collect 用它重建 details.json：resume 场景下本次 collect 结果只是
+        增量，state 是跨 run 的全量权威缓存，details.json 必须反映全量。
+        """
+        return [dict(v) for _, v in sorted(self._data.items())]
+
     def __len__(self) -> int:
         return len(self._data)
 

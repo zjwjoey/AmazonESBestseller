@@ -131,6 +131,13 @@ def test_validate_review_count_unparseable():
     assert issues[0].code == "REVIEW_COUNT_INVALID"
 
 
+def test_validate_review_count_modern_paren_format():
+    # 现代 Amazon.es 页面（2026-08-26 真实核实）：评论数显示为括号包裹
+    # "(8.819)"（点=千位分隔，西语）→ 应解析通过，不误报 REVIEW_COUNT_INVALID
+    assert validate_review_count("(8.819)") == (QAStatus.PASS, [])
+    assert validate_review_count("(24.280)") == (QAStatus.PASS, [])
+
+
 # ---------- 品牌 ----------
 def test_validate_brand_ok():
     assert validate_brand("Tatay", "Tatay") == (QAStatus.PASS, [])
@@ -254,6 +261,17 @@ def test_validate_rank_separation_ok():
     assert validate_rank_separation(r) == (QAStatus.PASS, [])
 
 
+def test_validate_rank_separation_same_value_with_source_ok():
+    # 合法同值：商品既是某子类榜单第 1、详情 BSR 也恰好第 1（2026-08-26 真实：
+    # B078C6QR1C 榜单 kitchen 顶级第 1，detail_bsr "n.º 1 en Hogar y cocina"）。
+    # 有独立榜单来源 → 数值碰巧相等不是混用。
+    r = {"bestseller_rank": "1",
+         "detail_bsr_segments": [("Hogar y cocina", 1)],
+         "ranking_source_url": "https://www.amazon.es/gp/bestsellers/kitchen/",
+         "collected_at": "2026-08-26"}
+    assert validate_rank_separation(r) == (QAStatus.PASS, [])
+
+
 def test_validate_rank_source_missing_warn():
     # QA_RULES §10：排名存在但无来源上下文 → WARN
     r = {"bestseller_rank": "52"}
@@ -370,7 +388,10 @@ def test_run_qa_warn_on_brand_missing():
 
 
 def test_run_qa_fail_on_rank_mixed():
+    # 旧构造模式：bestseller_rank 无独立榜单来源（无 ranking_source_url /
+    # collected_at）且数值与详情 BSR 重合 → 疑似污染
     r = _clean_record()
+    r.pop("ranking_source_url", None)
     r["bestseller_rank"] = "180285"
     r["detail_bsr_segments"] = [("", 180285)]
     out = run_qa(r)

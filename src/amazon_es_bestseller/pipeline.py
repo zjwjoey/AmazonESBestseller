@@ -25,12 +25,12 @@ from .normalization.category import category_zh
 from .normalization.dates import parse_es_date
 from .normalization.monthly_bought import parse_monthly_bought
 from .normalization.price import CURRENCY, discount_rate, parse_price
-from .normalization.specification import build_spec_v2
+from .normalization.specification import attributes_to_spec_dict, build_spec_v2
 from .translation.full_detail import (
     render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
 from .translation.product_type import detect_product_type
 
-_LEADING_NUM_RE = re.compile(r"^([\d.,]+)")
+_LEADING_NUM_RE = re.compile(r"^\(?\s*([\d.,]+)")  # 容忍前导 '('（现代评论数 "(8.819)"）
 
 
 def _to_int_spanish(s: str) -> Optional[int]:
@@ -97,6 +97,9 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["date_first_available"] = dfa.strftime("%Y-%m-%d") if dfa else None
 
     details = _details_of(out)
+    if not details:
+        # 现代无损全量模型：attributes（列表）→ 规格 dict，供 build_spec_v2
+        details = attributes_to_spec_dict(out.get("attributes"))
     out["spec_v2"] = build_spec_v2(
         details, variant=out.get("selected_variation_raw"),
         title_es=out.get("title_es_raw"))

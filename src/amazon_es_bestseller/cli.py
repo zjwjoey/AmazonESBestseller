@@ -65,6 +65,10 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
         details = collect_details(collect_asins(plan), session, out_dir)
         state.update(details)
         state.save()
+        # details.json 用 state 全量重建：resume 场景下 collect_details 只产出
+        # 本次增量（新增/重采），直接覆盖会丢已缓存详情；state 是跨 run 权威
+        # 持久缓存，含全部 ASIN 的最新详情。
+        _save_json(state.records(), str(Path(out_dir) / "details.json"))
 
     # 最新一次 run 的产物稳定复制到 out_dir 根，供 enrich/qa/export 读取
     runs = sorted(Path(out_dir).glob("runs/*"), reverse=True)
