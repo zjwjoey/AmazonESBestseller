@@ -127,8 +127,10 @@ _PACKAGE_KEYS = (
 )
 _COUNT_BEFORE_RE = re.compile(
     r'(\d+)\s*(?:piezas?|unidades?|uds\.?|artículos?|paquetes?|juegos?|pack)\b', re.I)
+# 真实锚点："Set 4 Estándar" / "SET 4 PORTAEMBUTIDOS" / "Pack de 2" / "paquete de 6"
+# （"set N" 与 "set de N" 两种写法都匹配）
 _COUNT_AFTER_RE = re.compile(
-    r'\b(?:pack|paquete|juego|set)\s+de\s+(\d+)', re.I)
+    r'\b(?:pack|paquete|juego|set)\s+(?:de\s+)?(\d+)', re.I)
 
 
 def package_count(d) -> Optional[str]:
@@ -175,10 +177,11 @@ def _count_from_text(s) -> Optional[int]:
 
 
 def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
-    """件数解析优先级（QA_RULES §37-§38）：
+    """件数解析优先级（QA_RULES §37-§38 / AGENTS §5）：
 
-    选中变体 > 标题显式件数 > numero_de_sets > 技术字段 max。
-    泛型 quantity=1 不产生件数展示。
+    选中变体 > 标题显式件数 > tamano（可靠规格详情，如 "Set 4 Estándar"）
+    > numero_de_sets > 技术字段 max。
+    泛型数量 1（numero_de_sets=1 / package=1）不产生件数展示。
     """
     if not d:
         return None
@@ -188,8 +191,11 @@ def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
     n = _count_from_text(title_es)
     if n:
         return n
-    n = set_count(d)
+    n = _count_from_text(d.get('tamano'))
     if n:
+        return n
+    n = set_count(d)
+    if n and n > 1:
         return n
     pc = package_count(d)
     if pc:
@@ -237,6 +243,14 @@ def _pick_dimension(d):
     return None
 
 
+def _is_set_evidence(d, variant=None, title_es=None) -> bool:
+    """计数来源是否为"套件"语义（Set/Pack/Juego/Paquete），决定 件套 vs 件。"""
+    for src in (variant, title_es, d.get('tamano') if isinstance(d, dict) else None):
+        if src and re.search(r'\b(?:pack|paquete|juego|set)\b', str(src), re.I):
+            return True
+    return False
+
+
 def build_spec_v2(d, variant=None, title_es=None) -> str:
     """简短规格（QA_RULES §36）：只回答"客户买的是哪个规格版本"。"""
     if not d:
@@ -245,7 +259,10 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
     n = resolve_package_count(d, variant, title_es)
     if n:
         nset = set_count(d)
-        parts.append('%d件套' % n if nset == n else '%d件' % n)
+        if nset == n or _is_set_evidence(d, variant, title_es):
+            parts.append('%d件套' % n)
+        else:
+            parts.append('%d件' % n)
     cap = _pick_capacity(d, variant)
     if cap and classify_value_unit(cap) in (None, 'capacity'):
         cz = cap_zh(cap)

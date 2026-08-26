@@ -141,6 +141,48 @@ def test_build_spec_skips_unit_mismatch():
     assert build_spec_v2({'capacidad': '992g'}) == ''
 
 
+# ---------- 真实边缘（_audit_details_keys.txt 锚点） ----------
+def test_real_tamano_set_4_counts():
+    # tamano="Fiambrera - Set 4 Estándar" → 4件套（真实 "Set N" 写法，无 "de"）
+    out = build_spec_v2({
+        'tamano': 'Fiambrera - Set 4 Estándar',
+        'capacidad': '1 litros',
+        'numero_de_sets': '1',
+    })
+    assert '4件套' in out
+    assert '1件套' not in out
+
+
+def test_real_tamano_SET_4_package():
+    assert build_spec_v2({'tamano': 'SET 4 PORTAEMBUTIDOS FRESH'}) == '4件套'
+
+
+def test_real_generic_set_1_no_count():
+    # numero_de_sets=1 是泛型数量，不显示件数；容量 1升 仍显示
+    out = build_spec_v2({'capacidad': '1 litros', 'numero_de_sets': '1'})
+    assert '1升' in out
+    assert '件' not in out
+
+
+def test_real_ancho_x_alto_2d():
+    assert dim_zh('10an. x 15al. centímetros') == '10×15厘米'
+
+
+def test_real_l_an_al_comma_decimals():
+    # 17l. x 3,2an. x 25,2al. → 逗号小数 + 单位省略写法
+    assert dim_zh('17l. x 3,2an. x 25,2al. centímetros') == '17×3.2×25.2厘米'
+
+
+def test_real_capacidad_de_salida():
+    assert cap_zh('354,88 ml') == '354.88毫升'
+
+
+def test_real_tamano_not_overridden_by_generic_set_1():
+    # 泛型 numero_de_sets=1 不得覆盖 tamano 显式 "Set 4" 证据
+    assert resolve_package_count(
+        {'tamano': 'Set 4 Estándar', 'numero_de_sets': '1'}) == 4
+
+
 # ---------- 组合 ----------
 def test_build_spec_v2_full(sample_detail_dict):
     out = build_spec_v2(sample_detail_dict)
