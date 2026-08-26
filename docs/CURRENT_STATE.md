@@ -63,10 +63,17 @@ The detail collector should eventually preserve, where publicly visible and tech
 Not every product will expose every section. Missing source data is not automatically a parser failure.
 
 **Current status (2026-08-26):** full-detail extraction (Product Attribute model:
-`section / label_raw / value_raw / position / source` plus feature bullets) is the designated
-next-round scope and is NOT yet implemented. This round the export columns `完整商品详情（中文）`
-(col 20) and `商品卖点（中文）` (col 21) are left empty — missing is not fabricated and is not an
-automatic QA failure (QA_RULES §29). See §26.
+`section / label_raw / value_raw / position / source` plus feature bullets) is implemented.
+`parse_detail_page` collects all visible Key/Value attributes (`product_overview` /
+`technical_details` / `additional_information`) plus `feature_bullets_raw` /
+`product_description_raw` / `detail_bullets_raw`. `pipeline.normalize_product` renders them
+offline into `product_details_es/zh` and `feature_bullets_es/zh` (spanish = evidence layer,
+chinese = derived layer via dictionary translation, unknown labels/words stay Spanish —
+never fabricated). The export columns `完整商品详情（中文）` (col 20) and `商品卖点（中文）`
+(col 21) on the Chinese sheet and `完整商品详情（西语原文）` (col 19) / `商品卖点（西语原文）`
+(col 20) on the Spanish sheet are filled from these rendered fields. Missing raw detail still
+renders empty — missing is not fabricated and is not an automatic QA failure (QA_RULES §29).
+Verified on 2 real products (B008YETL18, B078C6QR1C). Remaining limits: see §26.
 
 ## 7. Specification state
 
@@ -197,8 +204,14 @@ Scope explicitly deferred from the 2026-08-26 data-quality round (Phase A + B co
 
 1. **Full-detail extraction (Product Attribute model)** — `section / label_raw / value_raw /
    position / source` plus feature bullets, rendering `完整商品详情（中文）` (col 20) and
-   `商品卖点（中文）` (col 21). NOT yet implemented; until it lands these columns are empty, not
-   fabricated (QA_RULES §29).
+   `商品卖点（中文）` (col 21). **Phase 1 (collect + render) is implemented** (2026-08-26):
+   `parse_detail_page` collects overview / technical_details / additional_information
+   attributes + feature bullets; `pipeline` renders `product_details_es/zh` and
+   `feature_bullets_es/zh` offline; exporter fills the Chinese-sheet cols 20/21 and
+   Spanish-sheet cols 19/20. **Remaining (deferred):** label/term dictionary coverage is
+   incremental (unknown labels/words stay Spanish — never fabricated); `product_description`
+   and A+ text are collected as raw evidence but not yet rendered into dedicated columns;
+   large-scale validation across a full category is not yet done.
 2. **Monthly-bought / original-price coverage** — known data-source limitation. Partial support
    exists (`monthly_bought_min` and `discount_rate` computed when raw present); full coverage
    deferred.

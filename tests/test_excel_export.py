@@ -84,8 +84,8 @@ def test_zh_column_mapping(tmp_path, export_records):
     assert row3[25] == '月购看涨（人工）'                   # 备注
 
 
-def test_zh_deferred_fields_empty(tmp_path, export_records):
-    """采集层暂缺字段本轮留空不臆造（QA_RULES §29）：完整商品详情/商品卖点。"""
+def test_zh_detail_cols_empty_without_raw_detail(tmp_path, export_records):
+    """无原始全量详情数据（attributes/卖点）→ 列 20/21 留空不臆造（QA_RULES §29）。"""
     wb = export_workbook(export_records, out_path=str(tmp_path / "out.xlsx"))
     ws = wb['中文选品清单']
     for r in (2, 3, 4):
@@ -106,11 +106,48 @@ def test_es_sheet_aligned_and_ordered(tmp_path, export_records):
     assert es_asins == zh_asins == ['B075JJRFVV', 'B078C6QR1C', 'B07RN64P2R']
     # 商品名称（西语）
     assert ws_es.cell(row=3, column=4).value == 'Fiambrera de cristal con 4 piezas'
-    # 当前选中规格 / 变体（西语）有值；核心规格/完整详情/卖点西语 → 本轮留空
+    # 当前选中规格 / 变体（西语）有值；核心规格西语暂留空；完整详情/卖点西语无原始数据留空
     assert ws_es.cell(row=3, column=17).value == 'Fiambrera - Set 4 Estándar'
     assert ws_es.cell(row=3, column=18).value in (None, '')   # 核心规格（西语）
-    assert ws_es.cell(row=3, column=19).value in (None, '')   # 完整商品详情（西语原文）
-    assert ws_es.cell(row=3, column=20).value in (None, '')   # 商品卖点（西语原文）
+    assert ws_es.cell(row=3, column=19).value in (None, '')   # 完整商品详情（西语原文）无数据
+    assert ws_es.cell(row=3, column=20).value in (None, '')   # 商品卖点（西语原文）无数据
+
+
+def test_full_detail_rendered_into_cells(tmp_path):
+    """带无损全量详情的记录 → 中文列 20/21、西语列 19/20 真实渲染（dedup + 剔除元信息）。"""
+    from amazon_es_bestseller.pipeline import normalize_product
+    rec = normalize_product({
+        "asin": "B008YETL18",
+        "attributes": [
+            {"section": "product_overview", "label_raw": "Marca", "value_raw": "De'Longhi",
+             "position": 0, "source": "productOverview"},
+            {"section": "technical_details", "label_raw": "Capacidad", "value_raw": "500 mililitros",
+             "position": 0, "source": "prodDetails"},
+            # 完全重复 → 渲染层去重
+            {"section": "product_overview", "label_raw": "Marca", "value_raw": "De'Longhi",
+             "position": 1, "source": "productOverview"},
+            # 元信息标签 → 渲染层剔除（原始 attributes 仍在数据层）
+            {"section": "technical_details", "label_raw": "ASIN", "value_raw": "B008YETL18",
+             "position": 1, "source": "prodDetails"},
+        ],
+        "feature_bullets_raw": ["Descalcificador para cafeteras", "SOLUCIÓN SUAVE"],
+    })
+    wb = export_workbook([rec], out_path=str(tmp_path / "out.xlsx"))
+    ws = wb['中文选品清单']
+    ws_es = wb['西班牙语选品清单']
+    zh_details = ws.cell(row=2, column=20).value      # 完整商品详情（中文）
+    zh_bullets = ws.cell(row=2, column=21).value      # 商品卖点（中文）
+    assert "品牌：De'Longhi" in zh_details
+    assert "容量：500毫升" in zh_details
+    assert "ASIN" not in zh_details                   # 元信息已剔除
+    assert zh_details.count("品牌：De'Longhi") == 1   # 重复行已去重
+    assert "除垢" in zh_bullets                       # 词典关键词翻译
+    assert "SOLUCIÓN SUAVE" in zh_bullets             # 未覆盖词保留西语原文
+    es_details = ws_es.cell(row=2, column=19).value   # 完整商品详情（西语原文）
+    es_bullets = ws_es.cell(row=2, column=20).value   # 商品卖点（西语原文）
+    assert "Marca: De'Longhi" in es_details
+    assert "Capacidad: 500 mililitros" in es_details
+    assert "Descalcificador para cafeteras" in es_bullets
 
 
 def test_es_sheet_header_25_cols(tmp_path, export_records):

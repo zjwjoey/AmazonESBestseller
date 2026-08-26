@@ -1289,8 +1289,15 @@ round. It is recorded here so future agents do not reinterpret it as forgotten o
 1. **Full-detail extraction (Product Attribute model)** — preserve all visible Key/Value product
    attributes dynamically as `section / label_raw / value_raw / position / source`, plus feature
    bullets / About this item, then render `完整商品详情（中文）` → Excel column 20 and
-   `商品卖点（中文）` → column 21. Until this lands, columns 20/21 are exported empty (not
-   fabricated) per QA_RULES §29.
+   `商品卖点（中文）` → column 21.
+   **STATUS UPDATE (2026-08-26): Phase 1 implemented and pushed** — `parse_detail_page`
+   collects the Product Attribute sections + feature bullets; `pipeline.normalize_product`
+   renders `product_details_es/zh` and `feature_bullets_es/zh` offline (Spanish = evidence
+   layer, Chinese = derived layer via the `translation/` dictionary; unknown labels/words stay
+   Spanish, never fabricated); the exporter fills Chinese-sheet cols 20/21 and Spanish-sheet
+   cols 19/20 from those rendered fields. Verified on 2 real products (B008YETL18,
+   B078C6QR1C). Remaining: incremental label/term dictionary coverage and full-category-scale
+   validation.
 2. **Monthly-bought / original-price coverage** — known data-source limitation. Partial support
    exists (`monthly_bought_min` and `discount_rate` are computed when raw evidence is present);
    full coverage is deferred.

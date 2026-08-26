@@ -12,8 +12,9 @@
   - 中西表 ASIN 集一致、确定性排序（§24，ASIN 升序）；
   - 图片按 ASIN 锚定内嵌于中文表 ``01 图片``（§21），西语表不嵌图；
   - exporter 只渲染 canonical 字段，不猜测品牌/类目/排名/类型/规格（§25）；
-  - 采集层暂缺字段（完整商品详情/商品卖点/Parent ASIN/核心规格西语等）
-    本轮**留空不臆造**（§29 缺失不自动失败）。
+  - 完整商品详情/商品卖点：``product_details_es/zh``、``feature_bullets_es/zh``
+    由 pipeline 渲染（translation/full_detail），无原始详情数据时留空不臆造（§29）；
+  - 核心规格（西语）/Parent ASIN 缺失时**留空不臆造**（§29 缺失不自动失败）。
 """
 from __future__ import annotations
 
@@ -130,8 +131,8 @@ def _zh_values(rec: Mapping, seq: int, translations: Optional[Mapping]) -> List:
         rec.get('bestseller_rank') or '',            # 17 畅销榜排名
         rec.get('selected_variation_raw') or '',     # 18 当前选中规格 / 变体
         rec.get('spec_v2') or '',                    # 19 核心规格（中文）
-        rec.get('product_details_zh') or '',         # 20 完整商品详情（中文）→ 本轮留空
-        rec.get('feature_bullets_zh') or '',         # 21 商品卖点（中文）→ 本轮留空
+        rec.get('product_details_zh') or '',         # 20 完整商品详情（中文）
+        rec.get('feature_bullets_zh') or '',         # 21 商品卖点（中文）
         rec.get('date_first_available') or '',       # 22 首次上架日期
         rec.get('seller') or rec.get('seller_raw') or '',  # 23 卖家
         rec.get('product_url') or '',                # 24 商品链接
@@ -160,9 +161,9 @@ def _es_values(rec: Mapping, seq: int) -> List:
         rec.get('leaf_category') or '',              # 细分类目
         rec.get('bestseller_rank') or '',            # 畅销榜排名
         rec.get('selected_variation_raw') or '',     # 当前选中规格 / 变体（西语）
-        '',                                          # 核心规格（西语）→ 本轮留空（全量详情下轮）
-        '',                                          # 完整商品详情（西语原文）→ 留空
-        '',                                          # 商品卖点（西语原文）→ 留空
+        '',                                          # 核心规格（西语）→ 规格派生，暂留空
+        rec.get('product_details_es') or '',         # 完整商品详情（西语原文）
+        rec.get('feature_bullets_es') or '',         # 商品卖点（西语原文）
         rec.get('date_first_available') or '',       # 首次上架日期
         rec.get('seller') or rec.get('seller_raw') or '',  # 卖家
         rec.get('product_url') or '',                # 商品链接

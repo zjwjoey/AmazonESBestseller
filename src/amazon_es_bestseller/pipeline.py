@@ -26,6 +26,8 @@ from .normalization.dates import parse_es_date
 from .normalization.monthly_bought import parse_monthly_bought
 from .normalization.price import CURRENCY, discount_rate, parse_price
 from .normalization.specification import build_spec_v2
+from .translation.full_detail import (
+    render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
 from .translation.product_type import detect_product_type
 
 _LEADING_NUM_RE = re.compile(r"^([\d.,]+)")
@@ -101,6 +103,14 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
 
     out["detail_bsr_segments"] = detail_bsr_segments(out.get("detail_bsr_raw"))
     out["monthly_bought_min"] = parse_monthly_bought(out.get("monthly_bought_raw"))
+
+    # 无损全量详情 → 展示渲染（DATA_MODEL §4-§8/§18-§19）：西语原文 + 中文派生
+    attrs = out.get("attributes")
+    bullets = out.get("feature_bullets_raw")
+    out["product_details_es"] = render_details_es(attrs)
+    out["product_details_zh"] = render_details_zh(attrs)
+    out["feature_bullets_es"] = render_bullets_es(bullets)
+    out["feature_bullets_zh"] = render_bullets_zh(bullets)
 
     title_es = out.get("title_es_raw")
     out["product_type"] = detect_product_type(title_es) if title_es else None
