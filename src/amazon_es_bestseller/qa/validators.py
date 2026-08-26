@@ -302,12 +302,17 @@ def validate_rank_separation(record) -> Tuple[QAStatus, List[QaIssue]]:
 
 
 def validate_category(record) -> Tuple[QAStatus, List[QaIssue]]:
-    """类目层级（QA_RULES §6）。"""
+    """类目层级（QA_RULES §6/§13）。
+
+    复制充数只指路径相邻槽位同名（L1=L2 或 L2=L3）；leaf==L3 是节点路径
+    恰为 3 级时的定义恒等（B1），不判重复。未知 deeper 层级必须为 null。
+    """
     issues: List[QaIssue] = []
+    l1 = record.get('category_l1')
     l2 = record.get('category_l2')
     l3 = record.get('category_l3')
     leaf = record.get('leaf_category')
-    for a, b, fld in ((l2, l3, 'category_l3'), (l3, leaf, 'leaf_category')):
+    for a, b, fld in ((l1, l2, 'category_l2'), (l2, l3, 'category_l3')):
         if a not in (None, '') and b not in (None, '') and a == b:
             issues.append(_issue(
                 'CATEGORY_DUPLICATED_LEVEL', 'P1', fld,
