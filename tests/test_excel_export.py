@@ -236,6 +236,14 @@ def test_merge_manual_fields_no_clobber(tmp_path, export_records):
     assert b075['备注'] == '新人工备注'
 
 
+def test_merge_manual_fields_keeps_new_nonempty_note(export_records):
+    prev = export_workbook(export_records)
+    new_records = [dict(r) for r in export_records]
+    new_records[0]["备注"] = "本次人工复核"
+    merged = merge_manual_fields(new_records, prev)
+    assert merged[0]["备注"] == "本次人工复核"
+
+
 def test_export_notes_survive_regeneration(tmp_path, export_records):
     """备注经 export_workbook(prev_workbook=...) 端到端按 ASIN 存活（QA_RULES §22）。"""
     prev = export_workbook(export_records, out_path=str(tmp_path / "prev.xlsx"))

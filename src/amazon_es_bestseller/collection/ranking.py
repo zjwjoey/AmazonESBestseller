@@ -39,6 +39,8 @@ _BREADCRUMB_SKIP = {
 #: 现代类目层级链：unv_ 链接（父级类目）+ h1 当前类目标题
 _UNV_SEL = 'a[href*="zg_bs_unv_"]'
 _H1_CURRENT_RE = re.compile(r"Los más vendidos en\s+(.+)$", re.I)
+_MONTHLY_RE = re.compile(
+    r"([\d.,]+\s*(?:mil|k)?\s*\+)\s+comprados\s+el\s+mes\s+pasado", re.I)
 
 
 def _category_trail_modern(soup) -> list:
@@ -116,6 +118,12 @@ def _browse_node_id(source_url, soup) -> Optional[str]:
     return node
 
 
+def _monthly_bought_raw(item) -> str:
+    text = item.get_text(" ", strip=True)
+    match = _MONTHLY_RE.search(text)
+    return re.sub(r"\s+", " ", match.group(1)).strip() if match else ""
+
+
 def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> list[dict]:
     """畅销榜页 HTML → 排行榜记录列表（每 ASIN × 页面一行）。
 
@@ -139,7 +147,7 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             bm = re.match(r"#\s*(\d+)", badge.get_text(" ", strip=True))
             if bm:
                 rank = int(bm.group(1))
-        records.append({
+        record = {
             "index": i,
             "asin": m.group(1).upper(),
             "category_l1": l1,
@@ -150,7 +158,11 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "bestseller_rank": rank,
             "ranking_source_url": source_url,
             "collected_at": collected_at,
-        })
+        }
+        monthly = _monthly_bought_raw(item)
+        if monthly:
+            record["monthly_bought_raw"] = monthly
+        records.append(record)
     return records
 
 

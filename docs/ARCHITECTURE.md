@@ -1268,9 +1268,9 @@ Do not break working behavior only to remove a hard-coded path.
 
 # 59. CLI architecture
 
-A future unified CLI is desirable.
+A unified CLI is implemented and is the supported runtime entry point.
 
-Potential conceptual commands:
+Supported commands:
 
 ```text
 collect

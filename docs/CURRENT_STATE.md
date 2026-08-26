@@ -117,11 +117,15 @@ Best Sellers rank and Detail BSR must remain separate permanently.
 
 ## 12. Monthly bought state
 
-Current sample data has little or no reliable monthly-bought coverage. This remains a valuable future field. Do not infer it from rank, rating or reviews.
+Monthly-bought raw extraction and lower-bound normalization are implemented for visible
+"comprados el mes pasado" evidence. Coverage still depends on whether Amazon exposes the
+message for a given SKU; do not infer it from rank, rating or reviews.
 
 ## 13. Price state
 
-Current-price extraction is relatively mature. Original/list-price coverage remains weaker. Discount rate must only be calculated when both prices exist.
+Current-price extraction is relatively mature. Original/list-price extraction now requires
+explicit struck-price evidence (or equivalent currency-only legacy evidence); unit prices are
+excluded. Discount rate is calculated only when original price is greater than current price.
 
 ## 14. Parent ASIN state
 
@@ -198,7 +202,10 @@ Embedded Chinese-sheet images have been successfully produced. Current expectati
 
 ## 22. Test state
 
-Formal regression testing remains one of the weakest engineering areas. High-priority test groups: product-type translation, specification parsing, brand false positives, ranking semantics, category mapping, bilingual row mapping, image association and default Excel schema.
+Offline regression coverage is established for product-type translation, specification parsing,
+brand false positives, ranking semantics, category mapping, bilingual row mapping, image
+association, access-stop behavior and the default Excel schema. Live tests remain opt-in via
+RUN_LIVE=1.
 
 ## 23. Export contract testing
 

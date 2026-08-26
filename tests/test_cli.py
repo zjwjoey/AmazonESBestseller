@@ -4,10 +4,12 @@
 不联网：只测离线子命令与参数纪律；collect 的真实采集不在此覆盖。
 """
 import json
+import base64
 import sys
 from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook
 
 from amazon_es_bestseller.cli import main
 
@@ -112,3 +114,27 @@ def test_export_qa_gate_force_bypasses(tmp_path):
     assert main(["export", "--products", str(prod_out),
                  "--out", str(xlsx_out), "--force"]) == 0
     assert xlsx_out.exists()
+
+
+def test_export_accepts_images_and_category_planning(tmp_path):
+    products = tmp_path / "products.json"
+    products.write_text(json.dumps([{
+        "asin": "B078C6QR1C",
+        "product_url": "https://www.amazon.es/dp/B078C6QR1C",
+        "image_url": "https://m.media-amazon.com/images/I/x.jpg",
+        "current_price": 1,
+    }]), encoding="utf-8")
+    images = tmp_path / "images"
+    images.mkdir()
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    (images / "B078C6QR1C.png").write_bytes(png)
+    planning = tmp_path / "planning.json"
+    planning.write_text(json.dumps([{"#": 1, "中文一级类目": "家居与厨房"}], ensure_ascii=False), encoding="utf-8")
+    out = tmp_path / "out.xlsx"
+    assert main(["export", "--products", str(products), "--images-dir", str(images),
+                  "--category-planning", str(planning), "--out", str(out), "--force"]) == 0
+    wb = load_workbook(out)
+    assert wb["类目规划"].max_row == 2
+    assert len(wb["中文选品清单"]._images) == 1
+    assert len(wb["西班牙语选品清单"]._images) == 0
