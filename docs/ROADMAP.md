@@ -1277,3 +1277,21 @@ FIX DATA LATER
 The roadmap prioritizes:
 
 > correctness first, scale second.
+
+---
+
+# 58. Next-round scope (frozen 2026-08-26)
+
+The 2026-08-26 data-quality round (Phase A: P0 offline quality; Phase B: P1 engineering + new
+export contract) is complete and pushed. The following work was explicitly deferred to the next
+round. It is recorded here so future agents do not reinterpret it as forgotten or accidental:
+
+1. **Full-detail extraction (Product Attribute model)** — preserve all visible Key/Value product
+   attributes dynamically as `section / label_raw / value_raw / position / source`, plus feature
+   bullets / About this item, then render `完整商品详情（中文）` → Excel column 20 and
+   `商品卖点（中文）` → column 21. Until this lands, columns 20/21 are exported empty (not
+   fabricated) per QA_RULES §29.
+2. **Monthly-bought / original-price coverage** — known data-source limitation. Partial support
+   exists (`monthly_bought_min` and `discount_rate` are computed when raw evidence is present);
+   full coverage is deferred.
+3. **Historical snapshots / database** — already outlined in §39-41; not started by design.

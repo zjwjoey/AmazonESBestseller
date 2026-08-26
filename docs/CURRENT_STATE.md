@@ -62,6 +62,12 @@ The detail collector should eventually preserve, where publicly visible and tech
 
 Not every product will expose every section. Missing source data is not automatically a parser failure.
 
+**Current status (2026-08-26):** full-detail extraction (Product Attribute model:
+`section / label_raw / value_raw / position / source` plus feature bullets) is the designated
+next-round scope and is NOT yet implemented. This round the export columns `完整商品详情（中文）`
+(col 20) and `商品卖点（中文）` (col 21) are left empty — missing is not fabricated and is not an
+automatic QA failure (QA_RULES §29). See §26.
+
 ## 7. Specification state
 
 `核心规格` is now formally treated as a compact display summary derived from the complete product detail. It is NOT the source of truth.
@@ -185,6 +191,19 @@ The project has proven real collection and transformation. It has not yet proven
 
 The next meaningful milestones remain: protect known regressions, stabilize full-detail extraction, stabilize ranking/category evidence, validate one full major category, repeat-run validation, validate a second major category, then controlled expansion.
 
-## 26. Current summary
+## 26. Next-round scope and known limitations
+
+Scope explicitly deferred from the 2026-08-26 data-quality round (Phase A + B complete and pushed):
+
+1. **Full-detail extraction (Product Attribute model)** — `section / label_raw / value_raw /
+   position / source` plus feature bullets, rendering `完整商品详情（中文）` (col 20) and
+   `商品卖点（中文）` (col 21). NOT yet implemented; until it lands these columns are empty, not
+   fabricated (QA_RULES §29).
+2. **Monthly-bought / original-price coverage** — known data-source limitation. Partial support
+   exists (`monthly_bought_min` and `discount_rate` computed when raw present); full coverage
+   deferred.
+3. **Historical snapshots / database** — not started by design (ROADMAP §39-41).
+
+## 27. Current summary
 
 AmazonESBestseller is already a working Amazon.es bestseller research system, and is now being upgraded so the data layer preserves complete dynamic product-detail evidence while the Excel display layer remains a fixed, readable one-SKU-per-row business view.
