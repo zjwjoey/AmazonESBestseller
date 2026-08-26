@@ -24,6 +24,15 @@ The project should not be described as a non-working prototype.
 
 Existing working datasets contain approximately 193–200 Amazon.es product records depending on output version. A stricter cleaned subset of 100 SKUs has already been used for direct internal selection/review.
 
+**Full-major-category validation (2026-08-26):** Hogar y cocina bestsellers were collected
+end-to-end at scale — 19 ranking pages (kitchen top + 18 subcategories), 570 ranking records
+→ 496 unique ASINs → 496 detail records → enrich → QA → export. QA result: **0 P0 / 0 P1**
+(456 PASS / 40 WARN, all WARN = P2 `BRAND_MISSING`, no SOURCE_CONFLICT). The bilingual
+workbook (`选品清单_496.xlsx`) satisfies the 3-sheet / 26-column contract with ASIN-aligned
+Spanish/Chinese sheets. Field coverage: current_price 467/496, brand 456/496, image_url
+475/496, leaf_category 466/496, browse_node_id 466/496, spec_v2 395/496 (80%),
+product_details_zh 469/496, feature_bullets_zh 475/496.
+
 ## 4. Newly frozen product-detail direction
 
 The project no longer treats a small predefined `specification` field as equivalent to the complete product detail.
@@ -196,7 +205,14 @@ The repository still contains a mixture of working scripts, experiments, audit s
 
 The project has proven real collection and transformation. It has not yet proven reliable production of 6,000–10,000 unique ASINs.
 
-The next meaningful milestones remain: protect known regressions, stabilize full-detail extraction, stabilize ranking/category evidence, validate one full major category, repeat-run validation, validate a second major category, then controlled expansion.
+**Milestone reached (2026-08-26): one full major category validated** — Hogar y cocina,
+496 unique ASINs, 0 P0 / 0 P1. Real-scale validation drove three parser/normalizer fixes
+(modern review-count `(8.819)` format; RANK_BSR_MIXED false-positive on legitimate same-value
+ranks; spec_v2 empty because the modern `attributes` model was not wired into `build_spec_v2`)
+plus collection resilience (resume + per-ASIN timeout isolation) and a `details.json`
+full-state rebuild so resume never loses cached details.
+
+The next meaningful milestones remain: repeat-run validation, validate a second major category, then controlled expansion toward 6,000–10,000.
 
 ## 26. Next-round scope and known limitations
 
@@ -223,6 +239,13 @@ Scope explicitly deferred from the 2026-08-26 data-quality round (Phase A + B co
    incomplete `rankings.json` / `details.json`; the CLI reports and exits 2. (b) `export`
    runs the full QA pipeline first and refuses to write the workbook while any P0/P1 issue
    exists, unless explicitly `--force` (QA_RULES §31).
+5. **Collection resilience (2026-08-26, real-scale failure driven)** — `collect_details` now
+   (a) resumes: already-saved non-restricted `html/<ASIN>.html` is re-parsed offline instead
+   of re-requested, so a re-run only fills gaps (CAPTCHA evidence on disk still raises
+   `AccessStopError`); (b) isolates per-ASIN transient failures (e.g. `Page.goto` timeout):
+   the ASIN is recorded as failed and collection continues — no retry, no bypass; and
+   (c) `cmd_collect` rebuilds `details.json` from the full `DetailState` cache so an
+   incremental resume never overwrites already-cached details.
 
 ## 27. Current summary
 
