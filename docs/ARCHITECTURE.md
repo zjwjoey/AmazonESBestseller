@@ -902,6 +902,19 @@ Spanish → Chinese
 
 consistency.
 
+## Field Closure Audit
+
+The formal closure diagnostic sits after normalization/translation and before the
+display consumer without rewriting the existing pipeline:
+
+```text
+Amazon Source → Raw → Canonical → Derived → QA / Field Closure → Display / Excel
+```
+
+`audit-fields` reads products, optional raw detail/ranking JSON and saved HTML, then
+emits deterministic JSON and Markdown. It distinguishes absent source from parser,
+mapping and derived loss and does not add concurrency or alter the three-sheet export.
+
 ---
 
 # 39. QA responsibilities

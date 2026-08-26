@@ -305,3 +305,12 @@ When choosing between complete but uncertain and incomplete but correct, choose 
 When choosing between full raw detail preservation and dropping unfamiliar fields, preserve the raw detail.
 
 When choosing between a large refactor and a small verified change, choose the small verified change.
+
+## 26. Field Closure Audit
+
+Field Closure Audit is a formal QA capability for automatic fields in the frozen
+Chinese 26-column contract. Trace every field as `Amazon Source → RAW → Canonical →
+Derived → Display / Excel`, and classify an empty value as `SOURCE_MISSING`,
+`PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`. An empty source is valid and
+must not be filled by guessing. Preserve raw evidence, keep `备注` human-owned, and
+never use Detail BSR as a fallback for `bestseller_rank`.

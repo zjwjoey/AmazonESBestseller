@@ -104,6 +104,7 @@ def test_validate_price_rejects_present_equal_original():
     status, issues = validate_price(14.99, 14.99, "EUR", None)
     assert status == QAStatus.FAIL
     assert any(i.code == "PRICE_INVALID" for i in issues)
+    assert any(i.code == "ORIGINAL_PRICE_INVALID" for i in issues)
 
 
 # ---------- 评分 ----------

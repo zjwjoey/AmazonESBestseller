@@ -12,6 +12,7 @@
   amazon-es enrich --legacy product_details.json        # 30 条遗留真实数据
   amazon-es enrich --offline
   amazon-es qa --offline
+  amazon-es audit-fields --products outputs/products.json --out outputs/field_closure.json
   amazon-es export --offline
 """
 from __future__ import annotations
@@ -168,6 +169,26 @@ def cmd_qa(args) -> None:
         print("0 P0 / 0 P1 OK")   # 不用 ✓（U+2713）：GBK 控制台无法编码
 
 
+# ---------- field closure audit（离线） ----------
+
+def cmd_audit_fields(args) -> None:
+    """Audit Source → Raw → Canonical → Derived → Excel without mutation."""
+    from .qa.field_closure import audit_field_closure, write_report
+
+    products = _load_json(args.products)
+    details = _load_json(args.details) if args.details else []
+    rankings = _load_json(args.rankings) if args.rankings else []
+    report = audit_field_closure(products, details=details, rankings=rankings,
+                                 html_dir=args.html_dir or None)
+    write_report(report, args.out, args.md_out or None)
+    s = report["summary"]
+    print("Field Closure Audit：%d SKU、%d 字段；PASS %d / SOURCE_MISSING %d / PARSER_MISSED %d / MAPPING_MISSED %d / DERIVED_MISSING %d"
+          % (s["total_skus"], s["fields_checked"], s["pass"], s["SOURCE_MISSING"],
+             s["PARSER_MISSED"], s["MAPPING_MISSED"], s["DERIVED_MISSING"]))
+    print("审计 JSON → %s" % args.out)
+    print("审计 Markdown → %s" % (args.md_out or str(Path(args.out).with_suffix(".md"))))
+
+
 # ---------- export（离线） ----------
 
 def cmd_export(args) -> None:
@@ -234,6 +255,15 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--products", default=str(OUTPUTS / "products.json"))
     q.add_argument("--out", default=str(OUTPUTS / "qa.json"))
     q.set_defaults(func=cmd_qa)
+
+    a = sub.add_parser("audit-fields", help="离线：Source→Raw→Canonical→Derived→Excel 字段闭环审计")
+    a.add_argument("--products", default=str(OUTPUTS / "products.json"), help="规范化商品表 JSON")
+    a.add_argument("--details", default=str(OUTPUTS / "details.json"), help="详情 raw JSON（可选）")
+    a.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"), help="榜单 raw JSON（可选）")
+    a.add_argument("--html-dir", default="", help="保存的详情 HTML 目录（可选，用于识别 PARSER_MISSED）")
+    a.add_argument("--out", default=str(OUTPUTS / "field_closure.json"))
+    a.add_argument("--md-out", default="", help="Markdown 输出路径（默认与 JSON 同名 .md）")
+    a.set_defaults(func=cmd_audit_fields)
 
     x = sub.add_parser("export", help="离线：商品表 → Excel")
     x.add_argument("--products", default=str(OUTPUTS / "products.json"))

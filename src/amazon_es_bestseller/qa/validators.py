@@ -120,6 +120,11 @@ def validate_price(current_price, original_price=None, currency=None,
         orig = parse_price(original_price)
         if orig is None or (cur is not None and orig <= cur):
             issues.append(_issue(
+                'ORIGINAL_PRICE_INVALID', 'P1', 'original_price',
+                '原价缺少有效证据或原价≤现价'))
+            # Keep the historical generic code for downstream consumers while the
+            # explicit code above makes the failure machine-actionable.
+            issues.append(_issue(
                 'PRICE_INVALID', 'P1', 'original_price',
                 '原价缺少有效证据或原价≤现价'))
     # 折扣必须有原价证据且原价 > 现价（QA_RULES §7，禁止重建）
@@ -128,6 +133,9 @@ def validate_price(current_price, original_price=None, currency=None,
         if orig is None or (cur is not None and orig <= cur):
             issues.append(_issue(
                 'PRICE_INVALID', 'P1', 'discount_rate',
+                '折扣缺少原价证据或原价≤现价'))
+            issues.append(_issue(
+                'ORIGINAL_PRICE_INVALID', 'P1', 'discount_rate',
                 '折扣缺少原价证据或原价≤现价'))
     return _worst_status(issues), issues
 

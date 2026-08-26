@@ -420,6 +420,16 @@ Do not fabricate rank, category, brand, original price, monthly bought or detail
 
 Any change to the 26 default Chinese columns, sheet names/order, notes field, rank semantics, category semantics, specification semantics or full-detail semantics requires explicit user approval, documentation update, code/schema update and regression validation.
 
+## Field Closure Result
+
+`audit-fields` returns a read-only result for each automatic display field with
+source/raw/canonical/derived/display statuses and evidence. The layers are
+`Amazon Source → Raw → Canonical → Derived → Display`; missing values are classified
+as `SOURCE_MISSING` (no reliable source), `PARSER_MISSED` (source exists but raw is
+empty), `MAPPING_MISSED` (raw exists but canonical is empty), or `DERIVED_MISSING`
+(raw/canonical exists but translation, calculation or display is empty). `备注` is
+human-owned and preserved by ASIN, not audited as an automatic field.
+
 ## 29. Final principle
 
 The data layer should be more complete than the display layer.

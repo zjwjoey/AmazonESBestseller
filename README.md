@@ -154,6 +154,19 @@ python -m pytest -q -rs
 Live collection tests run only when `RUN_LIVE=1` is explicitly set. The project does not
 provide CAPTCHA, proxy-rotation or stealth bypass behavior.
 
+### Field Closure Audit
+
+The offline `audit-fields` command follows `collect → enrich → qa → audit-fields →
+export` and emits deterministic JSON plus Markdown. It diagnoses automatic-field
+gaps as `SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`;
+source-missing values remain empty rather than being guessed.
+
+```powershell
+amazon-es audit-fields --products outputs/products.json `
+  --details outputs/details.json --rankings outputs/rankings.json `
+  --out outputs/field_closure.json
+```
+
 ## 12. Documentation
 
 核心文档：`AGENTS.md`、`docs/CURRENT_STATE.md`、`docs/DATA_MODEL.md`、`docs/QA_RULES.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`。

@@ -102,6 +102,15 @@ def test_enrich_no_discount_when_original_not_greater():
     d = dict(DETAIL[0], original_price_raw="10,00 €")  # orig < cur
     p = enrich_products(RANKING, [d])[0]
     assert p["discount_rate"] is None
+    assert p["original_price"] is None
+
+
+def test_enrich_brand_falls_back_to_reliable_marca_attribute():
+    d = dict(DETAIL[0], brand_raw="", attributes=[
+        {"section": "product_overview", "label_raw": "Marca", "value_raw": "De'Longhi"}
+    ])
+    p = enrich_products(RANKING, [d])[0]
+    assert p["brand"] == "De'Longhi"
 
 
 def test_enrich_title_zh_from_translations():

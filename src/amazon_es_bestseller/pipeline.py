@@ -74,6 +74,16 @@ def _details_of(prod: Mapping) -> Optional[dict]:
     return None
 
 
+def _brand_from_attributes(attributes) -> str:
+    """Return a brand only from an explicit, reliable attribute label."""
+    for attr in attributes or []:
+        label = str(attr.get("label_raw") or "").strip().casefold()
+        value = str(attr.get("value_raw") or "").strip()
+        if label in {"marca", "brand"} and value:
+            return value
+    return ""
+
+
 def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> dict:
     """单条合并后商品 → 规范化 + 中文派生字段（不修改传入记录）。"""
     out = dict(prod)
@@ -83,7 +93,9 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     cur = parse_price(out.get("current_price_raw"))
     orig = parse_price(out.get("original_price_raw"))
     out["current_price"] = cur
-    out["original_price"] = orig
+    # A struck/list price at or below the current price is not a valid original
+    # price.  Keep original_price_raw as evidence, but never display the bad number.
+    out["original_price"] = orig if (cur is None or orig is None or orig > cur) else None
     out["currency"] = CURRENCY
     out["discount_rate"] = discount_rate(cur, orig)
 
@@ -91,6 +103,8 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["review_count"] = _to_int_spanish(out.get("review_count_raw"))
 
     brand = clean_brand(out.get("brand_raw"))
+    if not brand:
+        brand = clean_brand(_brand_from_attributes(out.get("attributes")))
     out["brand"] = normalize_brand_case(brand) if brand else ""
 
     dfa = parse_es_date(out.get("date_first_available_raw"))

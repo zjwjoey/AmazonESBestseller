@@ -251,3 +251,16 @@ When a real bug is discovered, convert it into a permanent regression test.
 Export runs the full QA pipeline before writing the workbook. Any P0/P1 issue blocks the default export: the workbook is not written and the blocking issues are reported with ASIN + code + message. `--force` bypasses the gate explicitly; the exporter never silently repairs upstream data (§25).
 
 Missing data is still not an automatic failure (§29): the gate only stops on real P0/P1 defects, not on empty-but-missing fields.
+
+## 32. Field Closure QA
+
+The offline `audit-fields` command checks each automatic field through Source → Raw
+→ Canonical → Derived → Display. It distinguishes `SOURCE_MISSING`,
+`PARSER_MISSED`, `MAPPING_MISSED` and `DERIVED_MISSING`; source-missing fields are
+normally informational and do not block export. The audit is read-only and excludes
+human-owned `备注`.
+
+`ORIGINAL_PRICE_INVALID` is emitted when an apparent list price is absent,
+unparseable, or `original_price <= current_price`; it is not displayed as a valid
+struck-through original and no discount is calculated. Unknown raw attributes remain
+preserved, and Detail BSR never supplies `bestseller_rank`.

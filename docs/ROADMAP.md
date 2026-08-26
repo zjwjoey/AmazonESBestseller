@@ -1245,6 +1245,13 @@ Do not immediately:
 * translate thousands of products before QA is stable;
 * optimize Excel appearance while core data errors remain.
 
+## 56A. Field Closure Audit milestone (completed 2026-08-26)
+
+The formal Source → Raw → Canonical → Derived → Display audit, four stable missing
+classes, JSON/Markdown report and offline regression coverage are complete. The next
+milestone is **real full-flow data closure validation for Hogar y cocina**; broad
+category expansion remains deferred.
+
 ---
 
 # 57. Final roadmap principle

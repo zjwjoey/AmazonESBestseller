@@ -21,8 +21,25 @@ def test_cli_help_lists_subcommands(capsys):
         main(["--help"])
     assert ei.value.code == 0
     out = capsys.readouterr().out
-    for cmd in ("collect", "enrich", "qa", "export"):
+    for cmd in ("collect", "enrich", "qa", "audit-fields", "export"):
         assert cmd in out
+
+
+def test_cli_audit_fields_writes_json_and_markdown(tmp_path, capsys):
+    products = tmp_path / "products.json"
+    details = tmp_path / "details.json"
+    rankings = tmp_path / "rankings.json"
+    out = tmp_path / "field_closure.json"
+    products.write_text(json.dumps([{"asin": "B000000001", "title_es_raw": "Caja",
+                                     "title_zh": "", "product_url": "https://www.amazon.es/dp/B000000001",
+                                     "image_url": "https://img"}], ensure_ascii=False), encoding="utf-8")
+    details.write_text("[]", encoding="utf-8")
+    rankings.write_text("[]", encoding="utf-8")
+    assert main(["audit-fields", "--products", str(products), "--details", str(details),
+                 "--rankings", str(rankings), "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["summary"]["total_skus"] == 1
+    assert (tmp_path / "field_closure.md").exists()
 
 
 def test_collect_rejects_offline(capsys):

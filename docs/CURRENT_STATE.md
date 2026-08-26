@@ -264,3 +264,12 @@ Scope explicitly deferred from the 2026-08-26 data-quality round (Phase A + B co
 ## 27. Current summary
 
 AmazonESBestseller is already a working Amazon.es bestseller research system, and is now being upgraded so the data layer preserves complete dynamic product-detail evidence while the Excel display layer remains a fixed, readable one-SKU-per-row business view.
+
+## 28. Field Closure Audit (2026-08-26)
+
+The formal offline field-closure audit is implemented. It traces automatic fields
+through Source → Raw → Canonical → Derived → Excel and reports
+`SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` and `DERIVED_MISSING` with
+field-level evidence. Raw full-detail extraction V1 is implemented; normalization,
+Chinese rendering and display closure continue to improve. The next milestone is
+real full-flow Hogar y cocina closure validation, not broad category expansion.
