@@ -63,6 +63,20 @@ def run_qa(record: Mapping) -> dict:
     }
 
 
+def blocking_issues(records: List[Mapping]) -> List[tuple]:
+    """整批记录的 P0/P1 问题列表 ``[(asin, code, message), ...]``（导出门禁用）。
+
+    供 export 前硬门禁：任何 P0/P1 存在即拒绝默认导出（QA_RULES §31）。
+    """
+    out: List[tuple] = []
+    for p in records:
+        res = run_qa(p)
+        for i in res["qa_issues"]:
+            if i.severity in ("P0", "P1"):
+                out.append((p.get("asin"), i.code, i.message))
+    return out
+
+
 def qa_summary(records: List[Mapping]) -> dict:
     """整批记录 QA 汇总（QA_RULES §28）+ 关键字段填充率（§29）。"""
     status_counts = Counter()

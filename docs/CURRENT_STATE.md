@@ -216,6 +216,13 @@ Scope explicitly deferred from the 2026-08-26 data-quality round (Phase A + B co
    exists (`monthly_bought_min` and `discount_rate` computed when raw present); full coverage
    deferred.
 3. **Historical snapshots / database** — not started by design (ROADMAP §39-41).
+4. **Access stop gate + QA export gate** — both were flagged as missing in the 2026-08-26
+   assessment and are now implemented (2026-08-26): (a) `require_normal_access` raises
+   `AccessStopError` on any non-NORMAL access state during `collect_rankings` /
+   `collect_details`, preserving the restricted page HTML as evidence and never writing an
+   incomplete `rankings.json` / `details.json`; the CLI reports and exits 2. (b) `export`
+   runs the full QA pipeline first and refuses to write the workbook while any P0/P1 issue
+   exists, unless explicitly `--force` (QA_RULES §31).
 
 ## 27. Current summary
 

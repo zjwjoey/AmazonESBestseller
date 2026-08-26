@@ -20,7 +20,7 @@ from typing import List, Mapping, Optional
 
 from bs4 import BeautifulSoup
 
-from ..access.detector import detect_access_status
+from ..access.detector import detect_access_status, require_normal_access
 from ..normalization.category import category_levels
 
 #: 榜单 URL 节点号：/Best-Sellers-<slug>/zgbs/<NODE>
@@ -125,6 +125,9 @@ def collect_rankings(urls: List[str], session, out_dir: str) -> List[dict]:
 
     需要 BrowserSession（playwright 仅在 __enter__ 时导入）；联网仅发生在
     调用本函数时。页间显式延迟，无重试、无 stealth。
+
+    访问门禁（ARCHITECTURE §6）：受限页 HTML 先落盘保留证据，随即抛
+    AccessStopError，rankings.json 不写出（不产出不完整榜单数据）。
     """
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = os.path.join(str(out_dir), "runs", stamp)
@@ -138,10 +141,13 @@ def collect_rankings(urls: List[str], session, out_dir: str) -> List[dict]:
         session.wait_between_requests()
         html = session.page.content()
         with open(os.path.join(html_dir, "ranking_%02d.html" % i), "w", encoding="utf-8") as f:
-            f.write(html)
+            f.write(html)  # 先保留证据，再判定访问状态
+        state = detect_access_status(status, html)
+        require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
+                              % (status, url, len(records)))
         for r in parse_bestsellers_page(html, url, collected_at):
             r["status_code"] = status
-            r["access_state"] = detect_access_status(status, html).value
+            r["access_state"] = state.value
             records.append(r)
     with open(os.path.join(run_dir, "rankings.json"), "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)

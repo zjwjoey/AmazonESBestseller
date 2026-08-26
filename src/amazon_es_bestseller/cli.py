@@ -134,10 +134,23 @@ def cmd_qa(args) -> None:
 # ---------- export（离线） ----------
 
 def cmd_export(args) -> None:
-    """商品表 → Excel 工作簿（B3x 重写为新 3 表/26 列契约）。"""
+    """商品表 → Excel 工作簿（B3x 重写为新 3 表/26 列契约）。
+
+    QA 硬门禁（QA_RULES §31）：导出前跑全量 QA，存在任何 P0/P1 即拒绝导出，
+    除非显式 --force（保留上游错误证据，不静默修复，§25）。
+    """
     from .export.excel import export_workbook
+    from .qa.run import blocking_issues
 
     products = _load_json(args.products)
+    blocked = blocking_issues(products)
+    if blocked and not args.force:
+        lines = ["QA 门禁未通过：%d 条 P0/P1 问题，拒绝导出（--force 强制）"
+                 % len(blocked)]
+        for asin, code, msg in blocked[:10]:
+            lines.append("   %s %s: %s" % (asin, code, msg))
+        raise SystemExit("\n".join(lines))
+
     translations = _load_json(args.translations) if args.translations else None
     prev_workbook = None
     if args.prev_workbook:
@@ -186,14 +199,21 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--translations", default="")
     x.add_argument("--prev-workbook", default="", help="前版工作簿（按 ASIN 保留备注）")
     x.add_argument("--out", default=str(OUTPUTS / "选品清单.xlsx"))
+    x.add_argument("--force", action="store_true",
+                   help="跳过 QA 硬门禁（存在 P0/P1 也导出，保留上游证据）")
     x.set_defaults(func=cmd_export)
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    from .access.detector import AccessStopError
     parser = build_parser()
     args = parser.parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except AccessStopError as e:
+        # 访问门禁（ARCHITECTURE §6）：非 NORMAL 停止采集，退出码 2
+        parser.exit(2, "!! %s\n" % e)
     return 0
 
 

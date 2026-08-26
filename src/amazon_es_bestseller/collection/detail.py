@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from bs4 import BeautifulSoup
 
-from ..access.detector import CAPTCHA_RE, detect_access_status
+from ..access.detector import CAPTCHA_RE, detect_access_status, require_normal_access
 
 
 def _clean(t) -> str:
@@ -347,8 +347,10 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
     wait_for_price_text → 页内 1.5s；页间 2.0s 显式延迟。
-    challenge 页（is_captcha=True）绝不空解析：字段缺省为空串，access_state
-    标为 CHALLENGE，由 QA/导出层据此排除（ARCHITECTURE §67）。
+
+    访问门禁（ARCHITECTURE §6/§67）：受限页（CHALLENGE/BLOCKED/RATE_LIMITED/
+    NETWORK_ERROR/UNKNOWN）HTML 先落盘保留证据，随即抛 AccessStopError——
+    challenge 页绝不空解析进结果，details.json 不写出（不产出不可信详情）。
     """
     html_dir = os.path.join(str(out_dir), "html")
     os.makedirs(html_dir, exist_ok=True)
@@ -361,10 +363,13 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
         time.sleep(1.5)
         html = session.page.content()
         with open(os.path.join(html_dir, asin + ".html"), "w", encoding="utf-8") as f:
-            f.write(html)
+            f.write(html)  # 先保留证据，再判定访问状态
+        state = detect_access_status(status, html)
+        require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
+                              % (status, asin, len(details)))
         rec = parse_detail_page(html, asin)
         rec["status_code"] = status
-        rec["access_state"] = detect_access_status(status, html).value
+        rec["access_state"] = state.value
         details.append(rec)
         session.wait_between_requests()
 

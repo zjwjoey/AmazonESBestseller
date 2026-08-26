@@ -14,6 +14,20 @@ from ..models import AccessState
 CAPTCHA_RE = re.compile(r'Captcha|Type the characters|resolver el captcha', re.IGNORECASE)
 
 
+class AccessStopError(RuntimeError):
+    """访问受限（ARCHITECTURE §6）：按策略停止采集，保留已落盘证据。"""
+
+
+def require_normal_access(state: "AccessState", context: str) -> None:
+    """非 NORMAL 访问状态 → AccessStopError；NORMAL 返回。
+
+    context 应带可定位信息（URL/ASIN + HTTP 状态码），供停止时报错。
+    """
+    if state is not AccessState.NORMAL:
+        raise AccessStopError(
+            "访问状态 %s（%s），按策略停止采集" % (state.value, context))
+
+
 def detect_access_status(status_code: Optional[int], page_text: str = "") -> AccessState:
     """状态码 + 页面文本 → AccessState。
 

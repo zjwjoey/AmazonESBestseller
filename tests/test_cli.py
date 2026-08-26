@@ -78,3 +78,37 @@ def test_enrich_missing_input_file(tmp_path):
         main(["enrich", "--rankings", str(tmp_path / "nope.json"),
               "--out", str(tmp_path / "x.json")])
     assert "找不到输入文件" in str(ei.value.code)
+
+
+def _blocked_products():
+    """含 1 条 P0（ASIN 非法）+ 1 条合法记录的商品表（测试 QA 导出门禁）。"""
+    return [
+        {"asin": "B078C6QR1C", "title_es_raw": "Protector",
+         "current_price_raw": "12,62 €"},
+        {"asin": None, "title_es_raw": "sin asin", "current_price_raw": "1,00 €"},
+    ]
+
+
+def test_export_qa_gate_blocks_on_p0(tmp_path, capsys):
+    """QA_RULES §31：存在 P0/P1 → 默认拒绝导出（保留上游错误证据）。"""
+    prod_out = tmp_path / "products.json"
+    prod_out.write_text(
+        json.dumps(_blocked_products()), encoding="utf-8")
+    with pytest.raises(SystemExit) as ei:
+        main(["export", "--products", str(prod_out),
+              "--out", str(tmp_path / "out.xlsx")])
+    msg = str(ei.value.code)
+    assert "拒绝导出" in msg
+    assert "ASIN_INVALID" in msg
+    assert not (tmp_path / "out.xlsx").exists()     # 未产出 Excel
+
+
+def test_export_qa_gate_force_bypasses(tmp_path):
+    """--force：跳过 QA 门禁强制导出（明确授权，不静默）。"""
+    prod_out = tmp_path / "products.json"
+    prod_out.write_text(
+        json.dumps(_blocked_products()), encoding="utf-8")
+    xlsx_out = tmp_path / "out.xlsx"
+    assert main(["export", "--products", str(prod_out),
+                 "--out", str(xlsx_out), "--force"]) == 0
+    assert xlsx_out.exists()

@@ -245,3 +245,9 @@ When choosing between complete but uncertain and incomplete but correct, choose 
 When the normalizer does not recognize a new detail field, preserve the raw field.
 
 When a real bug is discovered, convert it into a permanent regression test.
+
+## 31. Export QA gate
+
+Export runs the full QA pipeline before writing the workbook. Any P0/P1 issue blocks the default export: the workbook is not written and the blocking issues are reported with ASIN + code + message. `--force` bypasses the gate explicitly; the exporter never silently repairs upstream data (§25).
+
+Missing data is still not an automatic failure (§29): the gate only stops on real P0/P1 defects, not on empty-but-missing fields.
