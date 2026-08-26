@@ -1,0 +1,187 @@
+有 details_json: 135 /200
+--- details_json 全部键（含值）---
+asin                                                    出现134 有值134 | B09HV438VV
+clasificacion_en_los_mas_vendidos_de_amazon             出现134 有值134 | nº52 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina )
+brand                                                   出现133 有值133 | Tatay
+features                                                出现133 有值133 | ['Conservación eficaz para embutidos – El sistema Fresh ayud
+fabricante                                              出现131 有值131 | TATAY
+valoracion_media_de_los_clientes                        出现112 有值112 | 4,4 4,4 de 5 estrellas (3.873) 4,4 de 5 estrellas
+total_del_paquete_segun_la_medida_elegida_para_referenciar_precio 出现95 有值95 | 1.0 Conteo
+color                                                   出现92 有值92 | Turquesa
+numero_de_articulos                                     出现89 有值89 | 1
+numero_modelo                                           出现71 有值71 | RP-19-3
+country_of_origin                                       出现66 有值66 | España
+usos_recomendados_para_producto                         出现66 有值66 | Comida para llevar
+tamano                                                  出现64 有值64 | Fiambrera - Set 4 Estándar
+tipo_de_material                                        出现57 有值57 | Polipropileno
+dimensiones_del_articulo_largo_x_ancho_x_alto           出现55 有值55 | 17l. x 3,2an. x 25,2al. centímetros
+numero_de_pieza_del_fabricante                          出现52 有值52 | 30020
+carecteristicas_especiales                              出现51 有值51 | Apilable
+elementos_incluidos                                     出现46 有值46 | 4 PORTAEMBUTIDOS
+forma_articulo                                          出现43 有值43 | Caja
+tipo_de_cierre                                          出现43 有值43 | Tapa
+actualizaciones_de_software_garantizadas_hasta          出现42 有值42 | desconocido
+numero_de_modelo_del_producto                           出现40 有值40 | 400748
+opiniones_de_los_clientes                               出现39 有值39 | 4,5 4,5 de 5 estrellas
+caracteristicas_de_materiales                           出现34 有值34 | Apto para congelador, Apto para microondas, Reciclable, Reut
+nombre_tipo_articulo                                    出现33 有值33 | Bolsas autocierre zip
+dimensiones_del_producto                                出现32 有值32 | 7,29 x 16,79 x 20,5 cm; 320 g
+capacidad                                               出现31 有值31 | 1 litros
+sin_tipo_de_material                                    出现30 有值30 | Sin BPA
+caracteristicas_especiales                              出现30 有值30 | Doble sello
+volumen_articulo                                        出现29 有值29 | 1426,56 Centímetros cúbicos
+componentes_incluidos                                   出现28 有值28 | Recipientes
+tipo_de_cadena_o_collar                                 出现27 有值27 | Rectangular
+numero_pieza                                            出现27 有值27 | 20383
+tipo_de_superficie                                      出现27 有值27 | Alfombras, tapicería, tapetes, interiores de automóviles
+peso_del_producto                                       出现25 有值25 | 350 Gramos
+num_de_identificacion_comercial_global                  出现24 有值24 | 09353965006800
+numero_de_sets                                          出现22 有值22 | 1
+peso_articulo                                           出现21 有值21 | 300 Gramos
+estilo                                                  出现21 有值21 | moderno
+fragancia                                               出现21 有值21 | Fresco
+usos_especificos_para_producto                          出现21 有值21 | Alfombras, Interior del automóvil, Tapetes, Tapicería
+numero_de_modelo                                        出现20 有值20 | 1745M07FS7WQ578W0DKIB788WVJ
+instrucciones_de_cuidado_del_producto                   出现19 有值19 | Apto para lavavajillas, Apto para nevera, Apto para congelad
+nombre_del_tipo_de_articulo                             出现19 有值19 | SET 4 PORTAEMBUTIDOS FRESH
+upc                                                     出现19 有值19 | 810013786217 810013783711
+acabado                                                 出现19 有值19 | Impresión digital
+contiene_liquidos                                       出现19 有值19 | Sí
+el_articulo_es_apto_para_lavavajillas                   出现18 有值18 | Sí
+material_o_tela                                         出现18 有值18 | Polipropileno
+el_articulo_es_apto_para_el_microondas                  出现17 有值17 | Sí
+numero_de_paquetes                                      出现17 有值17 | 1
+pais_de_origen                                          出现16 有值16 | China
+descatalogado_por_el_fabricante                         出现16 有值16 | No
+cantidad_de_articulos_en_el_paquete                     出现15 有值15 | 1
+forma_del_envase                                        出现15 有值15 | Rectangular
+forma                                                   出现15 有值15 | Rectangular
+hermeticidad_del_recipiente_de_almacenamiento_de_alimentos 出现14 有值14 | Airtight
+uso                                                     出现13 有值13 | Transportador de alimentos
+dimensiones_del_articulo_l_x_a                          出现13 有值13 | 71l. x 27an. centímetros
+nombre_del_estilo                                       出现12 有值12 | Moderno
+patron                                                  出现12 有值12 | Sólido
+tematica                                                出现11 有值11 | Amor
+dimensiones_articulo                                    出现11 有值11 | 33 x 25 x 3 centímetros
+material_de_la_tapa                                     出现10 有值10 | Plástico
+cantidad_de_compartimentos                              出现9 有值9 | 2
+dimensiones_del_articulo_profundidad_x_ancho_x_alto     出现9 有值9 | 5,8f. x 10,6an. x 20al. centímetros
+garantia_producto                                       出现9 有值9 | No warranty.
+tipo_envase                                             出现9 有值9 | Botella
+dimensiones_del_paquete                                 出现9 有值9 | 27,5 x 18,8 x 2,2 cm; 15,36 g
+material                                                出现9 有值9 | ‎Plástico
+tipo_de_cama_o_colchones                                出现9 有值9 | Portarrollos Baño Autoadhesivo, Soporte Colgador, Acero Inox
+beneficios                                              出现8 有值8 | Diseñada para dispositivos BISSELL SpotClean, Elimina olores
+perfil_del_enchufe                                      出现7 有值7 | Montaje en suelo
+descripcion_del_rango_de_edad                           出现6 有值6 | Niño
+numero_de_piezas                                        出现6 有值6 | 100
+capacidad_de_carga                                      出现6 有值6 | 1E+2 kg
+tipo_de_instalacion                                     出现6 有值6 | Sobre encimera
+ingredientes_especiales                                 出现6 有值6 | Peróxido de hidrógeno
+capacidad_de_salida                                     出现5 有值5 | 354,88 ml
+dimensiones_del_articulo_ancho_x_alto                   出现5 有值5 | 10an. x 15al. centímetros
+nivel_de_resistencia_al_agua                            出现5 有值5 | A prueba de agua
+idioma                                                  出现5 有值5 | Inglés
+fuente_alimentacion                                     出现5 有值5 | Cable eléctrico
+material_del_mango                                      出现5 有值5 | Plástico
+fuente_de_alimentacion                                  出现5 有值5 | Batería
+nombre_modelo                                           出现4 有值4 | 30018
+formulacion_de_agente_limpiador                         出现4 有值4 | Detergente, Quitamanchas
+descripcion_de_la_firmeza_del_articulo                  出现4 有值4 | Medio a suave
+longitud_de_la_manguera                                 出现4 有值4 | 150 Centímetros
+metodo_de_instalacion                                   出现4 有值4 | Montado en la pared
+numero_de_ajustes                                       出现4 有值4 | 4
+tipo_de_engaste                                         出现4 有值4 | Lluvia, Masaje
+cantidad_de_anzuelos                                    出现4 有值4 | 4
+capacidad_de_carga_maxima                               出现4 有值4 | 6 Kilogramos
+peso_maximo_recomendado                                 出现4 有值4 | 6 Kilogramos
+habitacion                                              出现4 有值4 | Aseo, Suelo
+departamento                                            出现3 有值3 | Unisex niños
+reutilizable                                            出现3 有值3 | Reutilizable
+pilas                                                   出现3 有值3 | 1 A (Tipo de pila necesaria)
+mecanismo_de_apertura                                   出现3 有值3 | Pestillo
+tipo_de_estante                                         出现3 有值3 | Estante de soporte
+uso_interior_y_exterior                                 出现3 有值3 | Interior
+etiqueta_de_eficiencia_energetica_de_la_ue              出现3 有值3 | Ahorro de agua
+numero_de_inyectores                                    出现3 有值3 | 1
+cantidad_de_rollo                                       出现3 有值3 | 1
+funcionamiento                                          出现3 有值3 | Manual
+descripcion_de_la_garantia                              出现3 有值3 | 3 años.
+altura_maxima_de_levantamiento                          出现3 有值3 | 5 Metros
+caudal                                                  出现3 有值3 | 7500 Litros por hora
+voltaje                                                 出现3 有值3 | 230 Voltios
+duracion_de_la_disponibilidad_de_piezas_de_recambio_en_la_ue 出现3 有值3 | 1 Años
+pais_region_de_origen                                   出现2 有值2 | China
+cantidad_de_unidades                                    出现2 有值2 | 1.0 Conteo
+volumen_de_almacenamiento                               出现2 有值2 | 27 Litros
+es_extensible                                           出现2 有值2 | No
+profundidad_articulo                                    出现2 有值2 | 3 Zentimeter
+requiere_montaje                                        出现2 有值2 | Sí
+numero_de_estantes                                      出现2 有值2 | 4
+necesita_baterias                                       出现2 有值2 | ‎No
+duracion_del_aroma                                      出现2 有值2 | 2 Horas
+nombre_del_tamano_del_paquete                           出现2 有值2 | Paquete de 1 unidad
+tipo_de_eliminador_de_olores_de_area                    出现2 有值2 | Desodorizante de área
+tipo_de_embalaje                                        出现2 有值2 | [YES]
+nombre_del_conjunto                                     出现2 有值2 | Set de 24 pegatinas antideslizantes Secopad
+tipo_de_habitacion                                      出现2 有值2 | Todas las habitaciones
+caballos                                                出现2 有值2 | 1
+ano_de_fabricacion                                      出现1 有值1 | 2022
+ocasion                                                 出现1 有值1 | Navidad
+estilo_de_puerta                                        出现1 有值1 | Bisagra
+numero_de_puertas                                       出现1 有值1 | 1
+opciones_de_almacenamiento                              出现1 有值1 | Almacenamiento interno
+tipo_de_material_de_la_parte_superior                   出现1 有值1 | Madera
+tipo_de_material_del_armazon_marco                      出现1 有值1 | Madera
+referencia_del_fabricante                               出现1 有值1 | LYE2605XT229
+clase_de_eficiencia_energetica_europea                  出现1 有值1 | ‎A to G
+eficiencia                                              出现1 有值1 | ‎A
+identificador_de_producto_del_fabricante                出现1 有值1 | ‎198800231
+material_de_la_cabeza                                   出现1 有值1 | Ratán
+anchura_de_la_hoja                                      出现1 有值1 | 3 Centímetros
+longitud_de_la_hoja                                     出现1 有值1 | 21 Centímetros
+material_de_la_cuchilla                                 出现1 有值1 | Silicona
+estaciones                                              出现1 有值1 | Invierno, Primavera, Verano
+personaje                                               出现1 有值1 | Pescado
+publico_de_destino                                      出现1 有值1 | Todas las edades
+tipo_acabado                                            出现1 有值1 | vidrioso
+acabado_metalico                                        出现1 有值1 | Mate
+longitud_del_articulo                                   出现1 有值1 | 24 Centímetros
+con_tapa                                                出现1 有值1 | No
+material_del_asa                                        出现1 有值1 | Plástico
+acabado_exterior                                        出现1 有值1 | negro
+capsulas_de_cafe_compatibles                            出现1 有值1 | Dolce Gusto
+interfaz_humana_de_entrada                              出现1 有值1 | Botones
+potencia                                                出现1 有值1 | 1500 vatios
+tension                                                 出现1 有值1 | 230 Voltios (CA)
+tipo_de_cafetera                                        出现1 有值1 | Cafetera de espresso
+tipo_de_entrada_de_cafe                                 出现1 有值1 | capsule
+tipo_de_filtro                                          出现1 有值1 | Reutilizable
+caudal_maximo                                           出现1 有值1 | 380 Litros por hora
+descripcion_de_la_garantia_del_fabricante               出现1 有值1 | 3.
+longitud_de_manguera                                    出现1 有值1 | 6 Metros
+presion_maxima                                          出现1 有值1 | 120 Bar
+requisitos_cumplidos                                    出现1 有值1 | CE, CSA
+tipo_de_energia                                         出现1 有值1 | Cable eléctrico
+volumen_del_tanque                                      出现1 有值1 | 1 Litros
+tipo_de_combustible                                     出现1 有值1 | Gasolina
+clasificacion                                           出现1 有值1 | Industrial
+diametro_del_articulo                                   出现1 有值1 | 6 Milímetros
+grosor_del_articulo                                     出现1 有值1 | 6 Milímetros
+acabado_del_mobiliario                                  出现1 有值1 | Revestimiento en polvo
+capacidad_de_peso_maxima                                出现1 有值1 | 40 Libras
+descripcion_de_instrucciones_de_montaje                 出现1 有值1 | 1. Compruebe que todas las partes estén presentes. 2. Limpie
+grosor_del_estante                                      出现1 有值1 | 30,4 Centímetros
+tipo_de_montaje                                         出现1 有值1 | Montaje en pared
+cadena_de_angulo_de_corte                               出现1 有值1 | 90 Grados
+diametro_de_corte                                       出现1 有值1 | 10 millimeters Milímetros
+diametro_minimo_de_perforacion                          出现1 有值1 | 4 Milímetros
+estilo_de_la_punta                                      出现1 有值1 | Ancho
+numero_de_acanaladuras                                  出现1 有值1 | 2
+numero_de_pieza                                         出现1 有值1 | 2607017082
+tipo_de_helicoidal                                      出现1 有值1 | Espiral
+tipo_de_vastago                                         出现1 有值1 | Cilíndrico
+rango_superior_de_temperaturas                          出现1 有值1 | 120 Grados Celsius
+viscosidad                                              出现1 有值1 | no aplica a solidos
+volumen_liquido                                         出现1 有值1 | 150 Mililitros
+incluye_baterias                                        出现1 有值1 | ‎No
