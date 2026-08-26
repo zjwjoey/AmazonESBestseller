@@ -128,7 +128,7 @@ def cmd_qa(args) -> None:
         for asin, code, msg in p0p1[:20]:
             print("   %s %s: %s" % (asin, code, msg))
     else:
-        print("0 P0 / 0 P1 ✓")
+        print("0 P0 / 0 P1 OK")   # 不用 ✓（U+2713）：GBK 控制台无法编码
 
 
 # ---------- export（离线） ----------
