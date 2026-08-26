@@ -39,3 +39,10 @@ V2:  prep_v2_selection.py → build_v2_workbook.py → audit_current_v2.py
 - `product_details.json`（30 条真实记录）：仍用于离线主链回归（`cli enrich --legacy product_details.json`）。
   注意：其中 `BSR` 列是 `build_output.py` 按 `Rank` 构造的历史伪造产物（30/30 为
   `"n.º {Rank} en Hogar y cocina"`），主链导入时**丢弃**，绝不作为 detail BSR 证据。
+  **该文件保留在仓库根目录**，因其同时是 `tests/test_pipeline.py` / `test_cli.py` /
+  `test_real_errors.py` 的真实数据回归 fixtures（动态读取，缺失则 skip）。
+  同类 fixtures 还有根目录 `_feat_scan.txt`、`_audit_details_keys.txt`（注释中作为证据来源引用）。
+
+- `data/`（纯历史产物，无代码引用，归档留痕）：
+  - `amazon_es_home_kitchen_bestsellers.csv` / `amazon_es_home_kitchen_bestsellers_updated.csv` —— 旧一代榜单采集数据
+  - `结构优化V2_最终报告.md` / `选品优化版_最终报告.md` —— V1/V2 历史分析报告
