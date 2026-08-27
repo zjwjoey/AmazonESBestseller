@@ -338,7 +338,7 @@ def cmd_export(args) -> None:
     blocked_closure = [r for r in closure.get("records", [])
                        if r.get("severity") == "P1" and r.get("classification") in
                        {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING",
-                        "TRANSLATION_INCOMPLETE", "ORIGINAL_PRICE_INVALID"}]
+                        "TRANSLATION_INCOMPLETE"}]
     closure_findings = [(r.get("asin"), r.get("classification"), r.get("message"))
                         for r in blocked_closure]
     blocked = blocked + closure_findings

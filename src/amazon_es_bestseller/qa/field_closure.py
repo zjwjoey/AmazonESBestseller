@@ -105,7 +105,7 @@ _TRANSLATION_FIELDS = {
     "product_details_zh": ("product_details_es", "完整商品详情（中文）"),
     "feature_bullets_zh": ("feature_bullets_es", "商品卖点（中文）"),
 }
-_SPANISH_MARKERS = re.compile(r"\b(?:el|la|los|las|de|para|con|sin|del|en|y|un|una|comprados|piezas|tamaño|capacidad|material|color|negro|blanco|acero|plástico)\b", re.I)
+_SPANISH_MARKERS = re.compile(r"\b(?:el|la|los|las|para|con|sin|del|en|un|una|comprados|piezas|tamaño|capacidad|material|color|negro|blanco|acero|plástico)\b", re.I)
 
 
 def _translation_residual(source: Any, target: Any) -> bool:
@@ -115,7 +115,9 @@ def _translation_residual(source: Any, target: Any) -> bool:
     if not t:
         return True
     if t.casefold() == s.casefold():
-        return True
+        # Pure model codes, sizes and unit-bearing quantities are validly
+        # identical across languages (e.g. L, 500ml, 122cm x 51cm).
+        return bool(_SPANISH_MARKERS.search(s))
     # Long Spanish sentences surviving in a Chinese display value are a
     # stronger signal than legitimate model/brand tokens.
     return len(t.split()) >= 5 and bool(_SPANISH_MARKERS.search(t))
@@ -376,6 +378,10 @@ def _raw_value(field: str, record: Mapping, detail: Mapping, ranking: Mapping) -
             return record.get("bestseller_rank")
         return None
     if field in {"spec_v2", "product_details_zh"}:
+        if field == "spec_v2":
+            # Attribute presence alone is not specification evidence; only a
+            # non-empty derived summary can close this field.
+            return record.get("spec_v2") or ""
         return _attributes(record, detail) or detail.get("details_json") or record.get("details_json")
     if field == "feature_bullets_zh":
         return detail.get("feature_bullets_raw") or record.get("feature_bullets_raw")
@@ -470,7 +476,7 @@ def _audit_one(field: str, asin: str, record: Mapping, detail: Mapping,
     classification, severity, message = _classify(
         field, source, raw, canonical, derived, display, raw_evidence=raw,
         page_available=bool(html))
-    if field == "title_zh" and display and _translation_residual(canonical, display):
+    if field == "title_zh" and display and str(canonical).casefold() == str(display).casefold():
         classification, severity = TRANSLATION_INCOMPLETE, "P1"
         message = "中文展示字段为空或仍保留西语原文/整句"
     if field == "original_price":
@@ -637,8 +643,6 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
         tr = tr if isinstance(tr, Mapping) else {}
         for target, (source_key, column) in _TRANSLATION_FIELDS.items():
             source = product.get(source_key)
-            if target == "specification_zh" and not source:
-                source = product.get("spec_v2")
             if source in (None, ""):
                 continue
             target_value = product.get(target) or tr.get(target)

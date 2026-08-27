@@ -12,6 +12,7 @@ import os
 import re
 import hashlib
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
 from urllib import error, request
@@ -99,6 +100,59 @@ def _json_content(content: Any) -> dict:
     if not isinstance(value, dict):
         raise TranslationError("response JSON must be an object")
     return value
+
+
+def _coerce_translation_value(value: Any) -> str:
+    """Render structured model output as readable display text, never Python
+    dict/list repr or internal snake_case keys."""
+    if isinstance(value, Mapping):
+        try:
+            from .full_detail import LABEL_ES_ZH
+        except ImportError:
+            LABEL_ES_ZH = {}
+        rows = []
+        known = {unicodedata.normalize("NFKD", k).encode("ascii", "ignore").decode().casefold(): v
+                 for k, v in LABEL_ES_ZH.items()}
+        known.update({"brand": "品牌", "country of origin": "原产国",
+                      "habitacion": "适用空间", "material del mango": "手柄材质",
+                      "peso articulo": "商品重量", "peso del producto": "商品重量",
+                      "material o tela": "材质"})
+        for key, item in value.items():
+            label = str(key).replace("_", " ").strip()
+            lookup = unicodedata.normalize("NFKD", label).encode("ascii", "ignore").decode().casefold()
+            label = known.get(lookup, label)
+            rows.append(f"{label}：{_coerce_translation_value(item)}")
+        return "\n".join(rows)
+    if isinstance(value, (list, tuple)):
+        return "\n".join(_coerce_translation_value(v) for v in value)
+    return str(value).strip()
+
+
+def _humanize_translation_labels(value: str) -> str:
+    """Remove snake_case/internal labels from structured detail text."""
+    try:
+        from .full_detail import LABEL_ES_ZH
+    except ImportError:
+        LABEL_ES_ZH = {}
+    known = {unicodedata.normalize("NFKD", k).encode("ascii", "ignore").decode().casefold(): v
+             for k, v in LABEL_ES_ZH.items()}
+    known.update({"brand": "品牌", "country of origin": "原产国",
+                  "habitacion": "适用空间", "material del mango": "手柄材质",
+                  "peso articulo": "商品重量", "peso del producto": "商品重量",
+                  "material o tela": "材质"})
+    lines = []
+    for line in str(value or "").splitlines():
+        label, sep, rest = line.partition("：")
+        if not sep:
+            label, sep, rest = line.partition(":")
+        if sep:
+            clean = label.replace("_", " ").strip()
+            lookup = unicodedata.normalize("NFKD", clean).encode("ascii", "ignore").decode().casefold()
+            clean = known.get(lookup, clean)
+            lines.append(clean + "：" + rest.strip())
+        else:
+            lines.append(line)
+    return "\n".join(lines).strip()
 
 
 class DeepSeekTranslator:
@@ -211,7 +265,7 @@ class DeepSeekTranslator:
         for key in ALLOWED_FIELDS:
             value = obj.get(key)
             if value not in (None, ""):
-                result[key] = str(value).strip()
+                result[key] = _humanize_translation_labels(_coerce_translation_value(value))
         for key in expected:
             result["fields"][key] = "success" if result.get(key) else "missing"
         if not expected:

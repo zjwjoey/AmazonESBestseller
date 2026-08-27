@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from .zh import apply_terms, translate_value
 
@@ -120,12 +121,25 @@ def _display_rows(attributes) -> list:
     return [(best[k][1], best[k][2]) for k in order]
 
 
+def _humanize_es_label(label: str) -> str:
+    """Turn legacy internal snake_case labels into readable Spanish labels."""
+    text = str(label or "").replace("_", " ").strip()
+    if not text:
+        return text
+    key = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().casefold()
+    for candidate in LABEL_ES_ZH:
+        ckey = unicodedata.normalize("NFKD", candidate).encode("ascii", "ignore").decode().casefold()
+        if ckey == key:
+            return candidate[:1].upper() + candidate[1:]
+    return text[:1].upper() + text[1:]
+
+
 def render_details_es(attributes) -> str:
     """完整商品详情（西语原文）：逐行 ``label: value``（多行，供 Excel WRAP 单元格）。"""
     rows = _display_rows(attributes)
     if not rows:
         return ""
-    return "\n".join("%s: %s" % (label, value) for label, value in rows)
+    return "\n".join("%s: %s" % (_humanize_es_label(label), value) for label, value in rows)
 
 
 def render_details_zh(attributes) -> str:
@@ -141,6 +155,7 @@ def render_details_zh(attributes) -> str:
     best: dict = {}          # 中文标签小写 -> (首次序号, 显示标签, 值)
     order: list = []
     for label, value in rows:
+        label = _humanize_es_label(label)
         zh_label = LABEL_ES_ZH.get(label.lower(), label)
         zh_value = translate_value(value)
         key = zh_label.lower()
