@@ -160,7 +160,9 @@ project does not provide CAPTCHA, proxy-rotation or stealth bypass behavior.
 `reparse-details --html-dir DIR1 DIR2 ...` accepts multiple saved-HTML directories;
 for duplicate ASINs, the first valid record in the supplied directory order wins.
 `translate-ds` reports `success`, `partial` and `failed` counts separately so partial
-translation is not mistaken for a complete failure.
+translation is not mistaken for a complete failure. Before constructing the DS client,
+it prints the request summary and requires an explicit `YES`; any other input (including
+EOF) cancels without an API request. `--offline translate-ds` is rejected.
 
 The minimum local verification is:
 
@@ -175,7 +177,7 @@ python -m pytest -q -rs
 
 ### Field Closure Audit
 
-The offline `audit-fields` command follows `collect → enrich → qa → audit-fields →
+The offline `audit-fields` command follows `collect → enrich → translate-ds → enrich → qa → audit-fields →
 export` and emits deterministic JSON plus Markdown. It diagnoses automatic-field
 gaps as `SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`;
 source-missing values remain empty rather than being guessed.

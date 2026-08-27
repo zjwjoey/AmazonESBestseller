@@ -94,7 +94,7 @@ def finalize_manifest(manifest: Mapping[str, Any], **updates: Any) -> dict[str, 
 
 
 def write_manifest(manifest: Mapping[str, Any], path: str | Path) -> Path:
-    """Write UTF-8 deterministic JSON and return the resolved output path."""
+    """Write UTF-8 deterministic JSON and return the output path."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(_as_dict(manifest), ensure_ascii=False,

@@ -60,6 +60,7 @@ def test_cli_translate_ds_writes_asin_map(tmp_path, monkeypatch):
 
     import amazon_es_bestseller.translation.ds as ds
     monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
+    monkeypatch.setattr("builtins.input", lambda prompt: "YES")
     assert main(["translate-ds", "--products", str(products), "--out", str(out)]) == 0
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert saved["B1"]["title_zh"] == "电钻"

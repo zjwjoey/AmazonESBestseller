@@ -5,7 +5,8 @@
   - collect：联网（榜单+详情，串行 + 显式延迟，无并发）；缺省输出
     ``outputs/rankings.json`` + ``outputs/details.json``。
   - enrich / qa / export：全离线（不联网）。
-  - ``--offline``：全局标记；collect 拒绝离线（需联网采集）。
+  - translate-ds：联网且在首个请求前要求人工确认。
+  - ``--offline``：全局标记；collect/translate-ds 拒绝离线。
 
 示例：
   amazon-es collect --urls "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbs/1293659031"
@@ -20,6 +21,7 @@ from __future__ import annotations
 import argparse
 from io import BytesIO
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -185,11 +187,25 @@ def cmd_select_quota(args) -> None:
 
 def cmd_translate_ds(args) -> None:
     """按 ASIN 顺序调用 DS，输出 ASIN → 翻译结果映射。"""
-    from .translation.ds import DeepSeekTranslator
-
+    if args.offline:
+        raise SystemExit("translate-ds 需要联网，不能与 --offline 同用")
     products = _load_json(args.products)
     if not isinstance(products, list):
         raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
+
+    endpoint = args.endpoint or os.getenv("DEEPSEEK_ENDPOINT") or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/chat/completions"
+    model = args.model or os.getenv("DEEPSEEK_MODEL") or os.getenv("DS_MODEL") or "deepseek-chat"
+    print("translate-ds 即将调用 DeepSeek API：%d 个 ASIN，endpoint=%s，model=%s"
+          % (len(products), endpoint, model))
+    try:
+        confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
+    except (EOFError, KeyboardInterrupt):
+        raise SystemExit("未确认，已取消 DS API 调用")
+    if confirmation.strip().upper() != "YES":
+        raise SystemExit("未确认，已取消 DS API 调用")
+
+    from .translation.ds import DeepSeekTranslator
+
     translator = DeepSeekTranslator(
         endpoint=args.endpoint or None,
         model=args.model or None,
@@ -373,7 +389,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="amazon-es",
         description="Amazon.es bestseller research pipeline")
     parser.add_argument("--offline", action="store_true",
-                        help="离线标记：collect 拒绝；其余处理命令不联网")
+                        help="离线标记：collect/translate-ds 拒绝；其余处理命令不联网")
     sub = parser.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("collect", help="联网采集榜单+详情（串行）")

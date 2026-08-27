@@ -1859,7 +1859,7 @@ Not to maximize abstraction.
 ## Pipeline Production Hardening (2026-08-27)
 
 The current stable path is `collect → select-quota → detail planning/collection →
-offline reparse → enrich → translation overlay → qa → field closure → export gate →
-Excel`. The CLI and smoke tests protect this path without implementing a new
+offline reparse → enrich → translate-ds (explicit YES confirmation) → enrich with
+translation overlay → qa → field closure → export gate → Excel`. The CLI and smoke tests protect this path without implementing a new
 orchestrator. `run_manifest.py` is observability metadata beside the pipeline; it is
 not a product/ranking source of truth. CI runs the offline tests only.

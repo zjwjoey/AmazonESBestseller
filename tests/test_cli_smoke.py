@@ -174,11 +174,50 @@ def test_translate_ds_isolates_partial_and_failed_records(tmp_path, monkeypatch,
 
     import amazon_es_bestseller.translation.ds as ds
     monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
+    monkeypatch.setattr("builtins.input", lambda prompt: "YES")
     assert main(["translate-ds", "--products", str(products), "--out", str(out)]) == 0
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert {v["translation_status"] for v in saved.values()} == {"success", "partial", "failed"}
     assert len(saves) == 3
     assert "成功 1、部分 1、失败 1" in capsys.readouterr().out
+
+
+def test_translate_ds_offline_rejected_before_translator_creation(monkeypatch):
+    import amazon_es_bestseller.translation.ds as ds
+
+    class ExplodingTranslator:
+        def __init__(self, **kwargs):
+            raise AssertionError("translator must not be created in offline mode")
+
+    monkeypatch.setattr(ds, "DeepSeekTranslator", ExplodingTranslator)
+    with pytest.raises(SystemExit) as ei:
+        main(["--offline", "translate-ds", "--products", "missing.json", "--out", "out.json"])
+    assert "不能与 --offline 同用" in str(ei.value)
+
+
+def test_translate_ds_requires_explicit_yes_before_first_request(tmp_path, monkeypatch):
+    products = tmp_path / "products.json"
+    products.write_text(json.dumps([{"asin": "B000000001", "title_es_raw": "Uno"}]), encoding="utf-8")
+    calls = []
+
+    class FakeTranslator:
+        def __init__(self, **kwargs):
+            calls.append("init")
+
+        def translate_record(self, record):
+            calls.append("translate")
+            return {"asin": record["asin"], "translation_status": "success"}
+
+        def save_cache(self):
+            pass
+
+    import amazon_es_bestseller.translation.ds as ds
+    monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
+    monkeypatch.setattr("builtins.input", lambda prompt: "NO")
+    with pytest.raises(SystemExit) as ei:
+        main(["translate-ds", "--products", str(products), "--out", str(tmp_path / "out.json")])
+    assert "未确认" in str(ei.value)
+    assert calls == []
 
 
 def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypatch):
@@ -187,6 +226,7 @@ def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypa
     quota_manifest = tmp_path / "quota.json"
     details = tmp_path / "details.json"
     translations = tmp_path / "translations.json"
+    normalized = tmp_path / "normalized.json"
     products = tmp_path / "products.json"
     qa = tmp_path / "qa.json"
     closure = tmp_path / "closure.json"
@@ -217,6 +257,10 @@ def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypa
         "image_url": "https://example.invalid/x.jpg",
     } for asin in asins]), encoding="utf-8")
 
+    assert main(["enrich", "--rankings", str(rankings), "--details", str(details),
+                 "--out", str(normalized)]) == 0
+    normalized_records = json.loads(normalized.read_text(encoding="utf-8"))
+
     from amazon_es_bestseller.translation.ds import DeepSeekTranslator as RealTranslator
 
     class FakeTranslator:
@@ -228,7 +272,9 @@ def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypa
             return RealTranslator.source_hash(record)
 
         def translate_record(self, record):
-            return {"asin": record["asin"], "title_zh": "两件装收纳盒",
+            return {"asin": record["asin"], "translation_schema_version": 2,
+                    "translation_source_hash": RealTranslator.source_hash(record),
+                    "title_zh": "两件装收纳盒",
                     "selected_variation_zh": "红色", "specification_zh": "2件",
                     "product_details_zh": "品牌：Marca；数量：2",
                     "feature_bullets_zh": "可重复使用收纳盒",
@@ -239,7 +285,8 @@ def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypa
 
     import amazon_es_bestseller.translation.ds as ds
     monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
-    assert main(["translate-ds", "--products", str(details), "--out", str(translations)]) == 0
+    monkeypatch.setattr("builtins.input", lambda prompt: "YES")
+    assert main(["translate-ds", "--products", str(normalized), "--out", str(translations)]) == 0
     assert main(["enrich", "--rankings", str(rankings), "--details", str(details),
                  "--translations", str(translations), "--out", str(products)]) == 0
     assert main(["qa", "--products", str(products), "--out", str(qa)]) == 0
