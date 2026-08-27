@@ -460,7 +460,45 @@ def _title_core_spec_es(title_es) -> str:
         title, re.I)
     if m:
         return m.group(0).strip()
+    # Compatibility generations are explicit product-version evidence even
+    # when Amazon exposes no structured size/capacity field.
+    m = re.search(r'(?<![\w])\d+[ªº]?\s*a\s*\d+[ªº]?\s+generaci[oó]n(?!\w)',
+                  title, re.I)
+    if m:
+        return m.group(0).strip()
     return ''
+
+
+_ES_MODEL_KEYS = {
+    'numero_modelo', 'numero_de_modelo', 'numero_pieza',
+    'numero_de_pieza', 'numero_de_pieza_del_fabricante',
+}
+
+
+def _explicit_model_spec_es(attributes) -> str:
+    """Return a concise explicit model/part identifier as last-resort spec.
+
+    Model/part values are retained only when Amazon labels them explicitly;
+    long free-form model-name compatibility lists are intentionally skipped.
+    """
+    candidates = []
+    for attr in attributes or []:
+        if not isinstance(attr, dict):
+            continue
+        label = str(attr.get('label_raw') or '').strip()
+        value = str(attr.get('value_raw') or '').strip()
+        key = _normalize_spec_label(label)
+        if key not in _ES_MODEL_KEYS or not value:
+            continue
+        if len(value) > 120 or value.casefold() in {'voir descriptif', 'desconocido'}:
+            continue
+        candidates.append((key, label, value))
+    if not candidates:
+        return ''
+    # Prefer model number over part number, then the first page occurrence.
+    candidates.sort(key=lambda x: (0 if 'modelo' in x[0] else 1))
+    _, label, value = candidates[0]
+    return '%s: %s' % (label, value)
 
 
 def build_spec_es(attributes=None, details=None, variant=None, title_es=None) -> str:
@@ -513,6 +551,9 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
     title_text = _valid_spec_text(_title_core_spec_es(title_es))
     if title_text:
         return title_text
+    model_text = _valid_spec_text(_explicit_model_spec_es(attributes))
+    if model_text:
+        return model_text
     return ''
 
 
@@ -526,6 +567,16 @@ def translate_spec_es_to_zh(value) -> str:
     text = _valid_spec_text(value)
     if not text:
         return ''
+    m = re.fullmatch(
+        r'(n[uú]mero\s+(?:de\s+)?modelo|n[uú]mero\s+(?:de\s+)?pieza(?:\s+del\s+fabricante)?)\s*:\s*(.+)',
+        text, re.I)
+    if m:
+        label = m.group(1).casefold()
+        zh_label = '型号' if 'modelo' in label else '零件号'
+        return '%s：%s' % (zh_label, m.group(2).strip())
+    m = re.fullmatch(r'\d+[ªº]?\s*a\s*\d+[ªº]?\s+generaci[oó]n', text, re.I)
+    if m:
+        return '兼容' + text
     m = re.fullmatch(
         r'(\d+(?:[.,]\d+)?)\s*(?:x|×|\*)\s*'
         r'(\d+(?:[.,]\d+)?)(?:\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?))?\s*'

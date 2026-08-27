@@ -2,7 +2,8 @@
 """translation/full_detail.py 测试：无损全量详情 → 西语原文 / 中文派生渲染。"""
 from amazon_es_bestseller.collection.detail import parse_detail_page
 from amazon_es_bestseller.translation.full_detail import (
-    render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
+    detail_bullets_to_attributes, render_bullets_es, render_bullets_zh,
+    render_details_es, render_details_zh)
 
 
 def test_render_details_es_from_fixture(delonghi_html):
@@ -61,6 +62,43 @@ def test_render_details_same_label_keeps_longest():
     assert zh.count("特殊功能") == 1
     assert "Impermeable, Lavable, Transpirable, Suave" in es   # 西语原文取完整值
     assert es.count("Características especiales") == 1
+
+
+def test_render_details_zh_cleans_amazon_display_artifacts():
+    attrs = [
+        {"label_raw": "Características especiales", "value_raw": "Impermeable… Ver más"},
+        {"label_raw": "Volumen del producto", "value_raw": "10 Modificador desconocido"},
+        {"label_raw": "Número de unidades", "value_raw": "10.0 Conteo"},
+        {"label_raw": "Garantía producto", "value_raw": "Actualizaciones de software garantizadas hasta: desconocido"},
+        {"label_raw": "Número modelo", "value_raw": "Voir descriptif"},
+    ]
+    zh = render_details_zh(attrs)
+    assert "查看更多" not in zh
+    assert "未知修饰符" not in zh
+    assert "软件更新保证至：未知" not in zh
+    assert "Voir descriptif" not in zh
+    assert "10件" in zh
+
+
+def test_render_bullets_zh_cleans_truncation_and_count_artifacts():
+    zh = render_bullets_zh(["Incluye 10.0 Conteo de piezas… Ver más"])
+    assert "查看更多" not in zh
+    assert "Ver más" not in zh
+    assert "10件" in zh
+
+
+def test_detail_bullets_can_supply_structured_details_when_tables_are_absent():
+    attrs = detail_bullets_to_attributes([
+        "Dimensiones del paquete ‏ : ‎ 9,4 x 8,9 x 5,5 cm; 290 g",
+        "Número de modelo del producto ‏ : ‎ B2-20231106MZQ-FBA",
+        "Actualizaciones de software garantizadas hasta ‏ : ‎ desconocido",
+        "Opiniones de los clientes: 4,5 de 5 estrellas (270)",
+    ])
+    zh = render_details_zh(attrs)
+    assert attrs[0]["label_raw"] == "Dimensiones del paquete"
+    assert "B2-20231106MZQ-FBA" in zh
+    assert "软件更新保证至" not in zh
+    assert "Opiniones de los clientes" not in zh
 
 
 def test_render_details_zh_merges_mapped_duplicates():

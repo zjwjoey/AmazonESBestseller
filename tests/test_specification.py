@@ -74,6 +74,20 @@ def test_build_spec_es_does_not_use_asin_as_spec_or_variant():
 def test_build_spec_es_title_count_and_star_dimensions():
     assert build_spec_es(title_es="Caffenu Cafetera x 5 Cápsulas") == "x 5 Cápsulas"
     assert build_spec_es(title_es="Alfombrilla ignífuga 100*150 cm") == "100*150 cm"
+
+
+def test_build_spec_es_uses_explicit_model_when_no_numeric_spec_exists():
+    attrs = [{"label_raw": "Número Modelo", "value_raw": "04-SHA-823"}]
+    assert build_spec_es(attrs) == "Número Modelo: 04-SHA-823"
+
+
+def test_build_spec_es_uses_explicit_generation_compatibility_from_title():
+    assert build_spec_es(title_es="Manguera inferior para Bissell de 1ª a 5ª generación") == "1ª a 5ª generación"
+
+
+def test_translate_model_and_generation_specs_to_chinese():
+    assert translate_spec_es_to_zh("Número Modelo: 04-SHA-823") == "型号：04-SHA-823"
+    assert translate_spec_es_to_zh("1ª a 5ª generación") == "兼容1ª a 5ª generación"
     assert translate_spec_es_to_zh("100*150 cm") == "100×150厘米"
     assert translate_spec_es_to_zh("x 5 Cápsulas") == "5粒胶囊"
     assert translate_spec_es_to_zh("2 baterías") == "2节电池"

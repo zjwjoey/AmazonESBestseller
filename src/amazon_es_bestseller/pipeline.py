@@ -29,7 +29,8 @@ from .normalization.specification import (
     attributes_to_spec_dict, build_spec_es, build_spec_v2,
     translate_spec_es_to_zh)
 from .translation.full_detail import (
-    render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
+    clean_display_zh, detail_bullets_to_attributes, render_bullets_es, render_bullets_zh,
+    render_details_es, render_details_zh)
 from .translation.ds import DeepSeekTranslator, TRANSLATION_SCHEMA_VERSION
 from .translation.product_type import detect_product_type
 
@@ -142,6 +143,12 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
 
     # 无损全量详情 → 展示渲染（DATA_MODEL §4-§8/§18-§19）：西语原文 + 中文派生
     attrs = out.get("attributes")
+    # A subset of current Amazon layouts has no overview/technical tables but
+    # does expose explicit key/value metadata in the visible detail bullets.
+    # Promote those pairs only as a display fallback; the original
+    # detail_bullets_raw remains preserved unchanged in the data layer.
+    if not attrs:
+        attrs = detail_bullets_to_attributes(out.get("detail_bullets_raw"))
     bullets = out.get("feature_bullets_raw")
     out["product_details_es"] = render_details_es(attrs)
     out["product_details_zh"] = render_details_zh(attrs)
@@ -223,7 +230,16 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
             # corresponding Spanish source before a Chinese field is copied.
             legacy_overlay = "attributes" not in out and "feature_bullets_raw" not in out
             if (source_present or legacy_overlay) and usable_translation(tr.get(key)):
-                out[key] = str(tr[key]).strip()
+                value = str(tr[key]).strip()
+                # DS output is a display-layer overlay and may preserve Amazon
+                # UI placeholders.  Sanitize it with the same deterministic
+                # rules as locally rendered Chinese fields; raw/Spanish
+                # evidence is never modified.
+                if key in {"product_details_zh", "feature_bullets_zh",
+                           "selected_variation_zh", "specification_zh"}:
+                    value = clean_display_zh(value)
+                if value:
+                    out[key] = value
         # Deterministic Chinese spec fallback: spec_v2 is derived only from
         # explicit Spanish evidence (variation/title/attributes).  It is safe
         # to display when DS did not return a translated core-spec field.

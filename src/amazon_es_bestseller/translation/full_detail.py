@@ -78,10 +78,68 @@ _META_LABELS = (
     "asin",
     "clasificación en los más vendidos de amazon",
     "valoración media de los clientes",
+    "opiniones de los clientes",
 )
 
 
 _TRUNC_MARK = "… Ver más"
+
+
+def clean_display_zh(text: str) -> str:
+    """Remove known Amazon/MT presentation artefacts from Chinese display text.
+
+    This operates only on the derived display layer.  Raw Spanish attributes and
+    the original DS response remain untouched for auditability.  Unknown source
+    values are not guessed; only explicit placeholders and machine-generated
+    count wording are normalized.
+    """
+    if text is None:
+        return ""
+    out = []
+    for raw_line in str(text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        # Amazon's expandable-value markers are UI chrome, not product data.
+        line = re.sub(r"(?:…|\.\.\.)?\s*(?:Ver\s+m[aá]s|查看更多)", "", line,
+                      flags=re.I)
+        # Placeholder metadata has no selection value.  Drop the whole row,
+        # including its label, when Amazon supplied an unknown update date.
+        low = line.casefold()
+        if (("软件更新保证" in line and ("未知" in line or "不详" in line))
+                or ("actualizaciones de software" in low
+                    and any(x in low for x in ("desconocido", "unknown", "未知")))):
+            continue
+        # French placeholder occasionally survives the Spanish→Chinese pass.
+        if "voir descriptif" in low:
+            continue
+        # Translate/count-normalize machine output such as ``10.0 计数`` or
+        # ``10.0 Conteo``.  A decimal .0 is not meaningful for item counts.
+        def _count(m):
+            n = m.group(1).replace(",", ".")
+            try:
+                f = float(n)
+                n = str(int(f)) if f.is_integer() else str(f).rstrip("0").rstrip(".")
+            except ValueError:
+                pass
+            return n + "件"
+        line = re.sub(r"(?<!\w)(\d+(?:[.,]\d+)?)\s*(?:计数|conteo|count)\b",
+                      _count, line, flags=re.I)
+        # Existing translations often use a decimal before a Chinese unit.
+        line = re.sub(r"(?<!\w)(\d+)\.0\s*(?=[件个只套粒片])", r"\1", line)
+        # ``未知修饰符`` is an explicit parser/translation placeholder.  Keep
+        # a real numeric value (e.g. ``产品体积：10``), but drop an empty row.
+        line = re.sub(r"\s*(?:未知修饰符|modificador desconocido)\b", "", line,
+                      flags=re.I)
+        line = re.sub(r"\s{2,}", " ", line).strip(" ：:;；,，")
+        if not line:
+            continue
+        # If cleanup left only a label, it carries no usable value.
+        if re.fullmatch(r"[^：:]{1,40}[：:]?", line):
+            if "：" in line or ":" in line:
+                continue
+        out.append(line)
+    return "\n".join(out)
 
 
 def _prefer(new: str, cur: str) -> bool:
@@ -119,6 +177,30 @@ def _display_rows(attributes) -> list:
             if _prefer(v, cur):
                 best[key] = (idx, label, v)
     return [(best[k][1], best[k][2]) for k in order]
+
+
+def detail_bullets_to_attributes(detail_bullets) -> list:
+    """Parse Amazon's visible ``detailBullets`` metadata into raw attributes.
+
+    Some modern/marketplace pages omit both Product Overview and Technical
+    Details tables but still expose key/value metadata (dimensions, model,
+    manufacturer, origin) in the visible detail bullets.  Preserve those
+    explicit pairs as a fallback; ranking/review rows remain filtered at the
+    display layer just like table metadata.
+    """
+    rows = []
+    for value in detail_bullets or []:
+        text = str(value or "").replace("\u200f", "").replace("\u200e", "").strip()
+        if not text or ":" not in text:
+            continue
+        label, raw_value = text.split(":", 1)
+        label = re.sub(r"\s+", " ", label).strip()
+        raw_value = re.sub(r"\s+", " ", raw_value).strip()
+        if label and raw_value:
+            rows.append({"section": "additional_information", "label_raw": label,
+                         "value_raw": raw_value, "position": len(rows),
+                         "source": "detailBullets"})
+    return rows
 
 
 def _humanize_es_label(label: str) -> str:
@@ -166,7 +248,7 @@ def render_details_zh(attributes) -> str:
             idx, _, cur = best[key]
             if _prefer(zh_value, cur):
                 best[key] = (idx, zh_label, zh_value)
-    return "\n".join("%s：%s" % (best[k][1], best[k][2]) for k in order)
+    return clean_display_zh("\n".join("%s：%s" % (best[k][1], best[k][2]) for k in order))
 
 
 def render_bullets_es(bullets) -> str:
@@ -178,7 +260,7 @@ def _bullet_zh(b) -> str:
     """单条卖点：词典关键词翻译，未覆盖词保留西语原文（不臆造）。"""
     s = apply_terms(str(b).strip())
     s = re.sub(r"(?<=\d)\s+(?=[克升毫升瓦件磅千米])", "", s)
-    return s.strip()
+    return clean_display_zh(s)
 
 
 def render_bullets_zh(bullets) -> str:
