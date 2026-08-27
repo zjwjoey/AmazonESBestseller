@@ -244,6 +244,11 @@ Use `audit-detail-cache --quarantine-dir <dir> --state <state.json>` to make
 the quarantine and state update reproducible; original evidence is never
 deleted.
 
+The final offline review bundle should use one consistent scope: `products_1000_final.json`,
+`qa_1000_final.json`, `field_closure_1000_final.json`, `details_final.json`, and
+`details_state_unified.json`. The field-closure report must not be mixed with
+the all-candidate `products.json` report.
+
 ## 25. Scale status
 
 The project has proven real collection and transformation. It has not yet proven reliable production of 6,000–10,000 unique ASINs.
