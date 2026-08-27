@@ -47,6 +47,26 @@ def test_parse_marca_brand_prefix():
     assert d["current_price_raw"] == "9,99 €"
 
 
+def test_parse_modern_apex_price_visible_fallback():
+    """新版 Amazon apex_price 可能把可见现价放在 aria-hidden 文本中。"""
+    html = """
+    <html><body>
+      <div id="productTitle">Pastillas limpiadoras</div>
+      <div id="apex_price">
+        <span class="a-price apex-pricetopay-value">
+          <span class="a-offscreen"></span><span aria-hidden="true">15,69€</span>
+        </span>
+        <span class="a-price a-text-price apex-basisprice-value" data-a-strike="true">
+          <span class="a-offscreen">18,49€</span><span aria-hidden="true">18,49€</span>
+        </span>
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B000CELRGU")
+    assert d["current_price_raw"] == "15,69€"
+    assert d["original_price_raw"] == "18,49€"
+
+
 def test_parse_missing_fields_empty():
     d = parse_detail_page("<html><body><p>hola</p></body></html>", "B078C6QR1C")
     assert d["title_es_raw"] == ""

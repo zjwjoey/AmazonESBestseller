@@ -188,7 +188,8 @@ def _struck_price(soup) -> str:
     """只从明确 data-a-strike=true 的划线价格中取原价。"""
     for container in soup.select(
             "#corePrice_feature_div .a-text-price, "
-            "#corePriceDisplay_desktop_feature_div .a-text-price"):
+            "#corePriceDisplay_desktop_feature_div .a-text-price, "
+            "#apex_price .a-text-price"):
         marked = container.get("data-a-strike")
         marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
         offscreen = container.select_one(".a-offscreen")
@@ -365,10 +366,19 @@ def parse_detail_page(html: str, asin: str) -> dict:
     is_captcha = bool(CAPTCHA_RE.search(page_text[:300]))
 
     # 现价（主 BuyBox 价格回退链，与 JS 一致）
-    price_el = (soup.select_one("#corePrice_feature_div .a-price .a-offscreen")
-                or soup.select_one("#corePriceDisplay_desktop_feature_div .a-price .a-offscreen")
-                or soup.select_one(".apex-pricetopay-value .a-offscreen")
-                or soup.select_one(".priceToPay .a-offscreen"))
+    price_el = None
+    for price_sel in (
+            "#corePrice_feature_div .a-price .a-offscreen",
+            "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
+            ".apex-pricetopay-value .a-offscreen",
+            ".priceToPay .a-offscreen",
+            # Newer Amazon apex markup may leave the offscreen span empty
+            # and expose the BuyBox amount only as visible text.
+            "#apex_price .apex-pricetopay-value"):
+        candidate = soup.select_one(price_sel)
+        if candidate is not None and _clean(candidate.get_text(" ", strip=True)):
+            price_el = candidate
+            break
     current_price_raw = _clean(price_el.get_text(" ", strip=True)) if price_el else ""
 
     # 划线价（原价）——必须有明确 data-a-strike=true 证据
