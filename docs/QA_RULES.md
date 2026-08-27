@@ -1,6 +1,6 @@
 # AmazonESBestseller — QA Rules
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document defines quality-assurance rules for collection, normalization, translation and Excel export.
 
@@ -268,3 +268,13 @@ preserved, and Detail BSR never supplies `bestseller_rank`.
 Export also blocks `TRANSLATION_INCOMPLETE` when a source Spanish display field
 exists but its Chinese target is empty or still a Spanish sentence. `--force`
 is the explicit override and is always reported.
+
+## 33. CLI and pipeline integrity
+
+Each CLI command must have command-specific parsing, deterministic input/output
+paths and controlled errors. `repair-cache` reports its cache-repair counters;
+`reparse-details` reports only schema-reparse counters and must not depend on
+repair-cache locals. Smoke tests may use fake browser/DeepSeek transports, but
+the default test suite and CI must never access Amazon, DeepSeek, credentials or
+local browser profiles. `SOURCE_MISSING` remains valid and does not become a
+blanket completeness failure.

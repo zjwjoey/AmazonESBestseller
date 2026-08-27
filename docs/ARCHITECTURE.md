@@ -1,6 +1,6 @@
 # AmazonESBestseller — Architecture
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document describes the intended architecture of the `AmazonESBestseller` project based on the current working implementation and verified outputs.
 
@@ -21,9 +21,11 @@ Best Sellers discovery
    ↓
 Ranking collection
    ↓
-ASIN discovery
+Global unique selection
    ↓
-Product-detail enrichment
+Detail planning / collection
+   ↓
+Offline schema reparse
    ↓
 Raw evidence storage
    ↓
@@ -1853,3 +1855,11 @@ enforces one global ASIN set across category groups and raises
 `QUOTA_UNIQUE_SHORTFALL` when the requested 200 cannot be satisfied.
 
 Not to maximize abstraction.
+
+## Pipeline Production Hardening (2026-08-27)
+
+The current stable path is `collect → select-quota → detail planning/collection →
+offline reparse → enrich → translation overlay → qa → field closure → export gate →
+Excel`. The CLI and smoke tests protect this path without implementing a new
+orchestrator. `run_manifest.py` is observability metadata beside the pipeline; it is
+not a product/ranking source of truth. CI runs the offline tests only.

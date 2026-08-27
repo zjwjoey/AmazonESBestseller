@@ -150,9 +150,23 @@ amazon-es --help
 python -m pytest -q -rs
 ```
 
-`collect` uses low-frequency serial browser access. `enrich`、`qa` 和 `export` are offline.
-Live collection tests run only when `RUN_LIVE=1` is explicitly set. The project does not
-provide CAPTCHA, proxy-rotation or stealth bypass behavior.
+Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `qa`,
+`audit-fields` and `export`. `collect` and `translate-ds` are the only commands that
+require external services (`collect` uses low-frequency serial browser access; the latter
+calls DeepSeek only when explicitly run). Live collection tests run only when `RUN_LIVE=1`
+is explicitly set. CI and the default test suite never access Amazon or DeepSeek, and the
+project does not provide CAPTCHA, proxy-rotation or stealth bypass behavior.
+
+The minimum local verification is:
+
+```powershell
+python -m pip install -e ".[test]"
+amazon-es --help
+python -m pytest -q -rs
+```
+
+`run_manifest.py` provides JSON-only run metadata helpers for a future orchestrator; no
+`amazon-es run` command or scheduler is implemented in the current phase.
 
 ### Field Closure Audit
 
