@@ -158,6 +158,14 @@ def test_collect_details_resume_detects_captcha_html(tmp_path):
     assert not (tmp_path / "details.json").exists()
 
 
+def test_collect_details_resume_rejects_normal_non_product_html(tmp_path):
+    from amazon_es_bestseller.collection.detail import collect_details
+    (tmp_path / "html").mkdir()
+    (tmp_path / "html" / "B008YETL18.html").write_text("<html><body>hola</body></html>", encoding="utf-8")
+    with pytest.raises(AccessStopError, match="校验失败"):
+        collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
+
+
 def test_collect_details_timeout_isolates_and_continues(tmp_path):
     """失败隔离：单个 ASIN goto 超时 → 记失败继续，不毁整批；失败页无证据落盘。"""
     from amazon_es_bestseller.collection.detail import collect_details

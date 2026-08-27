@@ -187,10 +187,17 @@ def _monthly_bought_raw(soup) -> str:
 
 def _struck_price(soup) -> str:
     """只从明确 data-a-strike=true 的划线价格中取原价。"""
-    for container in soup.select(
-            "#corePrice_feature_div .a-text-price, "
-            "#corePriceDisplay_desktop_feature_div .a-text-price, "
-            "#apex_price .a-text-price"):
+    primary = soup.select("#corePrice_feature_div .a-text-price, #corePriceDisplay_desktop_feature_div .a-text-price")
+    containers = primary if primary else soup.select("#apex_price .a-text-price")
+    for container in containers:
+        classes = " ".join(container.get("class") or [])
+        parent_classes = " ".join(container.parent.get("class") or []) if container.parent else ""
+        if re.search(r"priceperunit|pricePerUnit", classes + " " + parent_classes, re.I):
+            continue
+        if re.search(r"basisprice", classes + " " + parent_classes, re.I):
+            context = _clean(container.parent.parent.get_text(" ", strip=True)) if container.parent and container.parent.parent else ""
+            if re.search(r"precio\s+(?:[úu]nico|por\s+unidad)|por\s+(?:kg|g|l|ml)\b", context, re.I):
+                continue
         marked = container.get("data-a-strike")
         marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
         offscreen = container.select_one(".a-offscreen")
@@ -484,17 +491,22 @@ def parse_detail_page(html: str, asin: str) -> dict:
 
 def _page_asin_candidates(soup) -> set[str]:
     """Extract explicit page identity signals when Amazon exposes them."""
-    candidates = set()
-    for el in soup.select("input#ASIN, input[name='ASIN'], input#productAsin, [data-asin]"):
+    strong = set()
+    weak = set()
+    for el in soup.select("input#ASIN, input[name='ASIN'], input#productAsin"):
         value = el.get("value") or el.get("data-asin") or ""
         if _ASIN_RE.fullmatch(str(value).strip()):
-            candidates.add(str(value).strip().upper())
+            strong.add(str(value).strip().upper())
+    for el in soup.select("[data-asin]"):
+        value = el.get("data-asin") or ""
+        if _ASIN_RE.fullmatch(str(value).strip()):
+            weak.add(str(value).strip().upper())
     for link in soup.select("link[rel='canonical'], meta[property='og:url']"):
         value = link.get("href") or link.get("content") or ""
         match = re.search(r"/dp/([A-Z0-9]{10})", str(value), re.I)
         if match:
-            candidates.add(match.group(1).upper())
-    return candidates
+            strong.add(match.group(1).upper())
+    return strong or weak
 
 
 def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessState, Optional[dict]]:
@@ -670,9 +682,12 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             if cached_url and not verify_asin_on_page(cached_url, asin):
                 raise AccessStopError(
                     "缓存详情页 ASIN 不一致，请求 %s，最终 URL %s" % (asin, cached_url))
-            rec = parse_detail_page(html, asin)
+            classification, parsed_state, rec = _classify_saved_page(
+                html, asin, {"status_code": cached_status, "final_url": cached_url})
+            if classification != "VALID_PRODUCT_PAGE":
+                raise AccessStopError("缓存详情页校验失败（%s），ASIN %s" % (classification, asin))
             rec["status_code"] = meta.get("status_code")
-            rec["access_state"] = state.value
+            rec["access_state"] = parsed_state.value
             rec["resumed_from_html"] = True
             details.append(rec)
             continue
@@ -694,9 +709,12 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"status_code": status, "final_url": final_url,
                            "access_state": state.value}, f, ensure_ascii=False, indent=2)
-            rec = parse_detail_page(html, asin)
+            classification, parsed_state, rec = _classify_saved_page(
+                html, asin, {"status_code": status, "final_url": final_url})
+            if classification != "VALID_PRODUCT_PAGE":
+                raise AccessStopError("详情页校验失败（%s），ASIN %s" % (classification, asin))
             rec["status_code"] = status
-            rec["access_state"] = state.value
+            rec["access_state"] = parsed_state.value
             details.append(rec)
             session.wait_between_requests()
         except AccessStopError:

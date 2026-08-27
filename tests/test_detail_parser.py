@@ -417,6 +417,14 @@ def test_a_text_price_without_explicit_strike_is_not_original_price():
     assert parse_detail_page(html, "B078C6QR1C")["original_price_raw"] == ""
 
 
+def test_struck_basis_price_is_not_original_price():
+    html = """<div id='productTitle'>Producto</div><div id='corePrice_feature_div'>
+      <span class='a-price'><span class='a-offscreen'>8,29€</span></span>
+      <span class='apex-basisprice-feature'>Precio único: <span class='a-price a-text-price apex-basisprice-value' data-a-strike='true'>
+      <span class='a-offscreen'>8,29€</span></span></span></div>"""
+    assert parse_detail_page(html, "B011036J00")["original_price_raw"] == ""
+
+
 def test_monthly_bought_is_preserved_from_visible_text():
     html = '<div id="social-proofing-faceout">1,5 mil+ comprados el mes pasado</div>'
     assert parse_detail_page(html, "B078C6QR1C")["monthly_bought_raw"] == "1,5 mil+"
