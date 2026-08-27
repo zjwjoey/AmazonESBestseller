@@ -227,6 +227,28 @@ def test_audit_cache_quarantines_and_marks_challenge(tmp_path):
     assert state.get("B078C6QR1C")["access_state"] == "CHALLENGE"
 
 
+def test_audit_cache_rejects_non_normal_status_and_asin_mismatch(tmp_path):
+    from amazon_es_bestseller.collection.detail import audit_saved_detail_cache
+    root = tmp_path / "html"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text(
+        "<html><body><div id='productTitle'>Wrong page</div>"
+        "<input id='ASIN' value='B000000001'></body></html>", encoding="utf-8")
+    (root / "B078C6QR1C.meta.json").write_text('{"status_code": 403}', encoding="utf-8")
+    report = audit_saved_detail_cache(root)
+    row = report["records"][0]
+    assert row["classification"] == "CHALLENGE"
+    assert row["access_state"] == "BLOCKED"
+
+
+def test_reparse_saved_details_skips_normal_non_product_page(tmp_path):
+    from amazon_es_bestseller.collection.detail import reparse_saved_details
+    root = tmp_path / "html"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text("<html><body>hola</body></html>", encoding="utf-8")
+    assert reparse_saved_details(root, []) == []
+
+
 def test_image_url_fallback_to_data_old_hires():
     html = """
     <html><body>

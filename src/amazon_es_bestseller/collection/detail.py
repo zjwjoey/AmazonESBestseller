@@ -482,6 +482,41 @@ def parse_detail_page(html: str, asin: str) -> dict:
     }
 
 
+def _page_asin_candidates(soup) -> set[str]:
+    """Extract explicit page identity signals when Amazon exposes them."""
+    candidates = set()
+    for el in soup.select("input#ASIN, input[name='ASIN'], input#productAsin, [data-asin]"):
+        value = el.get("value") or el.get("data-asin") or ""
+        if _ASIN_RE.fullmatch(str(value).strip()):
+            candidates.add(str(value).strip().upper())
+    for link in soup.select("link[rel='canonical'], meta[property='og:url']"):
+        value = link.get("href") or link.get("content") or ""
+        match = re.search(r"/dp/([A-Z0-9]{10})", str(value), re.I)
+        if match:
+            candidates.add(match.group(1).upper())
+    return candidates
+
+
+def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessState, Optional[dict]]:
+    """Classify saved evidence and return parsed data only for valid pages."""
+    access_state = detect_access_status(meta.get("status_code", 200), html)
+    if access_state is not AccessState.NORMAL:
+        return "CHALLENGE", access_state, None
+    if not html.strip():
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    soup = BeautifulSoup(html, "lxml")
+    candidates = _page_asin_candidates(soup)
+    final_url = str(meta.get("final_url") or "")
+    if final_url and not verify_asin_on_page(final_url, asin):
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    if candidates and str(asin).upper() not in candidates:
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    parsed = parse_detail_page(html, asin)
+    if not parsed.get("title_es_raw") or parsed.get("is_captcha"):
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    return "VALID_PRODUCT_PAGE", access_state, parsed
+
+
 def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
     """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
@@ -512,12 +547,11 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
                     meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     meta = {}
-            state_value = detect_access_status(meta.get("status_code", 200), html)
-            if state_value.value != "NORMAL":
+            classification, state_value, rec = _classify_saved_page(html, asin, meta)
+            if classification != "VALID_PRODUCT_PAGE":
                 continue
             if asin in seen_asins:
                 continue
-            rec = parse_detail_page(html, asin)
             rec.update({"status_code": meta.get("status_code"),
                         "access_state": state_value.value,
                         "resumed_from_html": True})
@@ -561,24 +595,19 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                     status_meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     status_meta = {}
-            access_state = detect_access_status(status_meta.get("status_code", 200), html)
-            if access_state is AccessState.CHALLENGE:
-                classification = "CHALLENGE"
-            elif not html.strip():
-                classification = "INVALID_OR_EMPTY"
-            else:
-                parsed = parse_detail_page(html, asin)
-                classification = ("VALID_PRODUCT_PAGE" if parsed.get("title_es_raw")
-                                  and not parsed.get("is_captcha") else "INVALID_OR_EMPTY")
-            records.append({"asin": asin, "path": str(path), "classification": classification})
+            classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
+            records.append({"asin": asin, "path": str(path), "classification": classification,
+                            "access_state": access_state.value})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
                 copy2(path, quarantine / path.name)
                 if meta_path.exists():
                     copy2(meta_path, quarantine / meta_path.name)
-            if state is not None and classification != "VALID_PRODUCT_PAGE":
-                state.update([{"asin": asin, "status_code": status_meta.get("status_code"),
+            if state is not None:
+                update = parsed or {"asin": asin}
+                update.update({"status_code": status_meta.get("status_code"),
                                "access_state": access_state.value,
-                               "cache_classification": classification}])
+                               "cache_classification": classification})
+                state.update([update])
     summary = {k: sum(r["classification"] == k for r in records)
                for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
     return {"summary": summary, "records": records}
