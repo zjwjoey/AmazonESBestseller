@@ -208,11 +208,12 @@ association, access-stop behavior and the default Excel schema. Live tests remai
 RUN_LIVE=1.
 
 **Hardening update (2026-08-27):** CLI smoke/vertical tests now cover all nine commands,
-including offline `reparse-details`, quota uniqueness/shortfall, translation failure
-isolation, the enrich→QA→closure→export path and export-gate classifications. The suite
-does not require Amazon/DeepSeek access or credentials. GitHub Actions offline CI is
-defined for Python 3.11 and 3.12. `run_manifest.py` supplies JSON-only workflow metadata
-helpers; no `amazon-es run` orchestrator exists yet.
+including fake-browser `collect --rankings-only`, offline `reparse-details` across multiple
+directories with duplicate-ASIN precedence, quota uniqueness/shortfall, translation failure
+isolation and separate partial counts, the select-quota→translation→enrich→QA→closure→export
+path, and export-gate classifications. The suite does not require Amazon/DeepSeek access or
+credentials. GitHub Actions offline CI is defined for Python 3.11 and 3.12. `run_manifest.py`
+supplies JSON-only workflow metadata helpers; no `amazon-es run` orchestrator exists yet.
 
 ## 23. Export contract testing
 

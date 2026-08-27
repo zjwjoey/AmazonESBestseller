@@ -341,3 +341,7 @@ Excel schema in this phase. Preserve the Access Gate, resume behavior, translati
 cache hash semantics, QA/Field Closure export gate, raw evidence and the 3-sheet /
 26-column contract. CI and default tests must remain offline and must not require
 Amazon credentials, DeepSeek credentials or a local browser profile.
+
+When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
+the first valid record in the supplied directory order. CLI translation summaries
+must report partial results separately from failures.

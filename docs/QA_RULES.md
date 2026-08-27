@@ -276,5 +276,7 @@ paths and controlled errors. `repair-cache` reports its cache-repair counters;
 `reparse-details` reports only schema-reparse counters and must not depend on
 repair-cache locals. Smoke tests may use fake browser/DeepSeek transports, but
 the default test suite and CI must never access Amazon, DeepSeek, credentials or
-local browser profiles. `SOURCE_MISSING` remains valid and does not become a
-blanket completeness failure.
+local browser profiles. Multiple reparse directories must deduplicate by ASIN with
+documented directory-order precedence, and translation summaries must distinguish
+`success`, `partial` and `failed`. `SOURCE_MISSING` remains valid and does not become
+a blanket completeness failure.

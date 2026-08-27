@@ -157,6 +157,11 @@ calls DeepSeek only when explicitly run). Live collection tests run only when `R
 is explicitly set. CI and the default test suite never access Amazon or DeepSeek, and the
 project does not provide CAPTCHA, proxy-rotation or stealth bypass behavior.
 
+`reparse-details --html-dir DIR1 DIR2 ...` accepts multiple saved-HTML directories;
+for duplicate ASINs, the first valid record in the supplied directory order wins.
+`translate-ds` reports `success`, `partial` and `failed` counts separately so partial
+translation is not mistaken for a complete failure.
+
 The minimum local verification is:
 
 ```powershell
