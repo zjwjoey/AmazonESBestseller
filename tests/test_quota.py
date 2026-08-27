@@ -10,7 +10,7 @@ def test_reviewed_200sku_config_has_150_50_quota_and_real_urls():
     rows = json.loads(path.read_text(encoding="utf-8"))
     assert sum(r["quota"] for r in rows if r["category_group"] == "hogar") == 150
     assert sum(r["quota"] for r in rows if r["category_group"] == "diy") == 50
-    assert all(r["url"].startswith("https://www.cdn.amazon.es/gp/bestsellers/") for r in rows)
+    assert all(r["url"].startswith("https://www.amazon.es/gp/bestsellers/") for r in rows)
 
 
 def test_select_quota_deduplicates_by_asin_within_group():

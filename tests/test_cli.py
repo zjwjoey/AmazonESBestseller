@@ -60,12 +60,13 @@ def test_cli_translate_ds_writes_asin_map(tmp_path, monkeypatch):
 
     import amazon_es_bestseller.translation.ds as ds
     monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
+    monkeypatch.setattr("builtins.input", lambda prompt: "YES")
     assert main(["translate-ds", "--products", str(products), "--out", str(out)]) == 0
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert saved["B1"]["title_zh"] == "电钻"
 
 
-def test_cli_repair_cache_merges_saved_detail_fields(tmp_path):
+def test_cli_repair_cache_merges_saved_detail_fields(tmp_path, capsys):
     products = tmp_path / "products.json"
     products.write_text(json.dumps([{"asin": "B078C6QR1C", "title_es_raw": "Fiambrera"}], ensure_ascii=False), encoding="utf-8")
     html_dir = tmp_path / "html"
@@ -79,6 +80,7 @@ def test_cli_repair_cache_merges_saved_detail_fields(tmp_path):
     assert main(["repair-cache", "--products", str(products), "--html-dir", str(html_dir), "--out", str(out)]) == 0
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert saved[0]["current_price"] == 12.62
+    assert "repair-cache" in capsys.readouterr().out
 
 
 def test_cli_audit_fields_writes_json_and_markdown(tmp_path, capsys):
@@ -226,7 +228,7 @@ def test_qa_diagnostic_does_not_crash_on_windows_code_page(tmp_path):
     assert out.exists()
 
 
-def test_export_qa_gate_force_bypasses(tmp_path):
+def test_export_qa_gate_force_bypasses(tmp_path, capsys):
     """--force：跳过 QA 门禁强制导出（明确授权，不静默）。"""
     prod_out = tmp_path / "products.json"
     prod_out.write_text(
@@ -235,6 +237,7 @@ def test_export_qa_gate_force_bypasses(tmp_path):
     assert main(["export", "--products", str(prod_out),
                  "--out", str(xlsx_out), "--force"]) == 0
     assert xlsx_out.exists()
+    assert "--force" in capsys.readouterr().out
 
 
 def test_export_accepts_images_and_category_planning(tmp_path):

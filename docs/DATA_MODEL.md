@@ -1,6 +1,6 @@
 # AmazonESBestseller — Data Model
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document defines the canonical data model and the default Excel export contract for `AmazonESBestseller`.
 
@@ -450,3 +450,11 @@ Both must remain traceable by ASIN.
 Each detail record carries `detail_schema_version`. Translation overlays carry
 `translation_schema_version`, `translation_source_hash` and field-level status;
 raw Spanish fields remain the source of truth.
+
+## 31. Run Manifest (workflow metadata)
+
+`run_manifest.py` stores JSON-serializable observability metadata such as run
+identity, stage counters, QA/Field Closure totals, export status and errors. It is
+workflow metadata only: it is not a `Product`, `Ranking Record` or Amazon evidence
+source, and it does not replace the raw detail or ranking stores. A future
+orchestrator may update it without changing the product data contract.

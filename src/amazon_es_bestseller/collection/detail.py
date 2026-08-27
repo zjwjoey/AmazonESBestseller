@@ -483,11 +483,12 @@ def parse_detail_page(html: str, asin: str) -> dict:
 
 
 def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
-    """Offline reparse saved detail HTML using the current extractor."""
+    """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
     wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
     out = []
+    seen_asins = set()
     for root in roots:
         if not root.is_dir():
             continue
@@ -514,11 +515,14 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
             state_value = detect_access_status(meta.get("status_code", 200), html)
             if state_value.value != "NORMAL":
                 continue
+            if asin in seen_asins:
+                continue
             rec = parse_detail_page(html, asin)
             rec.update({"status_code": meta.get("status_code"),
                         "access_state": state_value.value,
                         "resumed_from_html": True})
             out.append(rec)
+            seen_asins.add(asin)
     if out:
         state.update(out)
     return out

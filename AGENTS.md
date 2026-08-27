@@ -326,3 +326,22 @@ Derived → Display / Excel`, and classify an empty value as `SOURCE_MISSING`,
 `PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`. An empty source is valid and
 must not be filled by guessing. Preserve raw evidence, keep `备注` human-owned, and
 never use Detail BSR as a fallback for `bestseller_rank`.
+
+## 27. Current production-hardening phase (2026-08-27)
+
+The current milestone is **Pipeline Production Hardening** for the frozen 200-SKU
+baseline. Work in this phase is limited to CLI reliability, offline smoke/integration
+tests, CI protection, documentation synchronization and the small Run Manifest
+observability foundation. Do not treat this phase as a crawler rewrite or a new
+collection milestone.
+
+Agents must not start 1,000-SKU collection, full Bricolaje validation, a new
+`amazon-es run` orchestrator, a database, concurrency/proxy/CAPTCHA systems or a new
+Excel schema in this phase. Preserve the Access Gate, resume behavior, translation
+cache hash semantics, QA/Field Closure export gate, raw evidence and the 3-sheet /
+26-column contract. CI and default tests must remain offline and must not require
+Amazon credentials, DeepSeek credentials or a local browser profile.
+
+When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
+the first valid record in the supplied directory order. CLI translation summaries
+must report partial results separately from failures.

@@ -1,6 +1,6 @@
 # AmazonESBestseller — Current State
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document describes the current verified state of the project.
 
@@ -10,7 +10,7 @@ The project has moved beyond pure reconnaissance.
 
 Current phase:
 
-> Working Amazon.es collection pipeline + data-quality stabilization + detail/export model upgrade.
+> Pipeline Production Hardening — Round 1 (200-SKU stable baseline freeze).
 
 The crawler has already produced real Amazon.es product data and working Excel outputs.
 
@@ -207,13 +207,27 @@ brand false positives, ranking semantics, category mapping, bilingual row mappin
 association, access-stop behavior and the default Excel schema. Live tests remain opt-in via
 RUN_LIVE=1.
 
+**Hardening update (2026-08-27):** CLI smoke/vertical tests now cover all nine commands,
+including fake-browser `collect --rankings-only`, offline `reparse-details` across multiple
+directories with duplicate-ASIN precedence, quota uniqueness/shortfall, translation failure
+isolation and separate partial counts, the select-quota→enrich→translation→enrich→QA→closure→export
+path, and export-gate classifications. The suite does not require Amazon/DeepSeek access or
+credentials. GitHub Actions offline CI is defined for Python 3.11 and 3.12. `run_manifest.py`
+supplies JSON-only workflow metadata helpers; no `amazon-es run` orchestrator exists yet.
+
 ## 23. Export contract testing
 
-Future automated tests should verify exact sheet names/order, Chinese sheet frozen 26 columns, no accidental rename/reorder, Spanish and Chinese ASIN order matches, notes survive regeneration, and image count/mapping is valid.
+Automated tests verify exact sheet names/order, the frozen 26 Chinese columns, Spanish/Chinese
+ASIN order, notes preservation and ASIN-based image mapping; the live collection tests remain
+opt-in only.
 
 ## 24. Current code organization
 
 The repository still contains a mixture of working scripts, experiments, audit scripts, workbook builders, translation scripts, historical data and reports. The actual working runtime path should continue to be documented and gradually clarified.
+
+The active CLI entry is `src/amazon_es_bestseller/cli.py`: online commands are
+`collect` and `translate-ds`; offline commands are `select-quota`, `enrich`,
+`repair-cache`, `reparse-details`, `qa`, `audit-fields` and `export`.
 
 ## 25. Scale status
 
@@ -226,7 +240,9 @@ ranks; spec_v2 empty because the modern `attributes` model was not wired into `b
 plus collection resilience (resume + per-ASIN timeout isolation) and a `details.json`
 full-state rebuild so resume never loses cached details.
 
-The next meaningful milestones remain: repeat-run validation, validate a second major category, then controlled expansion toward 6,000–10,000.
+Repeat-run validation is complete for the bounded Hogar y cocina run. The next meaningful
+milestone is validating a second major category (`Bricolaje y herramientas`), followed by
+controlled category expansion toward 6,000–10,000.
 
 ## 26. Next-round scope and known limitations
 

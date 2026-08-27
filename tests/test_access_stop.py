@@ -162,3 +162,22 @@ def test_collect_details_timeout_isolates_and_continues(tmp_path):
     assert not (tmp_path / "html" / "B0CK2B7GW5.html").exists()  # 失败页无落盘
     assert (tmp_path / "html" / "B008YETL18.html").exists()
     assert (tmp_path / "details.json").exists()
+
+
+def test_browser_wait_helpers_use_bounded_render_delay_without_dom_block(tmp_path, monkeypatch):
+    from amazon_es_bestseller.access import browser
+
+    class UnresponsivePage:
+        def wait_for_selector(self, *args, **kwargs):
+            raise AssertionError("must not block on selector protocol")
+
+        def wait_for_function(self, *args, **kwargs):
+            raise AssertionError("must not block on function protocol")
+
+    delays = []
+    monkeypatch.setattr(browser.time, "sleep", lambda seconds: delays.append(seconds))
+    session = browser.BrowserSession()
+    session.page = UnresponsivePage()
+    session.wait_for_product_page(timeout_ms=20000)
+    session.wait_for_price_text(timeout_ms=10000)
+    assert delays == [2.0, 1.0]

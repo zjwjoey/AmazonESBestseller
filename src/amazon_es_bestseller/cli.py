@@ -1,25 +1,27 @@
 # -*- coding: utf-8 -*-
-"""统一 CLI 入口（ARCHITECTURE §59-60）：collect / enrich / qa / export。
+"""统一 CLI 入口（ARCHITECTURE §59-60）：Amazon.es bestseller research pipeline。
 
-主链：``collect → enrich → qa → export``。
+主链按需要组合联网采集与离线处理命令。
   - collect：联网（榜单+详情，串行 + 显式延迟，无并发）；缺省输出
     ``outputs/rankings.json`` + ``outputs/details.json``。
   - enrich / qa / export：全离线（不联网）。
-  - ``--offline``：全局标记；collect 拒绝离线（需联网采集）。
+  - translate-ds：联网且在首个请求前要求人工确认。
+  - ``--offline``：全局标记；collect/translate-ds 拒绝离线。
 
 示例：
   amazon-es collect --urls "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbs/1293659031"
   amazon-es enrich --legacy product_details.json        # 30 条遗留真实数据
-  amazon-es enrich --offline
-  amazon-es qa --offline
+  amazon-es --offline enrich
+  amazon-es --offline qa
   amazon-es audit-fields --products outputs/products.json --out outputs/field_closure.json
-  amazon-es export --offline
+  amazon-es --offline export
 """
 from __future__ import annotations
 
 import argparse
 from io import BytesIO
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -185,11 +187,25 @@ def cmd_select_quota(args) -> None:
 
 def cmd_translate_ds(args) -> None:
     """按 ASIN 顺序调用 DS，输出 ASIN → 翻译结果映射。"""
-    from .translation.ds import DeepSeekTranslator
-
+    if args.offline:
+        raise SystemExit("translate-ds 需要联网，不能与 --offline 同用")
     products = _load_json(args.products)
     if not isinstance(products, list):
         raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
+
+    endpoint = args.endpoint or os.getenv("DEEPSEEK_ENDPOINT") or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/chat/completions"
+    model = args.model or os.getenv("DEEPSEEK_MODEL") or os.getenv("DS_MODEL") or "deepseek-chat"
+    print("translate-ds 即将调用 DeepSeek API：%d 个 ASIN，endpoint=%s，model=%s"
+          % (len(products), endpoint, model))
+    try:
+        confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
+    except (EOFError, KeyboardInterrupt):
+        raise SystemExit("未确认，已取消 DS API 调用")
+    if confirmation.strip().upper() != "YES":
+        raise SystemExit("未确认，已取消 DS API 调用")
+
+    from .translation.ds import DeepSeekTranslator
+
     translator = DeepSeekTranslator(
         endpoint=args.endpoint or None,
         model=args.model or None,
@@ -207,8 +223,10 @@ def cmd_translate_ds(args) -> None:
         translator.save_cache()
     _save_json(output, args.out)
     success = sum(1 for r in output.values() if r.get("translation_status") == "success")
-    failed = len(output) - success
-    print("translate-ds 完成：成功 %d、失败 %d、总计 %d → %s" % (success, failed, len(output), args.out))
+    partial = sum(1 for r in output.values() if r.get("translation_status") == "partial")
+    failed = sum(1 for r in output.values() if r.get("translation_status") == "failed")
+    print("translate-ds 完成：成功 %d、部分 %d、失败 %d、总计 %d → %s"
+          % (success, partial, failed, len(output), args.out))
 
 
 # ---------- enrich（离线） ----------
@@ -240,6 +258,9 @@ def cmd_repair_cache(args) -> None:
     products = _load_json(args.products)
     repaired, report = repair_cached_products(products, args.html_dir)
     _save_json(repaired, args.out)
+    print("repair-cache 完成：匹配 %d 页、忽略 %d 页、修改 %d 个商品、%d 个字段 → %s"
+          % (report["matched_pages"], report["ignored_pages"],
+             report["changed_products"], report["changed_fields"], args.out))
 
 
 def cmd_reparse_details(args) -> None:
@@ -250,10 +271,8 @@ def cmd_reparse_details(args) -> None:
     records = reparse_saved_details(args.html_dir, state)
     state.save()
     _save_json(state.records(), args.out)
-    print("离线重解析完成：%d 条 → %s" % (len(records), args.out))
-    print("repair-cache 完成：匹配 %d 页、忽略 %d 页、修改 %d 个商品、%d 个字段 → %s"
-          % (report["matched_pages"], report["ignored_pages"],
-             report["changed_products"], report["changed_fields"], args.out))
+    print("reparse-details 完成：重解析 %d 条、缓存总计 %d 条 → %s"
+          % (len(records), len(state), args.out))
 
 
 # ---------- qa（离线） ----------
@@ -368,9 +387,9 @@ def cmd_export(args) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="amazon-es",
-        description="Amazon.es 畅销品研究主链：collect → enrich → qa → export")
+        description="Amazon.es bestseller research pipeline")
     parser.add_argument("--offline", action="store_true",
-                        help="离线标记：collect 拒绝、enrich/qa/export 要求")
+                        help="离线标记：collect/translate-ds 拒绝；其余处理命令不联网")
     sub = parser.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("collect", help="联网采集榜单+详情（串行）")
@@ -400,13 +419,13 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--out", default=str(OUTPUTS / "products.json"), help="输出商品表 JSON")
     e.set_defaults(func=cmd_enrich)
 
-    r = sub.add_parser("repair-cache", help="离线：用保存的详情 HTML 补齐商品字段")
+    r = sub.add_parser("repair-cache", help="离线：用保存 HTML 修复已有商品的 canonical/display 字段")
     r.add_argument("--products", required=True, help="规范化商品 JSON 数组")
     r.add_argument("--html-dir", required=True, help="保存的详情 HTML 目录")
     r.add_argument("--out", required=True, help="修复后的商品 JSON")
     r.set_defaults(func=cmd_repair_cache)
 
-    rp = sub.add_parser("reparse-details", help="离线：按当前详情 schema 重解析保存 HTML")
+    rp = sub.add_parser("reparse-details", help="离线：按当前详情 schema 重建 raw details（重复 ASIN 取首个有效目录）")
     rp.add_argument("--html-dir", nargs="+", required=True)
     rp.add_argument("--state", required=True, help="DetailState JSON")
     rp.add_argument("--out", required=True, help="重建后的 details JSON")
