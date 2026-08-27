@@ -1,6 +1,6 @@
 # AmazonESBestseller — Data Model
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document defines the canonical data model and the default Excel export contract for `AmazonESBestseller`.
 
@@ -61,6 +61,7 @@ monthly_bought_min
 
 selected_variation_raw
 selected_variation_zh
+specification_es
 
 image_url
 product_url
@@ -73,6 +74,7 @@ seller
 
 detail_bsr_raw
 detail_bsr_segments
+detail_category_trail
 
 first_seen
 last_seen
@@ -130,6 +132,11 @@ product_details_zh
 `product_details_normalized` is an optional structured normalized representation.
 
 `product_details_zh` is a human-readable Chinese rendering of the collected details. It is a display/derived field, not the raw source of truth.
+
+`detail_category_trail` preserves the visible Amazon detail-page breadcrumb from
+root to leaf. When the ranking page exposes only a top-level category, the
+normalizer may use this explicit trail only to fill missing product category
+depth; existing ranking-page category values remain authoritative.
 
 ## 8. Feature bullets
 
@@ -420,6 +427,16 @@ Do not fabricate rank, category, brand, original price, monthly bought or detail
 
 Any change to the 26 default Chinese columns, sheet names/order, notes field, rank semantics, category semantics, specification semantics or full-detail semantics requires explicit user approval, documentation update, code/schema update and regression validation.
 
+## Field Closure Result
+
+`audit-fields` returns a read-only result for each automatic display field with
+source/raw/canonical/derived/display statuses and evidence. The layers are
+`Amazon Source → Raw → Canonical → Derived → Display`; missing values are classified
+as `SOURCE_MISSING` (no reliable source), `PARSER_MISSED` (source exists but raw is
+empty), `MAPPING_MISSED` (raw exists but canonical is empty), or `DERIVED_MISSING`
+(raw/canonical exists but translation, calculation or display is empty). `备注` is
+human-owned and preserved by ASIN, not audited as an automatic field.
+
 ## 29. Final principle
 
 The data layer should be more complete than the display layer.
@@ -427,3 +444,17 @@ The data layer should be more complete than the display layer.
 The display layer should be more readable than the data layer.
 
 Both must remain traceable by ASIN.
+
+## 30. Versioned detail and translation closure
+
+Each detail record carries `detail_schema_version`. Translation overlays carry
+`translation_schema_version`, `translation_source_hash` and field-level status;
+raw Spanish fields remain the source of truth.
+
+## 31. Run Manifest (workflow metadata)
+
+`run_manifest.py` stores JSON-serializable observability metadata such as run
+identity, stage counters, QA/Field Closure totals, export status and errors. It is
+workflow metadata only: it is not a `Product`, `Ranking Record` or Amazon evidence
+source, and it does not replace the raw detail or ranking stores. A future
+orchestrator may update it without changing the product data contract.

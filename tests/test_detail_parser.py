@@ -47,6 +47,26 @@ def test_parse_marca_brand_prefix():
     assert d["current_price_raw"] == "9,99 €"
 
 
+def test_parse_modern_apex_price_visible_fallback():
+    """新版 Amazon apex_price 可能把可见现价放在 aria-hidden 文本中。"""
+    html = """
+    <html><body>
+      <div id="productTitle">Pastillas limpiadoras</div>
+      <div id="apex_price">
+        <span class="a-price apex-pricetopay-value">
+          <span class="a-offscreen"></span><span aria-hidden="true">15,69€</span>
+        </span>
+        <span class="a-price a-text-price apex-basisprice-value" data-a-strike="true">
+          <span class="a-offscreen">18,49€</span><span aria-hidden="true">18,49€</span>
+        </span>
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B000CELRGU")
+    assert d["current_price_raw"] == "15,69€"
+    assert d["original_price_raw"] == "18,49€"
+
+
 def test_parse_missing_fields_empty():
     d = parse_detail_page("<html><body><p>hola</p></body></html>", "B078C6QR1C")
     assert d["title_es_raw"] == ""
@@ -88,10 +108,49 @@ def test_parse_missing_new_fields_empty():
     assert d["product_url"] == "https://www.amazon.es/dp/B078C6QR1C"
 
 
+def test_parse_detail_category_breadcrumb_trail():
+    html = """
+    <div id="wayfinding-breadcrumbs_feature_div">
+      <ul><li><a>Hogar y cocina</a></li><li><a>Muebles</a></li>
+      <li><a>Dormitorio</a></li><li><a>Protectores de colchón</a></li></ul>
+    </div>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["detail_category_trail"] == [
+        "Hogar y cocina", "Muebles", "Dormitorio", "Protectores de colchón"]
+
+
+def test_parse_modern_selected_variation_values():
+    html = """
+    <div id="twister_feature_div">
+      <span id="color_name_9" class="a-button a-button-selected">
+        <img alt="Gris" src="x.jpg">
+      </span>
+      <span id="size_name_6" class="a-button a-button-selected">
+        <span class="swatch-title-text-display">Cama 150 | 2 Fundas Almohada 50x75 cm</span>
+      </span>
+      <div id="variation_size_name">
+        <select id="native_dropdown_selected_size_name">
+          <option class="dropdownSelect" selected="">Cama 90 x 190 x 40 cm</option>
+        </select>
+      </div>
+    </div>
+    """
+    d = parse_detail_page(html, "B075JJRFVV")
+    assert d["selected_variation_raw"] == (
+        "Gris / Cama 150 | 2 Fundas Almohada 50x75 cm / Cama 90 x 190 x 40 cm")
+
+
 def test_parent_asin_malformed_not_trusted():
     html = '<input type="hidden" id="parentASIN" value="no-es-asin">'
     d = parse_detail_page(html, "B078C6QR1C")
     assert d["parent_asin"] == ""      # 值不合法 → 空，不臆造
+
+
+def test_parent_asin_from_explicit_page_json():
+    html = '<script type="a-state">{"parentAsin":"B0H1HDXMFF"}</script>'
+    d = parse_detail_page(html, "B0H1H86BF3")
+    assert d["parent_asin"] == "B0H1HDXMFF"
 
 
 def test_available_date_from_details_table():
@@ -105,6 +164,18 @@ def test_available_date_from_details_table():
     """
     d = parse_detail_page(html, "B078C6QR1C")
     assert d["date_first_available_raw"] == "28 octubre 2023"
+
+
+def test_available_date_from_amazon_since_label():
+    html = """
+    <html><body>
+      <div id="detailBulletsWrapper_feature_div">
+        Producto en Amazon.es desde : 6 noviembre 2023
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["date_first_available_raw"] == "6 noviembre 2023"
 
 
 def test_image_url_fallback_to_data_old_hires():
@@ -151,6 +222,21 @@ def test_full_detail_feature_bullets(delonghi_html):
     d = parse_detail_page(delonghi_html, "B008YETL18")
     assert len(d["feature_bullets_raw"]) == 3
     assert d["feature_bullets_raw"][0].startswith("SOLUCIÓN SUAVE DE DESCALCIFICACIÓN")
+
+
+def test_feature_bullets_pqv_fallback():
+    html = '''<html><body><div id="productTitle">Producto</div>
+    <div id="pqv-feature-bullets"><ul><li><span>Primera ventaja</span></li>
+    <li><span>Segunda ventaja</span></li></ul></div></body></html>'''
+    assert parse_detail_page(html, "B000000001")["feature_bullets_raw"] == [
+        "Primera ventaja", "Segunda ventaja"]
+
+
+def test_brand_from_product_overview_when_byline_missing():
+    html = '''<html><body><div id="productTitle">Producto</div>
+    <div id="productOverview_feature_div"><table><tr><td>Marca</td><td>Marca Visible</td></tr></table></div>
+    </body></html>'''
+    assert parse_detail_page(html, "B000000001")["brand_raw"] == "Marca Visible"
 
 
 def test_full_detail_product_description(delonghi_html):

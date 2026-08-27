@@ -74,6 +74,13 @@ def test_missing_key_field_incomplete():
     assert "现价" in plan["collect"][0]["reason"]
 
 
+def test_old_detail_schema_is_not_considered_fresh():
+    st = _state({"B078C6QR1C": dict(FULL_REC, detail_schema_version=1)})
+    plan = build_plan(_rank(["B078C6QR1C"]), st, now=NOW)
+    assert plan["collect"][0]["priority"] == "incomplete"
+    assert "schema" in plan["collect"][0]["reason"]
+
+
 def test_unreliable_state_forced_recollect():
     # CHALLENGE/BLOCKED 绝不当缓存：上次访问不可信 → 强制重采
     st = _state({"B078C6QR1C": dict(FULL_REC, access_state="CHALLENGE")})

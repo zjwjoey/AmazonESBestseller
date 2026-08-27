@@ -1,0 +1,9 @@
+{
+  "products": [
+    {"asin":"B008YETL18","title_es_raw":"De'Longhi EcoDecalk - Descalcificador para Cafeteras 5 Dosis","brand":"","brand_raw":"","title_zh":"","attributes":[{"label_raw":"Marca","value_raw":"De'Longhi"}],"product_details_zh":"","feature_bullets_raw":["Descalcificante universal Delonghi"],"feature_bullets_zh":"","bestseller_rank":5,"detail_bsr_raw":"n.º 6 en Hogar y cocina"},
+    {"asin":"B075JJRFVV","title_es_raw":"Utopia Bedding Juego de Sabanas 4 Piezas","brand":"Utopia Bedding","title_zh":"Juego de sábanas"},
+    {"asin":"B078C6QR1C","title_es_raw":"Protector de Colchón Impermeable 90x190 cm","brand":"Utopia Bedding","title_zh":"","attributes":[{"label_raw":"Dimensiones del producto","value_raw":"90 x 190 cm"}],"spec_v2":"","product_details_zh":"","feature_bullets_raw":[],"feature_bullets_zh":"","bestseller_rank":1,"detail_bsr_raw":"n.º 1 en Hogar y cocina"},
+    {"asin":"B07RN64P2R","title_es_raw":"Amazon Basics Paquete de 6 Bolsas de vacío","brand":"Amazon Basics","title_zh":"真空收纳袋 6件套","current_price":13.52,"original_price":null,"original_price_raw":"2,25 €","discount_rate":null,"bestseller_rank":3,"detail_bsr_raw":"n.º 3 en Hogar y cocina"},
+    {"asin":"B0H1H86BF3","title_es_raw":"Todocama Almohada Viscoelástica Pack 2","brand":"Todocama","title_zh":"记忆棉枕头 2件套","current_price":29.99,"original_price":null,"original_price_raw":"15,00 €","discount_rate":null,"bestseller_rank":4,"detail_bsr_raw":"n.º 2 en Hogar y cocina"}
+  ]
+}

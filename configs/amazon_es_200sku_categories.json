@@ -1,0 +1,80 @@
+[
+  {
+    "category_group": "hogar",
+    "category_name": "Hogar y cocina",
+    "url": "https://www.amazon.es/gp/bestsellers/kitchen/",
+    "quota": 50
+  },
+  {
+    "category_group": "hogar",
+    "category_name": "Protectores y fundas de colchón",
+    "url": "https://www.amazon.es/gp/bestsellers/kitchen/27003773031",
+    "quota": 25
+  },
+  {
+    "category_group": "hogar",
+    "category_name": "Almohadillas de colchón",
+    "url": "https://www.amazon.es/gp/bestsellers/kitchen/27003778031",
+    "quota": 20
+  },
+  {
+    "category_group": "hogar",
+    "category_name": "Maletas de transporte máquinas de coser",
+    "url": "https://www.amazon.es/gp/bestsellers/kitchen/4358458031",
+    "quota": 15
+  },
+  {
+    "category_group": "hogar",
+    "category_name": "Zapateros colgantes",
+    "url": "https://www.amazon.es/gp/bestsellers/kitchen/27362438031",
+    "quota": 20
+  },
+  {
+    "category_group": "hogar",
+    "category_name": "Barras de cortina dobles para ventanas",
+    "url": "https://www.amazon.es/gp/bestsellers/kitchen/56171694031",
+    "quota": 20
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Linternas",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3053011031",
+    "quota": 10
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Pegamentos universales",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3049570031",
+    "quota": 10
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Sensores de movimiento",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3051813031",
+    "quota": 8
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Accesorios para bombas de agua",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3049611031",
+    "quota": 6
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Puertas de garaje",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3053230031",
+    "quota": 6
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Pernos con ranura en T",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3051945031",
+    "quota": 5
+  },
+  {
+    "category_group": "diy",
+    "category_name": "Pinturas acrílicas",
+    "url": "https://www.amazon.es/gp/bestsellers/tools/3051764031",
+    "quota": 5
+  }
+]

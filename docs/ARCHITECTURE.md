@@ -1,6 +1,6 @@
 # AmazonESBestseller — Architecture
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document describes the intended architecture of the `AmazonESBestseller` project based on the current working implementation and verified outputs.
 
@@ -21,9 +21,11 @@ Best Sellers discovery
    ↓
 Ranking collection
    ↓
-ASIN discovery
+Global unique selection
    ↓
-Product-detail enrichment
+Detail planning / collection
+   ↓
+Offline schema reparse
    ↓
 Raw evidence storage
    ↓
@@ -901,6 +903,19 @@ Spanish → Chinese
 ```
 
 consistency.
+
+## Field Closure Audit
+
+The formal closure diagnostic sits after normalization/translation and before the
+display consumer without rewriting the existing pipeline:
+
+```text
+Amazon Source → Raw → Canonical → Derived → QA / Field Closure → Display / Excel
+```
+
+`audit-fields` reads products, optional raw detail/ranking JSON and saved HTML, then
+emits deterministic JSON and Markdown. It distinguishes absent source from parser,
+mapping and derived loss and does not add concurrency or alter the three-sheet export.
 
 ---
 
@@ -1835,4 +1850,21 @@ The most important architectural properties are:
 
 Architecture exists to protect data quality.
 
+Detail schema upgrades first reparse saved HTML offline. The quota selector
+enforces one global ASIN set across category groups and raises
+`QUOTA_UNIQUE_SHORTFALL` when the requested 200 cannot be satisfied.
+
+After detail navigation, the browser uses short fixed render delays instead of
+DOM selector/function waits. This prevents a partially responsive Playwright page
+from blocking the whole batch; access-state detection still runs against saved
+HTML and remains the authority for stopping on challenges or denied pages.
+
 Not to maximize abstraction.
+
+## Pipeline Production Hardening (2026-08-27)
+
+The current stable path is `collect → select-quota → detail planning/collection →
+offline reparse → enrich → translate-ds (explicit YES confirmation) → enrich with
+translation overlay → qa → field closure → export gate → Excel`. The CLI and smoke tests protect this path without implementing a new
+orchestrator. `run_manifest.py` is observability metadata beside the pipeline; it is
+not a product/ranking source of truth. CI runs the offline tests only.

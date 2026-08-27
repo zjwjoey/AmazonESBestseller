@@ -1,6 +1,6 @@
 # AmazonESBestseller — QA Rules
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document defines quality-assurance rules for collection, normalization, translation and Excel export.
 
@@ -251,3 +251,32 @@ When a real bug is discovered, convert it into a permanent regression test.
 Export runs the full QA pipeline before writing the workbook. Any P0/P1 issue blocks the default export: the workbook is not written and the blocking issues are reported with ASIN + code + message. `--force` bypasses the gate explicitly; the exporter never silently repairs upstream data (§25).
 
 Missing data is still not an automatic failure (§29): the gate only stops on real P0/P1 defects, not on empty-but-missing fields.
+
+## 32. Field Closure QA
+
+The offline `audit-fields` command checks each automatic field through Source → Raw
+→ Canonical → Derived → Display. It distinguishes `SOURCE_MISSING`,
+`PARSER_MISSED`, `MAPPING_MISSED` and `DERIVED_MISSING`; source-missing fields are
+normally informational and do not block export. The audit is read-only and excludes
+human-owned `备注`.
+
+`ORIGINAL_PRICE_INVALID` is emitted when an apparent list price is absent,
+unparseable, or `original_price <= current_price`; it is not displayed as a valid
+struck-through original and no discount is calculated. Unknown raw attributes remain
+preserved, and Detail BSR never supplies `bestseller_rank`.
+
+Export also blocks `TRANSLATION_INCOMPLETE` when a source Spanish display field
+exists but its Chinese target is empty or still a Spanish sentence. `--force`
+is the explicit override and is always reported.
+
+## 33. CLI and pipeline integrity
+
+Each CLI command must have command-specific parsing, deterministic input/output
+paths and controlled errors. `repair-cache` reports its cache-repair counters;
+`reparse-details` reports only schema-reparse counters and must not depend on
+repair-cache locals. Smoke tests may use fake browser/DeepSeek transports, but
+the default test suite and CI must never access Amazon, DeepSeek, credentials or
+local browser profiles. Multiple reparse directories must deduplicate by ASIN with
+documented directory-order precedence, and translation summaries must distinguish
+`success`, `partial` and `failed`. `SOURCE_MISSING` remains valid and does not become
+a blanket completeness failure.

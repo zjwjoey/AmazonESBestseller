@@ -12,6 +12,25 @@ from typing import Optional
 #: 已知西语类目 → 中文业务名（仅收录有把握的映射；未知返回 None）
 CATEGORY_ZH = {
     "hogar y cocina": "家居与厨房",
+    "bricolaje y herramientas": "DIY及工具",
+    "café y té": "咖啡与茶",
+    "almacenamiento y organización": "收纳与整理",
+    "almacenamiento de cocina y despensa": "厨房与食品储藏",
+    "aspiración, limpieza y cuidado de suelo y ventanas": "吸尘、清洁及地面和窗户护理",
+    "baño": "浴室",
+    "chimeneas y accesorios": "壁炉与配件",
+    "cortacéspedes y herramientas eléctricas para exteriores": "割草机与户外电动工具",
+    "ferretería": "五金工具",
+    "fontanería": "管道工具",
+    "herramientas manuales y eléctricas": "手动与电动工具",
+    "accesorios de aspiradoras para alfombras": "吸尘器配件",
+    "accesorios de baño": "浴室配件",
+    "accesorios de chimenea": "壁炉配件",
+    "accesorios para cafeteras": "咖啡机配件",
+    "accesorios para herramientas eléctricas": "电动工具配件",
+    "almacenaje de adornos festivos": "节日装饰收纳",
+    "almacenamiento de alimentos": "食品收纳",
+    "bombas de agua y accesorios": "水泵及配件",
     "juegos de recipientes": "收纳盒套装",
 }
 

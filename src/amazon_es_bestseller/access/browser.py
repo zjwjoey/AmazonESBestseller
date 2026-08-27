@@ -44,28 +44,12 @@ class BrowserSession:
         return resp.status if resp is not None else None
 
     def wait_for_product_page(self, timeout_ms: int = 20000) -> None:
-        """复刻 JS：等待 价格/库存/缺货标识 任一出现；超时容忍（.catch 语义）。"""
-        try:
-            self.page.wait_for_selector(
-                "#corePrice_feature_div, #corePriceDisplay_desktop_feature_div, "
-                "#availability, #outOfStock",
-                timeout=timeout_ms)
-        except Exception:
-            pass
+        """给详情页固定渲染缓冲，避免 DOM 协议等待在失活页面上挂死。"""
+        time.sleep(min(max(float(timeout_ms), 0.0) / 1000.0, 2.0))
 
     def wait_for_price_text(self, timeout_ms: int = 10000) -> None:
-        """复刻 JS：额外等待价格真正渲染出数字。"""
-        try:
-            self.page.wait_for_function(
-                "() => {"
-                "  const t = document.querySelector("
-                "    '#corePrice_feature_div .a-price .a-offscreen, "
-                "    .apex-pricetopay-value .a-offscreen, "
-                "    .priceToPay .a-offscreen');"
-                "  return t && t.textContent.trim().length > 0;"
-                "}", timeout=timeout_ms)
-        except Exception:
-            pass
+        """给价格脚本再留短暂缓冲，不调用可能长期不返回的 DOM 等待。"""
+        time.sleep(min(max(float(timeout_ms), 0.0) / 1000.0, 1.0))
 
     def wait_between_requests(self, delay: Optional[float] = None) -> None:
         """串行采集的显式页间延迟（默认 2.0 秒）。"""

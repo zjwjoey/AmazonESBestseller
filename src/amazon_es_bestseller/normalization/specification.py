@@ -91,6 +91,11 @@ _DIM_RE5 = re.compile(r'^([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|m
 _DIM_RE6 = re.compile(r'^([\d.]+)\s*l\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
 # §40：10×15cm 二维简式（历史回归：10×15cm → 10×10mm 必须永不重现）
 _DIM_RE2D = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*(centímetros|milímetros|metros|cm|mm|m)?', re.I)
+_DIM_FRAGMENT_RE = re.compile(
+    r'((?:[\d.,]+)\s*(?:l\.)?\s*x\s*(?:[\d.,]+)\s*(?:an\.)?\s*x\s*'
+    r'(?:[\d.,]+)\s*(?:al\.)?\s*(?:centímetros|milímetros|metros|cm|mm|m)?|'
+    r'(?:[\d.,]+)\s*x\s*(?:[\d.,]+)\s*'
+    r'(?:centímetros|milímetros|metros|cm|mm|m)?)', re.I)
 _UNIT_CN = {'centímetros': '厘米', 'milímetros': '毫米', 'metros': '米', 'cm': '厘米', 'mm': '毫米', 'm': '米', '': ''}
 
 
@@ -283,6 +288,14 @@ def _pick_dimension(d):
         v = d.get(k)
         if v:
             return v
+    # Amazon often prefixes a concrete size with text, e.g.
+    # ``Tamaño: Cama 90 x 190 x 40 cm``.  Extract only the explicit numeric
+    # dimension fragment; never infer a dimension from unrelated title text.
+    size = d.get('tamano')
+    if size:
+        m = _DIM_FRAGMENT_RE.search(str(size))
+        if m:
+            return m.group(1).strip()
     return None
 
 
@@ -296,8 +309,7 @@ def _is_set_evidence(d, variant=None, title_es=None) -> bool:
 
 def build_spec_v2(d, variant=None, title_es=None) -> str:
     """简短规格（QA_RULES §36）：只回答"客户买的是哪个规格版本"。"""
-    if not d:
-        return ''
+    d = d if isinstance(d, dict) else {}
     parts = []
     n = resolve_package_count(d, variant, title_es)
     if n:
@@ -332,4 +344,268 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
         m = re.match(r'(\d+)', str(pcs))
         if m and int(m.group(1)) > 1:
             parts.append('%s只' % m.group(1))
+    # When Amazon exposes no structured attribute table, retain explicit
+    # numeric evidence from the exact title rather than leaving the derived
+    # specification silently blank.  This is intentionally conservative:
+    # only dimensions/capacity/power/voltage/package-count patterns qualify.
+    if not parts and title_es:
+        text = str(title_es)
+        m = re.search(r'(?<!\w)(\d+(?:[.,]\d+)?\s*(?:x|×)\s*\d+(?:[.,]\d+)?(?:\s*(?:x|×)\s*\d+(?:[.,]\d+)?)?\s*(?:mm|cm|m))(?!\w)', text, re.I)
+        if m:
+            parts.append(dim_zh(m.group(1).replace(',', '.')) or m.group(1))
+        else:
+            m = re.search(r'(?<!\w)(\d+(?:[.,]\d+)?)\s*(ml|mililitros?|l|litros?|g|kg|w|vatios?|v|voltios?)(?!\w)', text, re.I)
+            if m:
+                parts.append(cap_zh((m.group(1) + ' ' + m.group(2)).replace(',', '.')) or m.group(0))
+        if not parts:
+            m = re.search(r'(?<!\w)(\d+)\s*(?:piezas?|unidades?|uds?)(?!\w)', text, re.I)
+            if m and int(m.group(1)) > 1:
+                parts.append('%s只' % m.group(1))
     return ' / '.join(parts)
+
+
+# ---------- 西语规格展示 ----------
+# 仅保留页面明确给出的“版本选择”相关字段；不把品牌、材质等完整详情
+# 塞进核心规格列。标签和值均保留西语原文，便于回溯页面证据。
+_ES_CORE_KEYS = {
+    'capacidad', 'capacidad_de_salida', 'volumen_de_almacenamiento',
+    'volumen_del_tanque', 'volumen_liquido', 'tamano', 'talla',
+    'talla_dimensiones', 'numero_de_articulos', 'numero_de_piezas',
+    'numero_de_unidades', 'numero_de_etiquetas', 'numero_de_productos',
+    'numero_de_paquetes', 'numero_de_sets',
+    'total_del_paquete_segun_la_medida_elegida_para_referenciar_precio',
+    'cantidad_de_compartimentos', 'potencia', 'voltaje', 'tension',
+}
+
+_ES_CORE_GROUPS = {
+    'capacity': 'capacity', 'capacidad_de_salida': 'capacity',
+    'volumen_de_almacenamiento': 'capacity', 'volumen_del_tanque': 'capacity',
+    'volumen_liquido': 'capacity', 'tamano': 'size', 'talla': 'size',
+    'talla_dimensiones': 'size', 'numero_de_articulos': 'count',
+    'numero_de_piezas': 'count', 'numero_de_unidades': 'count',
+    'numero_de_etiquetas': 'count', 'numero_de_productos': 'count',
+    'numero_de_sets': 'count', 'cantidad_de_compartimentos': 'compartments',
+    'potencia': 'power', 'voltaje': 'voltage', 'tension': 'voltage',
+}
+
+
+def _is_es_core_key(key: str) -> bool:
+    return key in _ES_CORE_KEYS or key.startswith('dimensiones_')
+
+
+def _es_core_group(key: str) -> str | None:
+    if key.startswith('dimensiones_'):
+        return 'dimension'
+    return _ES_CORE_GROUPS.get(key)
+
+
+def _is_generic_one_count(key: str, value: str) -> bool:
+    if not (key.startswith('numero_de_') or key.startswith('total_del_paquete')):
+        return False
+    return bool(re.match(r'^1(?:[.,]0)?(?:\s+conteo)?$', value.strip(), re.I))
+
+
+_ASIN_ONLY_RE = re.compile(r'^B[0-9A-Z]{9}$', re.I)
+
+
+def _valid_spec_text(value) -> str:
+    """Return a displayable spec candidate, rejecting identity values.
+
+    A stale export once copied a parent/child ASIN into the core-spec column.
+    ASINs are product identity, never specification evidence.
+    """
+    text = str(value or '').strip()
+    if not text or _ASIN_ONLY_RE.fullmatch(text):
+        return ''
+    return text
+
+
+def _title_core_spec_es(title_es) -> str:
+    """Extract only explicit numeric spec evidence from the exact title.
+
+    This is a conservative fallback for pages where Amazon exposes no
+    structured attribute table.  It never invents a value from rank, price or
+    an ASIN-like token.
+    """
+    title = str(title_es or '').strip()
+    if not title:
+        return ''
+    # Dimensions with an explicit unit, preserving the Spanish source text.
+    m = re.search(
+        r'(?<![\w])\d+(?:[.,]\d+)?\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?'
+        r'(?:\s*(?:x|×)\s*\d+(?:[.,]\d+)?)?\s*'
+        r'(?:mm|cm|m|milímetros?|centímetros?|metros?)(?!\w)',
+        title, re.I)
+    if m:
+        return m.group(0).strip()
+    # A single explicit length in metres is still useful evidence (for
+    # example a 1.2 m shower barrier); model numbers without a unit do not
+    # match this branch.
+    m = re.search(r'(?<![\w])\d+(?:[.,]\d+)?\s*(?:m|metros?)(?!\w)', title, re.I)
+    if m:
+        return m.group(0).strip()
+    # Capacity/weight/power/voltage with explicit units.
+    m = re.search(
+        r'(?<![\w])\d+(?:[.,]\d+)?\s*'
+        r'(?:ml|mililitros?|l|litros?|g|gramos?|kg|kilogramos?|w|vatios?|watios?|v|voltios?)'
+        r'(?!\w)', title, re.I)
+    if m:
+        return m.group(0).strip()
+    # Explicit package/count language only; a bare trailing number is ignored.
+    m = re.search(
+        r'(?<![\w])(?:\d+\s*(?:piezas?|unidades?|uds?\.?|artículos?|packs?|'
+        r'cápsulas?|baterías?|cuchillas?|bolsas?|tabletas?|dosis?|juegos?)|'
+        r'(?:pack|paquete|juego|set)\s+(?:de\s+)?\d+|'
+        r'x\s*\d+(?:\s*(?:cápsulas?|baterías?|cuchillas?|bolsas?|tabletas?|dosis?))?)(?![\w])',
+        title, re.I)
+    if m:
+        return m.group(0).strip()
+    # Compatibility generations are explicit product-version evidence even
+    # when Amazon exposes no structured size/capacity field.
+    m = re.search(r'(?<![\w])\d+[ªº]?\s*a\s*\d+[ªº]?\s+generaci[oó]n(?!\w)',
+                  title, re.I)
+    if m:
+        return m.group(0).strip()
+    return ''
+
+
+_ES_MODEL_KEYS = {
+    'numero_modelo', 'numero_de_modelo', 'numero_pieza',
+    'numero_de_pieza', 'numero_de_pieza_del_fabricante',
+}
+
+
+def _explicit_model_spec_es(attributes) -> str:
+    """Return a concise explicit model/part identifier as last-resort spec.
+
+    Model/part values are retained only when Amazon labels them explicitly;
+    long free-form model-name compatibility lists are intentionally skipped.
+    """
+    candidates = []
+    for attr in attributes or []:
+        if not isinstance(attr, dict):
+            continue
+        label = str(attr.get('label_raw') or '').strip()
+        value = str(attr.get('value_raw') or '').strip()
+        key = _normalize_spec_label(label)
+        if key not in _ES_MODEL_KEYS or not value:
+            continue
+        if len(value) > 120 or value.casefold() in {'voir descriptif', 'desconocido'}:
+            continue
+        candidates.append((key, label, value))
+    if not candidates:
+        return ''
+    # Prefer model number over part number, then the first page occurrence.
+    candidates.sort(key=lambda x: (0 if 'modelo' in x[0] else 1))
+    _, label, value = candidates[0]
+    return '%s: %s' % (label, value)
+
+
+def build_spec_es(attributes=None, details=None, variant=None, title_es=None) -> str:
+    """Build a compact Spanish core-spec display from explicit page evidence.
+
+    ``attributes`` is preferred because it retains the original Spanish label.
+    ``details`` is a compatibility fallback for legacy normalized records.  A
+    selected variation is only used when no recognized attribute is available;
+    no value is inferred from rank, price, or a translated Chinese summary.
+    """
+    parts = []
+    seen = set()
+    seen_groups = set()
+    for attr in attributes or []:
+        if not isinstance(attr, dict):
+            continue
+        label = str(attr.get('label_raw') or '').strip()
+        value = str(attr.get('value_raw') or '').strip()
+        key = _normalize_spec_label(label)
+        group = _es_core_group(key)
+        if not label or not value or not _is_es_core_key(key) or group is None:
+            continue
+        if group in seen_groups:
+            continue
+        if _is_generic_one_count(key, value):
+            continue
+        dedupe = (key, value.casefold())
+        if dedupe in seen:
+            continue
+        seen.add(dedupe)
+        seen_groups.add(group)
+        parts.append('%s: %s' % (label, value))
+
+    if not parts and isinstance(details, dict):
+        for key, value in details.items():
+            key_norm = _normalize_spec_label(key)
+            value = str(value or '').strip()
+            group = _es_core_group(key_norm)
+            if (not value or not _is_es_core_key(key_norm) or group is None
+                    or group in seen_groups or _is_generic_one_count(key_norm, value)):
+                continue
+            seen_groups.add(group)
+            parts.append('%s: %s' % (key, value))
+
+    if parts:
+        return ' / '.join(parts)
+    variant_text = _valid_spec_text(variant)
+    if variant_text:
+        return variant_text
+    title_text = _valid_spec_text(_title_core_spec_es(title_es))
+    if title_text:
+        return title_text
+    model_text = _valid_spec_text(_explicit_model_spec_es(attributes))
+    if model_text:
+        return model_text
+    return ''
+
+
+def translate_spec_es_to_zh(value) -> str:
+    """Translate the small, title-derived Spanish spec forms deterministically.
+
+    This is deliberately limited to dimensions, units and explicit package
+    counts.  It is a display fallback when DS did not return a translation;
+    arbitrary Spanish prose is never machine-rewritten here.
+    """
+    text = _valid_spec_text(value)
+    if not text:
+        return ''
+    m = re.fullmatch(
+        r'(n[uú]mero\s+(?:de\s+)?modelo|n[uú]mero\s+(?:de\s+)?pieza(?:\s+del\s+fabricante)?)\s*:\s*(.+)',
+        text, re.I)
+    if m:
+        label = m.group(1).casefold()
+        zh_label = '型号' if 'modelo' in label else '零件号'
+        return '%s：%s' % (zh_label, m.group(2).strip())
+    m = re.fullmatch(r'\d+[ªº]?\s*a\s*\d+[ªº]?\s+generaci[oó]n', text, re.I)
+    if m:
+        return '兼容' + text
+    m = re.fullmatch(
+        r'(\d+(?:[.,]\d+)?)\s*(?:x|×|\*)\s*'
+        r'(\d+(?:[.,]\d+)?)(?:\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?))?\s*'
+        r'(mm|cm|m|milímetros?|centímetros?|metros?)', text, re.I)
+    if m:
+        nums = [g for g in m.groups()[:3] if g]
+        unit = m.group(4).lower()
+        unit_zh = {'mm': '毫米', 'milimetro': '毫米', 'milimetros': '毫米',
+                   'milímetros': '毫米', 'milímetros': '毫米',
+                   'cm': '厘米', 'centimetro': '厘米', 'centimetros': '厘米',
+                   'centímetros': '厘米', 'centímetros': '厘米',
+                   'm': '米', 'metro': '米', 'metros': '米'}
+        return '×'.join(n.replace(',', '.') for n in nums) + unit_zh.get(unit, '')
+    m = re.fullmatch(r'(\d+(?:[.,]\d+)?)\s*(m|metros?)', text, re.I)
+    if m:
+        return m.group(1).replace(',', '.') + '米'
+    m = re.fullmatch(
+        r'(?:x\s*)?(\d+)\s*(cápsulas?|capsulas?|baterías?|baterias?|'
+        r'cuchillas?|bolsas?|tabletas?|dosis?|piezas?|unidades?|uds?\.?|'
+        r'artículos?|packs?|juegos?|set|sets?)?', text, re.I)
+    if m:
+        n, noun = m.group(1), (m.group(2) or '').casefold().rstrip('.')
+        labels = {
+            'cápsula': '粒胶囊', 'cápsulas': '粒胶囊', 'capsula': '粒胶囊', 'capsulas': '粒胶囊',
+            'batería': '节电池', 'baterías': '节电池', 'bateria': '节电池', 'baterias': '节电池',
+            'cuchilla': '片刀片', 'cuchillas': '片刀片', 'bolsa': '个袋', 'bolsas': '个袋',
+            'tableta': '片', 'tabletas': '片', 'dosis': '剂', 'pieza': '件', 'piezas': '件',
+            'unidad': '件', 'unidades': '件', 'uds': '件', 'artículo': '件', 'artículos': '件',
+            'pack': '件', 'juego': '套', 'juegos': '套', 'set': '套', 'sets': '套',
+        }
+        return n + labels.get(noun, '件')
+    return ''

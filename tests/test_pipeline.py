@@ -55,6 +55,14 @@ def test_enrich_normalizes_fields():
     assert p["采集类目中文"] == "收纳盒套装"
 
 
+def test_enrich_derives_chinese_category_levels_for_display():
+    p = enrich_products(RANKING, DETAIL)[0]
+    assert p["category_l1_zh"] == "家居与厨房"
+    assert p["category_l2_zh"] == "收纳与整理"
+    assert p["category_l3_zh"] == "收纳盒套装"
+    assert p["leaf_category_zh"] == "收纳盒套装"
+
+
 def test_enrich_review_count_modern_paren_format():
     # 现代页面评论数 "(8.819)"（括号包裹）→ 3873 类比解析为 8819，不落 None
     d = dict(DETAIL[0], review_count_raw="(8.819)")
@@ -84,6 +92,28 @@ def test_enrich_spec_from_modern_attributes():
     assert "件" in p["spec_v2"]                     # Número de artículos → 4 件
 
 
+def test_enrich_preserves_spanish_core_spec_from_modern_attributes():
+    attrs = [
+        {"section": "product_overview", "label_raw": "Tamaño",
+         "value_raw": "Cama 90 x 190 x 40 cm"},
+    ]
+    d = dict(DETAIL[0], details_json=None, attributes=attrs)
+    p = enrich_products(RANKING, [d])[0]
+    assert p["specification_es"] == "Tamaño: Cama 90 x 190 x 40 cm"
+
+
+def test_enrich_fills_missing_category_depth_from_detail_breadcrumb():
+    d = dict(DETAIL[0], detail_category_trail=[
+        "Hogar y cocina", "Muebles", "Dormitorio", "Protectores de colchón"])
+    ranking = dict(RANKING[0], category_l2=None, category_l3=None,
+                   leaf_category=None)
+    p = enrich_products([ranking], [d])[0]
+    assert p["category_l1"] == "Hogar y cocina"  # ranking context remains preferred
+    assert p["category_l2"] == "Muebles"
+    assert p["category_l3"] == "Dormitorio"
+    assert p["leaf_category"] == "Protectores de colchón"
+
+
 def test_enrich_spec_and_product_type():
     p = enrich_products(RANKING, DETAIL)[0]
     assert p["spec_v2"] != ""
@@ -102,6 +132,29 @@ def test_enrich_no_discount_when_original_not_greater():
     d = dict(DETAIL[0], original_price_raw="10,00 €")  # orig < cur
     p = enrich_products(RANKING, [d])[0]
     assert p["discount_rate"] is None
+    assert p["original_price"] is None
+
+
+def test_enrich_brand_falls_back_to_reliable_marca_attribute():
+    d = dict(DETAIL[0], brand_raw="", attributes=[
+        {"section": "product_overview", "label_raw": "Marca", "value_raw": "De'Longhi"}
+    ])
+    p = enrich_products(RANKING, [d])[0]
+    assert p["brand"] == "De'Longhi"
+
+
+def test_enrich_drops_unconfirmed_self_parent_asin():
+    d = dict(DETAIL[0], asin="B078C6QR1C", parent_asin="B078C6QR1C",
+             parent_asin_status="self_reported_unconfirmed")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["parent_asin"] == ""
+
+
+def test_enrich_preserves_confirmed_parent_asin():
+    d = dict(DETAIL[0], asin="B078C6QR1C", parent_asin="B0DH0ABC01",
+             parent_asin_status="confirmed")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["parent_asin"] == "B0DH0ABC01"
 
 
 def test_enrich_title_zh_from_translations():
@@ -110,6 +163,44 @@ def test_enrich_title_zh_from_translations():
     assert p["title_zh"] == "玻璃便当盒 4 件套"
     # 无翻译 → 空（缺失不臆造）
     assert enrich_products(RANKING, DETAIL)[0]["title_zh"] == ""
+
+
+def test_enrich_applies_ds_translation_without_changing_spanish_source():
+    tr = {
+        "B078C6QR1C": {
+            "title_zh": "床垫保护垫",
+            "category_l2_zh": "收纳与整理",
+            "selected_variation_zh": "4件套",
+            "specification_zh": "90×190厘米",
+            "product_details_zh": "材质：玻璃",
+            "feature_bullets_zh": "防水",
+        }
+    }
+    p = enrich_products(RANKING, DETAIL, translations=tr)[0]
+    assert p["title_es_raw"] == "Fiambrera de cristal con 4 piezas"
+    assert p["title_zh"] == "床垫保护垫"
+    assert p["category_l2_zh"] == "收纳与整理"
+    assert p["selected_variation_zh"] == "4件套"
+    assert p["specification_zh"] == "90×190厘米"
+    assert p["product_details_zh"] == "材质：玻璃"
+    assert p["feature_bullets_zh"] == "防水"
+
+
+def test_enrich_does_not_overlay_detail_translation_when_spanish_source_empty():
+    """中文详情不能凭 DS 返回值独立出现，必须与西语源字段同步。"""
+    detail_without_full_text = dict(
+        DETAIL[0], attributes=[], feature_bullets_raw=[],
+        details_json={}, product_description_raw="", detail_bullets_raw="",
+    )
+    tr = {"B078C6QR1C": {
+        "product_details_zh": "2升",
+        "feature_bullets_zh": "清洁设备",
+    }}
+    p = enrich_products(RANKING, [detail_without_full_text], translations=tr)[0]
+    assert p["product_details_es"] == ""
+    assert p["product_details_zh"] == ""
+    assert p["feature_bullets_es"] == ""
+    assert p["feature_bullets_zh"] == ""
 
 
 def test_enrich_deterministic_order_by_asin():

@@ -150,9 +150,43 @@ amazon-es --help
 python -m pytest -q -rs
 ```
 
-`collect` uses low-frequency serial browser access. `enrich`、`qa` 和 `export` are offline.
-Live collection tests run only when `RUN_LIVE=1` is explicitly set. The project does not
-provide CAPTCHA, proxy-rotation or stealth bypass behavior.
+Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `qa`,
+`audit-fields` and `export`. `collect` and `translate-ds` are the only commands that
+require external services (`collect` uses low-frequency serial browser access; the latter
+calls DeepSeek only when explicitly run). Live collection tests run only when `RUN_LIVE=1`
+is explicitly set. CI and the default test suite never access Amazon or DeepSeek, and the
+project does not provide CAPTCHA, proxy-rotation or stealth bypass behavior.
+
+`reparse-details --html-dir DIR1 DIR2 ...` accepts multiple saved-HTML directories;
+for duplicate ASINs, the first valid record in the supplied directory order wins.
+`translate-ds` reports `success`, `partial` and `failed` counts separately so partial
+translation is not mistaken for a complete failure. Before constructing the DS client,
+it prints the request summary and requires an explicit `YES`; any other input (including
+EOF) cancels without an API request. `--offline translate-ds` is rejected.
+
+The minimum local verification is:
+
+```powershell
+python -m pip install -e ".[test]"
+amazon-es --help
+python -m pytest -q -rs
+```
+
+`run_manifest.py` provides JSON-only run metadata helpers for a future orchestrator; no
+`amazon-es run` command or scheduler is implemented in the current phase.
+
+### Field Closure Audit
+
+The offline `audit-fields` command follows `collect → enrich → translate-ds → enrich → qa → audit-fields →
+export` and emits deterministic JSON plus Markdown. It diagnoses automatic-field
+gaps as `SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`;
+source-missing values remain empty rather than being guessed.
+
+```powershell
+amazon-es audit-fields --products outputs/products.json `
+  --details outputs/details.json --rankings outputs/rankings.json `
+  --out outputs/field_closure.json
+```
 
 ## 12. Documentation
 
@@ -167,3 +201,7 @@ QA: 宁缺毋错
 ```
 
 最终目标不是抓最多的数据，而是得到足够多、足够准确、能真正支持选品判断的 Amazon.es 商品数据。
+
+导出前会执行字段闭环审计；翻译缓存按 ASIN、schema 和西语源哈希复用，详情 schema
+升级优先离线重解析保存 HTML。150 家居 + 50 DIY 是全局唯一配额，缺口会以
+`QUOTA_UNIQUE_SHORTFALL` 明确失败。

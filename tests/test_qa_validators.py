@@ -104,6 +104,7 @@ def test_validate_price_rejects_present_equal_original():
     status, issues = validate_price(14.99, 14.99, "EUR", None)
     assert status == QAStatus.FAIL
     assert any(i.code == "PRICE_INVALID" for i in issues)
+    assert any(i.code == "ORIGINAL_PRICE_INVALID" for i in issues)
 
 
 # ---------- 评分 ----------
@@ -248,6 +249,14 @@ def test_validate_spec_variant_ok():
     r = _spec_record({"capacidad": "20 litros"}, selected_variation_raw="30L",
                      title_es_raw="Fiambrera de cristal con 4 piezas", spec_v2="30升")
     assert validate_spec(r) == (QAStatus.PASS, [])
+
+
+def test_validate_spec_rejects_asin_identity_value():
+    r = _spec_record({}, asin="B002X3IDBK", parent_asin="B07VVDBKCX",
+                     specification_es="B07VVDBKCX")
+    status, issues = validate_spec(r)
+    assert status == QAStatus.FAIL
+    assert any(i.code == "SPEC_IDENTITY_VALUE" for i in issues)
 
 
 # ---------- 排名与 BSR 隔离 ----------

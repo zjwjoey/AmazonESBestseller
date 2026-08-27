@@ -10,6 +10,8 @@ from amazon_es_bestseller.normalization.specification import (
     set_count,
     resolve_package_count,
     build_spec_v2,
+    build_spec_es,
+    translate_spec_es_to_zh,
 )
 
 
@@ -27,6 +29,68 @@ def test_capacity_30l_variant_beats_technical():
     out = build_spec_v2({'capacidad': '20 litros'}, variant='30L')
     assert '30升' in out
     assert '20升' not in out
+
+
+def test_build_spec_v2_extracts_dimensions_embedded_in_size_label():
+    out = build_spec_v2({'tamano': 'Cama 90 x 190 x 40 cm'})
+    assert out == '90×190×40厘米'
+
+
+def test_build_spec_es_preserves_explicit_spanish_spec_evidence():
+    attrs = [
+        {"label_raw": "Tamaño", "value_raw": "Cama 90 x 190 x 40 cm"},
+        {"label_raw": "Número de Artículos", "value_raw": "1"},
+    ]
+    out = build_spec_es(attrs)
+    assert "Tamaño: Cama 90 x 190 x 40 cm" in out
+    assert "Número de Artículos: 1" not in out
+
+
+def test_build_spec_es_deduplicates_dimension_and_package_metadata():
+    attrs = [
+        {"label_raw": "Tamaño", "value_raw": "2 Unidades de 70 cm"},
+        {"label_raw": "Dimensiones del producto", "value_raw": "70l. x 35an. centímetros"},
+        {"label_raw": "Dimensiones del artículo L x A", "value_raw": "70l. x 35an. centímetros"},
+        {"label_raw": "Total del paquete según la medida elegida para referenciar precio",
+         "value_raw": "2.0 Conteo"},
+    ]
+    out = build_spec_es(attrs)
+    assert out.count("Dimensiones") == 1
+    assert "Total del paquete" not in out
+
+
+def test_build_spec_es_uses_explicit_title_evidence_when_attributes_missing():
+    out = build_spec_es(
+        attributes=[],
+        title_es="Broca SDS Plus 14 x 160 mm - Broca para hormigón",
+    )
+    assert out == "14 x 160 mm"
+
+
+def test_build_spec_es_does_not_use_asin_as_spec_or_variant():
+    assert build_spec_es(variant="B07VVDBKCX") == ""
+
+
+def test_build_spec_es_title_count_and_star_dimensions():
+    assert build_spec_es(title_es="Caffenu Cafetera x 5 Cápsulas") == "x 5 Cápsulas"
+    assert build_spec_es(title_es="Alfombrilla ignífuga 100*150 cm") == "100*150 cm"
+
+
+def test_build_spec_es_uses_explicit_model_when_no_numeric_spec_exists():
+    attrs = [{"label_raw": "Número Modelo", "value_raw": "04-SHA-823"}]
+    assert build_spec_es(attrs) == "Número Modelo: 04-SHA-823"
+
+
+def test_build_spec_es_uses_explicit_generation_compatibility_from_title():
+    assert build_spec_es(title_es="Manguera inferior para Bissell de 1ª a 5ª generación") == "1ª a 5ª generación"
+
+
+def test_translate_model_and_generation_specs_to_chinese():
+    assert translate_spec_es_to_zh("Número Modelo: 04-SHA-823") == "型号：04-SHA-823"
+    assert translate_spec_es_to_zh("1ª a 5ª generación") == "兼容1ª a 5ª generación"
+    assert translate_spec_es_to_zh("100*150 cm") == "100×150厘米"
+    assert translate_spec_es_to_zh("x 5 Cápsulas") == "5粒胶囊"
+    assert translate_spec_es_to_zh("2 baterías") == "2节电池"
 
 
 # ---------- 回归：尺寸 ----------
@@ -194,3 +258,8 @@ def test_build_spec_v2_full(sample_detail_dict):
 def test_build_spec_v2_empty():
     assert build_spec_v2({}) == ''
     assert build_spec_v2(None) == ''
+
+
+def test_build_spec_v2_uses_explicit_title_dimensions_without_attributes():
+    out = build_spec_v2({}, title_es='Organizador 30 x 20 cm')
+    assert '30' in out and '20' in out and '厘米' in out

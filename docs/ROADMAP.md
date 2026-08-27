@@ -1,6 +1,6 @@
 # AmazonESBestseller — Roadmap
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This document defines the recommended development sequence for the `AmazonESBestseller` project.
 
@@ -38,7 +38,7 @@ The project is not currently required to become:
 
 Current phase:
 
-> Stabilization and engineering of the already-working collection pipeline.
+> **Pipeline Production Hardening — Round 1** (200-SKU stable baseline freeze).
 
 The project already has:
 
@@ -59,6 +59,20 @@ That has already been demonstrated.
 The next goal is:
 
 > make the existing working process stable, repeatable and testable.
+
+## 2A. Status reconciliation (2026-08-27)
+
+The following milestones are verified or substantially complete in code and offline
+tests: project/data contracts, production-path identification, regression foundation,
+ranking records, detail collection/resume, specification and brand normalization,
+Chinese display translation, QA gate, export gate, full Hogar y cocina validation,
+repeat-run validation, Field Closure, translation cache and 200-SKU deliverable
+stabilization. The current round closes CLI vertical coverage, offline CI and the
+Run Manifest foundation. It does not start a new `amazon-es run` orchestrator.
+
+Next: **Full Bricolaje y herramientas validation**. Then category-discovery
+stabilization, 1,000 unique ASINs, incremental refresh, and only later the larger
+3,000 / 6,000–10,000 milestones.
 
 ---
 
@@ -110,7 +124,7 @@ No need to repeat reconnaissance from scratch.
 
 Status:
 
-> 🟡 IN PROGRESS
+> ✅ COMPLETED
 
 Goal:
 
@@ -136,7 +150,7 @@ All seven documents exist and reflect current reality.
 
 Status:
 
-> ⬜ NEXT
+> ✅ COMPLETED
 
 Current repository contains:
 
@@ -202,7 +216,7 @@ This must describe reality, not the planned architecture.
 
 Status:
 
-> ⬜ HIGH PRIORITY
+> ✅ COMPLETED / substantially extended in this hardening round
 
 Before major parser or translation refactoring, convert known real failures into tests.
 
@@ -246,7 +260,7 @@ Known historical P0/P1 failures are protected by automated tests or deterministi
 
 Status:
 
-> ⬜
+> ✅ COMPLETED for the validated bounded runs
 
 Goal:
 
@@ -293,7 +307,7 @@ For a bounded test category:
 
 Status:
 
-> ⬜
+> 🟡 SUBSTANTIALLY COMPLETED for Hogar y cocina; broader discovery remains future work
 
 Goal:
 
@@ -335,7 +349,7 @@ Unknown hierarchy levels remain null.
 
 Status:
 
-> ⬜
+> ✅ SUBSTANTIALLY COMPLETED (resume, schema reparse and failure isolation verified)
 
 Current detail extraction has already proven that useful data can be captured.
 
@@ -406,7 +420,7 @@ Avoid repeatedly visiting the same detail page.
 
 Status:
 
-> ⬜
+> ✅ SUBSTANTIALLY COMPLETED; regression suite protects known cases
 
 Goal:
 
@@ -440,7 +454,7 @@ Additionally:
 
 Status:
 
-> ⬜
+> ✅ SUBSTANTIALLY COMPLETED; remaining false-positive review is QA evidence
 
 Goal:
 
@@ -465,7 +479,7 @@ Known false-brand examples no longer pass QA.
 
 Status:
 
-> ⬜
+> ✅ SUBSTANTIALLY COMPLETED for the current deliverable; scalable improvement remains future work
 
 Current ASIN-specific/manual mappings successfully improve the sample dataset but do not scale.
 
@@ -529,7 +543,7 @@ For a representative fixture set:
 
 Status:
 
-> ⬜
+> ✅ COMPLETED
 
 Goal:
 
@@ -574,7 +588,7 @@ Minimum:
 
 Status:
 
-> 🟡 PARTIALLY COMPLETE
+> ✅ COMPLETED for the frozen 3-sheet / 26-column contract
 
 Excel export already works.
 
@@ -698,6 +712,10 @@ Compare:
 ---
 
 # 30. Phase 13 — Second major category validation
+
+Status:
+
+> ⬜ NEXT — do not start in this round
 
 Recommended category:
 
@@ -1244,6 +1262,16 @@ Do not immediately:
 * add CAPTCHA solving;
 * translate thousands of products before QA is stable;
 * optimize Excel appearance while core data errors remain.
+
+## 56A. Field Closure Audit milestone (completed 2026-08-26)
+
+The formal Source → Raw → Canonical → Derived → Display audit, four stable missing
+classes, JSON/Markdown report and offline regression coverage are complete. The next
+milestone is **real full-flow data closure validation for Hogar y cocina**; broad
+category expansion remains deferred.
+
+The 2026-08-27 closure pass adds the versioned detail migration, global-unique
+quota failure contract, hash-aware translation cache and export closure gate.
 
 ---
 

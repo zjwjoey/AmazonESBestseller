@@ -17,6 +17,8 @@ from bs4 import BeautifulSoup
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
 
+CURRENT_DETAIL_SCHEMA_VERSION = 2
+
 
 def _clean(t) -> str:
     """对齐 JS clean()：压空白、去首尾。"""
@@ -32,16 +34,40 @@ def _text(soup, sel) -> str:
 
 _ASIN_RE = re.compile(r"[A-Z0-9]{10}", re.I)   # flags 编译进正则，调用时不传
 _PARENT_ASIN_SELECTORS = ("input#parentASIN", 'input[name="parentASIN"]')
+_PARENT_ASIN_JSON_RE = re.compile(
+    r"[\"']parentAsin[\"']\s*:\s*[\"']([A-Z0-9]{10})[\"']", re.I)
 
 # 首次上架日期（西语标签；raw 归一为 parse_es_date 接受的 "D M YYYY"）
 _AVAIL_DATE_RE = re.compile(
-    r"(?:fecha de primera disponibilidad|primera fecha disponible|fecha de lanzamiento)"
+    r"(?:fecha de primera disponibilidad|primera fecha disponible|fecha de lanzamiento|"
+    r"producto en amazon\.es desde)"
     r"\s*:?\s*(\d{1,2})\s+(?:de\s+)?([a-záéíóúñü]+)[,\s]*(?:de\s+)?(\d{4})",
     re.I)
 _DATE_SECTIONS = ("#detailBulletsWrapper_feature_div", "#detailBullets_feature_div",
                   "#productDetails_detailBullets_sections1", "#prodDetails")
 
 _IMAGE_SELECTORS = ("#landingImage", "#imgBlkFront", "#imageBlock_feature_div img")
+_DETAIL_CATEGORY_SKIP = {
+    "los más vendidos", "más vendidos", "los mas vendidos", "mas vendidos",
+    "best sellers", "best-sellers", "cualquier departamento",
+}
+
+
+def _detail_category_trail(soup) -> list[str]:
+    """Visible product breadcrumb, root → leaf, as raw Spanish evidence."""
+    container = soup.select_one("#wayfinding-breadcrumbs_feature_div")
+    if container is None:
+        return []
+    trail = []
+    seen = set()
+    for a in container.select("a"):
+        name = _clean(a.get_text(" ", strip=True))
+        key = name.casefold()
+        if not name or key in _DETAIL_CATEGORY_SKIP or key in seen:
+            continue
+        seen.add(key)
+        trail.append(name)
+    return trail
 
 
 def _parent_asin(soup) -> str:
@@ -51,6 +77,12 @@ def _parent_asin(soup) -> str:
         if el is None:
             continue
         v = str(el.get("value") or "").strip()
+        if _ASIN_RE.fullmatch(v):
+            return v.upper()
+    # Modern detail pages may expose the confirmed family ASIN in an explicit
+    # page-state JSON object instead of the legacy hidden input.
+    for match in _PARENT_ASIN_JSON_RE.finditer(str(soup)):
+        v = match.group(1).strip()
         if _ASIN_RE.fullmatch(v):
             return v.upper()
     return ""
@@ -81,6 +113,55 @@ def _main_image_url(soup) -> str:
     return ""
 
 
+def _selected_variation(soup) -> str:
+    """Extract explicitly selected variation values from legacy and modern twisters."""
+    values = []
+
+    for sel in ("#variation_name .selection",
+                "#twister-plus-name-feature .selection",
+                ".twister-plus-buying-options-price-data .selection"):
+        el = soup.select_one(sel)
+        if el is not None:
+            value = _clean(el.get_text(" ", strip=True))
+            if value:
+                values.append(value)
+                break
+
+    # Modern swatch twisters mark selected values with a button class.  Restrict
+    # IDs to variation dimensions so quantity/media controls cannot leak in.
+    swatch_sel = ('#twister_feature_div span.a-button-selected[id^="color_name_"], '
+                  '#twister_feature_div span.a-button-selected[id^="size_name_"], '
+                  '#twister_feature_div span.a-button-selected[id^="style_name_"], '
+                  '#twister_feature_div span.a-button-selected[id^="pattern_name_"]')
+    for swatch in soup.select(swatch_sel):
+        title = swatch.select_one('.swatch-title-text-display')
+        if title is not None:
+            value = _clean(title.get_text(" ", strip=True))
+        else:
+            image = swatch.select_one('img[alt]')
+            value = _clean(image.get('alt')) if image is not None else ''
+        if value:
+            values.append(value)
+
+    # Modern dropdown twisters expose the chosen option via ``dropdownSelect``
+    # (and sometimes a selected attribute), scoped to native variation selects.
+    for option in soup.select(
+            'select[id^="native_dropdown_selected_"] option.dropdownSelect, '
+            'select[id^="native_dropdown_selected_"] option[selected]'):
+        value = _clean(option.get_text(" ", strip=True))
+        if value:
+            values.append(value)
+
+    out = []
+    seen = set()
+    for value in values:
+        key = value.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(value)
+    return ' / '.join(out)
+
+
 _MONTHLY_RE = re.compile(
     r"([\d.,]+\s*(?:mil|k)?\s*\+)\s+comprados\s+el\s+mes\s+pasado",
     re.I)
@@ -107,7 +188,8 @@ def _struck_price(soup) -> str:
     """只从明确 data-a-strike=true 的划线价格中取原价。"""
     for container in soup.select(
             "#corePrice_feature_div .a-text-price, "
-            "#corePriceDisplay_desktop_feature_div .a-text-price"):
+            "#corePriceDisplay_desktop_feature_div .a-text-price, "
+            "#apex_price .a-text-price"):
         marked = container.get("data-a-strike")
         marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
         offscreen = container.select_one(".a-offscreen")
@@ -235,15 +317,22 @@ def _collect_attributes(soup) -> list:
 
 def _feature_bullets_raw(soup) -> list:
     """feature_bullets_raw：#feature-bullets 下所有非空卖点文本（DATA_MODEL §8）。"""
-    fb = soup.select_one(_FEATURE_BULLETS_SEL)
-    if fb is None:
-        return []
-    bullets = []
-    for li in fb.select("li"):
-        t = _clean(li.get_text(" ", strip=True))
-        if t:
-            bullets.append(t)
-    return bullets
+    # Amazon uses all of these IDs for the same visible block across desktop,
+    # quick-view and newer page layouts.  Use the first non-empty block so a
+    # hidden/empty duplicate cannot mask the actual bullets.
+    for selector in (_FEATURE_BULLETS_SEL, "#featurebullets_feature_div",
+                     "#pqv-feature-bullets"):
+        fb = soup.select_one(selector)
+        if fb is None:
+            continue
+        bullets = []
+        for li in fb.select("li"):
+            t = _clean(li.get_text(" ", strip=True))
+            if t:
+                bullets.append(t)
+        if bullets:
+            return bullets
+    return []
 
 
 def _product_description_raw(soup) -> str:
@@ -277,10 +366,19 @@ def parse_detail_page(html: str, asin: str) -> dict:
     is_captcha = bool(CAPTCHA_RE.search(page_text[:300]))
 
     # 现价（主 BuyBox 价格回退链，与 JS 一致）
-    price_el = (soup.select_one("#corePrice_feature_div .a-price .a-offscreen")
-                or soup.select_one("#corePriceDisplay_desktop_feature_div .a-price .a-offscreen")
-                or soup.select_one(".apex-pricetopay-value .a-offscreen")
-                or soup.select_one(".priceToPay .a-offscreen"))
+    price_el = None
+    for price_sel in (
+            "#corePrice_feature_div .a-price .a-offscreen",
+            "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
+            ".apex-pricetopay-value .a-offscreen",
+            ".priceToPay .a-offscreen",
+            # Newer Amazon apex markup may leave the offscreen span empty
+            # and expose the BuyBox amount only as visible text.
+            "#apex_price .apex-pricetopay-value"):
+        candidate = soup.select_one(price_sel)
+        if candidate is not None and _clean(candidate.get_text(" ", strip=True)):
+            price_el = candidate
+            break
     current_price_raw = _clean(price_el.get_text(" ", strip=True)) if price_el else ""
 
     # 划线价（原价）——必须有明确 data-a-strike=true 证据
@@ -335,15 +433,28 @@ def parse_detail_page(html: str, asin: str) -> dict:
         brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
         brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
         brand_raw = _clean(brand_raw)
+    if not brand_raw:
+        # Some pages omit the byline but expose an explicit Marca row in the
+        # product-overview table.  This is reliable page evidence, unlike a
+        # title-prefix fallback (which is forbidden by the data rules).
+        overview = soup.select_one(_OVERVIEW_SEL)
+        if overview is not None:
+            for row in overview.select("tr"):
+                cells = row.select("td")
+                if len(cells) < 2:
+                    continue
+                label = _clean(cells[0].get_text(" ", strip=True)).casefold()
+                value = _clean(cells[1].get_text(" ", strip=True))
+                if label in {"marca", "brand"} and value:
+                    brand_raw = value
+                    break
 
-    # 已选规格（变体）
-    var_el = (soup.select_one("#variation_name .selection")
-              or soup.select_one("#twister-plus-name-feature .selection")
-              or soup.select_one(".twister-plus-buying-options-price-data .selection"))
-    selected_variation_raw = _clean(var_el.get_text(" ", strip=True)) if var_el else ""
+    # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
+    selected_variation_raw = _selected_variation(soup)
 
     return {
         "asin": asin,
+        "detail_schema_version": CURRENT_DETAIL_SCHEMA_VERSION,
         "is_captcha": is_captcha,
         "title_es_raw": _text(soup, "#productTitle"),
         "current_price_raw": current_price_raw,
@@ -362,12 +473,59 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "date_first_available_raw": _first_available_date_raw(soup),
         "product_url": _product_url(asin),
         "image_url": _main_image_url(soup),
+        "detail_category_trail": _detail_category_trail(soup),
         # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
         "attributes": _collect_attributes(soup),
         "feature_bullets_raw": _feature_bullets_raw(soup),
         "product_description_raw": _product_description_raw(soup),
         "detail_bullets_raw": _detail_bullets_raw(soup),
     }
+
+
+def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
+    """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
+    from pathlib import Path
+    roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
+    wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
+    out = []
+    seen_asins = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.html")):
+            try:
+                html = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            asin = path.stem.upper()
+            if not _ASIN_RE.fullmatch(asin):
+                match = re.search(r'(?:id|name)=["\']ASIN["\'][^>]*value=["\']([A-Z0-9]{10})', html, re.I)
+                if not match:
+                    match = re.search(r'(?:data-asin|parentASIN)["\']?\s*[:=]\s*["\']([A-Z0-9]{10})', html, re.I)
+                asin = match.group(1).upper() if match else ""
+            if not asin or not _ASIN_RE.fullmatch(asin) or (wanted and asin not in wanted):
+                continue
+            meta = {}
+            meta_path = path.with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    meta = {}
+            state_value = detect_access_status(meta.get("status_code", 200), html)
+            if state_value.value != "NORMAL":
+                continue
+            if asin in seen_asins:
+                continue
+            rec = parse_detail_page(html, asin)
+            rec.update({"status_code": meta.get("status_code"),
+                        "access_state": state_value.value,
+                        "resumed_from_html": True})
+            out.append(rec)
+            seen_asins.add(asin)
+    if out:
+        state.update(out)
+    return out
 
 
 def verify_asin_on_page(url: str, asin: str) -> bool:

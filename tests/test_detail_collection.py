@@ -52,3 +52,38 @@ def test_collect_details_rechecks_cached_blocked_page(tmp_path):
         encoding="utf-8")
     with pytest.raises(AccessStopError):
         collect_details(["B078C6QR1C"], FakeSession(), str(tmp_path))
+
+
+def test_repair_cached_products_merges_only_matching_page_evidence(tmp_path):
+    from amazon_es_bestseller.collection.repair import repair_cached_products
+
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "page_01.html").write_text(
+        """
+        <html><body>
+          <input id="ASIN" value="B078C6QR1C">
+          <div id="productTitle">Fiambrera</div>
+          <div id="corePrice_feature_div"><div class="a-price"><span class="a-offscreen">12,62 €</span></div>
+            <span class="a-text-price" data-a-strike="true"><span class="a-offscreen">13,29 €</span></span>
+          </div>
+          <div id="social-proofing-faceout">1,5 mil+ comprados el mes pasado</div>
+          <div id="merchantInfoFeature_feature_div"><a>Utopia Brands</a></div>
+        </body></html>
+        """,
+        encoding="utf-8",
+    )
+    # This page is a different ASIN and must not enrich the target record.
+    (html_dir / "page_02.html").write_text(
+        '<input id="ASIN" value="B075JJRFVV"><div id="productTitle">Other</div>',
+        encoding="utf-8",
+    )
+    records = [{"asin": "B078C6QR1C", "title_es_raw": "Fiambrera"}]
+    repaired, report = repair_cached_products(records, html_dir)
+    assert repaired[0]["current_price"] == 12.62
+    assert repaired[0]["original_price"] == 13.29
+    assert repaired[0]["discount_rate"] == round((13.29 - 12.62) / 13.29, 4)
+    assert repaired[0]["monthly_bought_min"] == 1500
+    assert repaired[0]["seller_raw"] == "Utopia Brands"
+    assert report["matched_pages"] == 1
+    assert report["ignored_pages"] == 1

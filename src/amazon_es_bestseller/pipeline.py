@@ -21,13 +21,17 @@ from typing import Dict, List, Mapping, Optional
 from .models import merge_ranking_and_detail, normalize_asin
 from .normalization.brand import clean_brand, normalize_brand_case
 from .normalization.bsr import detail_bsr_segments
-from .normalization.category import category_zh
+from .normalization.category import category_levels, category_zh
 from .normalization.dates import parse_es_date
 from .normalization.monthly_bought import parse_monthly_bought
 from .normalization.price import CURRENCY, discount_rate, parse_price
-from .normalization.specification import attributes_to_spec_dict, build_spec_v2
+from .normalization.specification import (
+    attributes_to_spec_dict, build_spec_es, build_spec_v2,
+    translate_spec_es_to_zh)
 from .translation.full_detail import (
-    render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
+    clean_display_zh, detail_bullets_to_attributes, render_bullets_es, render_bullets_zh,
+    render_details_es, render_details_zh)
+from .translation.ds import DeepSeekTranslator, TRANSLATION_SCHEMA_VERSION
 from .translation.product_type import detect_product_type
 
 _LEADING_NUM_RE = re.compile(r"^\(?\s*([\d.,]+)")  # 容忍前导 '('（现代评论数 "(8.819)"）
@@ -74,16 +78,40 @@ def _details_of(prod: Mapping) -> Optional[dict]:
     return None
 
 
+def _brand_from_attributes(attributes) -> str:
+    """Return a brand only from an explicit, reliable attribute label."""
+    for attr in attributes or []:
+        label = str(attr.get("label_raw") or "").strip().casefold()
+        value = str(attr.get("value_raw") or "").strip()
+        if label in {"marca", "brand"} and value:
+            return value
+    return ""
+
+
 def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> dict:
     """单条合并后商品 → 规范化 + 中文派生字段（不修改传入记录）。"""
     out = dict(prod)
     asin = normalize_asin(out.get("asin"))
     out["asin"] = asin
 
+    # Parent ASIN is only useful when it identifies a confirmed variation
+    # family.  A child ASIN copied into its own parent slot is not evidence of
+    # a family; drop it unless an explicit confirmed status is present.
+    parent = normalize_asin(out.get("parent_asin"))
+    parent_status = str(out.get("parent_asin_status") or "").strip().casefold()
+    if parent == asin and parent_status != "confirmed":
+        out["parent_asin"] = ""
+    elif parent:
+        out["parent_asin"] = parent
+    else:
+        out["parent_asin"] = ""
+
     cur = parse_price(out.get("current_price_raw"))
     orig = parse_price(out.get("original_price_raw"))
     out["current_price"] = cur
-    out["original_price"] = orig
+    # A struck/list price at or below the current price is not a valid original
+    # price.  Keep original_price_raw as evidence, but never display the bad number.
+    out["original_price"] = orig if (cur is None or orig is None or orig > cur) else None
     out["currency"] = CURRENCY
     out["discount_rate"] = discount_rate(cur, orig)
 
@@ -91,6 +119,8 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["review_count"] = _to_int_spanish(out.get("review_count_raw"))
 
     brand = clean_brand(out.get("brand_raw"))
+    if not brand:
+        brand = clean_brand(_brand_from_attributes(out.get("attributes")))
     out["brand"] = normalize_brand_case(brand) if brand else ""
 
     dfa = parse_es_date(out.get("date_first_available_raw"))
@@ -103,12 +133,22 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["spec_v2"] = build_spec_v2(
         details, variant=out.get("selected_variation_raw"),
         title_es=out.get("title_es_raw"))
+    out["specification_es"] = build_spec_es(
+        attributes=out.get("attributes"), details=details,
+        variant=out.get("selected_variation_raw"),
+        title_es=out.get("title_es_raw"))
 
     out["detail_bsr_segments"] = detail_bsr_segments(out.get("detail_bsr_raw"))
     out["monthly_bought_min"] = parse_monthly_bought(out.get("monthly_bought_raw"))
 
     # 无损全量详情 → 展示渲染（DATA_MODEL §4-§8/§18-§19）：西语原文 + 中文派生
     attrs = out.get("attributes")
+    # A subset of current Amazon layouts has no overview/technical tables but
+    # does expose explicit key/value metadata in the visible detail bullets.
+    # Promote those pairs only as a display fallback; the original
+    # detail_bullets_raw remains preserved unchanged in the data layer.
+    if not attrs:
+        attrs = detail_bullets_to_attributes(out.get("detail_bullets_raw"))
     bullets = out.get("feature_bullets_raw")
     out["product_details_es"] = render_details_es(attrs)
     out["product_details_zh"] = render_details_zh(attrs)
@@ -118,14 +158,99 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     title_es = out.get("title_es_raw")
     out["product_type"] = detect_product_type(title_es) if title_es else None
 
+    # A root ranking page may expose only L1.  When deeper levels are absent,
+    # use the explicit product-detail breadcrumb as a secondary source; never
+    # overwrite a ranking-context value already present.
+    detail_trail = out.get("detail_category_trail")
+    if isinstance(detail_trail, (list, tuple)):
+        dl1, dl2, dl3, dleaf = category_levels(detail_trail)
+        for key, value in (("category_l1", dl1), ("category_l2", dl2),
+                           ("category_l3", dl3), ("leaf_category", dleaf)):
+            if not out.get(key) and value:
+                out[key] = value
+
     # 类目中文（派生层）：只映射有把握的，未知保留西语原文（不臆造）
     l1 = out.get("category_l1")
     leaf = out.get("leaf_category")
     out["采集类目中文"] = category_zh(leaf) or category_zh(l1) or (l1 or "")
-    out["leaf_category_zh"] = category_zh(leaf)
+    for key in ("category_l1", "category_l2", "category_l3", "leaf_category"):
+        value = out.get(key)
+        # Unknown categories remain in Spanish as source evidence; known
+        # reviewed labels receive a deterministic Chinese display overlay.
+        out[f"{key}_zh"] = category_zh(value) or (value or "")
 
     tr = (translations or {}).get(asin) or {}
-    out["title_zh"] = (tr.get("title_zh") or "") if isinstance(tr, dict) else ""
+    # A translation overlay is valid only for the exact Spanish evidence it
+    # was produced from; this prevents stale ASIN-only cache values from
+    # surviving parser repairs or refreshed detail pages.
+    translation_valid = isinstance(tr, dict) and (
+        (tr.get("translation_source_hash") == DeepSeekTranslator.source_hash(out)
+         and tr.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION)
+        # Explicitly supplied legacy overlays remain readable for backwards
+        # compatibility; the DS client never reuses such entries silently and
+        # the closure audit still flags any untranslated residuals.
+        or ("translation_source_hash" not in tr and "translation_schema_version" not in tr))
+    if not translation_valid:
+        tr = {}
+    if isinstance(tr, dict):
+        # DS is an optional display-layer overlay.  Only non-empty approved
+        # fields are copied; every Spanish/raw field above remains untouched.
+        if tr.get("title_zh"):
+            out["title_zh"] = str(tr["title_zh"]).strip()
+        else:
+            out["title_zh"] = out.get("title_zh") or ""
+        def usable_translation(value) -> bool:
+            if value is None:
+                return False
+            if isinstance(value, (dict, list, tuple, set)):
+                return bool(value)
+            text = str(value).strip()
+            return bool(text) and text not in {"{}", "[]", "null", "None"}
+
+        source_for_translation = {
+            "category_l1_zh": "category_l1",
+            "category_l2_zh": "category_l2",
+            "category_l3_zh": "category_l3",
+            "leaf_category_zh": "leaf_category",
+            "selected_variation_zh": "selected_variation_raw",
+            "specification_zh": "specification_es",
+            "product_details_zh": ("product_details_es", "attributes", "details_json"),
+            "feature_bullets_zh": ("feature_bullets_es", "feature_bullets_raw", "detail_bullets_raw"),
+        }
+        for key in (
+            "category_l1_zh", "category_l2_zh", "category_l3_zh", "leaf_category_zh",
+            "selected_variation_zh", "specification_zh", "product_details_zh",
+            "feature_bullets_zh",
+        ):
+            source_key = source_for_translation[key]
+            source_keys = (source_key,) if isinstance(source_key, str) else source_key
+            source_present = any(usable_translation(out.get(k)) for k in source_keys)
+            # Legacy flat fixtures predate explicit raw evidence fields. Keep
+            # their supplied overlays readable; modern records must prove the
+            # corresponding Spanish source before a Chinese field is copied.
+            legacy_overlay = "attributes" not in out and "feature_bullets_raw" not in out
+            if (source_present or legacy_overlay) and usable_translation(tr.get(key)):
+                value = str(tr[key]).strip()
+                # DS output is a display-layer overlay and may preserve Amazon
+                # UI placeholders.  Sanitize it with the same deterministic
+                # rules as locally rendered Chinese fields; raw/Spanish
+                # evidence is never modified.
+                if key in {"product_details_zh", "feature_bullets_zh",
+                           "selected_variation_zh", "specification_zh"}:
+                    value = clean_display_zh(value)
+                if value:
+                    out[key] = value
+        # Deterministic Chinese spec fallback: spec_v2 is derived only from
+        # explicit Spanish evidence (variation/title/attributes).  It is safe
+        # to display when DS did not return a translated core-spec field.
+        if not usable_translation(out.get("specification_zh")):
+            zh_spec = translate_spec_es_to_zh(out.get("specification_es"))
+            if not zh_spec:
+                zh_spec = out.get("spec_v2")
+            if zh_spec:
+                out["specification_zh"] = str(zh_spec).strip()
+    else:
+        out["title_zh"] = out.get("title_zh") or ""
     return out
 
 

@@ -305,3 +305,43 @@ When choosing between complete but uncertain and incomplete but correct, choose 
 When choosing between full raw detail preservation and dropping unfamiliar fields, preserve the raw detail.
 
 When choosing between a large refactor and a small verified change, choose the small verified change.
+
+## 26. Closure upgrade (2026-08-27)
+
+- The 150 Hogar + 50 DIY quota is a global-unique-ASIN contract. Selection
+  must fail with `QUOTA_UNIQUE_SHORTFALL` instead of emitting a short batch.
+- Detail records carry the centralized `CURRENT_DETAIL_SCHEMA_VERSION` marker;
+  old records are offline-reparsed from saved HTML before any new request.
+- Translation caches are keyed by ASIN plus source hash and schema version.
+  Field-level `partial` status is not equivalent to full success, and raw
+  Spanish evidence is immutable.
+- Export runs field-closure audit and blocks P0/P1 parser, mapping, derived or
+  translation-incomplete findings unless `--force` is explicit.
+
+## 26. Field Closure Audit
+
+Field Closure Audit is a formal QA capability for automatic fields in the frozen
+Chinese 26-column contract. Trace every field as `Amazon Source → RAW → Canonical →
+Derived → Display / Excel`, and classify an empty value as `SOURCE_MISSING`,
+`PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`. An empty source is valid and
+must not be filled by guessing. Preserve raw evidence, keep `备注` human-owned, and
+never use Detail BSR as a fallback for `bestseller_rank`.
+
+## 27. Current production-hardening phase (2026-08-27)
+
+The current milestone is **Pipeline Production Hardening** for the frozen 200-SKU
+baseline. Work in this phase is limited to CLI reliability, offline smoke/integration
+tests, CI protection, documentation synchronization and the small Run Manifest
+observability foundation. Do not treat this phase as a crawler rewrite or a new
+collection milestone.
+
+Agents must not start 1,000-SKU collection, full Bricolaje validation, a new
+`amazon-es run` orchestrator, a database, concurrency/proxy/CAPTCHA systems or a new
+Excel schema in this phase. Preserve the Access Gate, resume behavior, translation
+cache hash semantics, QA/Field Closure export gate, raw evidence and the 3-sheet /
+26-column contract. CI and default tests must remain offline and must not require
+Amazon credentials, DeepSeek credentials or a local browser profile.
+
+When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
+the first valid record in the supplied directory order. CLI translation summaries
+must report partial results separately from failures.

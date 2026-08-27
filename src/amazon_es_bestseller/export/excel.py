@@ -107,6 +107,26 @@ def _title_zh(rec: Mapping, translations: Optional[Mapping]) -> str:
     return ''
 
 
+def _zh_field(rec: Mapping, translations: Optional[Mapping], key: str, fallback: str = '') -> str:
+    """Read one translated display field, falling back to the Spanish value."""
+    def usable(value) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, (Mapping, list, tuple, set)):
+            return bool(value)
+        text = str(value).strip()
+        return bool(text) and text not in {'{}', '[]', 'null', 'None'}
+
+    value = rec.get(key)
+    if usable(value):
+        return str(value)
+    asin = str(rec.get('asin') or '').strip().upper()
+    tr = (translations or {}).get(asin) if asin else None
+    if isinstance(tr, dict) and usable(tr.get(key)):
+        return str(tr[key])
+    return str(fallback) if usable(fallback) else ''
+
+
 # ---------- 行值（只读 canonical 字段，渲染不改源记录） ----------
 
 def _zh_values(rec: Mapping, seq: int, translations: Optional[Mapping]) -> List:
@@ -124,15 +144,15 @@ def _zh_values(rec: Mapping, seq: int, translations: Optional[Mapping]) -> List:
         rec.get('rating') or '',                     # 10 评分
         rec.get('review_count') or '',               # 11 评论数
         rec.get('monthly_bought_min') or '',         # 12 月购买量
-        rec.get('category_l1') or '',                # 13 一级类目
-        rec.get('category_l2') or '',                # 14 二级类目
-        rec.get('category_l3') or '',                # 15 三级类目
-        rec.get('leaf_category') or '',              # 16 细分类目
+        _zh_field(rec, translations, 'category_l1_zh', rec.get('category_l1')),  # 13 一级类目
+        _zh_field(rec, translations, 'category_l2_zh', rec.get('category_l2')),  # 14 二级类目
+        _zh_field(rec, translations, 'category_l3_zh', rec.get('category_l3')),  # 15 三级类目
+        _zh_field(rec, translations, 'leaf_category_zh', rec.get('leaf_category')),  # 16 细分类目
         rec.get('bestseller_rank') or '',            # 17 畅销榜排名
-        rec.get('selected_variation_raw') or '',     # 18 当前选中规格 / 变体
-        rec.get('spec_v2') or '',                    # 19 核心规格（中文）
-        rec.get('product_details_zh') or '',         # 20 完整商品详情（中文）
-        rec.get('feature_bullets_zh') or '',         # 21 商品卖点（中文）
+        _zh_field(rec, translations, 'selected_variation_zh', rec.get('selected_variation_raw')),  # 18 当前选中规格 / 变体
+        _zh_field(rec, translations, 'specification_zh', rec.get('spec_v2')),  # 19 核心规格（中文）
+        _zh_field(rec, translations, 'product_details_zh', rec.get('product_details_zh')),  # 20 完整商品详情（中文）
+        _zh_field(rec, translations, 'feature_bullets_zh', rec.get('feature_bullets_zh')),  # 21 商品卖点（中文）
         rec.get('date_first_available') or '',       # 22 首次上架日期
         rec.get('seller') or rec.get('seller_raw') or '',  # 23 卖家
         rec.get('product_url') or '',                # 24 商品链接
@@ -161,7 +181,7 @@ def _es_values(rec: Mapping, seq: int) -> List:
         rec.get('leaf_category') or '',              # 细分类目
         rec.get('bestseller_rank') or '',            # 畅销榜排名
         rec.get('selected_variation_raw') or '',     # 当前选中规格 / 变体（西语）
-        '',                                          # 核心规格（西语）→ 规格派生，暂留空
+        rec.get('specification_es') or '',           # 核心规格（西语）
         rec.get('product_details_es') or '',         # 完整商品详情（西语原文）
         rec.get('feature_bullets_es') or '',         # 商品卖点（西语原文）
         rec.get('date_first_available') or '',       # 首次上架日期
