@@ -65,7 +65,7 @@ def test_cli_translate_ds_writes_asin_map(tmp_path, monkeypatch):
     assert saved["B1"]["title_zh"] == "电钻"
 
 
-def test_cli_repair_cache_merges_saved_detail_fields(tmp_path):
+def test_cli_repair_cache_merges_saved_detail_fields(tmp_path, capsys):
     products = tmp_path / "products.json"
     products.write_text(json.dumps([{"asin": "B078C6QR1C", "title_es_raw": "Fiambrera"}], ensure_ascii=False), encoding="utf-8")
     html_dir = tmp_path / "html"
@@ -79,6 +79,7 @@ def test_cli_repair_cache_merges_saved_detail_fields(tmp_path):
     assert main(["repair-cache", "--products", str(products), "--html-dir", str(html_dir), "--out", str(out)]) == 0
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert saved[0]["current_price"] == 12.62
+    assert "repair-cache" in capsys.readouterr().out
 
 
 def test_cli_audit_fields_writes_json_and_markdown(tmp_path, capsys):
