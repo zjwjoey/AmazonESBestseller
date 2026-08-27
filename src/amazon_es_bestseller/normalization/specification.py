@@ -527,6 +527,12 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         group = _es_core_group(key)
         if not label or not value or not _is_es_core_key(key) or group is None:
             continue
+        # Amazon's overloaded "Número de unidades" may describe volume or
+        # weight.  Keep it in raw attributes, but never show it as a count in
+        # the compact Spanish core specification.
+        if key == 'numero_de_unidades' and classify_value_unit(value) in {
+                'capacity', 'weight', 'dimension'}:
+            continue
         if group in seen_groups:
             continue
         if _is_generic_one_count(key, value):

@@ -240,6 +240,10 @@ prices cannot become list prices, and detail-bullet key/value rows supplement
 table attributes. The 1000-SKU quota config rejects automotive records whose
 source L1 is not `Coche y moto`.
 
+Use `audit-detail-cache --quarantine-dir <dir> --state <state.json>` to make
+the quarantine and state update reproducible; original evidence is never
+deleted.
+
 ## 25. Scale status
 
 The project has proven real collection and transformation. It has not yet proven reliable production of 6,000–10,000 unique ASINs.

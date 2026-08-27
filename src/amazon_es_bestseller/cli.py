@@ -278,7 +278,13 @@ def cmd_reparse_details(args) -> None:
 def cmd_audit_detail_cache(args) -> None:
     """离线：审计保存详情 HTML，识别验证页并生成隔离清单。"""
     from .collection.detail import audit_saved_detail_cache
-    report = audit_saved_detail_cache(args.html_dir, asins=args.asins or None)
+    from .collection.planning import DetailState
+    state = DetailState(args.state) if args.state else None
+    report = audit_saved_detail_cache(args.html_dir, asins=args.asins or None,
+                                      quarantine_dir=args.quarantine_dir or None,
+                                      state=state)
+    if state:
+        state.save()
     _save_json(report, args.out)
     s = report["summary"]
     print("detail-cache-audit：有效 %d、挑战 %d、无效/空 %d → %s" %
@@ -444,6 +450,8 @@ def build_parser() -> argparse.ArgumentParser:
     ca = sub.add_parser("audit-detail-cache", help="离线：审计详情 HTML 缓存，不访问 Amazon")
     ca.add_argument("--html-dir", nargs="+", required=True)
     ca.add_argument("--asins", nargs="*", default=[])
+    ca.add_argument("--quarantine-dir", default="")
+    ca.add_argument("--state", default="")
     ca.add_argument("--out", required=True)
     ca.set_defaults(func=cmd_audit_detail_cache)
 

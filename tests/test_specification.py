@@ -194,6 +194,11 @@ def test_explicit_product_count_labels_remain_counts():
         assert resolve_package_count(d) == expected
 
 
+def test_spanish_core_spec_does_not_label_volume_as_count():
+    attrs = [{"label_raw": "Número de unidades", "value_raw": "500 Mililitros"}]
+    assert "Número de unidades" not in build_spec_es(attrs)
+
+
 # ---------- 单位类别（QA_RULES §41-§42） ----------
 def test_classify_value_unit():
     assert classify_value_unit('30cm') == 'dimension'

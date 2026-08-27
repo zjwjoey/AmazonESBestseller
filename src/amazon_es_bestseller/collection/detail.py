@@ -196,13 +196,7 @@ def _struck_price(soup) -> str:
         offscreen = container.select_one(".a-offscreen")
         if offscreen is not None:
             value = _clean(offscreen.get_text(" ", strip=True))
-            context = _clean(container.parent.get_text(" ", strip=True)) if container.parent else ""
-            # Legacy fixtures/pages omit data-a-strike but use a-text-price for
-            # the crossed list price.  Accept that fallback only when the
-            # surrounding label is not a per-unit reference price.
-            legacy_struck = "a-text-price" in (container.get("class") or []) and not re.search(
-                r"/\s*(?:kg|g|l|ml|unidad|ud)\b|por\s+(?:kg|g|l|ml|unidad|ud)", context, re.I)
-            if str(marked).lower() == "true" or marked_parent is not None or legacy_struck:
+            if str(marked).lower() == "true" or marked_parent is not None:
                 return value
     return ""
 
@@ -369,7 +363,7 @@ def parse_detail_page(html: str, asin: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     body = soup.find("body")
     page_text = _clean(body.get_text(" ", strip=True)) if body is not None else ""
-    is_captcha = bool(CAPTCHA_RE.search(page_text[:300]))
+    is_captcha = bool(CAPTCHA_RE.search(page_text))
 
     # 现价（主 BuyBox 价格回退链，与 JS 一致）
     price_el = None
@@ -534,7 +528,7 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
     return out
 
 
-def audit_saved_detail_cache(html_dirs, asins=None) -> dict:
+def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=None) -> dict:
     """Classify saved HTML without network access or mutation.
 
     Every file is reported as VALID_PRODUCT_PAGE, CHALLENGE, or
@@ -544,6 +538,10 @@ def audit_saved_detail_cache(html_dirs, asins=None) -> dict:
     from pathlib import Path
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
     wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
+    from shutil import copy2
+    quarantine = Path(quarantine_dir) if quarantine_dir else None
+    if quarantine:
+        quarantine.mkdir(parents=True, exist_ok=True)
     records = []
     for root in roots:
         if not root.is_dir():
@@ -556,8 +554,15 @@ def audit_saved_detail_cache(html_dirs, asins=None) -> dict:
             asin = path.stem.upper()
             if wanted and asin not in wanted:
                 continue
-            state = detect_access_status(200, html)
-            if state is AccessState.CHALLENGE:
+            status_meta = {}
+            meta_path = path.with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    status_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    status_meta = {}
+            access_state = detect_access_status(status_meta.get("status_code", 200), html)
+            if access_state is AccessState.CHALLENGE:
                 classification = "CHALLENGE"
             elif not html.strip():
                 classification = "INVALID_OR_EMPTY"
@@ -566,6 +571,14 @@ def audit_saved_detail_cache(html_dirs, asins=None) -> dict:
                 classification = ("VALID_PRODUCT_PAGE" if parsed.get("title_es_raw")
                                   and not parsed.get("is_captcha") else "INVALID_OR_EMPTY")
             records.append({"asin": asin, "path": str(path), "classification": classification})
+            if classification != "VALID_PRODUCT_PAGE" and quarantine:
+                copy2(path, quarantine / path.name)
+                if meta_path.exists():
+                    copy2(meta_path, quarantine / meta_path.name)
+            if state is not None and classification != "VALID_PRODUCT_PAGE":
+                state.update([{"asin": asin, "status_code": status_meta.get("status_code"),
+                               "access_state": access_state.value,
+                               "cache_classification": classification}])
     summary = {k: sum(r["classification"] == k for r in records)
                for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
     return {"summary": summary, "records": records}
