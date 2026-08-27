@@ -19,6 +19,10 @@ def test_reparse_details_prints_its_own_report_and_supports_multiple_dirs(tmp_pa
         '<input id="ASIN" value="B000000001"><div id="productTitle">Caja</div>',
         encoding="utf-8",
     )
+    (second / "B000000002.html").write_text(
+        '<input id="ASIN" value="B000000002"><div id="productTitle">Otra caja</div>',
+        encoding="utf-8",
+    )
     out = tmp_path / "details.json"
 
     assert main(["reparse-details", "--html-dir", str(first), str(second),
@@ -27,6 +31,73 @@ def test_reparse_details_prints_its_own_report_and_supports_multiple_dirs(tmp_pa
     assert "reparse-details" in captured.out
     assert "repair-cache" not in captured.out
     assert "B000000001" in out.read_text(encoding="utf-8")
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    saved_by_asin = {row["asin"]: row for row in saved}
+    assert set(saved_by_asin) == {"B000000001", "B000000002"}
+    assert saved_by_asin["B000000001"]["detail_schema_version"]
+    persisted = json.loads(state.read_text(encoding="utf-8"))
+    assert persisted["B000000002"]["detail_schema_version"] == saved_by_asin["B000000002"]["detail_schema_version"]
+
+
+def test_reparse_details_first_directory_wins_duplicate_asin(tmp_path):
+    state = tmp_path / "state.json"
+    state.write_text("{}", encoding="utf-8")
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    (first / "B000000001.html").write_text(
+        '<input id="ASIN" value="B000000001"><div id="productTitle">优先版本</div>',
+        encoding="utf-8",
+    )
+    (second / "B000000001.html").write_text(
+        '<input id="ASIN" value="B000000001"><div id="productTitle">重复版本</div>',
+        encoding="utf-8",
+    )
+    out = tmp_path / "details.json"
+    assert main(["reparse-details", "--html-dir", str(first), str(second),
+                 "--state", str(state), "--out", str(out)]) == 0
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    saved_by_asin = {row["asin"]: row for row in saved}
+    assert saved_by_asin["B000000001"]["title_es_raw"] == "优先版本"
+
+
+def test_collect_rankings_only_smoke_uses_fake_browser(tmp_path, monkeypatch):
+    from amazon_es_bestseller.access import browser
+    from amazon_es_bestseller.collection import ranking
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            self.headless = kwargs["headless"]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    calls = []
+
+    def fake_collect_rankings(urls, session, out_dir):
+        calls.append((urls, session.headless, out_dir))
+        return [{"asin": "B000000001", "ranking_source_url": urls[0]}]
+
+    monkeypatch.setattr(browser, "BrowserSession", FakeSession)
+    monkeypatch.setattr(ranking, "collect_rankings", fake_collect_rankings)
+    out_dir = tmp_path / "run"
+    assert main(["collect", "--rankings-only", "--urls", "https://example.invalid/rank",
+                 "--out-dir", str(out_dir)]) == 0
+    assert calls and calls[0][0] == ["https://example.invalid/rank"]
+    assert json.loads((out_dir / "rankings.json").read_text(encoding="utf-8"))[0]["asin"] == "B000000001"
+
+
+def test_finalize_manifest_running_defaults_to_success():
+    from amazon_es_bestseller.run_manifest import create_manifest, finalize_manifest, update_manifest
+
+    manifest = update_manifest(create_manifest("run-001", started_at="x"), status="running")
+    finalized = finalize_manifest(manifest)
+    assert finalized["status"] == "success"
+    assert finalized["finished_at"]
 
 
 def test_run_manifest_round_trip_and_stage_updates(tmp_path):
@@ -78,7 +149,7 @@ def test_select_quota_global_uniqueness_and_shortfall(tmp_path):
     assert "QUOTA_UNIQUE_SHORTFALL" in str(ei.value.code)
 
 
-def test_translate_ds_isolates_partial_and_failed_records(tmp_path, monkeypatch):
+def test_translate_ds_isolates_partial_and_failed_records(tmp_path, monkeypatch, capsys):
     products = tmp_path / "products.json"
     out = tmp_path / "translations.json"
     products.write_text(json.dumps([
@@ -107,43 +178,94 @@ def test_translate_ds_isolates_partial_and_failed_records(tmp_path, monkeypatch)
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert {v["translation_status"] for v in saved.values()} == {"success", "partial", "failed"}
     assert len(saves) == 3
+    assert "成功 1、部分 1、失败 1" in capsys.readouterr().out
 
 
-def test_enrich_to_export_minimal_offline_vertical_path(tmp_path):
+def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypatch):
     rankings = tmp_path / "rankings.json"
+    config = tmp_path / "config.json"
+    quota_manifest = tmp_path / "quota.json"
     details = tmp_path / "details.json"
     translations = tmp_path / "translations.json"
     products = tmp_path / "products.json"
     qa = tmp_path / "qa.json"
     closure = tmp_path / "closure.json"
     workbook = tmp_path / "out.xlsx"
-    asin = "B000000001"
+    asins = ["B000000001", "B000000002"]
     rankings.write_text(json.dumps([{
-        "asin": asin, "bestseller_rank": 1,
+        "asin": asins[0], "bestseller_rank": 1,
         "ranking_source_url": "https://www.amazon.es/Best-Sellers-Hogar/zgbs/1",
         "category_l1": "Hogar y cocina", "category_group": "hogar",
+    }, {
+        "asin": asins[1], "bestseller_rank": 1,
+        "ranking_source_url": "https://www.amazon.es/Best-Sellers-DIY/zgbs/2",
+        "category_l1": "Bricolaje y herramientas", "category_group": "diy",
     }]), encoding="utf-8")
+    config.write_text(json.dumps([
+        {"group": "hogar", "quota": 1}, {"group": "diy", "quota": 1},
+    ]), encoding="utf-8")
+    assert main(["select-quota", "--rankings", str(rankings), "--config", str(config),
+                 "--out", str(quota_manifest)]) == 0
+    selected = json.loads(quota_manifest.read_text(encoding="utf-8"))
+    assert selected["summary"]["total"] == 2
+    assert len({row["asin"] for row in selected["records"]}) == 2
     details.write_text(json.dumps([{
         "asin": asin, "title_es_raw": "Caja 2 piezas", "current_price_raw": "12,99 €",
-        "brand_raw": "Marca", "selected_variation_raw": "Rojo",
+        "brand_raw": "KRUPS", "selected_variation_raw": "Rojo",
         "attributes": [{"label_raw": "Número de piezas", "value_raw": "2"}],
         "feature_bullets_raw": ["Caja reutilizable"], "product_url": f"https://www.amazon.es/dp/{asin}",
         "image_url": "https://example.invalid/x.jpg",
-    }]), encoding="utf-8")
-    translations.write_text(json.dumps({asin: {"title_zh": "两件装收纳盒"}}), encoding="utf-8")
+    } for asin in asins]), encoding="utf-8")
+
+    from amazon_es_bestseller.translation.ds import DeepSeekTranslator as RealTranslator
+
+    class FakeTranslator:
+        def __init__(self, **kwargs):
+            pass
+
+        @staticmethod
+        def source_hash(record):
+            return RealTranslator.source_hash(record)
+
+        def translate_record(self, record):
+            return {"asin": record["asin"], "title_zh": "两件装收纳盒",
+                    "selected_variation_zh": "红色", "specification_zh": "2件",
+                    "product_details_zh": "品牌：Marca；数量：2",
+                    "feature_bullets_zh": "可重复使用收纳盒",
+                    "translation_status": "success"}
+
+        def save_cache(self):
+            pass
+
+    import amazon_es_bestseller.translation.ds as ds
+    monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
+    assert main(["translate-ds", "--products", str(details), "--out", str(translations)]) == 0
     assert main(["enrich", "--rankings", str(rankings), "--details", str(details),
                  "--translations", str(translations), "--out", str(products)]) == 0
     assert main(["qa", "--products", str(products), "--out", str(qa)]) == 0
     assert main(["audit-fields", "--products", str(products), "--details", str(details),
                  "--rankings", str(rankings), "--translations", str(translations),
                  "--out", str(closure)]) == 0
-    assert main(["export", "--products", str(products), "--out", str(workbook), "--force"]) == 0
+    assert main(["export", "--products", str(products), "--details", str(details),
+                 "--rankings", str(rankings), "--translations", str(translations),
+                 "--out", str(workbook)]) == 0
     saved = json.loads(products.read_text(encoding="utf-8"))
-    assert saved[0]["asin"] == asin
-    assert saved[0]["product_details_zh"]
-    assert saved[0]["feature_bullets_zh"]
+    assert [row["asin"] for row in saved] == asins
+    assert all(row["product_details_zh"] for row in saved)
+    assert all(row["feature_bullets_zh"] for row in saved)
     assert json.loads(qa.read_text(encoding="utf-8"))["records"]
     assert json.loads(closure.read_text(encoding="utf-8"))["summary"]
+    import openpyxl
+    wb = openpyxl.load_workbook(workbook)
+    assert wb.sheetnames == ["类目规划", "西班牙语选品清单", "中文选品清单"]
+    assert wb["中文选品清单"].max_column == 26
+    es_header = [cell.value for cell in wb["西班牙语选品清单"][1]]
+    zh_header = [cell.value for cell in wb["中文选品清单"][1]]
+    es_asins = [wb["西班牙语选品清单"].cell(row=i, column=es_header.index("ASIN") + 1).value
+                for i in range(2, 4)]
+    zh_asins = [wb["中文选品清单"].cell(row=i, column=zh_header.index("ASIN") + 1).value
+                for i in range(2, 4)]
+    assert es_asins == zh_asins == asins
 
 
 def _export_gate_product(tmp_path):

@@ -227,7 +227,7 @@ def test_qa_diagnostic_does_not_crash_on_windows_code_page(tmp_path):
     assert out.exists()
 
 
-def test_export_qa_gate_force_bypasses(tmp_path):
+def test_export_qa_gate_force_bypasses(tmp_path, capsys):
     """--force：跳过 QA 门禁强制导出（明确授权，不静默）。"""
     prod_out = tmp_path / "products.json"
     prod_out.write_text(
@@ -236,6 +236,7 @@ def test_export_qa_gate_force_bypasses(tmp_path):
     assert main(["export", "--products", str(prod_out),
                  "--out", str(xlsx_out), "--force"]) == 0
     assert xlsx_out.exists()
+    assert "--force" in capsys.readouterr().out
 
 
 def test_export_accepts_images_and_category_planning(tmp_path):

@@ -10,10 +10,10 @@
 示例：
   amazon-es collect --urls "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbs/1293659031"
   amazon-es enrich --legacy product_details.json        # 30 条遗留真实数据
-  amazon-es enrich --offline
-  amazon-es qa --offline
+  amazon-es --offline enrich
+  amazon-es --offline qa
   amazon-es audit-fields --products outputs/products.json --out outputs/field_closure.json
-  amazon-es export --offline
+  amazon-es --offline export
 """
 from __future__ import annotations
 
@@ -207,8 +207,10 @@ def cmd_translate_ds(args) -> None:
         translator.save_cache()
     _save_json(output, args.out)
     success = sum(1 for r in output.values() if r.get("translation_status") == "success")
-    failed = len(output) - success
-    print("translate-ds 完成：成功 %d、失败 %d、总计 %d → %s" % (success, failed, len(output), args.out))
+    partial = sum(1 for r in output.values() if r.get("translation_status") == "partial")
+    failed = sum(1 for r in output.values() if r.get("translation_status") == "failed")
+    print("translate-ds 完成：成功 %d、部分 %d、失败 %d、总计 %d → %s"
+          % (success, partial, failed, len(output), args.out))
 
 
 # ---------- enrich（离线） ----------
@@ -407,7 +409,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--out", required=True, help="修复后的商品 JSON")
     r.set_defaults(func=cmd_repair_cache)
 
-    rp = sub.add_parser("reparse-details", help="离线：按当前详情 schema 重建 DetailState/raw details")
+    rp = sub.add_parser("reparse-details", help="离线：按当前详情 schema 重建 raw details（重复 ASIN 取首个有效目录）")
     rp.add_argument("--html-dir", nargs="+", required=True)
     rp.add_argument("--state", required=True, help="DetailState JSON")
     rp.add_argument("--out", required=True, help="重建后的 details JSON")

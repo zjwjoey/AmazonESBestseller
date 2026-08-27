@@ -82,13 +82,13 @@ def update_manifest(manifest: Mapping[str, Any], **updates: Any) -> dict[str, An
 
 
 def finalize_manifest(manifest: Mapping[str, Any], **updates: Any) -> dict[str, Any]:
-    """Mark a run finished, preserving an explicitly supplied timestamp."""
+    """Mark a run finished, defaulting open states to successful completion."""
     result = _as_dict(manifest)
     result.update(updates)
     result.setdefault("finished_at", "")
     if not result["finished_at"]:
         result["finished_at"] = _now()
-    if not result.get("status") or result.get("status") == "created":
+    if result.get("status") in {None, "", "created", "running"}:
         result["status"] = "success"
     return result
 
