@@ -253,6 +253,16 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
                     'SPEC_QUANTITY_CONFLICT', 'P1', 'spec',
                     '标题 %s 件套被泛型 package 数量 1 覆盖' % m.group(1)))
     spec_str = record.get('spec_v2') or record.get('specification') or ''
+    # Identity values are never valid specifications.  This catches stale
+    # exports that copied a child/parent ASIN into the core-spec column.
+    asin = normalize_asin(record.get('asin'))
+    parent = normalize_asin(record.get('parent_asin'))
+    for field in ('spec_v2', 'specification_es', 'specification_zh', 'specification'):
+        value = str(record.get(field) or '').strip()
+        if value and _ASIN_RE.fullmatch(value) and value in {asin, parent}:
+            issues.append(_issue(
+                'SPEC_IDENTITY_VALUE', 'P1', field,
+                '规格列出现 ASIN 身份值，疑似旧数据污染: %s' % value))
     # 变体冲突（§19/§12）：选中变体容量应反映到规格输出
     variant = record.get('selected_variation_raw')
     if variant:

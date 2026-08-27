@@ -11,6 +11,7 @@ from amazon_es_bestseller.normalization.specification import (
     resolve_package_count,
     build_spec_v2,
     build_spec_es,
+    translate_spec_es_to_zh,
 )
 
 
@@ -56,6 +57,26 @@ def test_build_spec_es_deduplicates_dimension_and_package_metadata():
     out = build_spec_es(attrs)
     assert out.count("Dimensiones") == 1
     assert "Total del paquete" not in out
+
+
+def test_build_spec_es_uses_explicit_title_evidence_when_attributes_missing():
+    out = build_spec_es(
+        attributes=[],
+        title_es="Broca SDS Plus 14 x 160 mm - Broca para hormigón",
+    )
+    assert out == "14 x 160 mm"
+
+
+def test_build_spec_es_does_not_use_asin_as_spec_or_variant():
+    assert build_spec_es(variant="B07VVDBKCX") == ""
+
+
+def test_build_spec_es_title_count_and_star_dimensions():
+    assert build_spec_es(title_es="Caffenu Cafetera x 5 Cápsulas") == "x 5 Cápsulas"
+    assert build_spec_es(title_es="Alfombrilla ignífuga 100*150 cm") == "100*150 cm"
+    assert translate_spec_es_to_zh("100*150 cm") == "100×150厘米"
+    assert translate_spec_es_to_zh("x 5 Cápsulas") == "5粒胶囊"
+    assert translate_spec_es_to_zh("2 baterías") == "2节电池"
 
 
 # ---------- 回归：尺寸 ----------

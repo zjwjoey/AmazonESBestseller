@@ -405,7 +405,65 @@ def _is_generic_one_count(key: str, value: str) -> bool:
     return bool(re.match(r'^1(?:[.,]0)?(?:\s+conteo)?$', value.strip(), re.I))
 
 
-def build_spec_es(attributes=None, details=None, variant=None) -> str:
+_ASIN_ONLY_RE = re.compile(r'^B[0-9A-Z]{9}$', re.I)
+
+
+def _valid_spec_text(value) -> str:
+    """Return a displayable spec candidate, rejecting identity values.
+
+    A stale export once copied a parent/child ASIN into the core-spec column.
+    ASINs are product identity, never specification evidence.
+    """
+    text = str(value or '').strip()
+    if not text or _ASIN_ONLY_RE.fullmatch(text):
+        return ''
+    return text
+
+
+def _title_core_spec_es(title_es) -> str:
+    """Extract only explicit numeric spec evidence from the exact title.
+
+    This is a conservative fallback for pages where Amazon exposes no
+    structured attribute table.  It never invents a value from rank, price or
+    an ASIN-like token.
+    """
+    title = str(title_es or '').strip()
+    if not title:
+        return ''
+    # Dimensions with an explicit unit, preserving the Spanish source text.
+    m = re.search(
+        r'(?<![\w])\d+(?:[.,]\d+)?\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?'
+        r'(?:\s*(?:x|×)\s*\d+(?:[.,]\d+)?)?\s*'
+        r'(?:mm|cm|m|milímetros?|centímetros?|metros?)(?!\w)',
+        title, re.I)
+    if m:
+        return m.group(0).strip()
+    # A single explicit length in metres is still useful evidence (for
+    # example a 1.2 m shower barrier); model numbers without a unit do not
+    # match this branch.
+    m = re.search(r'(?<![\w])\d+(?:[.,]\d+)?\s*(?:m|metros?)(?!\w)', title, re.I)
+    if m:
+        return m.group(0).strip()
+    # Capacity/weight/power/voltage with explicit units.
+    m = re.search(
+        r'(?<![\w])\d+(?:[.,]\d+)?\s*'
+        r'(?:ml|mililitros?|l|litros?|g|gramos?|kg|kilogramos?|w|vatios?|watios?|v|voltios?)'
+        r'(?!\w)', title, re.I)
+    if m:
+        return m.group(0).strip()
+    # Explicit package/count language only; a bare trailing number is ignored.
+    m = re.search(
+        r'(?<![\w])(?:\d+\s*(?:piezas?|unidades?|uds?\.?|artículos?|packs?|'
+        r'cápsulas?|baterías?|cuchillas?|bolsas?|tabletas?|dosis?|juegos?)|'
+        r'(?:pack|paquete|juego|set)\s+(?:de\s+)?\d+|'
+        r'x\s*\d+(?:\s*(?:cápsulas?|baterías?|cuchillas?|bolsas?|tabletas?|dosis?))?)(?![\w])',
+        title, re.I)
+    if m:
+        return m.group(0).strip()
+    return ''
+
+
+def build_spec_es(attributes=None, details=None, variant=None, title_es=None) -> str:
     """Build a compact Spanish core-spec display from explicit page evidence.
 
     ``attributes`` is preferred because it retains the original Spanish label.
@@ -449,4 +507,54 @@ def build_spec_es(attributes=None, details=None, variant=None) -> str:
 
     if parts:
         return ' / '.join(parts)
-    return str(variant or '').strip()
+    variant_text = _valid_spec_text(variant)
+    if variant_text:
+        return variant_text
+    title_text = _valid_spec_text(_title_core_spec_es(title_es))
+    if title_text:
+        return title_text
+    return ''
+
+
+def translate_spec_es_to_zh(value) -> str:
+    """Translate the small, title-derived Spanish spec forms deterministically.
+
+    This is deliberately limited to dimensions, units and explicit package
+    counts.  It is a display fallback when DS did not return a translation;
+    arbitrary Spanish prose is never machine-rewritten here.
+    """
+    text = _valid_spec_text(value)
+    if not text:
+        return ''
+    m = re.fullmatch(
+        r'(\d+(?:[.,]\d+)?)\s*(?:x|×|\*)\s*'
+        r'(\d+(?:[.,]\d+)?)(?:\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?))?\s*'
+        r'(mm|cm|m|milímetros?|centímetros?|metros?)', text, re.I)
+    if m:
+        nums = [g for g in m.groups()[:3] if g]
+        unit = m.group(4).lower()
+        unit_zh = {'mm': '毫米', 'milimetro': '毫米', 'milimetros': '毫米',
+                   'milímetros': '毫米', 'milímetros': '毫米',
+                   'cm': '厘米', 'centimetro': '厘米', 'centimetros': '厘米',
+                   'centímetros': '厘米', 'centímetros': '厘米',
+                   'm': '米', 'metro': '米', 'metros': '米'}
+        return '×'.join(n.replace(',', '.') for n in nums) + unit_zh.get(unit, '')
+    m = re.fullmatch(r'(\d+(?:[.,]\d+)?)\s*(m|metros?)', text, re.I)
+    if m:
+        return m.group(1).replace(',', '.') + '米'
+    m = re.fullmatch(
+        r'(?:x\s*)?(\d+)\s*(cápsulas?|capsulas?|baterías?|baterias?|'
+        r'cuchillas?|bolsas?|tabletas?|dosis?|piezas?|unidades?|uds?\.?|'
+        r'artículos?|packs?|juegos?|set|sets?)?', text, re.I)
+    if m:
+        n, noun = m.group(1), (m.group(2) or '').casefold().rstrip('.')
+        labels = {
+            'cápsula': '粒胶囊', 'cápsulas': '粒胶囊', 'capsula': '粒胶囊', 'capsulas': '粒胶囊',
+            'batería': '节电池', 'baterías': '节电池', 'bateria': '节电池', 'baterias': '节电池',
+            'cuchilla': '片刀片', 'cuchillas': '片刀片', 'bolsa': '个袋', 'bolsas': '个袋',
+            'tableta': '片', 'tabletas': '片', 'dosis': '剂', 'pieza': '件', 'piezas': '件',
+            'unidad': '件', 'unidades': '件', 'uds': '件', 'artículo': '件', 'artículos': '件',
+            'pack': '件', 'juego': '套', 'juegos': '套', 'set': '套', 'sets': '套',
+        }
+        return n + labels.get(noun, '件')
+    return ''

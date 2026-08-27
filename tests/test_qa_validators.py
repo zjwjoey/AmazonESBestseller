@@ -251,6 +251,14 @@ def test_validate_spec_variant_ok():
     assert validate_spec(r) == (QAStatus.PASS, [])
 
 
+def test_validate_spec_rejects_asin_identity_value():
+    r = _spec_record({}, asin="B002X3IDBK", parent_asin="B07VVDBKCX",
+                     specification_es="B07VVDBKCX")
+    status, issues = validate_spec(r)
+    assert status == QAStatus.FAIL
+    assert any(i.code == "SPEC_IDENTITY_VALUE" for i in issues)
+
+
 # ---------- 排名与 BSR 隔离 ----------
 def test_validate_rank_separation_mixed():
     # QA_RULES §9/§72：180285（detail BSR）绝不能进 bestseller_rank

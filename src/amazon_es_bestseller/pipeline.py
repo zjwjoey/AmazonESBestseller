@@ -26,7 +26,8 @@ from .normalization.dates import parse_es_date
 from .normalization.monthly_bought import parse_monthly_bought
 from .normalization.price import CURRENCY, discount_rate, parse_price
 from .normalization.specification import (
-    attributes_to_spec_dict, build_spec_es, build_spec_v2)
+    attributes_to_spec_dict, build_spec_es, build_spec_v2,
+    translate_spec_es_to_zh)
 from .translation.full_detail import (
     render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
 from .translation.ds import DeepSeekTranslator, TRANSLATION_SCHEMA_VERSION
@@ -133,7 +134,8 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
         title_es=out.get("title_es_raw"))
     out["specification_es"] = build_spec_es(
         attributes=out.get("attributes"), details=details,
-        variant=out.get("selected_variation_raw"))
+        variant=out.get("selected_variation_raw"),
+        title_es=out.get("title_es_raw"))
 
     out["detail_bsr_segments"] = detail_bsr_segments(out.get("detail_bsr_raw"))
     out["monthly_bought_min"] = parse_monthly_bought(out.get("monthly_bought_raw"))
@@ -222,6 +224,15 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
             legacy_overlay = "attributes" not in out and "feature_bullets_raw" not in out
             if (source_present or legacy_overlay) and usable_translation(tr.get(key)):
                 out[key] = str(tr[key]).strip()
+        # Deterministic Chinese spec fallback: spec_v2 is derived only from
+        # explicit Spanish evidence (variation/title/attributes).  It is safe
+        # to display when DS did not return a translated core-spec field.
+        if not usable_translation(out.get("specification_zh")):
+            zh_spec = translate_spec_es_to_zh(out.get("specification_es"))
+            if not zh_spec:
+                zh_spec = out.get("spec_v2")
+            if zh_spec:
+                out["specification_zh"] = str(zh_spec).strip()
     else:
         out["title_zh"] = out.get("title_zh") or ""
     return out
