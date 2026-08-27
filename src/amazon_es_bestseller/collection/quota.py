@@ -71,6 +71,12 @@ def annotate_groups(records: Iterable[Mapping], category_config: Sequence[Mappin
             group = url_to_group.get(normalize_source_url(item.get("ranking_source_url")), "")
         if group:
             item["category_group"] = group
+            # Automotive pages must not absorb baby/other department records;
+            # keep the evidence but mark the source mismatch so quota selection
+            # cannot silently count it.
+            l1 = str(item.get("category_l1") or "").strip().casefold()
+            if group == "car" and l1 and l1 not in {"coche y moto", "coche y motocicleta"}:
+                item["category_group_source_mismatch"] = True
         out.append(item)
     return out
 
@@ -92,7 +98,8 @@ def select_quota(records: Iterable[Mapping], quotas: Mapping[str, int]) -> dict[
     for record in records:
         group = normalize_group(record.get("category_group") or record.get("group") or record.get("category_l1"))
         asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
-        if (group not in selected or not asin or asin in seen_global
+        if (group not in selected or record.get("category_group_source_mismatch")
+                or not asin or asin in seen_global
                 or asin in seen[group] or len(selected[group]) >= normalized_quotas[group]):
             continue
         seen[group].add(asin)

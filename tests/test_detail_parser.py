@@ -178,6 +178,39 @@ def test_available_date_from_amazon_since_label():
     assert d["date_first_available_raw"] == "6 noviembre 2023"
 
 
+def test_available_date_strips_bidi_marks():
+    html = """<div id='detailBulletsWrapper_feature_div'>Fecha de primera disponibilidad:\u200f 17 mayo\u200e 2021</div>"""
+    assert parse_detail_page(html, "B078C6QR1C")["date_first_available_raw"] == "17 mayo 2021"
+
+
+def test_unit_price_is_not_original_price():
+    html = """<div id='productTitle'>Producto</div><div id='corePrice_feature_div'>
+      <span class='a-price'><span class='a-offscreen'>8,29€</span></span>
+      <span class='a-price a-text-price'><span class='a-offscreen'>172,71€</span></span> / kg
+      </div>"""
+    assert parse_detail_page(html, "B011036J00")["original_price_raw"] == ""
+
+
+def test_detail_bullets_supplement_existing_attributes():
+    html = """<div id='productTitle'>Producto</div>
+      <div id='productOverview_feature_div'><table><tr><td>Marca</td><td>Marca</td></tr></table></div>
+      <div id='detailBulletsWrapper_feature_div'><ul><li>Capacidad: 500 mililitros</li></ul></div>"""
+    d = parse_detail_page(html, "B078C6QR1C")
+    from amazon_es_bestseller.pipeline import normalize_product
+    out = normalize_product(d)
+    assert "Capacidad: 500 mililitros" in out["product_details_es"]
+
+
+def test_reparse_saved_details_skips_http_200_challenge(tmp_path):
+    from amazon_es_bestseller.collection.detail import reparse_saved_details
+    root = tmp_path / "html"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text(
+        "<html><body>" + ("x " * 500) + "validateCaptcha" + "</body></html>", encoding="utf-8")
+    state = []
+    assert reparse_saved_details([root], state) == []
+
+
 def test_image_url_fallback_to_data_old_hires():
     html = """
     <html><body>

@@ -49,10 +49,9 @@ def test_captcha_re_matches_js_variants():
     assert CAPTCHA_RE.search("Captcha")
 
 
-def test_captcha_re_scans_first_300_chars_only():
-    # 复刻 JS 只扫 body.innerText.slice(0, 300)
+def test_captcha_signal_is_detected_beyond_first_300_chars():
     long_text = "x" * 300 + " Captcha en el final"
-    assert detect_access_status(200, long_text) == AccessState.NORMAL
+    assert detect_access_status(200, long_text) == AccessState.CHALLENGE
 
 
 def test_browser_session_smoke():

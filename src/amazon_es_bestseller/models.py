@@ -140,6 +140,15 @@ def merge_ranking_and_detail(
             _merge_detail_fields(prod, d)
             products[a] = prod
 
+    # Product URL is deterministic identity evidence; retain ranking/detail
+    # URLs when present, otherwise derive the canonical Amazon.es /dp URL from
+    # the validated ASIN so ranking-only products remain actionable.
+    for prod in products.values():
+        if not str(prod.get("product_url") or "").strip():
+            asin = normalize_asin(prod.get("asin"))
+            if asin:
+                prod["product_url"] = "https://www.amazon.es/dp/%s" % asin
+
     return list(products.values())
 
 

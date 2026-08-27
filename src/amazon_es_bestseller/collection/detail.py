@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
+from ..models import AccessState
 
 CURRENT_DETAIL_SCHEMA_VERSION = 2
 
@@ -91,7 +92,7 @@ def _parent_asin(soup) -> str:
 def _first_available_date_raw(soup) -> str:
     """详情页首次上架日期 → "D M YYYY"（供 parse_es_date 解析）；无 → 空。"""
     for sel in _DATE_SECTIONS:
-        txt = _text(soup, sel)
+        txt = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\ufeff]", "", _text(soup, sel))
         m = _AVAIL_DATE_RE.search(txt)
         if m:
             return "%s %s %s" % (m.group(1), m.group(2).lower(), m.group(3))
@@ -195,8 +196,13 @@ def _struck_price(soup) -> str:
         offscreen = container.select_one(".a-offscreen")
         if offscreen is not None:
             value = _clean(offscreen.get_text(" ", strip=True))
-            if (str(marked).lower() == "true" or marked_parent is not None
-                    or ("€" in value and "/" not in value)):
+            context = _clean(container.parent.get_text(" ", strip=True)) if container.parent else ""
+            # Legacy fixtures/pages omit data-a-strike but use a-text-price for
+            # the crossed list price.  Accept that fallback only when the
+            # surrounding label is not a per-unit reference price.
+            legacy_struck = "a-text-price" in (container.get("class") or []) and not re.search(
+                r"/\s*(?:kg|g|l|ml|unidad|ud)\b|por\s+(?:kg|g|l|ml|unidad|ud)", context, re.I)
+            if str(marked).lower() == "true" or marked_parent is not None or legacy_struck:
                 return value
     return ""
 
@@ -526,6 +532,43 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
     if out:
         state.update(out)
     return out
+
+
+def audit_saved_detail_cache(html_dirs, asins=None) -> dict:
+    """Classify saved HTML without network access or mutation.
+
+    Every file is reported as VALID_PRODUCT_PAGE, CHALLENGE, or
+    INVALID_OR_EMPTY.  Challenge/invalid evidence remains untouched so callers
+    can copy it to a quarantine directory while preserving the original cache.
+    """
+    from pathlib import Path
+    roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
+    wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
+    records = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.html")):
+            try:
+                html = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            asin = path.stem.upper()
+            if wanted and asin not in wanted:
+                continue
+            state = detect_access_status(200, html)
+            if state is AccessState.CHALLENGE:
+                classification = "CHALLENGE"
+            elif not html.strip():
+                classification = "INVALID_OR_EMPTY"
+            else:
+                parsed = parse_detail_page(html, asin)
+                classification = ("VALID_PRODUCT_PAGE" if parsed.get("title_es_raw")
+                                  and not parsed.get("is_captcha") else "INVALID_OR_EMPTY")
+            records.append({"asin": asin, "path": str(path), "classification": classification})
+    summary = {k: sum(r["classification"] == k for r in records)
+               for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
+    return {"summary": summary, "records": records}
 
 
 def verify_asin_on_page(url: str, asin: str) -> bool:

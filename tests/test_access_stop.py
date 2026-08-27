@@ -5,7 +5,7 @@
 """
 import pytest
 
-from amazon_es_bestseller.access.detector import AccessStopError, require_normal_access
+from amazon_es_bestseller.access.detector import AccessStopError, require_normal_access, detect_access_status
 from amazon_es_bestseller.models import AccessState
 
 #: 页面前 300 字符含 CAPTCHA 信号 → CHALLENGE
@@ -46,6 +46,12 @@ class _FakeSession:
 
 def test_require_normal_access_ok():
     require_normal_access(AccessState.NORMAL, "HTTP 200")  # 不抛
+
+
+def test_http_200_validation_page_is_challenge_even_when_signal_is_deep():
+    from amazon_es_bestseller.access.detector import detect_access_status
+    html = "<html><body>" + ("x " * 500) + "/errors_page/validateCaptcha?foo=1" + "</body></html>"
+    assert detect_access_status(200, html) is AccessState.CHALLENGE
 
 
 @pytest.mark.parametrize("state", [

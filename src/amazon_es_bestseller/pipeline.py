@@ -142,13 +142,19 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["monthly_bought_min"] = parse_monthly_bought(out.get("monthly_bought_raw"))
 
     # 无损全量详情 → 展示渲染（DATA_MODEL §4-§8/§18-§19）：西语原文 + 中文派生
-    attrs = out.get("attributes")
-    # A subset of current Amazon layouts has no overview/technical tables but
-    # does expose explicit key/value metadata in the visible detail bullets.
-    # Promote those pairs only as a display fallback; the original
-    # detail_bullets_raw remains preserved unchanged in the data layer.
-    if not attrs:
-        attrs = detail_bullets_to_attributes(out.get("detail_bullets_raw"))
+    attrs = list(out.get("attributes") or [])
+    # Supplement (rather than replace) table attributes with explicit visible
+    # detail-bullet key/value pairs.  This closes layouts where Amazon splits
+    # attributes across overview tables and the detail-bullets block.
+    extra_attrs = detail_bullets_to_attributes(out.get("detail_bullets_raw"))
+    seen_attr = {(str(a.get("label_raw", "")).casefold(), str(a.get("value_raw", "")).casefold())
+                 for a in attrs if isinstance(a, dict)}
+    for attr in extra_attrs:
+        key = (attr["label_raw"].casefold(), attr["value_raw"].casefold())
+        if key not in seen_attr:
+            attr["position"] = len(attrs)
+            attrs.append(attr)
+            seen_attr.add(key)
     bullets = out.get("feature_bullets_raw")
     out["product_details_es"] = render_details_es(attrs)
     out["product_details_zh"] = render_details_zh(attrs)

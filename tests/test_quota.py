@@ -77,3 +77,13 @@ def test_annotate_groups_matches_configured_url_without_guessing():
     tagged = annotate_groups(records, config)
     assert tagged[0]["category_group"] == "hogar"
     assert "category_group" not in tagged[1]
+
+
+def test_automotive_group_rejects_baby_source_mismatch():
+    tagged = annotate_groups(
+        [{"asin": "B1", "ranking_source_url": "u", "category_l1": "Bebé"}],
+        [{"url": "u", "group": "car"}],
+    )
+    assert tagged[0]["category_group_source_mismatch"] is True
+    with pytest.raises(QuotaError):
+        select_quota(tagged, {"car": 1})

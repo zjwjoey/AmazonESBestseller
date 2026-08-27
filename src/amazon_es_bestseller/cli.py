@@ -275,6 +275,16 @@ def cmd_reparse_details(args) -> None:
           % (len(records), len(state), args.out))
 
 
+def cmd_audit_detail_cache(args) -> None:
+    """离线：审计保存详情 HTML，识别验证页并生成隔离清单。"""
+    from .collection.detail import audit_saved_detail_cache
+    report = audit_saved_detail_cache(args.html_dir, asins=args.asins or None)
+    _save_json(report, args.out)
+    s = report["summary"]
+    print("detail-cache-audit：有效 %d、挑战 %d、无效/空 %d → %s" %
+          (s["VALID_PRODUCT_PAGE"], s["CHALLENGE"], s["INVALID_OR_EMPTY"], args.out))
+
+
 # ---------- qa（离线） ----------
 
 def cmd_qa(args) -> None:
@@ -430,6 +440,12 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--state", required=True, help="DetailState JSON")
     rp.add_argument("--out", required=True, help="重建后的 details JSON")
     rp.set_defaults(func=cmd_reparse_details)
+
+    ca = sub.add_parser("audit-detail-cache", help="离线：审计详情 HTML 缓存，不访问 Amazon")
+    ca.add_argument("--html-dir", nargs="+", required=True)
+    ca.add_argument("--asins", nargs="*", default=[])
+    ca.add_argument("--out", required=True)
+    ca.set_defaults(func=cmd_audit_detail_cache)
 
     t = sub.add_parser("translate-ds", help="联网：调用 DeepSeek API 翻译中文显示字段")
     t.add_argument("--products", required=True, help="规范化商品 JSON 数组")

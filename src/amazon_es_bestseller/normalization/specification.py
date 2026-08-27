@@ -21,10 +21,13 @@ from .text import dec_comma, strip_zero_width
 _SPEC_ALIASES = {
     'numero_de_pieza': 'numero_de_piezas',
     'numero_de_productos': 'numero_de_piezas',
-    'numero_de_unidades': 'numero_de_piezas',
+    # ``Número de unidades`` is overloaded by Amazon: it can mean volume or
+    # weight (e.g. 500 Millilitros).  Preserve that key and only treat it as
+    # a count when explicit count labels are present.
     'numero_de_paquetes': 'numero_de_piezas',
     'numero_de_compartimentos': 'cantidad_de_compartimentos',
     'cantidad_de_compartimentos': 'cantidad_de_compartimentos',
+    'pack_de': 'numero_de_piezas',
 }
 
 
@@ -186,6 +189,9 @@ def package_count(d) -> Optional[str]:
     for k in _PACKAGE_KEYS:
         v = d.get(k)
         if v:
+            # Never parse capacity/weight/dimension values as piece counts.
+            if classify_value_unit(v) in {'capacity', 'weight', 'dimension'}:
+                continue
             m = re.match(r'([\d.,]+)', str(v).replace(' ', ''))
             if m:
                 val = float(m.group(1).replace(',', '.'))
