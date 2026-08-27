@@ -186,6 +186,23 @@ def test_enrich_applies_ds_translation_without_changing_spanish_source():
     assert p["feature_bullets_zh"] == "防水"
 
 
+def test_enrich_does_not_overlay_detail_translation_when_spanish_source_empty():
+    """中文详情不能凭 DS 返回值独立出现，必须与西语源字段同步。"""
+    detail_without_full_text = dict(
+        DETAIL[0], attributes=[], feature_bullets_raw=[],
+        details_json={}, product_description_raw="", detail_bullets_raw="",
+    )
+    tr = {"B078C6QR1C": {
+        "product_details_zh": "2升",
+        "feature_bullets_zh": "清洁设备",
+    }}
+    p = enrich_products(RANKING, [detail_without_full_text], translations=tr)[0]
+    assert p["product_details_es"] == ""
+    assert p["product_details_zh"] == ""
+    assert p["feature_bullets_es"] == ""
+    assert p["feature_bullets_zh"] == ""
+
+
 def test_enrich_deterministic_order_by_asin():
     r2 = dict(RANKING[0], asin="B075JJRFVV", bestseller_rank=2)
     d2 = dict(DETAIL[0], asin="B075JJRFVV", current_price_raw="16,98 €")

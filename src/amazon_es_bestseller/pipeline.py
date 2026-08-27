@@ -198,12 +198,29 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
             text = str(value).strip()
             return bool(text) and text not in {"{}", "[]", "null", "None"}
 
+        source_for_translation = {
+            "category_l1_zh": "category_l1",
+            "category_l2_zh": "category_l2",
+            "category_l3_zh": "category_l3",
+            "leaf_category_zh": "leaf_category",
+            "selected_variation_zh": "selected_variation_raw",
+            "specification_zh": "specification_es",
+            "product_details_zh": ("product_details_es", "attributes", "details_json"),
+            "feature_bullets_zh": ("feature_bullets_es", "feature_bullets_raw", "detail_bullets_raw"),
+        }
         for key in (
             "category_l1_zh", "category_l2_zh", "category_l3_zh", "leaf_category_zh",
             "selected_variation_zh", "specification_zh", "product_details_zh",
             "feature_bullets_zh",
         ):
-            if usable_translation(tr.get(key)):
+            source_key = source_for_translation[key]
+            source_keys = (source_key,) if isinstance(source_key, str) else source_key
+            source_present = any(usable_translation(out.get(k)) for k in source_keys)
+            # Legacy flat fixtures predate explicit raw evidence fields. Keep
+            # their supplied overlays readable; modern records must prove the
+            # corresponding Spanish source before a Chinese field is copied.
+            legacy_overlay = "attributes" not in out and "feature_bullets_raw" not in out
+            if (source_present or legacy_overlay) and usable_translation(tr.get(key)):
                 out[key] = str(tr[key]).strip()
     else:
         out["title_zh"] = out.get("title_zh") or ""
