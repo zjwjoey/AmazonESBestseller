@@ -10,7 +10,20 @@ def test_reviewed_200sku_config_has_150_50_quota_and_real_urls():
     rows = json.loads(path.read_text(encoding="utf-8"))
     assert sum(r["quota"] for r in rows if r["category_group"] == "hogar") == 150
     assert sum(r["quota"] for r in rows if r["category_group"] == "diy") == 50
-    assert all(r["url"].startswith("https://www.cdn.amazon.es/gp/bestsellers/") for r in rows)
+    assert all(r["url"].startswith("https://www.amazon.es/gp/bestsellers/") for r in rows)
+
+
+def test_1000sku_scale_config_has_seven_groups_and_candidate_pages():
+    path = Path(__file__).resolve().parents[1] / "configs" / "amazon_es_1000sku_categories.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    expected = {"hogar": 245, "diy": 180, "office": 145, "garden": 130,
+                "car": 110, "pets": 100, "beauty": 90}
+    assert {r["category_group"] for r in rows} == set(expected)
+    assert {g: sum(r["quota"] for r in rows if r["category_group"] == g)
+            for g in expected} == expected
+    assert sum(expected.values()) == 1000
+    assert len(rows) >= 40
+    assert all(r["url"].startswith("https://www.amazon.es/gp/bestsellers/") for r in rows)
 
 
 def test_select_quota_deduplicates_by_asin_within_group():
