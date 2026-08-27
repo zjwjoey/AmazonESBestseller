@@ -14,6 +14,8 @@ from urllib.parse import urlsplit, urlunsplit
 class QuotaError(ValueError):
     """Raised when a configured group cannot satisfy its requested quota."""
 
+    code = "QUOTA_UNIQUE_SHORTFALL"
+
 
 def normalize_group(value: object) -> str:
     value = str(value or "").strip().casefold()
@@ -86,17 +88,20 @@ def select_quota(records: Iterable[Mapping], quotas: Mapping[str, int]) -> dict[
 
     selected = {group: [] for group in normalized_quotas}
     seen = {group: set() for group in normalized_quotas}
+    seen_global: set[str] = set()
     for record in records:
         group = normalize_group(record.get("category_group") or record.get("group") or record.get("category_l1"))
         asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
-        if group not in selected or not asin or asin in seen[group] or len(selected[group]) >= normalized_quotas[group]:
+        if (group not in selected or not asin or asin in seen_global
+                or asin in seen[group] or len(selected[group]) >= normalized_quotas[group]):
             continue
         seen[group].add(asin)
+        seen_global.add(asin)
         selected[group].append(dict(record, asin=asin, category_group=group))
 
     for group, quota in normalized_quotas.items():
         actual = len(selected[group])
         if actual < quota:
-            raise QuotaError("%s组需要 %d，只有 %d" % (group, quota, actual))
+            raise QuotaError("QUOTA_UNIQUE_SHORTFALL: %s组需要 %d 个全局唯一 ASIN，只有 %d 个可用" %
+                             (group, quota, actual))
     return selected
-

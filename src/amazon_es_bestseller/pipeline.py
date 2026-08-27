@@ -29,6 +29,7 @@ from .normalization.specification import (
     attributes_to_spec_dict, build_spec_es, build_spec_v2)
 from .translation.full_detail import (
     render_bullets_es, render_bullets_zh, render_details_es, render_details_zh)
+from .translation.ds import DeepSeekTranslator, TRANSLATION_SCHEMA_VERSION
 from .translation.product_type import detect_product_type
 
 _LEADING_NUM_RE = re.compile(r"^\(?\s*([\d.,]+)")  # 容忍前导 '('（现代评论数 "(8.819)"）
@@ -91,6 +92,18 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     asin = normalize_asin(out.get("asin"))
     out["asin"] = asin
 
+    # Parent ASIN is only useful when it identifies a confirmed variation
+    # family.  A child ASIN copied into its own parent slot is not evidence of
+    # a family; drop it unless an explicit confirmed status is present.
+    parent = normalize_asin(out.get("parent_asin"))
+    parent_status = str(out.get("parent_asin_status") or "").strip().casefold()
+    if parent == asin and parent_status != "confirmed":
+        out["parent_asin"] = ""
+    elif parent:
+        out["parent_asin"] = parent
+    else:
+        out["parent_asin"] = ""
+
     cur = parse_price(out.get("current_price_raw"))
     orig = parse_price(out.get("original_price_raw"))
     out["current_price"] = cur
@@ -151,9 +164,25 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     l1 = out.get("category_l1")
     leaf = out.get("leaf_category")
     out["采集类目中文"] = category_zh(leaf) or category_zh(l1) or (l1 or "")
-    out["leaf_category_zh"] = category_zh(leaf)
+    for key in ("category_l1", "category_l2", "category_l3", "leaf_category"):
+        value = out.get(key)
+        # Unknown categories remain in Spanish as source evidence; known
+        # reviewed labels receive a deterministic Chinese display overlay.
+        out[f"{key}_zh"] = category_zh(value) or (value or "")
 
     tr = (translations or {}).get(asin) or {}
+    # A translation overlay is valid only for the exact Spanish evidence it
+    # was produced from; this prevents stale ASIN-only cache values from
+    # surviving parser repairs or refreshed detail pages.
+    translation_valid = isinstance(tr, dict) and (
+        (tr.get("translation_source_hash") == DeepSeekTranslator.source_hash(out)
+         and tr.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION)
+        # Explicitly supplied legacy overlays remain readable for backwards
+        # compatibility; the DS client never reuses such entries silently and
+        # the closure audit still flags any untranslated residuals.
+        or ("translation_source_hash" not in tr and "translation_schema_version" not in tr))
+    if not translation_valid:
+        tr = {}
     if isinstance(tr, dict):
         # DS is an optional display-layer overlay.  Only non-empty approved
         # fields are copied; every Spanish/raw field above remains untouched.

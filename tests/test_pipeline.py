@@ -55,6 +55,14 @@ def test_enrich_normalizes_fields():
     assert p["采集类目中文"] == "收纳盒套装"
 
 
+def test_enrich_derives_chinese_category_levels_for_display():
+    p = enrich_products(RANKING, DETAIL)[0]
+    assert p["category_l1_zh"] == "家居与厨房"
+    assert p["category_l2_zh"] == "收纳与整理"
+    assert p["category_l3_zh"] == "收纳盒套装"
+    assert p["leaf_category_zh"] == "收纳盒套装"
+
+
 def test_enrich_review_count_modern_paren_format():
     # 现代页面评论数 "(8.819)"（括号包裹）→ 3873 类比解析为 8819，不落 None
     d = dict(DETAIL[0], review_count_raw="(8.819)")
@@ -133,6 +141,20 @@ def test_enrich_brand_falls_back_to_reliable_marca_attribute():
     ])
     p = enrich_products(RANKING, [d])[0]
     assert p["brand"] == "De'Longhi"
+
+
+def test_enrich_drops_unconfirmed_self_parent_asin():
+    d = dict(DETAIL[0], asin="B078C6QR1C", parent_asin="B078C6QR1C",
+             parent_asin_status="self_reported_unconfirmed")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["parent_asin"] == ""
+
+
+def test_enrich_preserves_confirmed_parent_asin():
+    d = dict(DETAIL[0], asin="B078C6QR1C", parent_asin="B0DH0ABC01",
+             parent_asin_status="confirmed")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["parent_asin"] == "B0DH0ABC01"
 
 
 def test_enrich_title_zh_from_translations():

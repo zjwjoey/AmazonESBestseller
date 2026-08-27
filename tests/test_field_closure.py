@@ -87,6 +87,28 @@ def test_html_evidence_without_raw_is_parser_missed(tmp_path):
     assert _issue(audit_field_closure([p], html_dir=tmp_path), p["asin"], "brand")["classification"] == "PARSER_MISSED"
 
 
+def test_page_named_html_is_indexed_by_embedded_asin(tmp_path):
+    p = _base_product(brand_raw="", brand="")
+    (tmp_path / "page_01.html").write_text(
+        '<input id="ASIN" value="B000000001"><div id="bylineInfo">Marca: DeLonghi</div>',
+        encoding="utf-8")
+    issue = _issue(audit_field_closure([p], html_dir=tmp_path), p["asin"], "brand")
+    assert issue["classification"] == "PARSER_MISSED"
+
+
+def test_multiple_html_directories_are_combined_by_embedded_asin(tmp_path):
+    p = _base_product(brand_raw="", brand="")
+    first = tmp_path / "home"
+    second = tmp_path / "diy"
+    first.mkdir()
+    second.mkdir()
+    (second / "page_01.html").write_text(
+        '<input id="ASIN" value="B000000001"><div id="bylineInfo">Marca: DeLonghi</div>',
+        encoding="utf-8")
+    issue = _issue(audit_field_closure([p], html_dir=[first, second]), p["asin"], "brand")
+    assert issue["classification"] == "PARSER_MISSED"
+
+
 def test_category_without_source_is_source_missing_but_ranking_without_detail_bsr_fallback():
     p = _base_product(detail_bsr_raw="n.º 1 en Hogar y cocina")
     r = {"asin": p["asin"], "bestseller_rank": None, "ranking_source_url": ""}
@@ -122,7 +144,7 @@ def test_generic_variation_script_is_not_selected_variation_evidence(tmp_path):
     (tmp_path / "B000000001.html").write_text(
         '<script>var variationConfig = {"variation":"other"}</script>', encoding="utf-8")
     report = audit_field_closure([p], html_dir=tmp_path)
-    assert _issue(report, p["asin"], "selected_variation_raw")["classification"] == "SOURCE_MISSING"
+    assert _issue(report, p["asin"], "selected_variation_raw")["classification"] == "NOT_OBSERVED"
 
 
 def test_unrelated_struck_variation_price_is_not_original_price_evidence(tmp_path):
@@ -131,7 +153,100 @@ def test_unrelated_struck_variation_price_is_not_original_price_evidence(tmp_pat
         '<span class="apex-basisprice-value" data-a-strike="true"><span class="a-offscreen">22,99€</span></span>',
         encoding="utf-8")
     report = audit_field_closure([p], html_dir=tmp_path)
-    assert _issue(report, p["asin"], "original_price")["classification"] == "SOURCE_MISSING"
+    assert _issue(report, p["asin"], "original_price")["classification"] == "NOT_OBSERVED"
+
+
+def test_optional_original_price_absent_on_available_page_is_not_observed(tmp_path):
+    p = _base_product(original_price_raw="", original_price=None)
+    (tmp_path / "B000000001.html").write_text(
+        '<input id="ASIN" value="B000000001"><span id="productTitle">Caja</span>',
+        encoding="utf-8")
+    issue = _issue(audit_field_closure([p], html_dir=tmp_path), p["asin"], "original_price")
+    assert issue["classification"] == "NOT_OBSERVED"
+    assert issue["severity"] == "INFO"
+
+
+def test_missing_html_is_evidence_unavailable_not_source_missing():
+    issue = _issue(audit_field_closure([_base_product()]), "B000000001", "original_price")
+    assert issue["classification"] == "EVIDENCE_UNAVAILABLE"
+
+
+def test_self_parent_asin_is_not_valid_parent_evidence():
+    p = _base_product(parent_asin="")
+    report = audit_field_closure([p], details=[{"asin": p["asin"], "parent_asin": p["asin"]}])
+    assert _issue(report, p["asin"], "parent_asin")["classification"] == "EVIDENCE_UNAVAILABLE"
+
+
+def test_self_parent_hidden_input_is_not_page_evidence(tmp_path):
+    p = _base_product(parent_asin="")
+    (tmp_path / "page_01.html").write_text(
+        '<input id="ASIN" value="B000000001"><input id="parentASIN" value="B000000001">',
+        encoding="utf-8")
+    issue = _issue(audit_field_closure([p], html_dir=tmp_path), p["asin"], "parent_asin")
+    assert issue["classification"] == "NOT_OBSERVED"
+
+
+def test_empty_seller_container_is_not_seller_evidence(tmp_path):
+    p = _base_product(seller="", seller_raw="")
+    (tmp_path / "page_01.html").write_text(
+        '<input id="ASIN" value="B000000001"><div id="productTitle">X</div>'
+        '<div id="merchantInfoFeature_feature_div"></div>', encoding="utf-8")
+    issue = _issue(audit_field_closure([p], html_dir=tmp_path), p["asin"], "seller")
+    assert issue["classification"] == "NOT_OBSERVED"
+
+
+def test_browse_node_alone_is_not_l3_evidence():
+    p = _base_product(category_l3="")
+    ranking = {"asin": p["asin"], "category_l1": "Hogar y cocina",
+               "category_l2": "Cocina", "category_l3": "", "browse_node_id": "123"}
+    issue = _issue(audit_field_closure([p], rankings=[ranking]), p["asin"], "category_l3")
+    assert issue["classification"] == "SOURCE_MISSING"
+
+
+def test_amazon_since_label_is_date_source_evidence(tmp_path):
+    p = _base_product(date_first_available_raw="", date_first_available=None)
+    (tmp_path / "page_01.html").write_text(
+        '<input id="ASIN" value="B000000001">Producto en Amazon.es desde: 6 noviembre 2023',
+        encoding="utf-8")
+    issue = _issue(audit_field_closure([p], html_dir=tmp_path), p["asin"], "date_first_available")
+    assert issue["classification"] == "PARSER_MISSED"
+
+
+def test_workbook_value_drift_is_export_value_mismatch(tmp_path):
+    from openpyxl import load_workbook
+    from amazon_es_bestseller.export.excel import export_workbook
+
+    product = _base_product()
+    book = tmp_path / "out.xlsx"
+    export_workbook([product], out_path=book)
+    wb = load_workbook(book)
+    wb["西班牙语选品清单"].cell(2, 6).value = 99.0
+    wb.save(book)
+
+    report = audit_field_closure([product], workbook_path=book)
+    assert any(r["classification"] == "EXPORT_VALUE_MISMATCH" for r in report["records"])
+
+
+def test_clean_workbook_has_no_export_row_missing_findings(tmp_path):
+    from amazon_es_bestseller.export.excel import export_workbook
+
+    product = _base_product(image_url="")
+    book = tmp_path / "out.xlsx"
+    export_workbook([product], out_path=book)
+
+    report = audit_field_closure([product], workbook_path=book)
+    assert not any(r["classification"] == "EXPORT_MISSING" for r in report["records"])
+
+
+def test_workbook_missing_linked_chinese_image_is_reported(tmp_path):
+    from amazon_es_bestseller.export.excel import export_workbook
+
+    product = _base_product()
+    book = tmp_path / "out.xlsx"
+    export_workbook([product], out_path=book)
+
+    report = audit_field_closure([product], workbook_path=book)
+    assert any(r["classification"] == "IMAGE_MISSING" for r in report["records"])
 
 
 def test_audit_does_not_mutate_records_and_output_is_deterministic():
@@ -146,11 +261,36 @@ def test_audit_does_not_mutate_records_and_output_is_deterministic():
     assert "Field Closure Audit" in render_markdown(one)
 
 
+def test_markdown_keeps_coverage_states_out_of_defect_details():
+    report = {
+        "summary": {},
+        "field_summary": {},
+        "records": [
+            {"asin": "B000000001", "field": "seller", "display_column": "卖家",
+             "classification": "NOT_OBSERVED", "severity": "INFO", "raw_evidence": "",
+             "canonical_value": "", "display_value": "", "message": "页面未展示"},
+            {"asin": "B000000002", "field": "seller", "display_column": "卖家",
+             "classification": "PARSER_MISSED", "severity": "P1", "raw_evidence": "",
+             "canonical_value": "", "display_value": "", "message": "raw 缺失"},
+        ],
+    }
+    markdown = render_markdown(report)
+    assert "页面未展示" not in markdown
+    assert "raw 缺失" in markdown
+
+
 def test_unknown_attribute_evidence_is_preserved_in_audit():
     p = _base_product(attributes=[{"label_raw": "Campo nuevo", "value_raw": "Valor nuevo"}], product_details_zh="Campo nuevo：Valor nuevo")
     report = audit_field_closure([p])
     rec = _issue(report, p["asin"], "product_details_zh")
     assert "Campo nuevo" in json.dumps(rec, ensure_ascii=False)
+
+
+def test_translation_residual_is_p1():
+    p = {"asin": "B000000001", "title_es_raw": "Caja organizadora", "title_zh": "Caja organizadora"}
+    report = audit_field_closure([p])
+    row = next(r for r in report["records"] if r["field"] == "title_zh")
+    assert row["classification"] == "TRANSLATION_INCOMPLETE"
 
 
 def test_five_sku_golden_fixture_covers_real_issue_shapes():

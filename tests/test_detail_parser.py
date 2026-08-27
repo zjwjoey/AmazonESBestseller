@@ -146,6 +146,18 @@ def test_available_date_from_details_table():
     assert d["date_first_available_raw"] == "28 octubre 2023"
 
 
+def test_available_date_from_amazon_since_label():
+    html = """
+    <html><body>
+      <div id="detailBulletsWrapper_feature_div">
+        Producto en Amazon.es desde : 6 noviembre 2023
+      </div>
+    </body></html>
+    """
+    d = parse_detail_page(html, "B078C6QR1C")
+    assert d["date_first_available_raw"] == "6 noviembre 2023"
+
+
 def test_image_url_fallback_to_data_old_hires():
     html = """
     <html><body>
@@ -190,6 +202,21 @@ def test_full_detail_feature_bullets(delonghi_html):
     d = parse_detail_page(delonghi_html, "B008YETL18")
     assert len(d["feature_bullets_raw"]) == 3
     assert d["feature_bullets_raw"][0].startswith("SOLUCIÓN SUAVE DE DESCALCIFICACIÓN")
+
+
+def test_feature_bullets_pqv_fallback():
+    html = '''<html><body><div id="productTitle">Producto</div>
+    <div id="pqv-feature-bullets"><ul><li><span>Primera ventaja</span></li>
+    <li><span>Segunda ventaja</span></li></ul></div></body></html>'''
+    assert parse_detail_page(html, "B000000001")["feature_bullets_raw"] == [
+        "Primera ventaja", "Segunda ventaja"]
+
+
+def test_brand_from_product_overview_when_byline_missing():
+    html = '''<html><body><div id="productTitle">Producto</div>
+    <div id="productOverview_feature_div"><table><tr><td>Marca</td><td>Marca Visible</td></tr></table></div>
+    </body></html>'''
+    assert parse_detail_page(html, "B000000001")["brand_raw"] == "Marca Visible"
 
 
 def test_full_detail_product_description(delonghi_html):

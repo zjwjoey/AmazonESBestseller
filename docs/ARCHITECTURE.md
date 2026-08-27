@@ -1848,4 +1848,8 @@ The most important architectural properties are:
 
 Architecture exists to protect data quality.
 
+Detail schema upgrades first reparse saved HTML offline. The quota selector
+enforces one global ASIN set across category groups and raises
+`QUOTA_UNIQUE_SHORTFALL` when the requested 200 cannot be satisfied.
+
 Not to maximize abstraction.

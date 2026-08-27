@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..models import normalize_asin
+from .detail import CURRENT_DETAIL_SCHEMA_VERSION
 
 #: 关键字段（缺失任一即视为"不完整"）与中文说明（QA_RULES §29 填充率字段）
 KEY_FIELDS = ("current_price_raw", "title_es_raw", "rating_raw", "review_count_raw")
@@ -76,6 +77,7 @@ class DetailState:
                 continue
             rec = dict(r)
             rec.setdefault("collected_at", now.isoformat(timespec="seconds"))
+            rec.setdefault("detail_schema_version", CURRENT_DETAIL_SCHEMA_VERSION)
             self._data[a] = rec
 
     def save(self) -> None:
@@ -164,6 +166,15 @@ def build_plan(ranking_records: List[dict], state: DetailState, now: Optional[da
         if (rec.get("access_state") or "").upper() in UNRELIABLE_STATES:
             collect.append({"asin": a, "action": "collect", "priority": "incomplete",
                             "reason": "上次访问 %s 不可信，强制重采" % rec.get("access_state")})
+            continue
+        try:
+            schema_version = int(rec.get("detail_schema_version", 0))
+        except (TypeError, ValueError):
+            schema_version = 0
+        if schema_version < CURRENT_DETAIL_SCHEMA_VERSION:
+            collect.append({"asin": a, "action": "collect", "priority": "incomplete",
+                            "reason": "详情 schema 过期（%s→%s），优先离线重解析或重采"
+                                      % (schema_version, CURRENT_DETAIL_SCHEMA_VERSION)})
             continue
         missing = _missing_key_fields(rec)
         if missing:

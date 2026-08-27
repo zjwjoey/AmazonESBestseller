@@ -1252,6 +1252,9 @@ classes, JSON/Markdown report and offline regression coverage are complete. The 
 milestone is **real full-flow data closure validation for Hogar y cocina**; broad
 category expansion remains deferred.
 
+The 2026-08-27 closure pass adds the versioned detail migration, global-unique
+quota failure contract, hash-aware translation cache and export closure gate.
+
 ---
 
 # 57. Final roadmap principle

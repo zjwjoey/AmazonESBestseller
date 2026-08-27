@@ -309,8 +309,7 @@ def _is_set_evidence(d, variant=None, title_es=None) -> bool:
 
 def build_spec_v2(d, variant=None, title_es=None) -> str:
     """简短规格（QA_RULES §36）：只回答"客户买的是哪个规格版本"。"""
-    if not d:
-        return ''
+    d = d if isinstance(d, dict) else {}
     parts = []
     n = resolve_package_count(d, variant, title_es)
     if n:
@@ -345,6 +344,23 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
         m = re.match(r'(\d+)', str(pcs))
         if m and int(m.group(1)) > 1:
             parts.append('%s只' % m.group(1))
+    # When Amazon exposes no structured attribute table, retain explicit
+    # numeric evidence from the exact title rather than leaving the derived
+    # specification silently blank.  This is intentionally conservative:
+    # only dimensions/capacity/power/voltage/package-count patterns qualify.
+    if not parts and title_es:
+        text = str(title_es)
+        m = re.search(r'(?<!\w)(\d+(?:[.,]\d+)?\s*(?:x|×)\s*\d+(?:[.,]\d+)?(?:\s*(?:x|×)\s*\d+(?:[.,]\d+)?)?\s*(?:mm|cm|m))(?!\w)', text, re.I)
+        if m:
+            parts.append(dim_zh(m.group(1).replace(',', '.')) or m.group(1))
+        else:
+            m = re.search(r'(?<!\w)(\d+(?:[.,]\d+)?)\s*(ml|mililitros?|l|litros?|g|kg|w|vatios?|v|voltios?)(?!\w)', text, re.I)
+            if m:
+                parts.append(cap_zh((m.group(1) + ' ' + m.group(2)).replace(',', '.')) or m.group(0))
+        if not parts:
+            m = re.search(r'(?<!\w)(\d+)\s*(?:piezas?|unidades?|uds?)(?!\w)', text, re.I)
+            if m and int(m.group(1)) > 1:
+                parts.append('%s只' % m.group(1))
     return ' / '.join(parts)
 
 

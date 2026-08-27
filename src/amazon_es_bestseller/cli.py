@@ -97,7 +97,7 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
     if not args.urls and not args.rankings_file:
         parser.error("collect 需要 --urls 或 --rankings-file")
     from .access.browser import BrowserSession
-    from .collection.detail import collect_details
+    from .collection.detail import collect_details, reparse_saved_details
     from .collection.planning import DetailState, build_plan, collect_asins
     from .collection.ranking import collect_rankings
 
@@ -118,6 +118,12 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
             if not rankings:
                 raise SystemExit("manifest 与榜单记录没有可匹配的 ASIN")
         state = DetailState(Path(out_dir) / "state" / "details_state.json")
+        # Upgrade old cached records from local HTML before planning.  This is
+        # deliberately offline and avoids re-requesting pages after a parser
+        # schema bump.
+        reparsed = reparse_saved_details(Path(out_dir) / "html", state)
+        if reparsed:
+            state.save()
         plan = build_plan(rankings, state)
         details = collect_details(collect_asins(plan), session, out_dir)
         state.update(details)
@@ -135,8 +141,8 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
             src = latest / name
             if src.exists():
                 shutil.copy(src, Path(out_dir) / name)
-    print("collect 完成：榜单 %d 条、详情 %d 条、计划收集 %d 条"
-          % (len(rankings), len(details), len(plan["collect"])))
+    print("collect 完成：榜单 %d 条、详情 %d 条、离线重解析 %d 条、计划收集 %d 条"
+          % (len(rankings), len(details), len(reparsed), len(plan["collect"])))
 
 
 # ---------- select-quota（离线） ----------
@@ -227,6 +233,29 @@ def cmd_enrich(args) -> None:
     print("enrich 完成：%d 条商品 → %s" % (len(products), args.out))
 
 
+def cmd_repair_cache(args) -> None:
+    """离线：用已保存详情 HTML 补齐 canonical 商品字段。"""
+    from .collection.repair import repair_cached_products
+
+    products = _load_json(args.products)
+    repaired, report = repair_cached_products(products, args.html_dir)
+    _save_json(repaired, args.out)
+
+
+def cmd_reparse_details(args) -> None:
+    """离线：用保存 HTML 升级详情 schema，不发起 Amazon 请求。"""
+    from .collection.detail import reparse_saved_details
+    from .collection.planning import DetailState
+    state = DetailState(args.state)
+    records = reparse_saved_details(args.html_dir, state)
+    state.save()
+    _save_json(state.records(), args.out)
+    print("离线重解析完成：%d 条 → %s" % (len(records), args.out))
+    print("repair-cache 完成：匹配 %d 页、忽略 %d 页、修改 %d 个商品、%d 个字段 → %s"
+          % (report["matched_pages"], report["ignored_pages"],
+             report["changed_products"], report["changed_fields"], args.out))
+
+
 # ---------- qa（离线） ----------
 
 def cmd_qa(args) -> None:
@@ -267,13 +296,16 @@ def cmd_audit_fields(args) -> None:
     products = _load_json(args.products)
     details = _load_json(args.details) if args.details else []
     rankings = _load_json(args.rankings) if args.rankings else []
+    translations = _load_json(args.translations) if args.translations else None
     report = audit_field_closure(products, details=details, rankings=rankings,
-                                 html_dir=args.html_dir or None, run_dir=args.run_dir or None)
+                                 html_dir=args.html_dir or None, run_dir=args.run_dir or None,
+                                 workbook_path=args.workbook or None, translations=translations)
     write_report(report, args.out, args.md_out or None)
     s = report["summary"]
-    print("Field Closure Audit：%d SKU、%d 字段；PASS %d / SOURCE_MISSING %d / PARSER_MISSED %d / MAPPING_MISSED %d / DERIVED_MISSING %d"
+    print("Field Closure Audit：%d SKU、%d 字段；PASS %d / SOURCE_MISSING %d / PARSER_MISSED %d / MAPPING_MISSED %d / DERIVED_MISSING %d / EXPORT_MISMATCH %d / IMAGE_MISSING %d"
           % (s["total_skus"], s["fields_checked"], s["pass"], s["SOURCE_MISSING"],
-             s["PARSER_MISSED"], s["MAPPING_MISSED"], s["DERIVED_MISSING"]))
+             s["PARSER_MISSED"], s["MAPPING_MISSED"], s["DERIVED_MISSING"],
+             s.get("EXPORT_VALUE_MISMATCH", 0), s.get("IMAGE_MISSING", 0)))
     print("审计 JSON → %s" % args.out)
     print("审计 Markdown → %s" % (args.md_out or str(Path(args.out).with_suffix(".md"))))
 
@@ -291,14 +323,33 @@ def cmd_export(args) -> None:
 
     products = _load_json(args.products)
     blocked = blocking_issues(products)
+
+    translations = _load_json(args.translations) if args.translations else None
+    closure_findings = []
+    from .qa.field_closure import audit_field_closure
+    details = _load_json(getattr(args, "details", "")) if getattr(args, "details", "") else None
+    rankings = _load_json(getattr(args, "rankings", "")) if getattr(args, "rankings", "") else None
+    closure_enabled = bool(args.translations or details or rankings or
+                            getattr(args, "html_dir", None) or getattr(args, "run_dir", ""))
+    closure = audit_field_closure(products, details=details, rankings=rankings,
+                                  html_dir=getattr(args, "html_dir", None) or None,
+                                  run_dir=getattr(args, "run_dir", "") or None,
+                                  translations=translations) if closure_enabled else {"records": []}
+    blocked_closure = [r for r in closure.get("records", [])
+                       if r.get("severity") == "P1" and r.get("classification") in
+                       {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING",
+                        "TRANSLATION_INCOMPLETE", "ORIGINAL_PRICE_INVALID"}]
+    closure_findings = [(r.get("asin"), r.get("classification"), r.get("message"))
+                        for r in blocked_closure]
+    blocked = blocked + closure_findings
     if blocked and not args.force:
-        lines = ["QA 门禁未通过：%d 条 P0/P1 问题，拒绝导出（--force 强制）"
+        lines = ["QA/字段闭环门禁未通过：%d 条 P0/P1 问题，拒绝导出（--force 强制）"
                  % len(blocked)]
         for asin, code, msg in blocked[:10]:
             lines.append("   %s %s: %s" % (asin, code, msg))
         raise SystemExit("\n".join(lines))
-
-    translations = _load_json(args.translations) if args.translations else None
+    if blocked and args.force:
+        print("警告：--force 忽略 %d 条 QA/字段闭环 P0/P1 问题" % len(blocked))
     images_by_asin = _load_images_by_asin(args.images_dir, products)
     category_planning = _load_category_planning(args.category_planning)
     prev_workbook = None
@@ -349,6 +400,18 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--out", default=str(OUTPUTS / "products.json"), help="输出商品表 JSON")
     e.set_defaults(func=cmd_enrich)
 
+    r = sub.add_parser("repair-cache", help="离线：用保存的详情 HTML 补齐商品字段")
+    r.add_argument("--products", required=True, help="规范化商品 JSON 数组")
+    r.add_argument("--html-dir", required=True, help="保存的详情 HTML 目录")
+    r.add_argument("--out", required=True, help="修复后的商品 JSON")
+    r.set_defaults(func=cmd_repair_cache)
+
+    rp = sub.add_parser("reparse-details", help="离线：按当前详情 schema 重解析保存 HTML")
+    rp.add_argument("--html-dir", nargs="+", required=True)
+    rp.add_argument("--state", required=True, help="DetailState JSON")
+    rp.add_argument("--out", required=True, help="重建后的 details JSON")
+    rp.set_defaults(func=cmd_reparse_details)
+
     t = sub.add_parser("translate-ds", help="联网：调用 DeepSeek API 翻译中文显示字段")
     t.add_argument("--products", required=True, help="规范化商品 JSON 数组")
     t.add_argument("--cache", default="", help="翻译缓存 JSON（默认写入 --out）")
@@ -369,8 +432,11 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--products", default=str(OUTPUTS / "products.json"), help="规范化商品表 JSON")
     a.add_argument("--details", default=str(OUTPUTS / "details.json"), help="详情 raw JSON（可选）")
     a.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"), help="榜单 raw JSON（可选）")
-    a.add_argument("--html-dir", default="", help="保存的详情 HTML 目录（可选，用于识别 PARSER_MISSED）")
+    a.add_argument("--html-dir", nargs="+", default=[],
+                   help="保存的详情 HTML 目录（可选，可传多个，用于识别 PARSER_MISSED）")
     a.add_argument("--run-dir", default="", help="采集 run 根目录（可选，自动读取 ranking_*.html 作为类目来源）")
+    a.add_argument("--workbook", default="", help="导出的 Excel 工作簿（可选，逐 ASIN 核验展示层）")
+    a.add_argument("--translations", default="", help="翻译映射 JSON（可选，用于中文表对账）")
     a.add_argument("--out", default=str(OUTPUTS / "field_closure.json"))
     a.add_argument("--md-out", default="", help="Markdown 输出路径（默认与 JSON 同名 .md）")
     a.set_defaults(func=cmd_audit_fields)
@@ -378,6 +444,10 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("export", help="离线：商品表 → Excel")
     x.add_argument("--products", default=str(OUTPUTS / "products.json"))
     x.add_argument("--translations", default="")
+    x.add_argument("--details", default="", help="详情 raw JSON（用于字段闭环门禁）")
+    x.add_argument("--rankings", default="", help="榜单 raw JSON（用于字段闭环门禁）")
+    x.add_argument("--html-dir", nargs="+", default=[], help="保存的详情 HTML 目录（可选）")
+    x.add_argument("--run-dir", default="", help="采集 run 根目录（可选）")
     x.add_argument("--prev-workbook", default="", help="前版工作簿（按 ASIN 保留备注）")
     x.add_argument("--images-dir", default="", help="本地图片目录（<ASIN>.png/.jpg/.jpeg）")
     x.add_argument("--category-planning", default="", help="类目规划 JSON（字典行数组或二维数组）")

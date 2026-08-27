@@ -24,6 +24,21 @@ def test_select_quota_deduplicates_by_asin_within_group():
     assert selected["diy"][0]["asin"] == "D1"
 
 
+def test_select_quota_deduplicates_asins_across_groups_and_reports_shortfall():
+    records = [
+        {"asin": "SHARED", "category_group": "hogar"},
+        {"asin": "SHARED", "category_group": "diy"},
+    ]
+    with pytest.raises(QuotaError, match="diy.*需要 1.*只有 0"):
+        select_quota(records, {"hogar": 1, "diy": 1})
+
+
+def test_quota_shortfall_has_machine_readable_code():
+    with pytest.raises(QuotaError) as exc:
+        select_quota([{"asin": "D1", "category_group": "diy"}], {"diy": 2})
+    assert exc.value.code == "QUOTA_UNIQUE_SHORTFALL"
+
+
 def test_select_quota_fails_when_group_is_short():
     with pytest.raises(QuotaError, match="diy.*需要 2.*只有 1"):
         select_quota([{"asin": "D1", "category_group": "diy"}], {"diy": 2})

@@ -83,3 +83,17 @@ def test_failed_cache_entry_is_not_treated_as_successful_cache_hit(tmp_path):
     result = client.translate_record({"asin": "B000000001", "title_es_raw": "Taladro"})
     assert result["translation_status"] == "success"
     assert transport.calls == 1
+
+
+def test_translation_marks_partial_and_invalidates_source_hash(tmp_path):
+    transport = FakeTransport()
+    client = DeepSeekTranslator(api_key="secret", cache_path=tmp_path / "t.json",
+                                 transport=transport, max_retries=0)
+    first = client.translate_record({"asin": "B000000001", "title_es_raw": "Taladro",
+                                     "feature_bullets_es": "Alta calidad"})
+    assert first["translation_status"] == "partial"
+    assert first["fields"]["feature_bullets_zh"] == "missing"
+    second = client.translate_record({"asin": "B000000001", "title_es_raw": "Taladro",
+                                      "feature_bullets_es": "Nueva calidad"})
+    assert transport.calls == 2
+    assert second["translation_source_hash"] != first["translation_source_hash"]

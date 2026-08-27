@@ -223,3 +223,8 @@ def test_build_spec_v2_full(sample_detail_dict):
 def test_build_spec_v2_empty():
     assert build_spec_v2({}) == ''
     assert build_spec_v2(None) == ''
+
+
+def test_build_spec_v2_uses_explicit_title_dimensions_without_attributes():
+    out = build_spec_v2({}, title_es='Organizador 30 x 20 cm')
+    assert '30' in out and '20' in out and '厘米' in out

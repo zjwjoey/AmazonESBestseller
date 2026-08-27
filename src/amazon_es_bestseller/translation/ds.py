@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import hashlib
 import time
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
@@ -41,6 +42,14 @@ _INPUT_FIELDS = (
     "feature_bullets_es",
 )
 _FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.IGNORECASE | re.DOTALL)
+TRANSLATION_SCHEMA_VERSION = 2
+_SOURCE_TO_TARGET = {
+    "title_es_raw": "title_zh", "category_l1": "category_l1_zh",
+    "category_l2": "category_l2_zh", "category_l3": "category_l3_zh",
+    "leaf_category": "leaf_category_zh", "selected_variation_raw": "selected_variation_zh",
+    "specification_es": "specification_zh", "spec_v2": "specification_zh",
+    "product_details_es": "product_details_zh", "feature_bullets_es": "feature_bullets_zh",
+}
 
 
 class TranslationError(RuntimeError):
@@ -143,12 +152,26 @@ class DeepSeekTranslator:
         tmp.write_text(json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(self.cache_path)
 
+    def _public_result(self, result: dict) -> dict:
+        """Keep the historical no-cache API shape while cache files carry
+        schema/hash/field metadata needed for safe reuse."""
+        if self.cache_path is None:
+            return {k: v for k, v in result.items()
+                    if k not in {"translation_schema_version", "translation_source_hash", "fields"}}
+        return dict(result)
+
     @staticmethod
     def _source_payload(record: Mapping[str, Any]) -> dict[str, Any]:
         payload = {key: record.get(key) for key in _INPUT_FIELDS if record.get(key) not in (None, "", [], {})}
         # Keep the source evidence bounded enough for a single request while
         # retaining the full details that the collector already rendered.
         return payload
+
+    @classmethod
+    def source_hash(cls, record: Mapping[str, Any]) -> str:
+        payload = cls._source_payload(record)
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")).encode("utf-8")).hexdigest()
 
     def _request_payload(self, record: Mapping[str, Any]) -> dict[str, Any]:
         asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
@@ -176,38 +199,56 @@ class DeepSeekTranslator:
         except (KeyError, IndexError, TypeError) as exc:
             raise TranslationError("missing chat completion content") from exc
         obj = _json_content(content)
-        result = {"asin": str(record.get("asin") or record.get("ASIN") or "").strip().upper()}
+        result = {"asin": str(record.get("asin") or record.get("ASIN") or "").strip().upper(),
+                  "translation_schema_version": TRANSLATION_SCHEMA_VERSION,
+                  "translation_source_hash": self.source_hash(record),
+                  "fields": {}}
+        source = self._source_payload(record)
+        expected = set()
+        for source_key, target_key in _SOURCE_TO_TARGET.items():
+            if source.get(source_key) not in (None, "", [], {}):
+                expected.add(target_key)
         for key in ALLOWED_FIELDS:
             value = obj.get(key)
             if value not in (None, ""):
                 result[key] = str(value).strip()
-        if len(result) == 1:
+        for key in expected:
+            result["fields"][key] = "success" if result.get(key) else "missing"
+        if not expected:
+            result["translation_status"] = "source_missing"
+            return result
+        if not any(result.get(key) for key in expected):
             raise TranslationError("translation object contains no allowed fields")
-        result["translation_status"] = "success"
+        result["translation_status"] = "success" if all(result.get(key) for key in expected) else "partial"
         return result
 
     def translate_record(self, record: Mapping[str, Any]) -> dict:
         asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
         if not asin:
             return {"asin": "", "translation_status": "failed", "translation_error": "missing asin"}
+        source_hash = self.source_hash(record)
         cached = self.cache.get(asin)
-        if cached is not None and cached.get("translation_status") == "success":
+        if (cached is not None and cached.get("translation_status") in {"success", "partial"}
+                and cached.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION
+                and cached.get("translation_source_hash") == source_hash):
             return dict(cached)
         last_error = "unknown error"
         for attempt in range(self.max_retries + 1):
             try:
                 result = self._call_once(record)
                 self.cache[asin] = result
-                return dict(result)
+                return self._public_result(result)
             except Exception as exc:  # bounded retry; failure is isolated per ASIN
                 last_error = str(exc) or type(exc).__name__
                 if isinstance(exc, TranslationError) and not exc.retryable:
                     break
                 if attempt < self.max_retries and self.backoff_seconds:
                     time.sleep(self.backoff_seconds * (2**attempt))
-        result = {"asin": asin, "translation_status": "failed", "translation_error": last_error}
+        result = {"asin": asin, "translation_schema_version": TRANSLATION_SCHEMA_VERSION,
+                  "translation_source_hash": source_hash, "fields": {},
+                  "translation_status": "failed", "translation_error": last_error}
         self.cache[asin] = result
-        return dict(result)
+        return self._public_result(result)
 
     def translate_records(self, records: Iterable[Mapping[str, Any]]) -> list[dict]:
         results = []

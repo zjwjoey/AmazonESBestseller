@@ -21,7 +21,7 @@ def test_cli_help_lists_subcommands(capsys):
         main(["--help"])
     assert ei.value.code == 0
     out = capsys.readouterr().out
-    for cmd in ("collect", "enrich", "qa", "audit-fields", "export", "select-quota", "translate-ds"):
+    for cmd in ("collect", "enrich", "qa", "audit-fields", "export", "select-quota", "translate-ds", "repair-cache"):
         assert cmd in out
 
 
@@ -65,6 +65,22 @@ def test_cli_translate_ds_writes_asin_map(tmp_path, monkeypatch):
     assert saved["B1"]["title_zh"] == "电钻"
 
 
+def test_cli_repair_cache_merges_saved_detail_fields(tmp_path):
+    products = tmp_path / "products.json"
+    products.write_text(json.dumps([{"asin": "B078C6QR1C", "title_es_raw": "Fiambrera"}], ensure_ascii=False), encoding="utf-8")
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "page_01.html").write_text(
+        '<input id="ASIN" value="B078C6QR1C"><div id="productTitle">Fiambrera</div>'
+        '<div id="corePrice_feature_div"><div class="a-price"><span class="a-offscreen">12,62 €</span></div></div>',
+        encoding="utf-8",
+    )
+    out = tmp_path / "repaired.json"
+    assert main(["repair-cache", "--products", str(products), "--html-dir", str(html_dir), "--out", str(out)]) == 0
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert saved[0]["current_price"] == 12.62
+
+
 def test_cli_audit_fields_writes_json_and_markdown(tmp_path, capsys):
     products = tmp_path / "products.json"
     details = tmp_path / "details.json"
@@ -80,6 +96,46 @@ def test_cli_audit_fields_writes_json_and_markdown(tmp_path, capsys):
     report = json.loads(out.read_text(encoding="utf-8"))
     assert report["summary"]["total_skus"] == 1
     assert (tmp_path / "field_closure.md").exists()
+
+
+def test_cli_audit_fields_accepts_workbook_and_translations(tmp_path):
+    from amazon_es_bestseller.export.excel import export_workbook
+
+    product = {"asin": "B000000001", "title_es_raw": "Caja",
+               "product_url": "https://www.amazon.es/dp/B000000001",
+               "image_url": "https://img"}
+    products = tmp_path / "products.json"
+    translations = tmp_path / "translations.json"
+    workbook = tmp_path / "out.xlsx"
+    out = tmp_path / "field_closure.json"
+    products.write_text(json.dumps([product]), encoding="utf-8")
+    translations.write_text(json.dumps({}), encoding="utf-8")
+    export_workbook([product], out_path=workbook)
+
+    assert main(["audit-fields", "--products", str(products), "--details", "", "--rankings", "",
+                 "--workbook", str(workbook), "--translations", str(translations),
+                 "--out", str(out)]) == 0
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert saved["summary"]["total_skus"] == 1
+
+
+def test_cli_audit_fields_accepts_multiple_html_directories(tmp_path):
+    products = tmp_path / "products.json"
+    first = tmp_path / "home"
+    second = tmp_path / "diy"
+    out = tmp_path / "field_closure.json"
+    first.mkdir()
+    second.mkdir()
+    products.write_text(json.dumps([{"asin": "B000000001", "brand": "", "brand_raw": ""}]), encoding="utf-8")
+    (second / "page_01.html").write_text(
+        '<input id="ASIN" value="B000000001"><div id="bylineInfo">Marca: DeLonghi</div>',
+        encoding="utf-8")
+
+    assert main(["audit-fields", "--products", str(products), "--details", "", "--rankings", "",
+                 "--html-dir", str(first), str(second), "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    brand = next(r for r in report["records"] if r["field"] == "brand")
+    assert brand["classification"] == "PARSER_MISSED"
 
 
 def test_collect_rejects_offline(capsys):

@@ -273,3 +273,6 @@ through Source → Raw → Canonical → Derived → Excel and reports
 field-level evidence. Raw full-detail extraction V1 is implemented; normalization,
 Chinese rendering and display closure continue to improve. The next milestone is
 real full-flow Hogar y cocina closure validation, not broad category expansion.
+
+The 2026-08-27 closure pass adds versioned detail migration, hash-aware
+translation caching, field-level translation QA and export-gate enforcement.

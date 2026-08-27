@@ -143,8 +143,8 @@ def _zh_values(rec: Mapping, seq: int, translations: Optional[Mapping]) -> List:
         rec.get('bestseller_rank') or '',            # 17 畅销榜排名
         _zh_field(rec, translations, 'selected_variation_zh', rec.get('selected_variation_raw')),  # 18 当前选中规格 / 变体
         _zh_field(rec, translations, 'specification_zh', rec.get('spec_v2')),  # 19 核心规格（中文）
-        rec.get('product_details_zh') or '',         # 20 完整商品详情（中文）
-        rec.get('feature_bullets_zh') or '',         # 21 商品卖点（中文）
+        _zh_field(rec, translations, 'product_details_zh', rec.get('product_details_zh')),  # 20 完整商品详情（中文）
+        _zh_field(rec, translations, 'feature_bullets_zh', rec.get('feature_bullets_zh')),  # 21 商品卖点（中文）
         rec.get('date_first_available') or '',       # 22 首次上架日期
         rec.get('seller') or rec.get('seller_raw') or '',  # 23 卖家
         rec.get('product_url') or '',                # 24 商品链接

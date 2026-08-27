@@ -306,6 +306,18 @@ When choosing between full raw detail preservation and dropping unfamiliar field
 
 When choosing between a large refactor and a small verified change, choose the small verified change.
 
+## 26. Closure upgrade (2026-08-27)
+
+- The 150 Hogar + 50 DIY quota is a global-unique-ASIN contract. Selection
+  must fail with `QUOTA_UNIQUE_SHORTFALL` instead of emitting a short batch.
+- Detail records carry the centralized `CURRENT_DETAIL_SCHEMA_VERSION` marker;
+  old records are offline-reparsed from saved HTML before any new request.
+- Translation caches are keyed by ASIN plus source hash and schema version.
+  Field-level `partial` status is not equivalent to full success, and raw
+  Spanish evidence is immutable.
+- Export runs field-closure audit and blocks P0/P1 parser, mapping, derived or
+  translation-incomplete findings unless `--force` is explicit.
+
 ## 26. Field Closure Audit
 
 Field Closure Audit is a formal QA capability for automatic fields in the frozen

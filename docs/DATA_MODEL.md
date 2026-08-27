@@ -444,3 +444,9 @@ The data layer should be more complete than the display layer.
 The display layer should be more readable than the data layer.
 
 Both must remain traceable by ASIN.
+
+## 30. Versioned detail and translation closure
+
+Each detail record carries `detail_schema_version`. Translation overlays carry
+`translation_schema_version`, `translation_source_hash` and field-level status;
+raw Spanish fields remain the source of truth.

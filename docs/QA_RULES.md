@@ -264,3 +264,7 @@ human-owned `备注`.
 unparseable, or `original_price <= current_price`; it is not displayed as a valid
 struck-through original and no discount is calculated. Unknown raw attributes remain
 preserved, and Detail BSR never supplies `bestseller_rank`.
+
+Export also blocks `TRANSLATION_INCOMPLETE` when a source Spanish display field
+exists but its Chinese target is empty or still a Spanish sentence. `--force`
+is the explicit override and is always reported.

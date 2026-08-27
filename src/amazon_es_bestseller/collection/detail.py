@@ -17,6 +17,8 @@ from bs4 import BeautifulSoup
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
 
+CURRENT_DETAIL_SCHEMA_VERSION = 2
+
 
 def _clean(t) -> str:
     """对齐 JS clean()：压空白、去首尾。"""
@@ -37,7 +39,8 @@ _PARENT_ASIN_JSON_RE = re.compile(
 
 # 首次上架日期（西语标签；raw 归一为 parse_es_date 接受的 "D M YYYY"）
 _AVAIL_DATE_RE = re.compile(
-    r"(?:fecha de primera disponibilidad|primera fecha disponible|fecha de lanzamiento)"
+    r"(?:fecha de primera disponibilidad|primera fecha disponible|fecha de lanzamiento|"
+    r"producto en amazon\.es desde)"
     r"\s*:?\s*(\d{1,2})\s+(?:de\s+)?([a-záéíóúñü]+)[,\s]*(?:de\s+)?(\d{4})",
     re.I)
 _DATE_SECTIONS = ("#detailBulletsWrapper_feature_div", "#detailBullets_feature_div",
@@ -313,15 +316,22 @@ def _collect_attributes(soup) -> list:
 
 def _feature_bullets_raw(soup) -> list:
     """feature_bullets_raw：#feature-bullets 下所有非空卖点文本（DATA_MODEL §8）。"""
-    fb = soup.select_one(_FEATURE_BULLETS_SEL)
-    if fb is None:
-        return []
-    bullets = []
-    for li in fb.select("li"):
-        t = _clean(li.get_text(" ", strip=True))
-        if t:
-            bullets.append(t)
-    return bullets
+    # Amazon uses all of these IDs for the same visible block across desktop,
+    # quick-view and newer page layouts.  Use the first non-empty block so a
+    # hidden/empty duplicate cannot mask the actual bullets.
+    for selector in (_FEATURE_BULLETS_SEL, "#featurebullets_feature_div",
+                     "#pqv-feature-bullets"):
+        fb = soup.select_one(selector)
+        if fb is None:
+            continue
+        bullets = []
+        for li in fb.select("li"):
+            t = _clean(li.get_text(" ", strip=True))
+            if t:
+                bullets.append(t)
+        if bullets:
+            return bullets
+    return []
 
 
 def _product_description_raw(soup) -> str:
@@ -413,12 +423,28 @@ def parse_detail_page(html: str, asin: str) -> dict:
         brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
         brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
         brand_raw = _clean(brand_raw)
+    if not brand_raw:
+        # Some pages omit the byline but expose an explicit Marca row in the
+        # product-overview table.  This is reliable page evidence, unlike a
+        # title-prefix fallback (which is forbidden by the data rules).
+        overview = soup.select_one(_OVERVIEW_SEL)
+        if overview is not None:
+            for row in overview.select("tr"):
+                cells = row.select("td")
+                if len(cells) < 2:
+                    continue
+                label = _clean(cells[0].get_text(" ", strip=True)).casefold()
+                value = _clean(cells[1].get_text(" ", strip=True))
+                if label in {"marca", "brand"} and value:
+                    brand_raw = value
+                    break
 
     # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
     selected_variation_raw = _selected_variation(soup)
 
     return {
         "asin": asin,
+        "detail_schema_version": CURRENT_DETAIL_SCHEMA_VERSION,
         "is_captcha": is_captcha,
         "title_es_raw": _text(soup, "#productTitle"),
         "current_price_raw": current_price_raw,
@@ -444,6 +470,48 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "product_description_raw": _product_description_raw(soup),
         "detail_bullets_raw": _detail_bullets_raw(soup),
     }
+
+
+def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
+    """Offline reparse saved detail HTML using the current extractor."""
+    from pathlib import Path
+    roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
+    wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
+    out = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.html")):
+            try:
+                html = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            asin = path.stem.upper()
+            if not _ASIN_RE.fullmatch(asin):
+                match = re.search(r'(?:id|name)=["\']ASIN["\'][^>]*value=["\']([A-Z0-9]{10})', html, re.I)
+                if not match:
+                    match = re.search(r'(?:data-asin|parentASIN)["\']?\s*[:=]\s*["\']([A-Z0-9]{10})', html, re.I)
+                asin = match.group(1).upper() if match else ""
+            if not asin or not _ASIN_RE.fullmatch(asin) or (wanted and asin not in wanted):
+                continue
+            meta = {}
+            meta_path = path.with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    meta = {}
+            state_value = detect_access_status(meta.get("status_code", 200), html)
+            if state_value.value != "NORMAL":
+                continue
+            rec = parse_detail_page(html, asin)
+            rec.update({"status_code": meta.get("status_code"),
+                        "access_state": state_value.value,
+                        "resumed_from_html": True})
+            out.append(rec)
+    if out:
+        state.update(out)
+    return out
 
 
 def verify_asin_on_page(url: str, asin: str) -> bool:
