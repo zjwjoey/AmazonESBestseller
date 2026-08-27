@@ -1854,6 +1854,11 @@ Detail schema upgrades first reparse saved HTML offline. The quota selector
 enforces one global ASIN set across category groups and raises
 `QUOTA_UNIQUE_SHORTFALL` when the requested 200 cannot be satisfied.
 
+After detail navigation, the browser uses short fixed render delays instead of
+DOM selector/function waits. This prevents a partially responsive Playwright page
+from blocking the whole batch; access-state detection still runs against saved
+HTML and remains the authority for stopping on challenges or denied pages.
+
 Not to maximize abstraction.
 
 ## Pipeline Production Hardening (2026-08-27)
