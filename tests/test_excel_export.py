@@ -296,6 +296,22 @@ def test_translations_fill_title_zh(tmp_path, export_records):
     assert ws.cell(row=3, column=5).value == '玻璃便当盒 4 件套'  # 记录已有 → 不覆盖
 
 
+def test_empty_structured_translation_does_not_render_braces(tmp_path, export_records):
+    """空对象/空数组翻译结果不能落成 ``{}``/``[]`` 占位文本。"""
+    translations = {
+        'B075JJRFVV': {'product_details_zh': {}, 'feature_bullets_zh': []},
+        'B078C6QR1C': {'product_details_zh': '{}', 'feature_bullets_zh': '[]'},
+    }
+    wb = export_workbook(export_records, translations=translations,
+                         out_path=str(tmp_path / "out.xlsx"))
+    ws = wb['中文选品清单']
+    # B075JJRFVV → row 2, B078C6QR1C → row 3
+    assert ws.cell(row=2, column=20).value == ''
+    assert ws.cell(row=2, column=21).value == ''
+    assert ws.cell(row=3, column=20).value == ''
+    assert ws.cell(row=3, column=21).value == ''
+
+
 def test_category_planning_sheet(tmp_path, export_records):
     planning = [
         {'#': 1, '中文一级类目': '家居与厨房', 'Amazon 西语名称': 'Hogar y cocina',

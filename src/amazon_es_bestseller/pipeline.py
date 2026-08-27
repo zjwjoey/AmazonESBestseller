@@ -190,12 +190,20 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
             out["title_zh"] = str(tr["title_zh"]).strip()
         else:
             out["title_zh"] = out.get("title_zh") or ""
+        def usable_translation(value) -> bool:
+            if value is None:
+                return False
+            if isinstance(value, (dict, list, tuple, set)):
+                return bool(value)
+            text = str(value).strip()
+            return bool(text) and text not in {"{}", "[]", "null", "None"}
+
         for key in (
             "category_l1_zh", "category_l2_zh", "category_l3_zh", "leaf_category_zh",
             "selected_variation_zh", "specification_zh", "product_details_zh",
             "feature_bullets_zh",
         ):
-            if tr.get(key) not in (None, ""):
+            if usable_translation(tr.get(key)):
                 out[key] = str(tr[key]).strip()
     else:
         out["title_zh"] = out.get("title_zh") or ""

@@ -128,6 +128,16 @@ def _coerce_translation_value(value: Any) -> str:
     return str(value).strip()
 
 
+def _usable_translation_value(value: Any) -> bool:
+    """Only retain non-empty display values; reject structured/placeholder empties."""
+    if value is None:
+        return False
+    if isinstance(value, (Mapping, list, tuple, set)):
+        return bool(value)
+    text = str(value).strip()
+    return bool(text) and text not in {"{}", "[]", "null", "None"}
+
+
 def _humanize_translation_labels(value: str) -> str:
     """Remove snake_case/internal labels from structured detail text."""
     try:
@@ -264,8 +274,10 @@ class DeepSeekTranslator:
                 expected.add(target_key)
         for key in ALLOWED_FIELDS:
             value = obj.get(key)
-            if value not in (None, ""):
-                result[key] = _humanize_translation_labels(_coerce_translation_value(value))
+            if _usable_translation_value(value):
+                rendered = _humanize_translation_labels(_coerce_translation_value(value))
+                if rendered and rendered not in {"{}", "[]", "null", "None"}:
+                    result[key] = rendered
         for key in expected:
             result["fields"][key] = "success" if result.get(key) else "missing"
         if not expected:

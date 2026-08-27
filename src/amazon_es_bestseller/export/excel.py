@@ -109,14 +109,22 @@ def _title_zh(rec: Mapping, translations: Optional[Mapping]) -> str:
 
 def _zh_field(rec: Mapping, translations: Optional[Mapping], key: str, fallback: str = '') -> str:
     """Read one translated display field, falling back to the Spanish value."""
+    def usable(value) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, (Mapping, list, tuple, set)):
+            return bool(value)
+        text = str(value).strip()
+        return bool(text) and text not in {'{}', '[]', 'null', 'None'}
+
     value = rec.get(key)
-    if value not in (None, ''):
+    if usable(value):
         return str(value)
     asin = str(rec.get('asin') or '').strip().upper()
     tr = (translations or {}).get(asin) if asin else None
-    if isinstance(tr, dict) and tr.get(key) not in (None, ''):
+    if isinstance(tr, dict) and usable(tr.get(key)):
         return str(tr[key])
-    return str(fallback or '')
+    return str(fallback) if usable(fallback) else ''
 
 
 # ---------- 行值（只读 canonical 字段，渲染不改源记录） ----------
