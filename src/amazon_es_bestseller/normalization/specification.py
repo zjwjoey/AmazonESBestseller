@@ -98,11 +98,15 @@ def cap_zh(v) -> str:
 
 
 # ---------- 尺寸（V2 逐字移植 + §40 二维简式） ----------
-_DIM_RE1 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
-_DIM_RE2 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*an\.\s*(centímetros|milímetros|metros)?', re.I)
-_DIM_RE4 = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)\s*(cm|mm|m)?', re.I)
-_DIM_RE5 = re.compile(r'^([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
-_DIM_RE6 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
+#: 单位组：西语全称与缩写必须同时接受。三维正则曾只写缩写，而它比带全称的
+#: 二维正则先被尝试，导致 "14,7 x 1,7 x 17,2 centímetros" 丢掉单位
+#: （真实回归 B08G8WLQ3L 等 13/100 商品）。
+_DIM_UNIT = r'(centímetros|milímetros|metros|cm|mm|m)?'
+_DIM_RE1 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*' + _DIM_UNIT, re.I)
+_DIM_RE2 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*an\.\s*' + _DIM_UNIT, re.I)
+_DIM_RE4 = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)\s*' + _DIM_UNIT, re.I)
+_DIM_RE5 = re.compile(r'^([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*' + _DIM_UNIT, re.I)
+_DIM_RE6 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*al\.\s*' + _DIM_UNIT, re.I)
 # §40：10×15cm 二维简式（历史回归：10×15cm → 10×10mm 必须永不重现）
 _DIM_RE2D = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*(centímetros|milímetros|metros|cm|mm|m)?', re.I)
 _DIM_FRAGMENT_RE = re.compile(

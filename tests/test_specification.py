@@ -419,3 +419,16 @@ def test_paper_size_fields_are_spec_evidence():
     assert '18×21.5厘米' in build_spec_v2(numeric)
     a5 = attributes_to_spec_dict([{"label_raw": "Tamaño de hoja", "value_raw": "A5"}])
     assert 'A5' in build_spec_v2(a5)
+
+
+def test_three_axis_dimension_keeps_full_spanish_unit():
+    """真实回归 B08G8WLQ3L 等 13/100：源值 "14,7 x 1,7 x 17,2 centímetros"。
+
+    三维正则的单位组只写了缩写 (cm|mm|m)，匹配不到西语全称，而它比带全称的
+    二维正则先被尝试，于是输出成无单位的 "14.7×1.7×17.2"。
+    尺寸没有单位在选品表里是不可用的（QA_RULES §17 单位类型校验）。
+    """
+    assert dim_zh('14,7 x 1,7 x 17,2 centímetros') == '14.7×1.7×17.2厘米'
+    assert dim_zh('13,5 x 7,4 x 1,5 milímetros') == '13.5×7.4×1.5毫米'
+    # 缩写写法不能回归
+    assert dim_zh('10 x 15 x 5 cm') == '10×15×5厘米'
