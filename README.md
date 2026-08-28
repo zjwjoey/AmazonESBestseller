@@ -150,6 +150,17 @@ amazon-es --help
 python -m pytest -q -rs
 ```
 
+The repository keeps several git worktrees under `.worktrees/`, and an editable
+install records whichever tree it was installed from. Installing from a worktree
+leaves `amazon-es` running that branch's code while `pytest` runs the checked-out
+tree, which silently hides fixes. Confirm the install points at the intended tree:
+
+```powershell
+python -c "import amazon_es_bestseller.cli as m; print(m.__file__)"
+```
+
+Re-run `python -m pip install -e ".[test]"` from the intended tree if the path is wrong.
+
 Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `audit-detail-cache`, `qa`,
 `audit-fields` and `export`. `collect` and `translate-ds` are the only commands that
 require external services (`collect` uses low-frequency serial browser access; the latter
@@ -187,6 +198,11 @@ amazon-es audit-fields --products outputs/products.json `
   --details outputs/details.json --rankings outputs/rankings.json `
   --out outputs/field_closure.json
 ```
+
+`export` applies the same closure audit as a gate. `--details` and `--rankings`
+default to `outputs/details.json` and `outputs/rankings.json`, so the gate runs
+without extra flags; when no evidence is reachable, export states that the
+field-closure gate did not run instead of skipping it silently.
 
 ## 12. Documentation
 

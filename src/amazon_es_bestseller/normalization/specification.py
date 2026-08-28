@@ -64,7 +64,11 @@ def attributes_to_spec_dict(attributes) -> dict:
 _CAP_TERMS = [
     ('Centímetros cúbicos', '立方厘米'), ('centímetros cúbicos', '立方厘米'),
     ('Litros', '升'), ('litros', '升'), ('Litro', '升'), ('litro', '升'),
-    ('Mililitros', '毫升'), ('mililitros', '毫升'), ('Mililitro', '毫升'), ('mililitro', '毫升'),
+    # Amazon.es 同批数据里同时出现单 l 与双 l 两种写法，两者都必须识别
+    ('Millilitros', '毫升'), ('millilitros', '毫升'),
+    ('Millilitro', '毫升'), ('millilitro', '毫升'),
+    ('Mililitros', '毫升'), ('mililitros', '毫升'),
+    ('Mililitro', '毫升'), ('mililitro', '毫升'),
 ]
 _SHORT_ML_RE = re.compile(r'^([\d.,]+)\s*[mM][lL]\s*$')
 _SHORT_L_RE = re.compile(r'^([\d.,]+)\s*[lL]\s*$')
@@ -141,7 +145,7 @@ def classify_value_unit(s) -> Optional[str]:
     if re.search(r'\b(?:l|an|al)\.', t):
         return 'dimension'
     # 容量词（长词优先，如 centímetros cúbicos 含 centímetros）+ 数字紧邻短单位
-    if re.search(r'\b(?:centímetros?\s+cúbicos?|centimetros?\s+cubicos?|litros?|mililitros?)\b', t):
+    if re.search(r'\b(?:centímetros?\s+cúbicos?|centimetros?\s+cubicos?|litros?|mil+ilitros?)\b', t):
         return 'capacity'
     if re.search(r'\d\s*(?:l|ml|cc)\b', t):
         return 'capacity'
@@ -234,19 +238,15 @@ def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
 
     选中变体 > 标题显式件数 > tamano（可靠规格详情，如 "Set 4 Estándar"）
     > numero_de_sets > 技术字段 max。
-    泛型数量 1（numero_de_sets=1 / package=1）不产生件数展示。
+    泛型数量 1（numero_de_sets=1 / package=1 / 变体 "Paquete de 1"）不产生
+    件数展示——它不是规格证据，且绝不能盖过变体/标题里的显式容量。
     """
     if not d:
         return None
-    n = _count_from_text(variant)
-    if n:
-        return n
-    n = _count_from_text(title_es)
-    if n:
-        return n
-    n = _count_from_text(d.get('tamano'))
-    if n:
-        return n
+    for source in (variant, title_es, d.get('tamano')):
+        n = _count_from_text(source)
+        if n and n > 1:
+            return n
     n = set_count(d)
     if n and n > 1:
         return n
@@ -262,9 +262,13 @@ def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
 
 
 # ---------- 字段挑选 ----------
+#: 容量字段。``volumen_de_liquido`` 是 Amazon 标签 "Volumen de líquido" 的实际
+#: 归一化形式（此前只列了不带 "de" 的写法，永远匹配不到）。
+#: 不收录 ``volumen_del_producto``：它常被卖家填成重量口径，会盖过标题里的
+#: 显式重量证据（AGENTS §5 标题优先于详情字段，真实回归 B011036J00）。
 _CAPACITY_KEYS = (
     'capacidad', 'capacidad_de_salida', 'volumen_de_almacenamiento',
-    'volumen_del_tanque', 'volumen_liquido',
+    'volumen_del_tanque', 'volumen_liquido', 'volumen_de_liquido',
 )
 _DIM_KEYS = (
     'dimensiones_del_articulo_largo_x_ancho_x_alto', 'dimensiones_del_producto',
@@ -272,16 +276,21 @@ _DIM_KEYS = (
     'dimensiones_del_articulo_ancho_x_alto',
     'dimensiones_del_articulo_profundidad_x_ancho_x_alto',
 )
-#: 变体容量：30L / 300 ml / 30 l
-_VARIANT_CAP_RE = re.compile(r'^([\d.,]+)\s*[mM]?[lL]\s*$')
+#: 变体容量：30L / 300 ml / 30 l，允许后跟包装说明（"100 ml (Paquete de 1)"）
+_VARIANT_CAP_RE = re.compile(
+    r'^([\d.,]+\s*[mM]?[lL])\s*(?:[（(][^）)]*[）)])?\s*$')
 
 
 def _pick_capacity(d, variant=None):
-    """容量优先级：选中变体（如 30L）> 技术容量字段（QA_RULES §43-§44）。"""
+    """容量优先级：选中变体（如 30L）> 技术容量字段（QA_RULES §43-§44）。
+
+    变体常以 "100 ml (Paquete de 1)" 形式同时给出容量与包装数量；容量是
+    显式规格证据，不能因为带包装后缀就被整体丢弃。
+    """
     if variant:
         m = _VARIANT_CAP_RE.match(str(variant).strip())
         if m:
-            return str(variant).strip()
+            return m.group(1).strip()
     for k in _CAPACITY_KEYS:
         v = d.get(k)
         if v:
@@ -551,6 +560,11 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             group = _es_core_group(key_norm)
             if (not value or not _is_es_core_key(key_norm) or group is None
                     or group in seen_groups or _is_generic_one_count(key_norm, value)):
+                continue
+            # 与 attributes 路径同一守卫：Amazon 的 "Número de unidades" 可能装
+            # 的是容量/重量/尺寸，不能当件数展示（真实回归 B000255PFI）。
+            if key_norm == 'numero_de_unidades' and classify_value_unit(value) in {
+                    'capacity', 'weight', 'dimension'}:
                 continue
             seen_groups.add(group)
             parts.append('%s: %s' % (key, value))

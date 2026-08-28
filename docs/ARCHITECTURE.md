@@ -214,6 +214,27 @@ Robot Check / CAPTCHA
 → CHALLENGE
 ```
 
+## HTTP 200 is not proof of a product page
+
+Observed on 2026-08-27 during 1000-SKU scale validation: Amazon.es returned
+**HTTP 200 with a challenge body** for 251 of 264 requested detail pages. Those
+responses were ~3.5 KB, carried no `productTitle`, and showed the Spanish
+continue-shopping challenge prompt, while the 13 genuine product pages were
+~2 MB.
+
+Consequences that the access layer must preserve:
+
+* a status code alone never establishes `NORMAL` — the response body must be
+  inspected before a page is accepted as product evidence;
+* the challenge marker may sit deep in the document, so detection scans the
+  whole saved response rather than a fixed prefix;
+* challenge bodies must never be parsed into detail records, and cached
+  challenge HTML must not be reused as evidence on a later run.
+
+A false CHALLENGE stops collection, which is recoverable. A challenge body
+accepted as a product page silently corrupts the dataset, which is not. The
+detection therefore fails toward stopping.
+
 ---
 
 # 6. Access behavior
@@ -1285,15 +1306,26 @@ Do not break working behavior only to remove a hard-coded path.
 
 A unified CLI is implemented and is the supported runtime entry point.
 
-Supported commands:
+Implemented commands, grouped by whether they reach an external service:
 
 ```text
-collect
-enrich
-normalize
-qa
-export
+online   collect          Best Sellers + detail pages (serial, explicit delay)
+         translate-ds     DeepSeek display-field translation (explicit YES required)
+
+offline  select-quota     choose the globally unique ASIN quota from rankings
+         enrich           rankings + details → normalized product table
+         repair-cache     backfill canonical fields from saved detail HTML
+         reparse-details  rebuild raw details under the current detail schema
+         audit-detail-cache  classify saved HTML as valid / challenge / invalid
+         qa               product table → QA results
+         audit-fields     Source → Raw → Canonical → Derived → Excel closure audit
+         export           product table → 3-sheet Excel workbook
 ```
+
+`--offline` is a global flag; `collect` and `translate-ds` reject it.
+
+There is no `normalize` command. Normalization runs inside `enrich`; the
+`normalize` name appears only in the aspirational flow in §60.
 
 These commands should only be documented as executable when actually implemented.
 

@@ -30,6 +30,11 @@ from typing import List, Mapping, Optional
 #: 默认数据目录（仓库相对，避免硬编码绝对路径）
 OUTPUTS = Path("outputs")
 
+#: 证据输入默认路径。export 与 enrich/qa 共用同一组默认值，保证字段闭环
+#: 门禁在默认调用下也会运行（缺省时曾静默跳过，见 QA_RULES §31）。
+DEFAULT_DETAILS = str(OUTPUTS / "details.json")
+DEFAULT_RANKINGS = str(OUTPUTS / "rankings.json")
+
 
 def _safe_print(*parts) -> None:
     """Print diagnostics without letting a narrow Windows code page abort QA."""
@@ -56,6 +61,21 @@ def _save_json(data, path: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _load_evidence_json(path: Optional[str], default_path: str):
+    """闭环门禁的证据输入：显式指定但缺失 → 报错；默认路径缺失 → 视为不可用。
+
+    默认路径可以合法地不存在（例如只跑离线子链），此时由调用方显式声明门禁
+    降级；显式传入的路径缺失仍必须失败，避免打错路径被当成"没有证据"。
+    """
+    if not path:
+        return None
+    if not Path(path).exists():
+        if str(path) != str(default_path):
+            raise SystemExit("找不到输入文件: %s" % path)
+        return None
+    return _load_json(path)
 
 
 def _load_category_planning(path: Optional[str]):
@@ -135,14 +155,16 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
         # 持久缓存，含全部 ASIN 的最新详情。
         _save_json(state.records(), str(Path(out_dir) / "details.json"))
 
-    # 最新一次 run 的产物稳定复制到 out_dir 根，供 enrich/qa/export 读取
-    runs = sorted(Path(out_dir).glob("runs/*"), reverse=True)
-    if runs:
-        latest = runs[0]
-        for name in ("rankings.json", "details.json"):
-            src = latest / name
+    # 本次采集的榜单产物复制到 out_dir 根，供 enrich/qa/export 读取。
+    # details.json 已由 state 全量重建，绝不用 run 目录副本覆盖；复用
+    # --rankings-file 时本次没有新 run 目录，跳过复制，避免旧 run 的榜单
+    # 覆盖调用方显式提供的输入（会让下游 enrich 与本次详情不同源）。
+    if not args.rankings_file:
+        runs = sorted(Path(out_dir).glob("runs/*"), reverse=True)
+        if runs:
+            src = runs[0] / "rankings.json"
             if src.exists():
-                shutil.copy(src, Path(out_dir) / name)
+                shutil.copy(src, Path(out_dir) / "rankings.json")
     print("collect 完成：榜单 %d 条、详情 %d 条、离线重解析 %d 条、计划收集 %d 条"
           % (len(rankings), len(details), len(reparsed), len(plan["collect"])))
 
@@ -362,14 +384,18 @@ def cmd_export(args) -> None:
     translations = _load_json(args.translations) if args.translations else None
     closure_findings = []
     from .qa.field_closure import audit_field_closure
-    details = _load_json(getattr(args, "details", "")) if getattr(args, "details", "") else None
-    rankings = _load_json(getattr(args, "rankings", "")) if getattr(args, "rankings", "") else None
+    details = _load_evidence_json(getattr(args, "details", ""), DEFAULT_DETAILS)
+    rankings = _load_evidence_json(getattr(args, "rankings", ""), DEFAULT_RANKINGS)
     closure_enabled = bool(args.translations or details or rankings or
                             getattr(args, "html_dir", None) or getattr(args, "run_dir", ""))
     closure = audit_field_closure(products, details=details, rankings=rankings,
                                   html_dir=getattr(args, "html_dir", None) or None,
                                   run_dir=getattr(args, "run_dir", "") or None,
                                   translations=translations) if closure_enabled else {"records": []}
+    if not closure_enabled:
+        # 门禁降级必须可见：静默跳过会让导出看起来通过了实际未执行的审计。
+        print("警告：未找到 details/rankings/translations 证据，字段闭环门禁未运行；"
+              "本次仅执行 QA 门禁")
     blocked_closure = [r for r in closure.get("records", [])
                        if r.get("severity") == "P1" and r.get("classification") in
                        {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING",
@@ -487,8 +513,10 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("export", help="离线：商品表 → Excel")
     x.add_argument("--products", default=str(OUTPUTS / "products.json"))
     x.add_argument("--translations", default="")
-    x.add_argument("--details", default="", help="详情 raw JSON（用于字段闭环门禁）")
-    x.add_argument("--rankings", default="", help="榜单 raw JSON（用于字段闭环门禁）")
+    x.add_argument("--details", default=DEFAULT_DETAILS,
+                   help="详情 raw JSON（默认 outputs/details.json，用于字段闭环门禁）")
+    x.add_argument("--rankings", default=DEFAULT_RANKINGS,
+                   help="榜单 raw JSON（默认 outputs/rankings.json，用于字段闭环门禁）")
     x.add_argument("--html-dir", nargs="+", default=[], help="保存的详情 HTML 目录（可选）")
     x.add_argument("--run-dir", default="", help="采集 run 根目录（可选）")
     x.add_argument("--prev-workbook", default="", help="前版工作簿（按 ASIN 保留备注）")
