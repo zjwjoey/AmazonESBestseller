@@ -252,6 +252,20 @@ Export runs the full QA pipeline before writing the workbook. Any P0/P1 issue bl
 
 Missing data is still not an automatic failure (§29): the gate only stops on real P0/P1 defects, not on empty-but-missing fields.
 
+### The gate must never fail open
+
+`export --details` and `--rankings` default to `outputs/details.json` and
+`outputs/rankings.json`, matching `enrich`/`qa`, so the field-closure half of
+the gate runs in the default invocation. Before this was fixed the flags
+defaulted to empty and the closure audit was skipped whenever they were
+omitted — the same product table exported cleanly without flags and was
+blocked with 908 P0/P1 findings when the optional flags were supplied.
+
+When no evidence is reachable the gate degrades **explicitly**: export prints
+that the field-closure gate did not run and that only the QA gate was applied.
+A missing path that was supplied explicitly remains a hard error, so a typo is
+never read as "no evidence available".
+
 ## 32. Field Closure QA
 
 The offline `audit-fields` command checks each automatic field through Source → Raw

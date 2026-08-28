@@ -175,6 +175,53 @@ def test_quantity_generic_1_no_display():
     assert resolve_package_count({'total_del_paquete_segun_la_medida_elegida_para_referenciar_precio': '1'}) is None
 
 
+def test_generic_paquete_de_1_in_variant_is_not_a_count():
+    """真实回归 B000255PFI/B009VZJD8K/B001RTTXTM/B00OTXYVZ4：
+
+    变体 "100 ml (Paquete de 1)" 的 "1" 是泛型包装数量，不得当作件数
+    （AGENTS §5：quantity=1 不能覆盖标题/变体证据）。
+    """
+    for variant in ("100 ml (Paquete de 1)", "3 kg (Paquete de 1)",
+                    "1.75 kg (Paquete de 1)"):
+        assert resolve_package_count({'marca': 'X'}, variant=variant) is None
+
+
+def test_pack_of_many_in_variant_still_counts():
+    """守住反向：包装数量 > 1 仍是有效件数证据，不能被上面的修复误伤。"""
+    assert resolve_package_count({'marca': 'X'}, variant="70 g (Paquete de 12)") == 12
+    assert resolve_package_count({'marca': 'X'}, variant="85 g (Paquete de 24 latas)") == 24
+
+
+def test_variant_capacity_survives_package_suffix():
+    """变体显式容量在带包装后缀时仍必须进入规格，而不是被丢弃。"""
+    out = build_spec_v2({'marca': 'X'}, variant="100 ml (Paquete de 1)",
+                        title_es="Seachem Acondicionador de Agua Prime, 100 ml")
+    assert '100毫升' in out
+    assert '1件套' not in out
+    assert '1件' not in out
+
+
+def test_volumen_de_liquido_label_is_capacity():
+    """Amazon 标签 "Volumen de líquido" 归一为 volumen_de_liquido，必须识别为容量。"""
+    from amazon_es_bestseller.normalization.specification import attributes_to_spec_dict
+    d = attributes_to_spec_dict([
+        {"label_raw": "Volumen de líquido", "value_raw": "100 Mililitros"}])
+    assert '100毫升' in build_spec_v2(d)
+
+
+def test_generic_product_volume_does_not_override_title_weight():
+    """真实回归 B011036J00：页面 "Volumen del producto = 48 Mililitros" 与标题
+    "tubo 48 g" 冲突时，按 AGENTS §5 标题证据优先，绝不把克显示成毫升。"""
+    from amazon_es_bestseller.normalization.specification import attributes_to_spec_dict
+    d = attributes_to_spec_dict([
+        {"label_raw": "Volumen del producto", "value_raw": "48 Mililitros"},
+        {"label_raw": "Cantidad de productos por paquete", "value_raw": "1"}])
+    out = build_spec_v2(d, variant="Esp. Madera Bl 48 gr",
+                        title_es="Pattex Barrita Arreglatodo, masilla bicomponente, tubo 48 g")
+    assert '毫升' not in out
+    assert '48g' in out
+
+
 def test_quantity_variant_volume_not_count():
     # 变体 30L 是容量，不应从变体文本产生虚假件数；技术件数仍生效
     assert resolve_package_count({'numero_de_articulos': '4'}, variant='30L') == 4
