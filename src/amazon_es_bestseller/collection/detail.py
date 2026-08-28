@@ -574,18 +574,28 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
     return out
 
 
-def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=None) -> dict:
-    """Classify saved HTML without network access or mutation.
+def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=None,
+                             move=False) -> dict:
+    """Classify saved HTML without network access.
 
     Every file is reported as VALID_PRODUCT_PAGE, CHALLENGE, or
-    INVALID_OR_EMPTY.  Challenge/invalid evidence remains untouched so callers
-    can copy it to a quarantine directory while preserving the original cache.
+    INVALID_OR_EMPTY.  With ``move=False`` (the default) the cache is left
+    untouched and challenge/invalid evidence is copied to ``quarantine_dir``.
+
+    ``move=True`` relocates challenge/invalid evidence out of the active cache
+    instead of copying it.  This is required to resume collection: a cached
+    challenge page halts ``collect_details`` on every later run, so the
+    poisoned entries must leave ``html/`` for the affected ASINs to be
+    requested again.  The evidence is moved, never deleted, and valid product
+    pages are always left in place.
     """
     from pathlib import Path
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
     wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
-    from shutil import copy2
+    from shutil import copy2, move as move_file
     quarantine = Path(quarantine_dir) if quarantine_dir else None
+    if move and quarantine is None:
+        raise ValueError("move=True 需要 quarantine_dir：证据只移动，绝不删除")
     if quarantine:
         quarantine.mkdir(parents=True, exist_ok=True)
     records = []
@@ -609,11 +619,14 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                     status_meta = {}
             classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
             records.append({"asin": asin, "path": str(path), "classification": classification,
-                            "access_state": access_state.value})
+                            "access_state": access_state.value,
+                            "quarantined": bool(quarantine) and classification != "VALID_PRODUCT_PAGE",
+                            "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
-                copy2(path, quarantine / path.name)
+                transfer = move_file if move else copy2
+                transfer(str(path), str(quarantine / path.name))
                 if meta_path.exists():
-                    copy2(meta_path, quarantine / meta_path.name)
+                    transfer(str(meta_path), str(quarantine / meta_path.name))
             if state is not None:
                 update = parsed or {"asin": asin}
                 update.update({"status_code": status_meta.get("status_code"),
@@ -622,6 +635,7 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                 state.update([update])
     summary = {k: sum(r["classification"] == k for r in records)
                for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
+    summary["removed_from_cache"] = sum(1 for r in records if r["removed_from_cache"])
     return {"summary": summary, "records": records}
 
 
@@ -676,7 +690,12 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             state = detect_access_status(cached_status, html)
             if state.value != "NORMAL":
                 raise AccessStopError(
-                    "已落盘证据受限（%s），ASIN %s，按策略停止" % (state.value, asin))
+                    "已落盘证据受限（%s），ASIN %s，按策略停止。"
+                    "该文件是上一轮留下的历史证据，会阻断本轮全部续采；"
+                    "先用 amazon-es audit-detail-cache --html-dir %s "
+                    "--quarantine-dir <隔离目录> --move 把它移出活动缓存"
+                    "（移动不删除），再重跑本命令。"
+                    % (state.value, asin, html_dir))
             require_normal_access(state, "缓存 HTML，ASIN %s" % asin)
             cached_url = meta.get("final_url") or ""
             if cached_url and not verify_asin_on_page(cached_url, asin):
@@ -685,7 +704,11 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, {"status_code": cached_status, "final_url": cached_url})
             if classification != "VALID_PRODUCT_PAGE":
-                raise AccessStopError("缓存详情页校验失败（%s），ASIN %s" % (classification, asin))
+                raise AccessStopError(
+                    "缓存详情页校验失败（%s），ASIN %s。"
+                    "先用 amazon-es audit-detail-cache --html-dir %s "
+                    "--quarantine-dir <隔离目录> --move 移出活动缓存，再重跑。"
+                    % (classification, asin, html_dir))
             rec["status_code"] = meta.get("status_code")
             rec["access_state"] = parsed_state.value
             rec["resumed_from_html"] = True

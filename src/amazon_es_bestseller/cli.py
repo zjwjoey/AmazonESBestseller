@@ -301,16 +301,21 @@ def cmd_audit_detail_cache(args) -> None:
     """离线：审计保存详情 HTML，识别验证页并生成隔离清单。"""
     from .collection.detail import audit_saved_detail_cache
     from .collection.planning import DetailState
+    if args.move and not args.quarantine_dir:
+        raise SystemExit("--move 需要同时指定 --quarantine-dir：证据只移动，绝不删除")
     state = DetailState(args.state) if args.state else None
     report = audit_saved_detail_cache(args.html_dir, asins=args.asins or None,
                                       quarantine_dir=args.quarantine_dir or None,
-                                      state=state)
+                                      state=state, move=args.move)
     if state:
         state.save()
     _save_json(report, args.out)
     s = report["summary"]
     print("detail-cache-audit：有效 %d、挑战 %d、无效/空 %d → %s" %
           (s["VALID_PRODUCT_PAGE"], s["CHALLENGE"], s["INVALID_OR_EMPTY"], args.out))
+    if args.move:
+        print("已移出活动缓存 %d 个文件 → %s（原件保留在隔离目录，续采可恢复）"
+              % (s.get("removed_from_cache", 0), args.quarantine_dir))
 
 
 # ---------- qa（离线） ----------
@@ -477,6 +482,8 @@ def build_parser() -> argparse.ArgumentParser:
     ca.add_argument("--html-dir", nargs="+", required=True)
     ca.add_argument("--asins", nargs="*", default=[])
     ca.add_argument("--quarantine-dir", default="")
+    ca.add_argument("--move", action="store_true",
+                    help="把挑战/无效页移出活动缓存（移动不删除，续采才能恢复）")
     ca.add_argument("--state", default="")
     ca.add_argument("--out", required=True)
     ca.set_defaults(func=cmd_audit_detail_cache)

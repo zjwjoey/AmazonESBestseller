@@ -148,13 +148,18 @@ def test_collect_details_resume_from_existing_html(tmp_path):
 
 
 def test_collect_details_resume_detects_captcha_html(tmp_path):
-    """断点续采发现已落盘证据受限 → AccessStopError，不把挑战页当成功恢复。"""
+    """断点续采发现已落盘证据受限 → AccessStopError，不把挑战页当成功恢复。
+
+    报错必须给出可执行的补救办法：缓存里留着挑战页时，续采会在第一个文件上
+    停住，操作者需要知道用 audit-detail-cache --move 把它们移出活动缓存。
+    """
     from amazon_es_bestseller.collection.detail import collect_details
     (tmp_path / "html").mkdir()
     (tmp_path / "html" / "B008YETL18.html").write_text(CHALLENGE_HTML, encoding="utf-8")
     with pytest.raises(AccessStopError) as ei:
         collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
     assert "已落盘证据受限" in str(ei.value)
+    assert "audit-detail-cache" in str(ei.value)
     assert not (tmp_path / "details.json").exists()
 
 
@@ -164,6 +169,57 @@ def test_collect_details_resume_rejects_normal_non_product_html(tmp_path):
     (tmp_path / "html" / "B008YETL18.html").write_text("<html><body>hola</body></html>", encoding="utf-8")
     with pytest.raises(AccessStopError, match="校验失败"):
         collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
+
+
+def test_collect_details_resumes_after_challenge_cache_is_moved_out(tmp_path):
+    """缓存清理后续采必须恢复：挑战页移出活动缓存 → 该 ASIN 重新请求。
+
+    真实场景：1000-SKU 那一轮在 html/ 里留下 251 个挑战页，任何续采都会死在
+    第一个文件上。移出后整批必须能继续。
+    """
+    from amazon_es_bestseller.collection.detail import (audit_saved_detail_cache,
+                                                        collect_details)
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B008YETL18.html").write_text(CHALLENGE_HTML, encoding="utf-8")
+    (html_dir / "B0CK2B7GW5.html").write_text(NORMAL_HTML, encoding="utf-8")
+
+    quarantine = tmp_path / "quarantine"
+    report = audit_saved_detail_cache(html_dir, quarantine_dir=quarantine, move=True)
+    assert report["summary"]["CHALLENGE"] == 1
+    assert report["summary"]["VALID_PRODUCT_PAGE"] == 1
+    # 证据被移走而不是删除：活动缓存干净，隔离区留有原件
+    assert not (html_dir / "B008YETL18.html").exists()
+    assert (quarantine / "B008YETL18.html").exists()
+    assert (html_dir / "B0CK2B7GW5.html").exists()
+
+    session = _FakeSession(200, NORMAL_HTML)
+    details = collect_details(["B008YETL18", "B0CK2B7GW5"], session, str(tmp_path))
+    assert sorted(d["asin"] for d in details) == ["B008YETL18", "B0CK2B7GW5"]
+
+
+def test_audit_detail_cache_move_keeps_valid_pages_in_place(tmp_path):
+    """清理只针对非有效页：有效商品页绝不能被移出缓存。"""
+    from amazon_es_bestseller.collection.detail import audit_saved_detail_cache
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B0CK2B7GW5.html").write_text(NORMAL_HTML, encoding="utf-8")
+    quarantine = tmp_path / "q"
+    audit_saved_detail_cache(html_dir, quarantine_dir=quarantine, move=True)
+    assert (html_dir / "B0CK2B7GW5.html").exists()
+    assert not (quarantine / "B0CK2B7GW5.html").exists()
+
+
+def test_audit_detail_cache_defaults_to_copy_not_move(tmp_path):
+    """默认仍是复制：清理必须是显式动作，不能因为跑了审计就悄悄改动缓存。"""
+    from amazon_es_bestseller.collection.detail import audit_saved_detail_cache
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B008YETL18.html").write_text(CHALLENGE_HTML, encoding="utf-8")
+    quarantine = tmp_path / "q"
+    audit_saved_detail_cache(html_dir, quarantine_dir=quarantine)
+    assert (html_dir / "B008YETL18.html").exists()
+    assert (quarantine / "B008YETL18.html").exists()
 
 
 def test_collect_details_timeout_isolates_and_continues(tmp_path):
