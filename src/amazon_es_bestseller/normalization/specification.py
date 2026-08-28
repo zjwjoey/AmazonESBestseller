@@ -37,8 +37,11 @@ def _normalize_spec_label(raw) -> str:
     去重音（á→a/ñ→n）、括号仅作分隔、空格/斜杠/连字符 → 下划线。归一化后大多
     直接命中 build_spec_v2 的现成 key（numero_de_articulos / tamano / capacidad /
     dimensiones_del_producto / tension / potencia ...）。
+
+    先剥离零宽/双向控制字符：Amazon 的 technical_details 表会在文本前插入
+    LEFT-TO-RIGHT MARK，留着会让键名匹配不上（真实证据 B00889569A）。
     """
-    s = unicodedata.normalize('NFD', str(raw or '').lower())
+    s = unicodedata.normalize('NFD', strip_zero_width(str(raw or '')).lower())
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
     s = s.replace('(', ' ').replace(')', ' ')
     s = re.sub(r'[\s/\-]+', '_', s)
@@ -50,12 +53,16 @@ def attributes_to_spec_dict(attributes) -> dict:
 
     新模型 attributes = [{section, label_raw, value_raw, ...}]（DATA_MODEL §4）；
     build_spec_v2 接受旧式 label→value dict。取第一个非空值，同义别名聚合。
+
+    值先剥离零宽/双向控制字符：Amazon 会在属性值前插入 LEFT-TO-RIGHT MARK，
+    ``"‎3"`` 会让数字提取正则匹配失败，真实件数被静默丢弃
+    （真实证据 B00889569A）。传入的 attributes 不被修改（数据层无损）。
     """
     out: dict = {}
     for a in attributes or []:
         key = _normalize_spec_label(a.get('label_raw'))
         key = _SPEC_ALIASES.get(key, key)
-        val = (a.get('value_raw') or '').strip()
+        val = strip_zero_width(a.get('value_raw') or '').strip()
         if key and val and key not in out:
             out[key] = val
     return out
@@ -501,7 +508,7 @@ def _explicit_model_spec_es(attributes) -> str:
         if not isinstance(attr, dict):
             continue
         label = str(attr.get('label_raw') or '').strip()
-        value = str(attr.get('value_raw') or '').strip()
+        value = strip_zero_width(attr.get('value_raw') or '').strip()
         key = _normalize_spec_label(label)
         if key not in _ES_MODEL_KEYS or not value:
             continue
@@ -531,7 +538,7 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         if not isinstance(attr, dict):
             continue
         label = str(attr.get('label_raw') or '').strip()
-        value = str(attr.get('value_raw') or '').strip()
+        value = strip_zero_width(attr.get('value_raw') or '').strip()
         key = _normalize_spec_label(label)
         group = _es_core_group(key)
         if not label or not value or not _is_es_core_key(key) or group is None:
@@ -556,7 +563,7 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
     if not parts and isinstance(details, dict):
         for key, value in details.items():
             key_norm = _normalize_spec_label(key)
-            value = str(value or '').strip()
+            value = strip_zero_width(value or '').strip()
             group = _es_core_group(key_norm)
             if (not value or not _is_es_core_key(key_norm) or group is None
                     or group in seen_groups or _is_generic_one_count(key_norm, value)):

@@ -136,3 +136,22 @@ def test_render_empty_inputs():
     assert render_details_zh([]) == ""
     assert render_bullets_es(None) == ""
     assert render_bullets_zh([]) == ""
+
+
+def test_display_rows_strip_amazon_bidi_marks():
+    """真实回归（文具/宠物 100 SKU 实采）：Amazon 在属性值前插入 LEFT-TO-RIGHT
+    MARK (\u200e)。数据层保留原文，展示层绝不能把不可见字符写进 Excel。
+    """
+    attributes = [
+        {"section": "technical_details", "label_raw": "Marca",
+         "value_raw": "‎BIC", "position": 0, "source": "prodDetails"},
+        {"section": "technical_details", "label_raw": "Color",
+         "value_raw": "‎Azul", "position": 1, "source": "prodDetails"},
+    ]
+    es = render_details_es(attributes)
+    zh = render_details_zh(attributes)
+    assert "‎" not in es
+    assert "‎" not in zh
+    assert "Marca: BIC" in es
+    # 数据层不被修改（无损原始证据）
+    assert attributes[0]["value_raw"] == "‎BIC"

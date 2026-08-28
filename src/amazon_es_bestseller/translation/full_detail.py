@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from ..normalization.text import strip_zero_width
 from .zh import apply_terms, translate_value
 
 #: 属性标签：西语（小写键）→ 中文。来自真实页面采集的标签集 + 通用 Amazon 标签。
@@ -161,8 +162,11 @@ def _display_rows(attributes) -> list:
     best: dict = {}          # label_lower -> (首次序号, 标签原文, 值)
     order: list = []
     for a in attributes or []:
-        label = a.get("label_raw") or ""
-        value = a.get("value_raw") or ""
+        # Amazon 的 technical_details 表在文本前插入 LEFT-TO-RIGHT MARK 等
+        # 不可见字符。数据层保留原文，展示层必须剥离——否则不可见字符会被
+        # 直接写进 Excel 单元格（真实证据 B00889569A / B0BVMKDD7T）。
+        label = strip_zero_width(a.get("label_raw") or "")
+        value = strip_zero_width(a.get("value_raw") or "")
         if not label or not value:
             continue
         if label.lower() in _META_LABELS:

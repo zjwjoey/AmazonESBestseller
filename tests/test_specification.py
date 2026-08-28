@@ -356,3 +356,18 @@ def test_build_spec_v2_empty():
 def test_build_spec_v2_uses_explicit_title_dimensions_without_attributes():
     out = build_spec_v2({}, title_es='Organizador 30 x 20 cm')
     assert '30' in out and '20' in out and '厘米' in out
+
+
+def test_attributes_to_spec_dict_strips_bidi_marks():
+    """真实回归 B00889569A：Número de productos = "\u200e3"。
+
+    零宽/双向标记会让数字提取正则匹配失败，导致真实存在的件数被丢弃。
+    """
+    from amazon_es_bestseller.normalization.specification import (
+        attributes_to_spec_dict, _normalize_spec_label)
+    d = attributes_to_spec_dict([
+        {"label_raw": "Número de productos", "value_raw": "‎3"}])
+    assert d["numero_de_piezas"] == "3"
+    assert resolve_package_count(d) == 3
+    # 标签侧同样加固：带标记的标签必须归一到同一个键
+    assert _normalize_spec_label("‎Marca") == "marca"
