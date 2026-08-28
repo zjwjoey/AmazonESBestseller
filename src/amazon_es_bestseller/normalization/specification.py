@@ -282,7 +282,12 @@ _DIM_KEYS = (
     'dimensiones_articulo', 'dimensiones_del_articulo_l_x_a',
     'dimensiones_del_articulo_ancho_x_alto',
     'dimensiones_del_articulo_profundidad_x_ancho_x_alto',
+    # 文具类目：记事本/本册的规格就是纸张尺寸，值可能是 "18x21,5 cm"，
+    # 也可能是 A5 这种标准开本（真实证据 B0GZHTDWCF / B0GZHCHKGS）
+    'tamano_de_hoja', 'tamano_papel', 'dimensiones_del_papel',
 )
+#: 标准开本代号：不是数值尺寸，但确实是页面给出的显式规格证据，原样透传
+_PAPER_FORMAT_RE = re.compile(r'^[AB][0-9]$', re.I)
 #: 变体容量：30L / 300 ml / 30 l，允许后跟包装说明（"100 ml (Paquete de 1)"）
 _VARIANT_CAP_RE = re.compile(
     r'^([\d.,]+\s*[mM]?[lL])\s*(?:[（(][^）)]*[）)])?\s*$')
@@ -327,7 +332,13 @@ def _pick_capacity(d, variant=None):
     return None
 
 
-def _pick_dimension(d):
+def _pick_dimension(d, variant=None):
+    # 变体常把显式尺寸和其他选项拼在一起（"Semanal_grande / 17 x 22,6 x 2,6 cm /
+    # Personajes 2"）；属性表没有尺寸时它是唯一证据（真实证据 B0GTHH24GY）。
+    if variant:
+        m = _DIM_FRAGMENT_RE.search(str(variant))
+        if m and dim_zh(m.group(1).strip()):
+            return m.group(1).strip()
     for k in _DIM_KEYS:
         v = d.get(k)
         if v:
@@ -371,11 +382,13 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
         wz = _variant_weight(variant)
         if wz:
             parts.append(wz)
-    dim = _pick_dimension(d)
+    dim = _pick_dimension(d, variant)
     if dim and not is_suspicious_dimension(dim):
         dz = dim_zh(dim)
         if dz:
             parts.append(dz)
+        elif _PAPER_FORMAT_RE.match(str(dim).strip()):
+            parts.append(str(dim).strip().upper())
     pot = d.get('potencia')
     if pot:
         parts.append(cap_zh(str(pot).replace('vatios', '瓦').replace('watios', '瓦')))

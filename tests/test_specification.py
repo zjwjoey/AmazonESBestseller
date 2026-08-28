@@ -399,3 +399,23 @@ def test_variant_weight_enters_spec():
     out2 = build_spec_v2({'marca': 'X'}, variant='500 g (Paquete de 1)',
                          title_es='Arquivet Heno Varios Aromas para roedores')
     assert '500克' in out2 or '500g' in out2
+
+
+def test_variant_explicit_dimension_enters_spec():
+    """真实回归 B0GTHH24GY：变体 "Semanal_grande / 17 x 22,6 x 2,6 cm / Personajes 2"
+    里带显式尺寸，属性表没有，整条被丢弃。"""
+    out = build_spec_v2({'marca': 'X'},
+                        variant='Semanal_grande / 17 x 22,6 x 2,6 cm / Personajes 2',
+                        title_es='Mr. Wonderful - Agenda escolar 2026-2027')
+    assert '17×22.6×2.6厘米' in out
+
+
+def test_paper_size_fields_are_spec_evidence():
+    """真实回归（文具类目）：记事本的规格就是纸张尺寸。
+    "Tamaño de hoja" 既可能是 A5 这种标准开本，也可能是 18x21,5 cm。"""
+    from amazon_es_bestseller.normalization.specification import attributes_to_spec_dict
+    numeric = attributes_to_spec_dict([
+        {"label_raw": "Tamaño de hoja", "value_raw": "18x21,5 cm"}])
+    assert '18×21.5厘米' in build_spec_v2(numeric)
+    a5 = attributes_to_spec_dict([{"label_raw": "Tamaño de hoja", "value_raw": "A5"}])
+    assert 'A5' in build_spec_v2(a5)
