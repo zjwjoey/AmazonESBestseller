@@ -241,6 +241,33 @@ def test_explicit_product_count_labels_remain_counts():
         assert resolve_package_count(d) == expected
 
 
+def test_amazon_millilitros_spelling_is_capacity():
+    """Amazon.es 同批数据里同时出现 "Mililitros" 与 "Millilitros"（双 l）。
+
+    只认单 l 写法会让容量既无法归类（单位校验失效），也无法译成中文
+    （中文字段残留西语原文）。真实证据 B000255PFI / B009VZJD8K。
+    """
+    assert classify_value_unit('100.0 Millilitros') == 'capacity'
+    assert cap_zh('100.0 Millilitros') == '100.0毫升'
+
+
+def test_overloaded_unidades_with_millilitros_is_not_shown_as_count():
+    """真实回归 B000255PFI：西语核心规格不得把容量显示成 "Número de unidades"。"""
+    attrs = [{"label_raw": "Número de unidades", "value_raw": "100.0 Millilitros"}]
+    assert "Número de unidades" not in build_spec_es(attrs)
+
+
+def test_overloaded_unidades_guard_applies_to_details_fallback():
+    """真实回归 B000255PFI：属性路径排除错标容量后落到 details 兜底分支时，
+    守卫必须同样生效，否则内部 snake_case 键会泄漏进西语展示字段。"""
+    details = {'numero_de_unidades': '100.0 Millilitros', 'marca': 'Seachem'}
+    out = build_spec_es(attributes=[{"label_raw": "Número de unidades",
+                                     "value_raw": "100.0 Millilitros"}],
+                        details=details, variant="100 ml (Paquete de 1)")
+    assert 'numero_de_unidades' not in out
+    assert out == "100 ml (Paquete de 1)"
+
+
 def test_spanish_core_spec_does_not_label_volume_as_count():
     attrs = [{"label_raw": "Número de unidades", "value_raw": "500 Mililitros"}]
     assert "Número de unidades" not in build_spec_es(attrs)

@@ -64,7 +64,11 @@ def attributes_to_spec_dict(attributes) -> dict:
 _CAP_TERMS = [
     ('Centímetros cúbicos', '立方厘米'), ('centímetros cúbicos', '立方厘米'),
     ('Litros', '升'), ('litros', '升'), ('Litro', '升'), ('litro', '升'),
-    ('Mililitros', '毫升'), ('mililitros', '毫升'), ('Mililitro', '毫升'), ('mililitro', '毫升'),
+    # Amazon.es 同批数据里同时出现单 l 与双 l 两种写法，两者都必须识别
+    ('Millilitros', '毫升'), ('millilitros', '毫升'),
+    ('Millilitro', '毫升'), ('millilitro', '毫升'),
+    ('Mililitros', '毫升'), ('mililitros', '毫升'),
+    ('Mililitro', '毫升'), ('mililitro', '毫升'),
 ]
 _SHORT_ML_RE = re.compile(r'^([\d.,]+)\s*[mM][lL]\s*$')
 _SHORT_L_RE = re.compile(r'^([\d.,]+)\s*[lL]\s*$')
@@ -141,7 +145,7 @@ def classify_value_unit(s) -> Optional[str]:
     if re.search(r'\b(?:l|an|al)\.', t):
         return 'dimension'
     # 容量词（长词优先，如 centímetros cúbicos 含 centímetros）+ 数字紧邻短单位
-    if re.search(r'\b(?:centímetros?\s+cúbicos?|centimetros?\s+cubicos?|litros?|mililitros?)\b', t):
+    if re.search(r'\b(?:centímetros?\s+cúbicos?|centimetros?\s+cubicos?|litros?|mil+ilitros?)\b', t):
         return 'capacity'
     if re.search(r'\d\s*(?:l|ml|cc)\b', t):
         return 'capacity'
@@ -556,6 +560,11 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             group = _es_core_group(key_norm)
             if (not value or not _is_es_core_key(key_norm) or group is None
                     or group in seen_groups or _is_generic_one_count(key_norm, value)):
+                continue
+            # 与 attributes 路径同一守卫：Amazon 的 "Número de unidades" 可能装
+            # 的是容量/重量/尺寸，不能当件数展示（真实回归 B000255PFI）。
+            if key_norm == 'numero_de_unidades' and classify_value_unit(value) in {
+                    'capacity', 'weight', 'dimension'}:
                 continue
             seen_groups.add(group)
             parts.append('%s: %s' % (key, value))
