@@ -5,7 +5,7 @@
 """
 import pytest
 
-from amazon_es_bestseller.access.detector import AccessStopError, require_normal_access
+from amazon_es_bestseller.access.detector import AccessStopError, require_normal_access, detect_access_status
 from amazon_es_bestseller.models import AccessState
 
 #: 页面前 300 字符含 CAPTCHA 信号 → CHALLENGE
@@ -46,6 +46,12 @@ class _FakeSession:
 
 def test_require_normal_access_ok():
     require_normal_access(AccessState.NORMAL, "HTTP 200")  # 不抛
+
+
+def test_http_200_validation_page_is_challenge_even_when_signal_is_deep():
+    from amazon_es_bestseller.access.detector import detect_access_status
+    html = "<html><body>" + ("x " * 500) + "/errors_page/validateCaptcha?foo=1" + "</body></html>"
+    assert detect_access_status(200, html) is AccessState.CHALLENGE
 
 
 @pytest.mark.parametrize("state", [
@@ -150,6 +156,14 @@ def test_collect_details_resume_detects_captcha_html(tmp_path):
         collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
     assert "已落盘证据受限" in str(ei.value)
     assert not (tmp_path / "details.json").exists()
+
+
+def test_collect_details_resume_rejects_normal_non_product_html(tmp_path):
+    from amazon_es_bestseller.collection.detail import collect_details
+    (tmp_path / "html").mkdir()
+    (tmp_path / "html" / "B008YETL18.html").write_text("<html><body>hola</body></html>", encoding="utf-8")
+    with pytest.raises(AccessStopError, match="校验失败"):
+        collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
 
 
 def test_collect_details_timeout_isolates_and_continues(tmp_path):

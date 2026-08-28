@@ -227,7 +227,28 @@ The repository still contains a mixture of working scripts, experiments, audit s
 
 The active CLI entry is `src/amazon_es_bestseller/cli.py`: online commands are
 `collect` and `translate-ds`; offline commands are `select-quota`, `enrich`,
-`repair-cache`, `reparse-details`, `qa`, `audit-fields` and `export`.
+`repair-cache`, `reparse-details`, `audit-detail-cache`, `qa`, `audit-fields` and `export`.
+
+### 2026-08-27 1000-SKU blocker repair
+
+The scale-validation repair is offline-first. `audit-detail-cache` classifies
+saved HTML as `VALID_PRODUCT_PAGE`, `CHALLENGE`, or `INVALID_OR_EMPTY`; HTTP
+200 validation pages are never treated as normal products. Reparse skips
+challenge/invalid evidence, while quarantine copies preserve those files for
+review. Product URLs are deterministically derived from valid ASINs, unit
+prices cannot become list prices, and detail-bullet key/value rows supplement
+table attributes. The 1000-SKU quota config rejects automotive records whose
+source L1 is not `Coche y moto`.
+
+Use `audit-detail-cache --quarantine-dir <dir> --state <state.json>` to make
+the quarantine and state update reproducible; original evidence is never
+deleted.
+
+The final offline review bundle should use one consistent scope: the latest
+`products_1000_final_v2.json`, `qa_1000_final_v2.json`,
+`field_closure_1000_final_v2.json`, `details_final_v2.json`, and
+`details_state_unified.json`. The field-closure report must not be mixed with
+the all-candidate `products.json` report.
 
 ## 25. Scale status
 

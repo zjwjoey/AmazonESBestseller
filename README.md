@@ -150,7 +150,7 @@ amazon-es --help
 python -m pytest -q -rs
 ```
 
-Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `qa`,
+Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `audit-detail-cache`, `qa`,
 `audit-fields` and `export`. `collect` and `translate-ds` are the only commands that
 require external services (`collect` uses low-frequency serial browser access; the latter
 calls DeepSeek only when explicitly run). Live collection tests run only when `RUN_LIVE=1`

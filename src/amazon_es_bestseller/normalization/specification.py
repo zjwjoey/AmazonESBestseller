@@ -21,10 +21,13 @@ from .text import dec_comma, strip_zero_width
 _SPEC_ALIASES = {
     'numero_de_pieza': 'numero_de_piezas',
     'numero_de_productos': 'numero_de_piezas',
-    'numero_de_unidades': 'numero_de_piezas',
+    # ``Número de unidades`` is overloaded by Amazon: it can mean volume or
+    # weight (e.g. 500 Millilitros).  Preserve that key and only treat it as
+    # a count when explicit count labels are present.
     'numero_de_paquetes': 'numero_de_piezas',
     'numero_de_compartimentos': 'cantidad_de_compartimentos',
     'cantidad_de_compartimentos': 'cantidad_de_compartimentos',
+    'pack_de': 'numero_de_piezas',
 }
 
 
@@ -186,6 +189,9 @@ def package_count(d) -> Optional[str]:
     for k in _PACKAGE_KEYS:
         v = d.get(k)
         if v:
+            # Never parse capacity/weight/dimension values as piece counts.
+            if classify_value_unit(v) in {'capacity', 'weight', 'dimension'}:
+                continue
             m = re.match(r'([\d.,]+)', str(v).replace(' ', ''))
             if m:
                 val = float(m.group(1).replace(',', '.'))
@@ -520,6 +526,12 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         key = _normalize_spec_label(label)
         group = _es_core_group(key)
         if not label or not value or not _is_es_core_key(key) or group is None:
+            continue
+        # Amazon's overloaded "Número de unidades" may describe volume or
+        # weight.  Keep it in raw attributes, but never show it as a count in
+        # the compact Spanish core specification.
+        if key == 'numero_de_unidades' and classify_value_unit(value) in {
+                'capacity', 'weight', 'dimension'}:
             continue
         if group in seen_groups:
             continue

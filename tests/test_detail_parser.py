@@ -178,6 +178,77 @@ def test_available_date_from_amazon_since_label():
     assert d["date_first_available_raw"] == "6 noviembre 2023"
 
 
+def test_available_date_strips_bidi_marks():
+    html = """<div id='detailBulletsWrapper_feature_div'>Fecha de primera disponibilidad:\u200f 17 mayo\u200e 2021</div>"""
+    assert parse_detail_page(html, "B078C6QR1C")["date_first_available_raw"] == "17 mayo 2021"
+
+
+def test_unit_price_is_not_original_price():
+    html = """<div id='productTitle'>Producto</div><div id='corePrice_feature_div'>
+      <span class='a-price'><span class='a-offscreen'>8,29€</span></span>
+      <span class='a-price a-text-price'><span class='a-offscreen'>172,71€</span></span> / kg
+      </div>"""
+    assert parse_detail_page(html, "B011036J00")["original_price_raw"] == ""
+
+
+def test_detail_bullets_supplement_existing_attributes():
+    html = """<div id='productTitle'>Producto</div>
+      <div id='productOverview_feature_div'><table><tr><td>Marca</td><td>Marca</td></tr></table></div>
+      <div id='detailBulletsWrapper_feature_div'><ul><li>Capacidad: 500 mililitros</li></ul></div>"""
+    d = parse_detail_page(html, "B078C6QR1C")
+    from amazon_es_bestseller.pipeline import normalize_product
+    out = normalize_product(d)
+    assert "Capacidad: 500 mililitros" in out["product_details_es"]
+
+
+def test_reparse_saved_details_skips_http_200_challenge(tmp_path):
+    from amazon_es_bestseller.collection.detail import reparse_saved_details
+    root = tmp_path / "html"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text(
+        "<html><body>" + ("x " * 500) + "validateCaptcha" + "</body></html>", encoding="utf-8")
+    state = []
+    assert reparse_saved_details([root], state) == []
+
+
+def test_audit_cache_quarantines_and_marks_challenge(tmp_path):
+    from amazon_es_bestseller.collection.detail import audit_saved_detail_cache
+    from amazon_es_bestseller.collection.planning import DetailState
+    root = tmp_path / "html"
+    quarantine = tmp_path / "quarantine"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text(
+        "<html><body>" + ("x " * 500) + "validateCaptcha" + "</body></html>", encoding="utf-8")
+    (root / "B078C6QR1C.meta.json").write_text('{"status_code": 200}', encoding="utf-8")
+    state = DetailState(tmp_path / "state.json")
+    report = audit_saved_detail_cache([root], quarantine_dir=quarantine, state=state)
+    assert report["summary"]["CHALLENGE"] == 1
+    assert (quarantine / "B078C6QR1C.html").exists()
+    assert state.get("B078C6QR1C")["access_state"] == "CHALLENGE"
+
+
+def test_audit_cache_rejects_non_normal_status_and_asin_mismatch(tmp_path):
+    from amazon_es_bestseller.collection.detail import audit_saved_detail_cache
+    root = tmp_path / "html"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text(
+        "<html><body><div id='productTitle'>Wrong page</div>"
+        "<input id='ASIN' value='B000000001'></body></html>", encoding="utf-8")
+    (root / "B078C6QR1C.meta.json").write_text('{"status_code": 403}', encoding="utf-8")
+    report = audit_saved_detail_cache(root)
+    row = report["records"][0]
+    assert row["classification"] == "CHALLENGE"
+    assert row["access_state"] == "BLOCKED"
+
+
+def test_reparse_saved_details_skips_normal_non_product_page(tmp_path):
+    from amazon_es_bestseller.collection.detail import reparse_saved_details
+    root = tmp_path / "html"
+    root.mkdir()
+    (root / "B078C6QR1C.html").write_text("<html><body>hola</body></html>", encoding="utf-8")
+    assert reparse_saved_details(root, []) == []
+
+
 def test_image_url_fallback_to_data_old_hires():
     html = """
     <html><body>
@@ -338,6 +409,20 @@ def test_struck_price_excludes_unit_price():
     parsed = parse_detail_page(html, "B078C6QR1C")
     assert parsed["current_price_raw"] == "14,99 €"
     assert parsed["original_price_raw"] == "19,99 €"
+
+
+def test_a_text_price_without_explicit_strike_is_not_original_price():
+    html = """<div id='corePrice_feature_div'><span class='a-text-price'>
+      <span class='a-offscreen'>19,99 €</span></span></div>"""
+    assert parse_detail_page(html, "B078C6QR1C")["original_price_raw"] == ""
+
+
+def test_struck_basis_price_is_not_original_price():
+    html = """<div id='productTitle'>Producto</div><div id='corePrice_feature_div'>
+      <span class='a-price'><span class='a-offscreen'>8,29€</span></span>
+      <span class='apex-basisprice-feature'>Precio único: <span class='a-price a-text-price apex-basisprice-value' data-a-strike='true'>
+      <span class='a-offscreen'>8,29€</span></span></span></div>"""
+    assert parse_detail_page(html, "B011036J00")["original_price_raw"] == ""
 
 
 def test_monthly_bought_is_preserved_from_visible_text():

@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
+from ..models import AccessState
 
 CURRENT_DETAIL_SCHEMA_VERSION = 2
 
@@ -91,7 +92,7 @@ def _parent_asin(soup) -> str:
 def _first_available_date_raw(soup) -> str:
     """详情页首次上架日期 → "D M YYYY"（供 parse_es_date 解析）；无 → 空。"""
     for sel in _DATE_SECTIONS:
-        txt = _text(soup, sel)
+        txt = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\ufeff]", "", _text(soup, sel))
         m = _AVAIL_DATE_RE.search(txt)
         if m:
             return "%s %s %s" % (m.group(1), m.group(2).lower(), m.group(3))
@@ -186,17 +187,23 @@ def _monthly_bought_raw(soup) -> str:
 
 def _struck_price(soup) -> str:
     """只从明确 data-a-strike=true 的划线价格中取原价。"""
-    for container in soup.select(
-            "#corePrice_feature_div .a-text-price, "
-            "#corePriceDisplay_desktop_feature_div .a-text-price, "
-            "#apex_price .a-text-price"):
+    primary = soup.select("#corePrice_feature_div .a-text-price, #corePriceDisplay_desktop_feature_div .a-text-price")
+    containers = primary if primary else soup.select("#apex_price .a-text-price")
+    for container in containers:
+        classes = " ".join(container.get("class") or [])
+        parent_classes = " ".join(container.parent.get("class") or []) if container.parent else ""
+        if re.search(r"priceperunit|pricePerUnit", classes + " " + parent_classes, re.I):
+            continue
+        if re.search(r"basisprice", classes + " " + parent_classes, re.I):
+            context = _clean(container.parent.parent.get_text(" ", strip=True)) if container.parent and container.parent.parent else ""
+            if re.search(r"precio\s+(?:[úu]nico|por\s+unidad)|por\s+(?:kg|g|l|ml)\b", context, re.I):
+                continue
         marked = container.get("data-a-strike")
         marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
         offscreen = container.select_one(".a-offscreen")
         if offscreen is not None:
             value = _clean(offscreen.get_text(" ", strip=True))
-            if (str(marked).lower() == "true" or marked_parent is not None
-                    or ("€" in value and "/" not in value)):
+            if str(marked).lower() == "true" or marked_parent is not None:
                 return value
     return ""
 
@@ -363,7 +370,7 @@ def parse_detail_page(html: str, asin: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     body = soup.find("body")
     page_text = _clean(body.get_text(" ", strip=True)) if body is not None else ""
-    is_captcha = bool(CAPTCHA_RE.search(page_text[:300]))
+    is_captcha = bool(CAPTCHA_RE.search(page_text))
 
     # 现价（主 BuyBox 价格回退链，与 JS 一致）
     price_el = None
@@ -482,6 +489,46 @@ def parse_detail_page(html: str, asin: str) -> dict:
     }
 
 
+def _page_asin_candidates(soup) -> set[str]:
+    """Extract explicit page identity signals when Amazon exposes them."""
+    strong = set()
+    weak = set()
+    for el in soup.select("input#ASIN, input[name='ASIN'], input#productAsin"):
+        value = el.get("value") or el.get("data-asin") or ""
+        if _ASIN_RE.fullmatch(str(value).strip()):
+            strong.add(str(value).strip().upper())
+    for el in soup.select("[data-asin]"):
+        value = el.get("data-asin") or ""
+        if _ASIN_RE.fullmatch(str(value).strip()):
+            weak.add(str(value).strip().upper())
+    for link in soup.select("link[rel='canonical'], meta[property='og:url']"):
+        value = link.get("href") or link.get("content") or ""
+        match = re.search(r"/dp/([A-Z0-9]{10})", str(value), re.I)
+        if match:
+            strong.add(match.group(1).upper())
+    return strong or weak
+
+
+def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessState, Optional[dict]]:
+    """Classify saved evidence and return parsed data only for valid pages."""
+    access_state = detect_access_status(meta.get("status_code", 200), html)
+    if access_state is not AccessState.NORMAL:
+        return "CHALLENGE", access_state, None
+    if not html.strip():
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    soup = BeautifulSoup(html, "lxml")
+    candidates = _page_asin_candidates(soup)
+    final_url = str(meta.get("final_url") or "")
+    if final_url and not verify_asin_on_page(final_url, asin):
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    if candidates and str(asin).upper() not in candidates:
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    parsed = parse_detail_page(html, asin)
+    if not parsed.get("title_es_raw") or parsed.get("is_captcha"):
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    return "VALID_PRODUCT_PAGE", access_state, parsed
+
+
 def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
     """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
@@ -512,12 +559,11 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
                     meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     meta = {}
-            state_value = detect_access_status(meta.get("status_code", 200), html)
-            if state_value.value != "NORMAL":
+            classification, state_value, rec = _classify_saved_page(html, asin, meta)
+            if classification != "VALID_PRODUCT_PAGE":
                 continue
             if asin in seen_asins:
                 continue
-            rec = parse_detail_page(html, asin)
             rec.update({"status_code": meta.get("status_code"),
                         "access_state": state_value.value,
                         "resumed_from_html": True})
@@ -526,6 +572,57 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
     if out:
         state.update(out)
     return out
+
+
+def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=None) -> dict:
+    """Classify saved HTML without network access or mutation.
+
+    Every file is reported as VALID_PRODUCT_PAGE, CHALLENGE, or
+    INVALID_OR_EMPTY.  Challenge/invalid evidence remains untouched so callers
+    can copy it to a quarantine directory while preserving the original cache.
+    """
+    from pathlib import Path
+    roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
+    wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
+    from shutil import copy2
+    quarantine = Path(quarantine_dir) if quarantine_dir else None
+    if quarantine:
+        quarantine.mkdir(parents=True, exist_ok=True)
+    records = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.html")):
+            try:
+                html = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            asin = path.stem.upper()
+            if wanted and asin not in wanted:
+                continue
+            status_meta = {}
+            meta_path = path.with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    status_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    status_meta = {}
+            classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
+            records.append({"asin": asin, "path": str(path), "classification": classification,
+                            "access_state": access_state.value})
+            if classification != "VALID_PRODUCT_PAGE" and quarantine:
+                copy2(path, quarantine / path.name)
+                if meta_path.exists():
+                    copy2(meta_path, quarantine / meta_path.name)
+            if state is not None:
+                update = parsed or {"asin": asin}
+                update.update({"status_code": status_meta.get("status_code"),
+                               "access_state": access_state.value,
+                               "cache_classification": classification})
+                state.update([update])
+    summary = {k: sum(r["classification"] == k for r in records)
+               for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
+    return {"summary": summary, "records": records}
 
 
 def verify_asin_on_page(url: str, asin: str) -> bool:
@@ -585,9 +682,12 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             if cached_url and not verify_asin_on_page(cached_url, asin):
                 raise AccessStopError(
                     "缓存详情页 ASIN 不一致，请求 %s，最终 URL %s" % (asin, cached_url))
-            rec = parse_detail_page(html, asin)
+            classification, parsed_state, rec = _classify_saved_page(
+                html, asin, {"status_code": cached_status, "final_url": cached_url})
+            if classification != "VALID_PRODUCT_PAGE":
+                raise AccessStopError("缓存详情页校验失败（%s），ASIN %s" % (classification, asin))
             rec["status_code"] = meta.get("status_code")
-            rec["access_state"] = state.value
+            rec["access_state"] = parsed_state.value
             rec["resumed_from_html"] = True
             details.append(rec)
             continue
@@ -609,9 +709,12 @@ def collect_details(asins: List[str], session, out_dir: str) -> List[dict]:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"status_code": status, "final_url": final_url,
                            "access_state": state.value}, f, ensure_ascii=False, indent=2)
-            rec = parse_detail_page(html, asin)
+            classification, parsed_state, rec = _classify_saved_page(
+                html, asin, {"status_code": status, "final_url": final_url})
+            if classification != "VALID_PRODUCT_PAGE":
+                raise AccessStopError("详情页校验失败（%s），ASIN %s" % (classification, asin))
             rec["status_code"] = status
-            rec["access_state"] = state.value
+            rec["access_state"] = parsed_state.value
             details.append(rec)
             session.wait_between_requests()
         except AccessStopError:

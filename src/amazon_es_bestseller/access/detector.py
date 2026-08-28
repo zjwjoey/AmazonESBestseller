@@ -12,8 +12,9 @@ from ..models import AccessState
 
 #: 与 extract_details.js line 48 完全一致：页面前 300 字符命中即判定验证码挑战
 CAPTCHA_RE = re.compile(
-    r'Captcha|Type the characters|resolver el captcha|robot check|'
-    r'access denied|unusual traffic|rate exceeded', re.IGNORECASE)
+    r'Captcha|validateCaptcha|errors_page/validateCaptcha|Type the characters|'
+    r'Haz clic en el bot[oó]n de abajo para seguir comprando|resolver el captcha|'
+    r'robot check|access denied|unusual traffic|rate exceeded', re.IGNORECASE)
 
 
 class AccessStopError(RuntimeError):
@@ -36,7 +37,9 @@ def detect_access_status(status_code: Optional[int], page_text: str = "") -> Acc
     判定优先级：验证码挑战（文本信号）> 403/429/5xx（状态码）> 200 正常。
     无信号 → UNKNOWN（不臆断）。
     """
-    if page_text and CAPTCHA_RE.search(str(page_text)[:300]):
+    # Amazon may return an HTTP 200 challenge page whose marker is deep in the
+    # document.  Inspect the complete saved response before accepting NORMAL.
+    if page_text and CAPTCHA_RE.search(str(page_text)):
         return AccessState.CHALLENGE
     if status_code == 403:
         return AccessState.BLOCKED

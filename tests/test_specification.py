@@ -180,6 +180,25 @@ def test_quantity_variant_volume_not_count():
     assert resolve_package_count({'numero_de_articulos': '4'}, variant='30L') == 4
 
 
+def test_numero_de_unidades_capacity_or_weight_is_not_count():
+    from amazon_es_bestseller.normalization.specification import attributes_to_spec_dict
+    for value in ("100.0 Millilitros", "500.0 Millilitros", "3000.0 Gramos"):
+        d = attributes_to_spec_dict([{"label_raw": "Número de unidades", "value_raw": value}])
+        assert resolve_package_count(d) is None
+
+
+def test_explicit_product_count_labels_remain_counts():
+    from amazon_es_bestseller.normalization.specification import attributes_to_spec_dict
+    for label, value, expected in (("Número de productos", "12", 12), ("Número de artículos", "6", 6), ("Pack de", "4", 4)):
+        d = attributes_to_spec_dict([{"label_raw": label, "value_raw": value}])
+        assert resolve_package_count(d) == expected
+
+
+def test_spanish_core_spec_does_not_label_volume_as_count():
+    attrs = [{"label_raw": "Número de unidades", "value_raw": "500 Mililitros"}]
+    assert "Número de unidades" not in build_spec_es(attrs)
+
+
 # ---------- 单位类别（QA_RULES §41-§42） ----------
 def test_classify_value_unit():
     assert classify_value_unit('30cm') == 'dimension'

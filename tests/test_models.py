@@ -135,3 +135,8 @@ def test_merge_multiple_unique_asins():
     out = merge_ranking_and_detail(ranking, [])
     assert len(out) == 2
     assert {p["asin"] for p in out} == {"B078C6QR1C", "B075JJRFVV"}
+
+
+def test_merge_ranking_only_derives_product_url_from_asin():
+    out = merge_ranking_and_detail([{"asin": "b078c6qr1c", "bestseller_rank": 1}], [])
+    assert out[0]["product_url"] == "https://www.amazon.es/dp/B078C6QR1C"
