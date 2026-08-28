@@ -307,3 +307,30 @@ def test_five_sku_golden_fixture_covers_real_issue_shapes():
     assert invalid["classification"] == "ORIGINAL_PRICE_INVALID"
     brand = _issue(report, "B008YETL18", "brand")
     assert brand["classification"] == "MAPPING_MISSED"
+
+
+def test_basis_price_equal_to_current_is_not_parser_missed(tmp_path):
+    """真实回归（文具/宠物 100 SKU 实采）：Amazon 的 "Precio único" 用
+    data-a-strike=true 重述当前售价，值与现价完全相同（14,29€ / 14,29€）。
+
+    解析器正确地不把它当划线原价；审计必须复用同一语义，否则会把正确行为
+    判成 PARSER_MISSED，并让导出门禁拦下本来合格的数据。实采 100 个 SKU 中
+    有 15 个是这种形态。
+    """
+    from amazon_es_bestseller.qa.field_closure import audit_field_closure
+    html = ("<div id='productTitle'>Producto</div><div id='corePrice_feature_div'>"
+            "<span class='a-price'><span class='a-offscreen'>14,29€</span></span>"
+            "<span class='apex-basisprice-feature'>Precio único: "
+            "<span class='a-price a-text-price apex-basisprice-value' data-a-strike='true'>"
+            "<span class='a-offscreen'>14,29€</span></span></span></div>")
+    record = {"asin": "B000LXUWN6", "current_price": 14.29, "current_price_raw": "14,29€",
+              "original_price": None, "original_price_raw": ""}
+    detail = {"asin": "B000LXUWN6", "current_price_raw": "14,29€", "original_price_raw": ""}
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B000LXUWN6.html").write_text(html, encoding="utf-8")
+    report = audit_field_closure([record], details=[detail], rankings=[],
+                                 html_dir=[str(html_dir)])
+    hits = [r for r in report["records"]
+            if r["field"] == "original_price" and r["classification"] == "PARSER_MISSED"]
+    assert hits == []

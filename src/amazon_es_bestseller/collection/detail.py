@@ -639,6 +639,19 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
     return {"summary": summary, "records": records}
 
 
+def struck_price_from_html(html: str) -> str:
+    """Public wrapper so the closure audit shares the collector's strike semantics.
+
+    The audit must not re-implement a looser ``data-a-strike`` regex: Amazon
+    restates the current price under "Precio único" with that exact attribute,
+    and treating it as evidence turns correct collector behaviour into a
+    PARSER_MISSED finding that blocks a valid export.
+    """
+    if not html:
+        return ""
+    return _struck_price(BeautifulSoup(html, "lxml"))
+
+
 def verify_asin_on_page(url: str, asin: str) -> bool:
     """URL 与记录 ASIN 是否一致（QA_RULES §4）。"""
     if not url or not asin:

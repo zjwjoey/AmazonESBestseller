@@ -350,6 +350,15 @@ def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapp
                        "feature_bullets_zh"}:
             if _html_visible_evidence(field, html):
                 evidence.append(f"html:visible:{field}")
+        elif field in {"original_price", "discount_rate"}:
+            # 复用采集器本身的划线价语义，而不是另写一条更宽松的正则：
+            # Amazon 的 "Precio único" 用 data-a-strike=true 重述当前售价，
+            # 值与现价相同，不是有效划线原价。审计若只匹配 data-a-strike，
+            # 会把采集器的正确行为判成 PARSER_MISSED 并拦下合格导出
+            # （实采 100 SKU 中 15 例，真实证据 B000LXUWN6）。
+            from ..collection.detail import struck_price_from_html
+            if struck_price_from_html(html):
+                evidence.append(f"html:struck_price:{field}")
         else:
             patterns = _HTML_PATTERNS.get(field, ())
             matched = [p for p in patterns if re.search(p, html, re.I)]
