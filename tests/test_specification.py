@@ -371,3 +371,31 @@ def test_attributes_to_spec_dict_strips_bidi_marks():
     assert resolve_package_count(d) == 3
     # 标签侧同样加固：带标记的标签必须归一到同一个键
     assert _normalize_spec_label("‎Marca") == "marca"
+
+
+def test_singular_unidad_is_a_count():
+    """真实回归 B0C98FGYJD：变体 "20 Unidad"。
+
+    西语单数是 unidad、复数 unidades；原正则 ``unidades?`` 只能匹配
+    "unidade(s)"，单数写法整个匹配不上，真实件数被丢弃。
+    """
+    assert resolve_package_count({'marca': 'X'}, variant='20 Unidad') == 20
+    assert resolve_package_count({'marca': 'X'}, variant='20 Unidades') == 20
+
+
+def test_fondo_dimension_abbreviation():
+    """真实回归 B0CGF2GR85 / B0D5HLD4BX：Amazon 用 f.(fondo) 作首位缩写，
+    不只是 l.(largo)。原正则只认 l. 开头，整条尺寸被丢弃。"""
+    assert dim_zh('3f. x 12an. x 6al. centímetros') == '3×12×6厘米'
+    assert dim_zh('40f. x 40an. x 40al. centímetros') == '40×40×40厘米'
+
+
+def test_variant_weight_enters_spec():
+    """真实回归 B01G7G8VVK / B072M7M1HJ：变体 "1 kg (Paquete de 1)" 是显式
+    重量规格证据；标题无数字时它是唯一证据，不能整条丢掉。"""
+    out = build_spec_v2({'marca': 'X'}, variant='1 kg (Paquete de 1)',
+                        title_es='Arquivet Heno prensado para roedores')
+    assert '1千克' in out or '1kg' in out
+    out2 = build_spec_v2({'marca': 'X'}, variant='500 g (Paquete de 1)',
+                         title_es='Arquivet Heno Varios Aromas para roedores')
+    assert '500克' in out2 or '500g' in out2

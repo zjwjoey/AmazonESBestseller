@@ -98,11 +98,11 @@ def cap_zh(v) -> str:
 
 
 # ---------- 尺寸（V2 逐字移植 + §40 二维简式） ----------
-_DIM_RE1 = re.compile(r'^([\d.]+)\s*l\.\s*x\s*([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
-_DIM_RE2 = re.compile(r'^([\d.]+)\s*l\.\s*x\s*([\d.]+)\s*an\.\s*(centímetros|milímetros|metros)?', re.I)
+_DIM_RE1 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
+_DIM_RE2 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*an\.\s*(centímetros|milímetros|metros)?', re.I)
 _DIM_RE4 = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)\s*(cm|mm|m)?', re.I)
 _DIM_RE5 = re.compile(r'^([\d.]+)\s*an\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
-_DIM_RE6 = re.compile(r'^([\d.]+)\s*l\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
+_DIM_RE6 = re.compile(r'^([\d.]+)\s*[lf]\.\s*x\s*([\d.]+)\s*al\.\s*(centímetros|milímetros|metros)?', re.I)
 # §40：10×15cm 二维简式（历史回归：10×15cm → 10×10mm 必须永不重现）
 _DIM_RE2D = re.compile(r'^([\d.]+)\s*x\s*([\d.]+)\s*(centímetros|milímetros|metros|cm|mm|m)?', re.I)
 _DIM_FRAGMENT_RE = re.compile(
@@ -149,7 +149,7 @@ def classify_value_unit(s) -> Optional[str]:
         return None
     t = re.sub(r'\s+', ' ', str(s).strip()).lower()
     # 西语尺寸简写（l.=largo, an.=ancho, al.=alto）→ dimension
-    if re.search(r'\b(?:l|an|al)\.', t):
+    if re.search(r'\b(?:l|f|an|al)\.', t):
         return 'dimension'
     # 容量词（长词优先，如 centímetros cúbicos 含 centímetros）+ 数字紧邻短单位
     if re.search(r'\b(?:centímetros?\s+cúbicos?|centimetros?\s+cubicos?|litros?|mil+ilitros?)\b', t):
@@ -187,7 +187,7 @@ _PACKAGE_KEYS = (
     'total_del_paquete_segun_la_medida_elegida_para_referenciar_precio',
 )
 _COUNT_BEFORE_RE = re.compile(
-    r'(\d+)\s*(?:piezas?|unidades?|uds\.?|artículos?|paquetes?|juegos?|pack)\b', re.I)
+    r'(\d+)\s*(?:piezas?|unidad(?:es)?|uds\.?|artículos?|paquetes?|juegos?|pack)\b', re.I)
 # 真实锚点："Set 4 Estándar" / "SET 4 PORTAEMBUTIDOS" / "Pack de 2" / "paquete de 6"
 # （"set N" 与 "set de N" 两种写法都匹配）
 _COUNT_AFTER_RE = re.compile(
@@ -286,6 +286,28 @@ _DIM_KEYS = (
 #: 变体容量：30L / 300 ml / 30 l，允许后跟包装说明（"100 ml (Paquete de 1)"）
 _VARIANT_CAP_RE = re.compile(
     r'^([\d.,]+\s*[mM]?[lL])\s*(?:[（(][^）)]*[）)])?\s*$')
+#: 变体重量：1 kg / 500 g，同样允许包装后缀（"1 kg (Paquete de 1)"）
+_VARIANT_WEIGHT_RE = re.compile(
+    r'^([\d.,]+\s*(?:kg|g|mg))\s*(?:[（(][^）)]*[）)])?\s*$', re.I)
+_WEIGHT_ZH = {'kg': '千克', 'g': '克', 'mg': '毫克'}
+
+
+def _variant_weight(variant) -> str:
+    """变体里的显式重量 → 中文短式（"1 kg (Paquete de 1)" → "1千克"）。
+
+    宠物/文具类目大量商品只在变体里给出重量，技术字段与标题都没有数字证据；
+    整条丢弃会让核心规格为空（真实证据 B01G7G8VVK / B072M7M1HJ）。
+    """
+    if not variant:
+        return ''
+    m = _VARIANT_WEIGHT_RE.match(str(variant).strip())
+    if not m:
+        return ''
+    text = dec_comma(m.group(1).strip())
+    num = re.match(r'([\d.]+)\s*([a-zA-Z]+)', text)
+    if not num:
+        return ''
+    return num.group(1) + _WEIGHT_ZH.get(num.group(2).lower(), '')
 
 
 def _pick_capacity(d, variant=None):
@@ -345,6 +367,10 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
         cz = cap_zh(cap)
         if cz:
             parts.append(cz)
+    if not cap:
+        wz = _variant_weight(variant)
+        if wz:
+            parts.append(wz)
     dim = _pick_dimension(d)
     if dim and not is_suspicious_dimension(dim):
         dz = dim_zh(dim)
