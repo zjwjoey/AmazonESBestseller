@@ -30,7 +30,7 @@ from .normalization.specification import (
     translate_spec_es_to_zh)
 from .translation.full_detail import (
     clean_display_zh, detail_bullets_to_attributes, render_bullets_es, render_bullets_zh,
-    render_details_es, render_details_zh)
+    render_details_es, render_details_zh, truncated_detail_labels)
 from .translation.ds import DeepSeekTranslator, TRANSLATION_SCHEMA_VERSION
 from .translation.product_type import detect_product_type
 
@@ -160,6 +160,10 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["product_details_zh"] = render_details_zh(attrs)
     out["feature_bullets_es"] = render_bullets_es(bullets)
     out["feature_bullets_zh"] = render_bullets_zh(bullets)
+    # 仍然只有截断文本的属性必须显式记录，"完整商品详情" 不能默默地不完整
+    truncated = truncated_detail_labels(attrs)
+    out["detail_truncated_labels"] = truncated
+    out["detail_truncated"] = bool(truncated)
 
     title_es = out.get("title_es_raw")
     out["product_type"] = detect_product_type(title_es) if title_es else None
@@ -174,6 +178,16 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
                            ("category_l3", dl3), ("leaf_category", dleaf)):
             if not out.get(key) and value:
                 out[key] = value
+
+    # leaf 必须是已知最深的一级。榜单页常只暴露 L1/L2（leaf 因此 = L2），
+    # 详情面包屑随后补上 L3；只填空字段会让 leaf 停在 L2，比 L3 还浅
+    # （实采 100 SKU 全部命中）。这里只在已有层级之间提升，不引入新证据。
+    deepest = next((out.get(k) for k in ("category_l3", "category_l2")
+                    if out.get(k)), None)
+    leaf = out.get("leaf_category")
+    if deepest and leaf in (None, "", out.get("category_l1"), out.get("category_l2")):
+        if leaf != deepest:
+            out["leaf_category"] = deepest
 
     # 类目中文（派生层）：只映射有把握的，未知保留西语原文（不臆造）
     l1 = out.get("category_l1")

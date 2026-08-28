@@ -85,6 +85,55 @@ _META_LABELS = (
 
 _TRUNC_MARK = "… Ver más"
 
+#: Amazon 折叠控件的按钮文字（展开/收起），本身不是商品属性内容
+_VER_MAS_RE = re.compile(r"\s*(?:…|\.\.\.)?\s*Ver\s+(?:más|mas|menos)\s*$", re.I)
+
+#: 零信息占位值：Amazon 明确写"未知/不适用"，展示层删除，数据层保留
+_PLACEHOLDER_VALUES = frozenset({
+    "desconocido", "desconocida", "no aplicable", "n/a", "na",
+    "sin especificar", "no disponible", "not applicable", "unknown",
+})
+
+
+def expand_collapsed_value(value) -> tuple[str, bool]:
+    """折叠属性值 → ``(完整文本, 是否仍为截断)``。
+
+    Amazon 的折叠控件会把同一段文字渲染两遍（展开版 + 折叠版）并跟一个
+    "Ver más" 按钮，形如 ``"<全文> <全文> Ver más"``。完整文本就在其中，
+    去掉重复即可还原（真实证据 B00EOOQD0O / B09YRD4GDR 等 5 处）。
+
+    若去掉按钮文字后剩下的内容无法还原出完整版本（后半段不是前半段的前缀），
+    说明页面只给了截断文本：返回可见文本并标记为截断，绝不冒充完整。
+    """
+    text = str(value or "").strip()
+    stripped = _VER_MAS_RE.sub("", text).strip()
+    if stripped == text:
+        return text, False          # 没有折叠控件，原样返回
+    n = len(stripped)
+    for cut in range(n // 2, n):
+        head, tail = stripped[:cut].strip(), stripped[cut:].strip()
+        if tail and head.startswith(tail):
+            return head, False      # 重复渲染，完整版本可还原
+    return stripped, True           # 只有截断版本
+
+
+def _is_placeholder(value: str) -> bool:
+    return value.strip().casefold().rstrip(".") in _PLACEHOLDER_VALUES
+
+
+def truncated_detail_labels(attributes) -> list:
+    """仍然只有截断文本的属性标签（供 QA/审计标记 DETAIL_TRUNCATED）。"""
+    out = []
+    for a in attributes or []:
+        label = strip_zero_width(a.get("label_raw") or "").strip()
+        value = strip_zero_width(a.get("value_raw") or "")
+        if not label or not value:
+            continue
+        _, truncated = expand_collapsed_value(value)
+        if truncated and label not in out:
+            out.append(label)
+    return out
+
 
 def clean_display_zh(text: str) -> str:
     """Remove known Amazon/MT presentation artefacts from Chinese display text.
@@ -170,6 +219,11 @@ def _display_rows(attributes) -> list:
         if not label or not value:
             continue
         if label.lower() in _META_LABELS:
+            continue
+        # 折叠控件：还原完整文本，去掉 "Ver más" 按钮文字
+        value, _ = expand_collapsed_value(value)
+        # 零信息占位（"desconocido" / "No aplicable"）不进展示层
+        if not value or _is_placeholder(value):
             continue
         key = label.lower()
         v = value.strip()

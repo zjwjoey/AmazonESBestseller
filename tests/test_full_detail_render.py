@@ -155,3 +155,53 @@ def test_display_rows_strip_amazon_bidi_marks():
     assert "Marca: BIC" in es
     # 数据层不被修改（无损原始证据）
     assert attributes[0]["value_raw"] == "‎BIC"
+
+
+def test_collapsed_ver_mas_value_is_restored_not_stripped():
+    """真实回归 B00EOOQD0O 等 5 处：Amazon 把同一段文字渲染两遍（展开版 +
+    折叠版），末尾跟 UI 按钮文字 "Ver más"。
+
+    完整文本其实就在里面，正确做法是去掉重复和按钮文字后还原完整版，
+    而不是简单删掉 "Ver más" 冒充完整，也不是整条丢弃。
+    """
+    text = "Alimente a sus peces dos veces al día."
+    attributes = [{"section": "product_overview", "label_raw": "Usos específicos del producto",
+                   "value_raw": "%s %s Ver más" % (text, text), "position": 0,
+                   "source": "productOverview"}]
+    es = render_details_es(attributes)
+    assert "Ver más" not in es
+    assert es.count(text) == 1
+    assert text in es
+
+
+def test_genuinely_truncated_value_is_reported_not_faked():
+    """只有截断版本时不得假装完整：保留可见文本，但显式标记为截断。"""
+    from amazon_es_bestseller.translation.full_detail import truncated_detail_labels
+    attributes = [{"section": "product_overview", "label_raw": "Destacado del artículo",
+                   "value_raw": "Texto largo que Amazon cortó aquí Ver más", "position": 0,
+                   "source": "productOverview"}]
+    assert truncated_detail_labels(attributes) == ["Destacado del artículo"]
+    # 可还原的重复形态不算截断
+    ok = [{"section": "product_overview", "label_raw": "X",
+           "value_raw": "abc def abc def Ver más", "position": 0, "source": "productOverview"}]
+    assert truncated_detail_labels(ok) == []
+
+
+def test_placeholder_values_are_dropped_from_display():
+    """真实回归（49/100）：Amazon 的 "Actualizaciones de software garantizadas
+    hasta: desconocido" 是零信息占位，不应出现在完整商品详情里。数据层保留。"""
+    attributes = [
+        {"section": "additional_information",
+         "label_raw": "Actualizaciones de software garantizadas hasta",
+         "value_raw": "desconocido", "position": 0, "source": "detailBullets"},
+        {"section": "additional_information", "label_raw": "Rango de edad (descripción)",
+         "value_raw": "No aplicable", "position": 1, "source": "detailBullets"},
+        {"section": "additional_information", "label_raw": "Marca",
+         "value_raw": "Tetra", "position": 2, "source": "detailBullets"},
+    ]
+    es = render_details_es(attributes)
+    assert "Actualizaciones de software" not in es
+    assert "No aplicable" not in es
+    assert "Marca: Tetra" in es
+    # 数据层无损
+    assert attributes[0]["value_raw"] == "desconocido"

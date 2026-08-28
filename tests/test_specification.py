@@ -432,3 +432,70 @@ def test_three_axis_dimension_keeps_full_spanish_unit():
     assert dim_zh('13,5 x 7,4 x 1,5 milímetros') == '13.5×7.4×1.5毫米'
     # 缩写写法不能回归
     assert dim_zh('10 x 15 x 5 cm') == '10×15×5厘米'
+
+
+def test_capacidad_label_reaches_spanish_core_spec():
+    """_ES_CORE_GROUPS 误写成 'capacity' 而非归一化后的 'capacidad'，
+    导致主容量字段一直无分组、被静默排除，西语核心规格永远拿不到容量。"""
+    assert 'Capacidad: 500 mililitros' in build_spec_es(
+        [{'label_raw': 'Capacidad', 'value_raw': '500 mililitros'}])
+
+
+def test_spanish_core_spec_prefers_measure_over_generic_count():
+    """真实回归 B005A3X9S2：118 ml 的水族用品，核心规格却只显示
+    "Número de productos: 12"。
+
+    明确的容量/重量证据必须排在泛型件数之前（AGENTS §5 证据优先级）。
+    """
+    attrs = [
+        {"label_raw": "Volumen de líquido", "value_raw": "118 Mililitros"},
+        {"label_raw": "Número de unidades", "value_raw": "118.0 Millilitros"},
+        {"label_raw": "Número de productos", "value_raw": "12"},
+    ]
+    out = build_spec_es(attrs)
+    assert out.startswith("Volumen de líquido: 118 Mililitros")
+
+
+def test_spanish_core_spec_includes_product_weight():
+    """真实回归 B072M7L1HH：30 gr 的商品被表达成 "Número de productos: 30"。
+    Peso del producto 是明确重量证据，必须排在泛型件数之前。"""
+    attrs = [
+        {"label_raw": "Número de unidades", "value_raw": "30.0 Gramos"},
+        {"label_raw": "Número de productos", "value_raw": "30"},
+        {"label_raw": "Peso del producto", "value_raw": "30 Gramos"},
+    ]
+    out = build_spec_es(attrs)
+    assert out.startswith("Peso del producto: 30 Gramos")
+
+
+def test_variant_pack_count_wins_over_attribute_count():
+    """真实回归 B005A3X9S2：变体明确写 "Paquete de 1"，属性却说 12。
+    变体是更高优先级的证据，泛型 1 表示不展示件数，不得回落到属性的 12。"""
+    d = {'numero_de_piezas': '12'}
+    assert resolve_package_count(d, variant='118 ml (Paquete de 1)') is None
+    out = build_spec_v2(d, variant='118 ml (Paquete de 1)')
+    assert '118毫升' in out
+    assert '12' not in out
+
+
+def test_variant_unit_times_pack_count():
+    """真实变体形态 "N unidad (Paquete de M)"：总件数 = N × M。
+
+    实采证据：
+      8 unidad (Paquete de 1)   → 8   (8支笔装1包)
+      1 unidad (Paquete de 20)  → 20  (1支×20包)
+      118 ml (Paquete de 1)     → 无  (118ml是量纲，包装数1为泛型)
+      1 g (Paquete de 30)       → 30
+      20 Unidad                 → 20  (无包装段)
+    """
+    cases = [
+        ('8 unidad (Paquete de 1) / Multicolor', 8),
+        ('1 unidad (Paquete de 20)', 20),
+        ('118 ml (Paquete de 1)', None),
+        ('1 g (Paquete de 30)', 30),
+        ('20 Unidad', 20),
+        ('85 g (Paquete de 24 latas)', 24),
+        ('70 g (Paquete de 12)', 12),
+    ]
+    for variant, expected in cases:
+        assert resolve_package_count({'marca': 'X'}, variant=variant) == expected, variant

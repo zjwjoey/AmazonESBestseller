@@ -259,3 +259,47 @@ def test_real_30_no_rank_bsr_mix():
         [legacy_flat_to_detail(r) for r in data])
     for prod in products:
         assert not prod.get("detail_bsr_segments"), "遗留 BSR 不得进入 detail_bsr_segments"
+
+
+def test_leaf_category_never_regresses_behind_l3():
+    """真实回归（文具/宠物 100 SKU 实采，100/100 命中）：
+
+    榜单页只暴露 L1/L2，leaf 因此等于 L2；详情面包屑随后补上 L3。合并只填
+    空字段，leaf 不被更新，结果 细分类目 比 三级类目 还浅：
+
+        L2   Peces y mascotas acuáticas
+        L3   Accesorios para acuarios
+        leaf Peces y mascotas acuáticas   ← 层级倒退
+
+    leaf 必须是已知最深的一级（category_levels 文档：leaf==L3 是定义使然）。
+    """
+    from amazon_es_bestseller.pipeline import normalize_product
+    out = normalize_product({
+        "asin": "B000255PFI",
+        "category_l1": "Productos para mascotas",
+        "category_l2": "Peces y mascotas acuáticas",
+        "leaf_category": "Peces y mascotas acuáticas",
+        "detail_category_trail": ["Productos para mascotas", "Acuáticos",
+                                  "Accesorios para acuarios",
+                                  "Tratamientos para el agua"],
+    })
+    assert out["category_l3"] == "Accesorios para acuarios"
+    assert out["leaf_category"] == "Accesorios para acuarios"
+
+
+def test_leaf_category_kept_when_already_deepest():
+    """已经是最深一级时不得改动（不能为了规则去覆盖真实证据）。"""
+    from amazon_es_bestseller.pipeline import normalize_product
+    out = normalize_product({
+        "asin": "B000000001",
+        "category_l1": "A", "category_l2": "B", "category_l3": "C",
+        "leaf_category": "D",
+    })
+    assert out["leaf_category"] == "D"
+
+
+def test_leaf_category_stays_empty_without_evidence():
+    """无类目证据时 leaf 保持空，绝不用 L1 充数。"""
+    from amazon_es_bestseller.pipeline import normalize_product
+    out = normalize_product({"asin": "B000000001", "category_l1": "A"})
+    assert not out.get("leaf_category")

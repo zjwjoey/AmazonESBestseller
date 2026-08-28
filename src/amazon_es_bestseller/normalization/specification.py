@@ -244,6 +244,27 @@ def _count_from_text(s) -> Optional[int]:
     return None
 
 
+def _variant_total_count(variant) -> Optional[int]:
+    """变体总件数 = 单位件数 × 包装数（形如 "N unidad (Paquete de M)"）。
+
+    Amazon 用同一个模板既表达 "8 支装 1 包" 也表达 "1 支 × 20 包"，只取第一个
+    数字会在其中一种上取错（真实证据 B0F9L1SGKY 与 B08G8WLQ3L）。
+    首段是量纲（118 ml / 1 g）时它不是件数，总数只由包装数决定。
+    返回 None 表示变体没有给出数量证据。
+    """
+    text = str(variant or '').strip()
+    if not text:
+        return None
+    pack = _COUNT_AFTER_RE.search(text)
+    pack_n = int(pack.group(1)) if pack else None
+    head = text[:pack.start()] if pack else text
+    unit = _COUNT_BEFORE_RE.search(head)
+    unit_n = int(unit.group(1)) if unit else None
+    if unit_n is None and pack_n is None:
+        return None
+    return (unit_n or 1) * (pack_n or 1)
+
+
 def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
     """件数解析优先级（QA_RULES §37-§38 / AGENTS §5）：
 
@@ -254,7 +275,13 @@ def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
     """
     if not d:
         return None
-    for source in (variant, title_es, d.get('tamano')):
+    # 变体里的显式数量是最高优先级证据：写着 "Paquete de 1" 就是 1 包，
+    # 属性表里的 "Número de productos: 12" 与之矛盾，不得回落上去
+    # （真实回归 B005A3X9S2：118 ml 单瓶被标成 12 件套）。
+    variant_count = _variant_total_count(variant)
+    if variant_count is not None:
+        return variant_count if variant_count > 1 else None
+    for source in (title_es, d.get('tamano')):
         n = _count_from_text(source)
         if n and n > 1:
             return n
@@ -405,7 +432,9 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
         if m:
             parts.append('%s格' % m.group(1))
     pcs = d.get('numero_de_piezas')
-    if pcs and not n:
+    # 变体已明确给出包装数量时，属性表的件数不再作为旁路补充——否则
+    # "Paquete de 1" 的单瓶会被属性的 12 重新写成 12 只（真实回归 B005A3X9S2）。
+    if pcs and not n and _count_from_text(variant) is None:
         m = re.match(r'(\d+)', str(pcs))
         if m and int(m.group(1)) > 1:
             parts.append('%s只' % m.group(1))
@@ -434,8 +463,10 @@ def build_spec_v2(d, variant=None, title_es=None) -> str:
 # 塞进核心规格列。标签和值均保留西语原文，便于回溯页面证据。
 _ES_CORE_KEYS = {
     'capacidad', 'capacidad_de_salida', 'volumen_de_almacenamiento',
-    'volumen_del_tanque', 'volumen_liquido', 'tamano', 'talla',
-    'talla_dimensiones', 'numero_de_articulos', 'numero_de_piezas',
+    'volumen_del_tanque', 'volumen_liquido', 'volumen_de_liquido', 'tamano', 'talla',
+    'talla_dimensiones', 'tamano_de_hoja', 'tamano_papel',
+    'peso_del_producto', 'peso_articulo', 'peso_del_articulo',
+    'numero_de_articulos', 'numero_de_piezas',
     'numero_de_unidades', 'numero_de_etiquetas', 'numero_de_productos',
     'numero_de_paquetes', 'numero_de_sets',
     'total_del_paquete_segun_la_medida_elegida_para_referenciar_precio',
@@ -443,14 +474,27 @@ _ES_CORE_KEYS = {
 }
 
 _ES_CORE_GROUPS = {
-    'capacity': 'capacity', 'capacidad_de_salida': 'capacity',
+    # 归一化后的西语键名是 'capacidad'；曾误写成英文 'capacity'，导致主容量
+    # 字段没有分组、被 build_spec_es 静默排除（真实回归：容量永远不展示）。
+    'capacidad': 'capacity', 'capacidad_de_salida': 'capacity',
     'volumen_de_almacenamiento': 'capacity', 'volumen_del_tanque': 'capacity',
-    'volumen_liquido': 'capacity', 'tamano': 'size', 'talla': 'size',
-    'talla_dimensiones': 'size', 'numero_de_articulos': 'count',
+    'volumen_liquido': 'capacity', 'volumen_de_liquido': 'capacity',
+    'peso_del_producto': 'weight', 'peso_articulo': 'weight',
+    'peso_del_articulo': 'weight',
+    'tamano': 'size', 'talla': 'size',
+    'talla_dimensiones': 'size', 'tamano_de_hoja': 'size', 'tamano_papel': 'size',
+    'numero_de_articulos': 'count',
     'numero_de_piezas': 'count', 'numero_de_unidades': 'count',
     'numero_de_etiquetas': 'count', 'numero_de_productos': 'count',
     'numero_de_sets': 'count', 'cantidad_de_compartimentos': 'compartments',
     'potencia': 'power', 'voltaje': 'voltage', 'tension': 'voltage',
+}
+
+#: 核心规格的证据优先级（AGENTS §5）：明确的量纲证据排在泛型件数之前。
+#: 页面顺序不代表重要性——Amazon 常把 "Número de productos" 排在容量前面。
+_ES_GROUP_PRIORITY = {
+    'capacity': 0, 'weight': 1, 'dimension': 2, 'size': 3,
+    'power': 4, 'voltage': 5, 'compartments': 6, 'count': 7,
 }
 
 
@@ -574,10 +618,10 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
     selected variation is only used when no recognized attribute is available;
     no value is inferred from rank, price, or a translated Chinese summary.
     """
-    parts = []
+    picked = []          # (组优先级, 页面顺序, 展示文本)
     seen = set()
     seen_groups = set()
-    for attr in attributes or []:
+    for position, attr in enumerate(attributes or []):
         if not isinstance(attr, dict):
             continue
         label = str(attr.get('label_raw') or '').strip()
@@ -601,7 +645,11 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             continue
         seen.add(dedupe)
         seen_groups.add(group)
-        parts.append('%s: %s' % (label, value))
+        picked.append((_ES_GROUP_PRIORITY.get(group, 99), position,
+                       '%s: %s' % (label, value)))
+    # 按证据优先级而非页面顺序输出：Amazon 常把泛型 "Número de productos"
+    # 排在真实容量/重量前面（真实回归 B005A3X9S2 / B072M7L1HH）。
+    parts = [text for _, _, text in sorted(picked, key=lambda t: (t[0], t[1]))]
 
     if not parts and isinstance(details, dict):
         for key, value in details.items():
