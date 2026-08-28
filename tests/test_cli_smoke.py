@@ -357,9 +357,83 @@ def test_export_gate_allows_source_missing_only(tmp_path, monkeypatch):
     assert out.exists()
 
 
+def test_export_runs_closure_gate_from_default_evidence_paths(tmp_path, monkeypatch):
+    """默认调用也必须跑字段闭环门禁（此前只在显式传 --details/--rankings 时才跑）。"""
+    products, details = _export_gate_product(tmp_path)
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "details.json").write_text(details.read_text(encoding="utf-8"), encoding="utf-8")
+    (outputs / "rankings.json").write_text("[]", encoding="utf-8")
+    import amazon_es_bestseller.qa.field_closure as closure
+    monkeypatch.setattr(closure, "audit_field_closure", lambda *args, **kwargs: {
+        "records": [{"asin": "B000000001", "classification": "PARSER_MISSED",
+                     "severity": "P1", "message": "fixture"}]
+    })
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as ei:
+        main(["export", "--products", str(products), "--out", str(tmp_path / "blocked.xlsx")])
+    assert "拒绝导出" in str(ei.value.code)
+
+
+def test_export_without_any_evidence_reports_that_closure_gate_did_not_run(tmp_path, capsys, monkeypatch):
+    """无证据时门禁降级必须显式告知，绝不静默跳过。"""
+    products, _ = _export_gate_product(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / "ungated.xlsx"
+    assert main(["export", "--products", str(products), "--out", str(out)]) == 0
+    assert "字段闭环门禁未运行" in capsys.readouterr().out
+
+
+def test_export_explicit_missing_evidence_path_still_errors(tmp_path):
+    """显式指定的证据文件缺失仍必须报错，不能被默认路径的容忍逻辑吞掉。"""
+    products, _ = _export_gate_product(tmp_path)
+    with pytest.raises(SystemExit) as ei:
+        main(["export", "--products", str(products),
+              "--details", str(tmp_path / "no_such_details.json"),
+              "--out", str(tmp_path / "x.xlsx")])
+    assert "找不到输入文件" in str(ei.value.code)
+
+
+def test_collect_with_rankings_file_keeps_supplied_rankings(tmp_path, monkeypatch):
+    """复用 --rankings-file 时，旧 run 目录的榜单绝不能覆盖调用方提供的输入。"""
+    from amazon_es_bestseller.access import browser
+    from amazon_es_bestseller.collection import detail as detail_mod
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            self.headless = kwargs["headless"]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(browser, "BrowserSession", FakeSession)
+    monkeypatch.setattr(detail_mod, "collect_details", lambda asins, session, out_dir: [])
+
+    out_dir = tmp_path / "run"
+    stale = out_dir / "runs" / "20200101_000000"
+    stale.mkdir(parents=True)
+    (stale / "rankings.json").write_text(
+        json.dumps([{"asin": "B0000STALE", "ranking_source_url": "https://old.invalid"}]),
+        encoding="utf-8")
+
+    supplied = tmp_path / "supplied_rankings.json"
+    supplied.write_text(
+        json.dumps([{"asin": "B000000001", "ranking_source_url": "https://new.invalid"}]),
+        encoding="utf-8")
+
+    assert main(["collect", "--rankings-file", str(supplied),
+                 "--out-dir", str(out_dir)]) == 0
+    written = out_dir / "rankings.json"
+    if written.exists():
+        assert [r["asin"] for r in json.loads(written.read_text(encoding="utf-8"))] == ["B000000001"]
+
+
 @pytest.mark.parametrize("command", [
     "collect", "select-quota", "translate-ds", "enrich", "repair-cache",
-    "reparse-details", "qa", "audit-fields", "export",
+    "reparse-details", "audit-detail-cache", "qa", "audit-fields", "export",
 ])
 def test_each_cli_help_is_parseable(command, capsys):
     with pytest.raises(SystemExit) as ei:
