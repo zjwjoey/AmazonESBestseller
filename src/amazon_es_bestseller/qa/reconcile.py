@@ -18,7 +18,10 @@ def reconcile_task(task, items, products, translations=None, images=None,
     target = set(_asins(target_rows)) if target_rows and isinstance(target_rows[0], dict) else {
         str(a).strip().upper() for a in (target_rows or []) if str(a).strip()
     }
-    report = {"target_count": len(target), "stages": {}, "conflicts": [], "status": "success"}
+    quota_mode = isinstance(task, dict) and task.get("selection_mode") == "category_quota" and not target
+    target_count = int(task.get("target_unique", 0) or 0) if quota_mode else len(target)
+    report = {"target_count": target_count, "target_mode": "category_quota" if quota_mode else "exact_asins",
+              "stages": {}, "conflicts": [], "status": "success"}
     sources = {"items": items, "products": products, "translations": translations or [],
                "images": images or [], "workbook": workbook_asins or []}
     for name, rows in sources.items():
@@ -28,7 +31,12 @@ def reconcile_task(task, items, products, translations=None, images=None,
         stage = {"count": len(actual), "missing": sorted(target - actual),
                  "extra": sorted(actual - target),
                  "duplicates": sorted(a for a, n in counts.items() if n > 1)}
+        if quota_mode:
+            stage["shortfall"] = max(target_count - len(actual), 0)
+            stage["overage"] = max(len(actual) - target_count, 0)
+            if stage["shortfall"] or stage["overage"] or stage["duplicates"]:
+                report["status"] = "partial"
         report["stages"][name] = stage
-        if stage["missing"] or stage["extra"] or stage["duplicates"]:
+        if not quota_mode and (stage["missing"] or stage["extra"] or stage["duplicates"]):
             report["status"] = "partial"
     return report
