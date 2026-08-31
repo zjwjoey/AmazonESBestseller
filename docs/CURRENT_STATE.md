@@ -354,3 +354,7 @@ The synthetic offline scale benchmark is available at
 `scripts/benchmark_scale.py`. A 5000-record business export completed with two
 product sheets (5001 rows each) in 70.905 seconds; this is a capacity signal only
 and is not Amazon data.
+
+Category-quota reconciliation now reports `target_count` and stage shortfalls
+even before a concrete ASIN manifest exists; a 4500-target shape check correctly
+reports the current 676-detail evidence as partial.
