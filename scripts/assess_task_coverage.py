@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
+
+from amazon_es_bestseller.collection.quota import normalize_group
 
 
 def _rows(path: str) -> list[dict]:
@@ -17,21 +19,35 @@ def _rows(path: str) -> list[dict]:
 
 def assess(task: dict, records: list[dict]) -> dict:
     categories = task.get("categories", [])
-    counts = Counter(str(r.get("category_group") or "").strip() for r in records
-                     if str(r.get("asin") or "").strip())
+    group_asins = defaultdict(set)
+    asin_groups = defaultdict(set)
+    asin_seen = Counter()
+    for record in records:
+        asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
+        group = normalize_group(record.get("category_group") or record.get("group"))
+        if not asin:
+            continue
+        asin_seen[asin] += 1
+        if group:
+            group_asins[group].add(asin)
+            asin_groups[asin].add(group)
+    conflicts = sorted(asin for asin, groups in asin_groups.items() if len(groups) > 1)
+    duplicates = sorted(asin for asin, count in asin_seen.items() if count > 1)
     groups = []
     for category in categories:
-        group = category.get("category_group", "")
+        group = normalize_group(category.get("category_group") or category.get("group"))
         quota = int(category.get("quota", 0) or 0)
-        observed = counts.get(group, 0)
+        observed = len(group_asins[group])
+        eligible = len(group_asins[group] - set(conflicts))
         groups.append({"category_group": group, "quota": quota,
-                       "observed": observed,
-                       "shortfall": max(quota - observed, 0),
-                       "ready": observed >= quota})
+                       "observed": observed, "eligible_observed": eligible,
+                       "shortfall": max(quota - eligible, 0),
+                       "ready": eligible >= quota})
     return {"task_id": task.get("task_id", ""),
             "target_unique": int(task.get("target_unique", 0) or 0),
-            "observed_unique": len({str(r.get("asin")).strip().upper() for r in records
-                                    if str(r.get("asin") or "").strip()}),
+            "observed_unique": len(asin_seen),
+            "duplicate_asins": duplicates,
+            "cross_group_conflicts": conflicts,
             "ready": all(g["ready"] for g in groups),
             "groups": groups}
 

@@ -200,6 +200,15 @@ python -m amazon_es_bestseller.cli collect `
 `research` 仍输出 `类目规划`、西语清单、中文清单三张表。
 
 4500 SKU 任务配置位于 `configs/amazon_es_4500sku_categories.json`（15 个类目×300）。
+
+可在不联网的情况下检查候选覆盖：
+
+```powershell
+python scripts/assess_task_coverage.py --task configs/amazon_es_4500sku_categories.json `
+  --manifest outputs/scale_1000/manifest_1000.json --out outputs/coverage_4500.json
+```
+
+该检查会去重 ASIN、识别跨类目冲突，并按每个类目的有效唯一 ASIN 计算缺口。
 先用榜单分页生成候选并检查每类唯一 ASIN 缺口，再启动详情采集；不能仅凭配额文件宣布完成。
 
 The minimum local verification is:
