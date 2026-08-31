@@ -322,8 +322,10 @@ The formal offline field-closure audit is implemented. It traces automatic field
 through Source → Raw → Canonical → Derived → Excel and reports
 `SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` and `DERIVED_MISSING` with
 field-level evidence. Raw full-detail extraction V1 is implemented; normalization,
-Chinese rendering and display closure continue to improve. The next milestone is
-real full-flow Hogar y cocina closure validation, not broad category expansion.
+Chinese rendering and display closure continue to improve. The active milestone is
+the guarded 4500-SKU multi-category delivery; it remains blocked at the real
+access stage until Amazon challenge conditions clear, while offline hardening
+continues independently.
 
 The 2026-08-27 closure pass adds versioned detail migration, hash-aware
 translation caching, field-level translation QA and export-gate enforcement.
