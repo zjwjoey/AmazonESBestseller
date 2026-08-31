@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -82,9 +83,11 @@ class DetailState:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(
             json.dumps(self._data, ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8")
+        os.replace(temporary, self.path)
 
     def records(self) -> List[dict]:
         """全部状态记录（detail records，含 collected_at），按 ASIN 排序。

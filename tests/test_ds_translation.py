@@ -97,3 +97,16 @@ def test_translation_marks_partial_and_invalidates_source_hash(tmp_path):
                                       "feature_bullets_es": "Nueva calidad"})
     assert transport.calls == 2
     assert second["translation_source_hash"] != first["translation_source_hash"]
+
+
+def test_translation_repair_partial_bypasses_same_source_cache(tmp_path):
+    transport = FakeTransport()
+    client = DeepSeekTranslator(api_key="secret", cache_path=tmp_path / "t.json",
+                                 transport=transport, max_retries=0)
+    record = {"asin": "B000000001", "title_es_raw": "Taladro",
+              "feature_bullets_es": "Alta calidad"}
+    first = client.translate_record(record)
+    assert first["translation_status"] == "partial"
+    second = client.translate_record(record, repair_partial=True)
+    assert second["translation_status"] == "partial"
+    assert transport.calls == 2

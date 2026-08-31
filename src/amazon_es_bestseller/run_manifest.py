@@ -8,6 +8,7 @@ orchestrator (which is deferred to a later milestone).
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -97,8 +98,10 @@ def write_manifest(manifest: Mapping[str, Any], path: str | Path) -> Path:
     """Write UTF-8 deterministic JSON and return the output path."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(_as_dict(manifest), ensure_ascii=False,
-                                 indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(json.dumps(_as_dict(manifest), ensure_ascii=False,
+                                    indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, target)
     return target
 
 

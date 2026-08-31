@@ -32,6 +32,46 @@ def normalize_group(value: object) -> str:
     return value
 
 
+def validate_category_config(config) -> list[dict]:
+    """Validate reviewed Amazon.es category URL/quota config before a run."""
+    rows = config.get("categories", []) if isinstance(config, Mapping) else config
+    if not isinstance(rows, list) or not rows:
+        raise QuotaError("类目配置必须是非空数组")
+    normalized = []
+    groups = set()
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, Mapping):
+            raise QuotaError("类目配置第 %d 项必须是对象" % index)
+        group = normalize_group(row.get("category_group") or row.get("group"))
+        if not group:
+            raise QuotaError("类目配置第 %d 项缺少 group" % index)
+        url = str(row.get("url") or row.get("ranking_url") or "").strip()
+        if url:
+            parsed = urlsplit(url)
+            if parsed.scheme != "https" or parsed.netloc.lower() not in {"amazon.es", "www.amazon.es"}:
+                raise QuotaError("类目配置第 %d 项 URL 必须是 Amazon.es HTTPS 地址" % index)
+        try:
+            quota = int(row.get("quota"))
+        except (TypeError, ValueError):
+            raise QuotaError("类目配置第 %d 项 quota 必须是整数" % index)
+        if quota < 1:
+            raise QuotaError("类目配置第 %d 项 quota 必须为正数" % index)
+        if group in groups:
+            raise QuotaError("类目 group 重复：%s" % group)
+        groups.add(group)
+        normalized.append({**dict(row), "group": group, "url": url, "quota": quota})
+    target = config.get("target_unique") if isinstance(config, Mapping) else None
+    if target is not None:
+        try:
+            target = int(target)
+        except (TypeError, ValueError):
+            raise QuotaError("target_unique 必须是整数")
+        total = sum(row["quota"] for row in normalized)
+        if target != total:
+            raise QuotaError("target_unique=%d 与 quota 总和=%d 不一致" % (target, total))
+    return normalized
+
+
 def normalize_source_url(value: object) -> str:
     """Normalize only URL noise used by Amazon's ranking links.
 

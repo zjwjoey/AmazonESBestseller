@@ -288,13 +288,18 @@ class DeepSeekTranslator:
         result["translation_status"] = "success" if all(result.get(key) for key in expected) else "partial"
         return result
 
-    def translate_record(self, record: Mapping[str, Any]) -> dict:
+    def translate_record(self, record: Mapping[str, Any], repair_partial: bool = False) -> dict:
         asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
         if not asin:
             return {"asin": "", "translation_status": "failed", "translation_error": "missing asin"}
         source_hash = self.source_hash(record)
         cached = self.cache.get(asin)
-        if (cached is not None and cached.get("translation_status") in {"success", "partial"}
+        if (cached is not None and cached.get("translation_status") == "success"
+                and cached.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION
+                and cached.get("translation_source_hash") == source_hash):
+            return dict(cached)
+        if (cached is not None and cached.get("translation_status") == "partial"
+                and not repair_partial
                 and cached.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION
                 and cached.get("translation_source_hash") == source_hash):
             return dict(cached)
@@ -316,9 +321,9 @@ class DeepSeekTranslator:
         self.cache[asin] = result
         return self._public_result(result)
 
-    def translate_records(self, records: Iterable[Mapping[str, Any]]) -> list[dict]:
+    def translate_records(self, records: Iterable[Mapping[str, Any]], repair_partial: bool = False) -> list[dict]:
         results = []
         for record in records:
-            results.append(self.translate_record(record))
+            results.append(self.translate_record(record, repair_partial=repair_partial))
             self.save_cache()
         return results

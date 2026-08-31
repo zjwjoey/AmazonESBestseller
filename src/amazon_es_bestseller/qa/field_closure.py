@@ -9,6 +9,7 @@ to be distinguished from a page that did not expose the field.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 import json
 import re
 from pathlib import Path
@@ -220,9 +221,25 @@ def _html_asin(html: str) -> str:
     return ""
 
 
-def _html_by_asin(html_dir: Optional[str | Path | Iterable[str | Path]]) -> dict[str, str]:
-    """Index saved detail HTML by its embedded ASIN, preserving first evidence."""
-    indexed: dict[str, str] = {}
+class _LazyHtmlByAsin(dict):
+    """ASIN→HTML mapping that indexes paths without loading every page."""
+    def __init__(self, paths: dict[str, Path]):
+        super().__init__()
+        self._paths = paths
+
+    def get(self, key, default=None):
+        path = self._paths.get(str(key).upper())
+        if path is None:
+            return default
+        try:
+            return path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return default
+
+
+def _html_by_asin(html_dir: Optional[str | Path | Iterable[str | Path]]) -> Mapping[str, str]:
+    """Index saved detail HTML by ASIN while keeping page bodies lazy."""
+    indexed: dict[str, Path] = {}
     for root in _html_roots(html_dir):
         for path in sorted(root.rglob("*.html")):
             try:
@@ -230,9 +247,11 @@ def _html_by_asin(html_dir: Optional[str | Path | Iterable[str | Path]]) -> dict
             except OSError:
                 continue
             asin = _html_asin(html)
+            if not asin and re.fullmatch(r"[A-Z0-9]{10}", path.stem, re.I):
+                asin = path.stem.upper()
             if asin and asin not in indexed:
-                indexed[asin] = html
-    return indexed
+                indexed[asin] = path
+    return _LazyHtmlByAsin(indexed)
 
 
 def _read_ranking_html(ranking_html_dir: Optional[str | Path | Iterable[str | Path]]) -> str:
@@ -268,7 +287,7 @@ def _html_parent_values(html: str) -> list[str]:
 
 def _html_visible_evidence(field: str, html: str) -> bool:
     """Check field-specific visible markup instead of generic ID/CSS noise."""
-    soup = BeautifulSoup(html, "lxml")
+    soup = _cached_soup(html)
     if field == "seller":
         selectors = ("#merchantInfoFeature_feature_div", "#sellerProfileTriggerId",
                      '#tabular-buybox .tabular-buybox-text[role="text"]')
@@ -295,6 +314,12 @@ def _html_visible_evidence(field: str, html: str) -> bool:
         return any(el.select("li") for sel in ("#feature-bullets", "#featurebullets_feature_div", "#pqv-feature-bullets")
                    for el in soup.select(sel))
     return False
+
+
+@lru_cache(maxsize=8)
+def _cached_soup(html: str):
+    """Avoid reparsing the same multi-megabyte page once per audited field."""
+    return BeautifulSoup(html, "lxml")
 
 
 def _clean_text_pair(row) -> bool:
@@ -454,8 +479,15 @@ def _classify(field: str, source: bool, raw: Any, canonical: Any, derived: Any,
 
 def _audit_one(field: str, asin: str, record: Mapping, detail: Mapping,
                ranking: Mapping, html: str) -> FieldClosureResult:
-    source, source_evidence = _source_evidence(field, record, detail, ranking, html)
     raw = _raw_value(field, record, detail, ranking)
+
+    # Once a raw value is already present, source evidence is established by the
+    # raw input below.  Avoid rescanning multi-megabyte saved HTML for every
+    # field; HTML inspection is only needed to explain an otherwise empty raw
+    # value (the PARSER_MISSED/MAPPING_MISSED path).
+    source, source_evidence = _source_evidence(
+        field, record, detail, ranking, "" if _has(raw) else html
+    )
     if _has(raw) and not source:
         source = True
         source_evidence = ["raw_input"]
@@ -638,7 +670,7 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
         asin = normalize_asin(product.get("asin"))
         detail = details_by.get(asin, {})
         ranking = rankings_by.get(asin, {})
-        html = html_by_asin.get(asin) or _find_html(html_dir, asin)
+        html = html_by_asin.get(asin) or ""
         # When a run directory is supplied, category evidence comes only from
         # ranking_*.html, while detail HTML remains available for other fields.
         if run_dir and ranking_html:

@@ -175,6 +175,33 @@ translation is not mistaken for a complete failure. Before constructing the DS c
 it prints the request summary and requires an explicit `YES`; any other input (including
 EOF) cancels without an API request. `--offline translate-ds` is rejected.
 
+需要复用本机 Chrome 登录会话时，可显式传入 Chrome 的用户配置目录。程序只让
+Playwright 使用该持久化上下文，不读取或导出 Cookie、本地存储等会话内容；运行前
+应关闭正在使用同一配置目录的 Chrome 窗口，避免配置锁冲突：
+
+```powershell
+python -m amazon_es_bestseller.cli collect `
+  --rankings-file outputs/scale_1000/rankings_batch_001.json `
+  --manifest outputs/scale_1000/manifest_profile5.json `
+  --out-dir outputs/scale_1000/detail_profile5 `
+  --profile-dir "$env:LOCALAPPDATA\Google\Chrome\User Data" `
+  --headful
+```
+
+长任务会在 `checkpoints/<ASIN>.json` 逐条记录成功、失败或门禁停止结果，
+可安全中断后续跑。隔离目录只影响详情计划，不会修改原始榜单 JSON。
+需要外部监控时可加 `collect --progress outputs/run_progress.json`，该文件会在
+每个 ASIN 终态后更新。
+
+详情完成后可用 `download-images --products products.json --out-dir images
+--report image_download.json` 按 ASIN 串行补齐原图缓存。
+
+正式业务导出如只需要两张产品表，可使用 `export --profile business`；默认
+`research` 仍输出 `类目规划`、西语清单、中文清单三张表。
+
+4500 SKU 任务配置位于 `configs/amazon_es_4500sku_categories.json`（15 个类目×300）。
+先用榜单分页生成候选并检查每类唯一 ASIN 缺口，再启动详情采集；不能仅凭配额文件宣布完成。
+
 The minimum local verification is:
 
 ```powershell
@@ -198,6 +225,9 @@ amazon-es audit-fields --products outputs/products.json `
   --details outputs/details.json --rankings outputs/rankings.json `
   --out outputs/field_closure.json
 ```
+
+审查开始时会立即打印 SKU 数量和 HTML 证据是否启用；由于大型详情 HTML
+需要离线解析，字段明细和最终统计会在整批处理完成后一次性写出。
 
 `export` applies the same closure audit as a gate. `--details` and `--rankings`
 default to `outputs/details.json` and `outputs/rankings.json`, so the gate runs

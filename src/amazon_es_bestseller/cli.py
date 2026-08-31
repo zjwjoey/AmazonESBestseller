@@ -119,14 +119,26 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
     if not args.urls and not args.rankings_file:
         parser.error("collect 需要 --urls 或 --rankings-file")
     from .access.browser import BrowserSession
-    from .collection.detail import collect_details, reparse_saved_details
+    from .collection.detail import (CURRENT_DETAIL_SCHEMA_VERSION,
+                                    collect_details, reparse_saved_details)
     from .collection.planning import DetailState, build_plan, collect_asins
+    from .collection.checkpoints import read_checkpoint
     from .collection.ranking import collect_rankings
 
     out_dir = str(Path(args.out_dir).resolve())
-    with BrowserSession(headless=not args.headful) as session:
-        rankings = (_load_json(args.rankings_file) if args.rankings_file
-                    else collect_rankings(args.urls, session, out_dir))
+    with BrowserSession(headless=not args.headful,
+                        profile_dir=args.profile_dir or None) as session:
+        if args.rankings_file:
+            rankings = _load_json(args.rankings_file)
+        elif args.pages_per_url != 1:
+            rankings = collect_rankings(args.urls, session, out_dir,
+                                        pages_per_url=args.pages_per_url)
+        else:
+            rankings = collect_rankings(args.urls, session, out_dir)
+        # Quarantine affects detail planning only; raw ranking evidence remains
+        # unchanged for audit/export.
+        quarantine_dir = Path(out_dir) / "quarantine"
+        quarantined = {p.stem.upper() for p in quarantine_dir.rglob("*.html")}
         if args.rankings_only:
             _save_json(rankings, str(Path(out_dir) / "rankings.json"))
             print("collect rankings-only 完成：榜单 %d 条 → %s" %
@@ -139,15 +151,43 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
             rankings = [r for r in rankings if str(r.get("asin") or "").strip().upper() in allowed]
             if not rankings:
                 raise SystemExit("manifest 与榜单记录没有可匹配的 ASIN")
+        planning_rankings = [r for r in rankings
+                             if str(r.get("asin") or "").strip().upper() not in quarantined]
+        skipped = len(rankings) - len(planning_rankings)
+        if skipped:
+            print("已跳过隔离 ASIN %d 条详情计划，原始榜单证据保留" % skipped)
         state = DetailState(Path(out_dir) / "state" / "details_state.json")
+        # Promote completed per-ASIN checkpoints before building the next plan;
+        # this is what makes Ctrl-C/resume useful even when the batch summary
+        # was never written.
+        checkpoint_records = []
+        for asin in {str(r.get("asin") or "").strip().upper() for r in rankings}:
+            checkpoint = read_checkpoint(Path(out_dir) / "checkpoints", asin)
+            if checkpoint and checkpoint.get("status") == "success" and checkpoint.get("record"):
+                checkpoint_records.append(checkpoint["record"])
+        if checkpoint_records:
+            state.update(checkpoint_records)
+            state.save()
         # Upgrade old cached records from local HTML before planning.  This is
         # deliberately offline and avoids re-requesting pages after a parser
         # schema bump.
-        reparsed = reparse_saved_details(Path(out_dir) / "html", state)
+        stale_asins = [r.get("asin") for r in state.records()
+                       if int(r.get("detail_schema_version", 0) or 0)
+                       < CURRENT_DETAIL_SCHEMA_VERSION]
+        reparsed = (reparse_saved_details(Path(out_dir) / "html", state,
+                                           asins=stale_asins)
+                    if stale_asins else [])
         if reparsed:
             state.save()
-        plan = build_plan(rankings, state)
-        details = collect_details(collect_asins(plan), session, out_dir)
+        plan = build_plan(planning_rankings, state)
+        planned_asins = collect_asins(plan)
+        if args.progress:
+            def _write_progress(event):
+                _save_json({"planned": len(planned_asins), **event}, args.progress)
+            details = collect_details(planned_asins, session, out_dir,
+                                      on_progress=_write_progress)
+        else:
+            details = collect_details(planned_asins, session, out_dir)
         state.update(details)
         state.save()
         # details.json 用 state 全量重建：resume 场景下 collect_details 只产出
@@ -173,13 +213,14 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
 
 def cmd_select_quota(args) -> None:
     """根据已采集榜单和审核过的 URL 配置生成 150/50 manifest。"""
-    from .collection.quota import annotate_groups, normalize_group, select_quota
+    from .collection.quota import annotate_groups, normalize_group, select_quota, validate_category_config
 
     rankings = _load_json(args.rankings)
     config = _load_json(args.config)
-    rows = config.get("categories", []) if isinstance(config, dict) else config
-    if not isinstance(rows, list) or not rows:
-        raise SystemExit("类目配置必须是非空数组: %s" % args.config)
+    try:
+        rows = validate_category_config(config)
+    except ValueError as exc:
+        raise SystemExit("%s: %s" % (args.config, exc))
     quotas: dict[str, int] = {}
     for row in rows:
         if not isinstance(row, dict):
@@ -203,6 +244,32 @@ def cmd_select_quota(args) -> None:
     _save_json({"summary": summary, "records": records}, args.out)
     print("select-quota 完成：家居 %d、DIY %d、总计 %d → %s"
           % (summary.get("hogar", 0), summary.get("diy", 0), len(records), args.out))
+
+
+def cmd_download_images(args) -> None:
+    """按 ASIN 下载缺失原图；串行、可恢复，不调用 DS。"""
+    from .collection.images import download_images
+    records = _load_json(args.products)
+    if not isinstance(records, list):
+        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
+    result = download_images(records, args.out_dir, delay_seconds=args.delay)
+    _save_json(result, args.report)
+    print("download-images 完成：下载 %d、缓存 %d、失败 %d → %s" %
+          (sum(v.get("status") == "downloaded" for v in result.values()),
+           sum(v.get("status") == "cached" for v in result.values()),
+          sum(v.get("status") == "failed" for v in result.values()), args.report))
+
+
+def cmd_reconcile_task(args) -> None:
+    from .qa.reconcile import reconcile_task
+    task = _load_json(args.task)
+    items = _load_json(args.items)
+    products = _load_json(args.products)
+    translations = _load_json(args.translations) if args.translations else []
+    report = reconcile_task(task, items, products, translations=translations)
+    _save_json(report, args.out)
+    print("reconcile-task：%s，目标 %d → %s" %
+          (report["status"], report["target_count"], args.out))
 
 
 # ---------- translate-ds（联网 API） ----------
@@ -238,7 +305,10 @@ def cmd_translate_ds(args) -> None:
     )
     output: dict[str, dict] = {}
     for product in products:
-        result = translator.translate_record(product)
+        if args.repair_partial:
+            result = translator.translate_record(product, repair_partial=True)
+        else:
+            result = translator.translate_record(product)
         asin = str(result.get("asin") or product.get("asin") or "").strip().upper()
         if asin:
             output[asin] = result
@@ -359,6 +429,12 @@ def cmd_audit_fields(args) -> None:
     details = _load_json(args.details) if args.details else []
     rankings = _load_json(args.rankings) if args.rankings else []
     translations = _load_json(args.translations) if args.translations else None
+    # Field closure may inspect large saved HTML pages and therefore take a few
+    # minutes.  Emit an immediate, flushed status line so a long-running audit
+    # is distinguishable from a hung process; the final summary remains the
+    # authoritative result.
+    print("开始字段闭环审查：%d SKU；HTML=%s" %
+          (len(products), "已启用" if args.html_dir else "未启用"), flush=True)
     report = audit_field_closure(products, details=details, rankings=rankings,
                                  html_dir=args.html_dir or None, run_dir=args.run_dir or None,
                                  workbook_path=args.workbook or None, translations=translations)
@@ -425,7 +501,8 @@ def cmd_export(args) -> None:
     wb = export_workbook(products, translations=translations,
                          images_by_asin=images_by_asin,
                          category_planning=category_planning,
-                         prev_workbook=prev_workbook, out_path=args.out)
+                         prev_workbook=prev_workbook, out_path=args.out,
+                         profile=getattr(args, "profile", "research"))
     print("export 完成：%s（%s 条商品，%d 张表）" % (args.out, len(products), len(wb.sheetnames)))
 
 
@@ -444,9 +521,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="榜单页 URL（/zgbs/<NODE>）")
     c.add_argument("--out-dir", default=str(OUTPUTS), help="输出目录（默认 outputs/）")
     c.add_argument("--headful", action="store_true", help="有头浏览器（默认 headless）")
+    c.add_argument("--profile-dir", default="",
+                   help="可选：复用本机 Chrome 用户配置目录（例如 Chrome User Data）")
+    c.add_argument("--pages-per-url", type=int, default=1,
+                   help="每个榜单 URL 依次访问的页数；默认 1，使用 ?pg=N 分页")
     c.add_argument("--rankings-only", action="store_true", help="只采集榜单页，不访问详情页")
     c.add_argument("--rankings-file", default="", help="复用已保存榜单 JSON，仅访问 manifest 中详情")
     c.add_argument("--manifest", default="", help="详情采集 ASIN manifest JSON（与 --rankings-file 配合）")
+    c.add_argument("--progress", default="", help="可选：逐 ASIN 写入运行进度 JSON")
     c.set_defaults(func=lambda a, p=c: cmd_collect(a, p))
 
     s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")
@@ -454,6 +536,21 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--config", required=True, help="类目配置 JSON")
     s.add_argument("--out", required=True, help="配额 manifest JSON")
     s.set_defaults(func=cmd_select_quota)
+
+    im = sub.add_parser("download-images", help="联网：按 ASIN 串行下载缺失原图")
+    im.add_argument("--products", required=True, help="商品 JSON 数组")
+    im.add_argument("--out-dir", required=True, help="图片缓存目录")
+    im.add_argument("--report", required=True, help="下载结果 JSON")
+    im.add_argument("--delay", type=float, default=1.0, help="图片请求间隔秒数")
+    im.set_defaults(func=cmd_download_images)
+
+    rc = sub.add_parser("reconcile-task", help="离线：对账任务目标与各阶段 ASIN 集合")
+    rc.add_argument("--task", required=True)
+    rc.add_argument("--items", required=True)
+    rc.add_argument("--products", required=True)
+    rc.add_argument("--translations", default="")
+    rc.add_argument("--out", required=True)
+    rc.set_defaults(func=cmd_reconcile_task)
 
     e = sub.add_parser("enrich", help="离线：榜单+详情 → 规范化+中文派生商品表")
     e.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"),
@@ -497,6 +594,8 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--max-retries", type=int, default=2)
     t.add_argument("--backoff-seconds", type=float, default=1.0)
     t.add_argument("--timeout", type=float, default=60.0)
+    t.add_argument("--repair-partial", action="store_true",
+                   help="已确认调用 API 时，绕过同源 partial 缓存并补翻缺失字段")
     t.set_defaults(func=cmd_translate_ds)
 
     q = sub.add_parser("qa", help="离线：商品表 → QA 结果")
@@ -532,6 +631,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--out", default=str(OUTPUTS / "选品清单.xlsx"))
     x.add_argument("--force", action="store_true",
                    help="跳过 QA 硬门禁（存在 P0/P1 也导出，保留上游证据）")
+    x.add_argument("--profile", choices=("research", "business"), default="research",
+                   help="research=类目规划+双语三表；business=仅西语/中文两表")
     x.set_defaults(func=cmd_export)
     return parser
 

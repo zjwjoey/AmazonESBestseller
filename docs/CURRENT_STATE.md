@@ -2,6 +2,20 @@
 
 Last updated: 2026-08-27
 
+Implementation update (2026-08-31): detail collection now writes an atomic
+per-ASIN terminal checkpoint under `checkpoints/<ASIN>.json`; state and run
+manifests also use atomic replacement. Quarantine entries are excluded only
+from the detail planning view and never removed from raw ranking evidence.
+榜单采集支持 `collect --pages-per-url N`，按同一类目 URL 的 `?pg=N` 顺序
+扩展分页；默认仍为 1 页，避免未明确配置时扩大访问范围。
+图片下载模块按 `ASIN → image_url → 本地原图` 建立可恢复缓存，缺失或失败
+不会覆盖已有文件，也不改变详情原始记录。
+普通无效页和最终 URL ASIN 冲突会按 ASIN 隔离并继续；403/429/CAPTCHA 等
+访问限制仍会停止联网并保留证据。
+新增 `configs/amazon_es_4500sku_categories.json`，定义 15 个一级类目、每类
+300 个、总目标 4500；该配置已通过离线 URL/group/配额总和校验，但真实候选
+覆盖和最终唯一 ASIN 数量仍需联网发现与采集验证。
+
 This document describes the current verified state of the project.
 
 ## 1. Current phase
@@ -313,3 +327,30 @@ real full-flow Hogar y cocina closure validation, not broad category expansion.
 
 The 2026-08-27 closure pass adds versioned detail migration, hash-aware
 translation caching, field-level translation QA and export-gate enforcement.
+
+## 29. 1000-SKU ranking manifest (2026-08-29)
+
+The configured 42 ranking URLs were collected serially for pages 1 and 2. The
+combined offline evidence contains 2520 ranking records and produces an exact
+1000-record, globally unique manifest with quotas hogar 245, diy 180, office
+145, garden 130, car 110, pets 100 and beauty 90. Detail collection remains a
+separate guarded stage. The first guarded 50-SKU detail batch was attempted
+after manifest validation, but Amazon returned an HTTP 200 challenge page on
+the second request. The gate stopped the batch after one normal detail page;
+both normal and challenge HTML were preserved and no retry or bypass was used.
+
+## 30. 4500-SKU preparation and audit status (2026-08-31)
+
+`configs/amazon_es_4500sku_categories.json` defines 15 category quotas of 300
+(target 4500) and passes offline quota validation. It is a task input, not proof
+of candidate coverage. The current real evidence run stopped at Amazon's
+challenge gate with 676 valid detail records out of the 1000-item manifest;
+324 items remain without valid detail evidence. The offline closure report is
+`outputs/scale_1000/detail_full/field_closure_partial.json` and its Markdown
+companion. `audit-fields` now prints an immediate start status before the
+expensive HTML pass, then emits the authoritative summary after completion.
+
+The synthetic offline scale benchmark is available at
+`scripts/benchmark_scale.py`. A 5000-record business export completed with two
+product sheets (5001 rows each) in 70.905 seconds; this is a capacity signal only
+and is not Amazon data.

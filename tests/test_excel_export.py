@@ -44,6 +44,11 @@ def test_export_3_sheets(tmp_path, export_records):
     assert wb.sheetnames == ['类目规划', '西班牙语选品清单', '中文选品清单']
 
 
+def test_export_business_profile_has_two_product_sheets(export_records):
+    wb = export_workbook(export_records, profile="business")
+    assert wb.sheetnames == ['西班牙语选品清单', '中文选品清单']
+
+
 def test_zh_sheet_frozen_26_columns(tmp_path, export_records):
     wb = export_workbook(export_records, out_path=str(tmp_path / "out.xlsx"))
     ws = wb['中文选品清单']

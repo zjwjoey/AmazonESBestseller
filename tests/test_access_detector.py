@@ -60,3 +60,10 @@ def test_browser_session_smoke():
     assert hasattr(BrowserSession, "goto")
     assert hasattr(BrowserSession, "wait_for_product_page")
     assert hasattr(BrowserSession, "wait_between_requests")
+
+
+def test_browser_session_accepts_profile_dir_without_starting_browser(tmp_path):
+    profile_dir = tmp_path / "chrome-user-data"
+    session = BrowserSession(profile_dir=profile_dir)
+
+    assert session.profile_dir == str(profile_dir)

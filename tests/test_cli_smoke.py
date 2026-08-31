@@ -69,6 +69,7 @@ def test_collect_rankings_only_smoke_uses_fake_browser(tmp_path, monkeypatch):
     class FakeSession:
         def __init__(self, **kwargs):
             self.headless = kwargs["headless"]
+            self.profile_dir = kwargs["profile_dir"]
 
         def __enter__(self):
             return self
@@ -79,16 +80,70 @@ def test_collect_rankings_only_smoke_uses_fake_browser(tmp_path, monkeypatch):
     calls = []
 
     def fake_collect_rankings(urls, session, out_dir):
-        calls.append((urls, session.headless, out_dir))
+        calls.append((urls, session.headless, session.profile_dir, out_dir))
         return [{"asin": "B000000001", "ranking_source_url": urls[0]}]
 
     monkeypatch.setattr(browser, "BrowserSession", FakeSession)
     monkeypatch.setattr(ranking, "collect_rankings", fake_collect_rankings)
     out_dir = tmp_path / "run"
     assert main(["collect", "--rankings-only", "--urls", "https://example.invalid/rank",
-                 "--out-dir", str(out_dir)]) == 0
+                 "--out-dir", str(out_dir), "--profile-dir", "C:/Chrome/User Data"]) == 0
     assert calls and calls[0][0] == ["https://example.invalid/rank"]
+    assert calls[0][2] == "C:/Chrome/User Data"
     assert json.loads((out_dir / "rankings.json").read_text(encoding="utf-8"))[0]["asin"] == "B000000001"
+
+
+def test_collect_preserves_quarantined_asins_in_rankings_only(tmp_path, monkeypatch):
+    from amazon_es_bestseller.access import browser
+    from amazon_es_bestseller.collection import ranking
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): return False
+
+    captured = []
+    monkeypatch.setattr(browser, "BrowserSession", FakeSession)
+    monkeypatch.setattr(ranking, "collect_rankings", lambda urls, session, out_dir: [
+        {"asin": "B084ZNZV3S", "ranking_source_url": urls[0]},
+        {"asin": "B000000001", "ranking_source_url": urls[0]},
+    ])
+    out_dir = tmp_path / "run"
+    quarantine = out_dir / "quarantine" / "B084ZNZV3S"
+    quarantine.mkdir(parents=True)
+    (quarantine / "B084ZNZV3S.html").write_text("invalid", encoding="utf-8")
+    assert main(["collect", "--rankings-only", "--urls", "https://example.invalid/rank",
+                 "--out-dir", str(out_dir)]) == 0
+    records = json.loads((out_dir / "rankings.json").read_text(encoding="utf-8"))
+    assert [r["asin"] for r in records] == ["B084ZNZV3S", "B000000001"]
+
+
+def test_collect_excludes_quarantined_asins_only_from_detail_plan(tmp_path, monkeypatch):
+    from amazon_es_bestseller.access import browser
+    from amazon_es_bestseller.collection import ranking, detail as detail_mod
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): return False
+
+    captured = []
+    monkeypatch.setattr(browser, "BrowserSession", FakeSession)
+    monkeypatch.setattr(ranking, "collect_rankings", lambda urls, session, out_dir: [
+        {"asin": "B084ZNZV3S", "ranking_source_url": urls[0]},
+        {"asin": "B000000001", "ranking_source_url": urls[0]},
+    ])
+    monkeypatch.setattr(detail_mod, "collect_details",
+                        lambda asins, session, out_dir: captured.append(list(asins)) or [])
+    out_dir = tmp_path / "run"
+    quarantine = out_dir / "quarantine" / "B084ZNZV3S"
+    quarantine.mkdir(parents=True)
+    (quarantine / "B084ZNZV3S.html").write_text("invalid", encoding="utf-8")
+    assert main(["collect", "--urls", "https://example.invalid/rank",
+                 "--out-dir", str(out_dir)]) == 0
+    assert captured == [["B000000001"]]
 
 
 def test_finalize_manifest_running_defaults_to_success():

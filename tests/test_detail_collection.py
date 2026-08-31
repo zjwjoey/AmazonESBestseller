@@ -33,13 +33,12 @@ class FakeSession:
         return None
 
 
-def test_collect_details_stops_on_final_asin_mismatch(tmp_path):
+def test_collect_details_isolates_final_asin_mismatch(tmp_path):
     html = '<html><body><input id="ASIN" value="B075JJRFVV"></body></html>'
     session = FakeSession(200, html, "https://www.amazon.es/dp/B075JJRFVV")
-    with pytest.raises(AccessStopError, match="ASIN"):
-        collect_details(["B078C6QR1C"], session, str(tmp_path))
-    assert (tmp_path / "html" / "B078C6QR1C.html").exists()
-    assert not (tmp_path / "details.json").exists()
+    assert collect_details(["B078C6QR1C"], session, str(tmp_path)) == []
+    assert not (tmp_path / "html" / "B078C6QR1C.html").exists()
+    assert (tmp_path / "quarantine" / "B078C6QR1C" / "B078C6QR1C.html").exists()
 
 
 def test_collect_details_rechecks_cached_blocked_page(tmp_path):

@@ -16,23 +16,36 @@ class BrowserSession:
 
     PAGE_DELAY_SECONDS = 2.0
 
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = True, profile_dir: Optional[str] = None):
         self.headless = headless
+        self.profile_dir = str(profile_dir) if profile_dir is not None else None
         self._playwright = None
         self.browser = None
         self.page = None
+        self.context = None
 
     def __enter__(self) -> "BrowserSession":
         from playwright.sync_api import sync_playwright
         self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=self.headless)
-        self.page = self.browser.new_page()
+        if self.profile_dir:
+            # Persistent context reuses the user's browser profile/session without
+            # exposing or reading cookies/local storage in application code.
+            self.context = self._playwright.chromium.launch_persistent_context(
+                user_data_dir=self.profile_dir,
+                headless=self.headless,
+            )
+            self.browser = self.context
+        else:
+            self.browser = self._playwright.chromium.launch(headless=self.headless)
+            self.context = self.browser
+        self.page = self.context.new_page()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         if self.browser is not None:
             self.browser.close()
             self.browser = None
+            self.context = None
         if self._playwright is not None:
             self._playwright.stop()
             self._playwright = None

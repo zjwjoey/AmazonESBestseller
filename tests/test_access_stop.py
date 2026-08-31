@@ -3,6 +3,7 @@
 
 全部离线：用 fake session 模拟受限访问，不启动真实浏览器。
 """
+import json
 import pytest
 
 from amazon_es_bestseller.access.detector import AccessStopError, require_normal_access, detect_access_status
@@ -167,8 +168,9 @@ def test_collect_details_resume_rejects_normal_non_product_html(tmp_path):
     from amazon_es_bestseller.collection.detail import collect_details
     (tmp_path / "html").mkdir()
     (tmp_path / "html" / "B008YETL18.html").write_text("<html><body>hola</body></html>", encoding="utf-8")
-    with pytest.raises(AccessStopError, match="校验失败"):
-        collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
+    details = collect_details(["B008YETL18"], _FakeSession(200, NORMAL_HTML), str(tmp_path))
+    assert details == []
+    assert (tmp_path / "quarantine" / "B008YETL18" / "B008YETL18.html").exists()
 
 
 def test_collect_details_resumes_after_challenge_cache_is_moved_out(tmp_path):
@@ -232,6 +234,9 @@ def test_collect_details_timeout_isolates_and_continues(tmp_path):
     assert not (tmp_path / "html" / "B0CK2B7GW5.html").exists()  # 失败页无落盘
     assert (tmp_path / "html" / "B008YETL18.html").exists()
     assert (tmp_path / "details.json").exists()
+    checkpoints = tmp_path / "checkpoints"
+    assert json.loads((checkpoints / "B0CK2B7GW5.json").read_text(encoding="utf-8"))["status"] == "failed"
+    assert json.loads((checkpoints / "B008YETL18.json").read_text(encoding="utf-8"))["status"] == "success"
 
 
 def test_browser_wait_helpers_use_bounded_render_delay_without_dom_block(tmp_path, monkeypatch):

@@ -21,7 +21,7 @@ def test_cli_help_lists_subcommands(capsys):
         main(["--help"])
     assert ei.value.code == 0
     out = capsys.readouterr().out
-    for cmd in ("collect", "enrich", "qa", "audit-fields", "export", "select-quota", "translate-ds", "repair-cache"):
+    for cmd in ("collect", "enrich", "qa", "audit-fields", "export", "select-quota", "download-images", "translate-ds", "repair-cache"):
         assert cmd in out
 
 

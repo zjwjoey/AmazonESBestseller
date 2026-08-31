@@ -166,7 +166,7 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
     return records
 
 
-def collect_rankings(urls: List[str], session, out_dir: str) -> List[dict]:
+def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int = 1) -> List[dict]:
     """串行采集榜单页：原始 HTML 落盘 runs/YYYYMMDD_HHMMSS/html/ + rankings.json。
 
     需要 BrowserSession（playwright 仅在 __enter__ 时导入）；联网仅发生在
@@ -180,21 +180,27 @@ def collect_rankings(urls: List[str], session, out_dir: str) -> List[dict]:
     html_dir = os.path.join(run_dir, "html")
     os.makedirs(html_dir, exist_ok=True)
 
+    if int(pages_per_url) < 1:
+        raise ValueError("pages_per_url must be >= 1")
     records: List[dict] = []
     collected_at = datetime.now().isoformat(timespec="seconds")
-    for i, url in enumerate(urls):
-        status = session.goto(url)
-        session.wait_between_requests()
-        html = session.page.content()
-        with open(os.path.join(html_dir, "ranking_%02d.html" % i), "w", encoding="utf-8") as f:
-            f.write(html)  # 先保留证据，再判定访问状态
-        state = detect_access_status(status, html)
-        require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
-                              % (status, url, len(records)))
-        for r in parse_bestsellers_page(html, url, collected_at):
-            r["status_code"] = status
-            r["access_state"] = state.value
-            records.append(r)
+    page_index = 0
+    for url in urls:
+        for page_no in range(1, int(pages_per_url) + 1):
+            page_url = url if page_no == 1 else (url + ("&" if "?" in url else "?") + "pg=%d" % page_no)
+            status = session.goto(page_url)
+            session.wait_between_requests()
+            html = session.page.content()
+            with open(os.path.join(html_dir, "ranking_%03d.html" % page_index), "w", encoding="utf-8") as f:
+                f.write(html)  # 先保留证据，再判定访问状态
+            page_index += 1
+            state = detect_access_status(status, html)
+            require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
+                                  % (status, page_url, page_index - 1))
+            for r in parse_bestsellers_page(html, page_url, collected_at):
+                r["status_code"] = status
+                r["access_state"] = state.value
+                records.append(r)
     with open(os.path.join(run_dir, "rankings.json"), "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
     return records

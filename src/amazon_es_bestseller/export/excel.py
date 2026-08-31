@@ -302,7 +302,8 @@ def export_workbook(records: List[Mapping],
                     category_planning: Optional[List] = None,
                     prev_workbook=None,
                     out_path=None,
-                    collected_at: Optional[str] = None) -> openpyxl.Workbook:
+                    collected_at: Optional[str] = None,
+                    profile: str = "research") -> openpyxl.Workbook:
     """构建默认 3-sheet 契约工作簿（DATA_MODEL §20-§23）并返回；仅当给 out_path 时保存。
 
     records: 合并后的商品表记录（内部拷贝 + ASIN 升序确定性排序，§24）；
@@ -318,6 +319,9 @@ def export_workbook(records: List[Mapping],
     records.sort(key=lambda r: str(r.get('asin') or '').upper())
 
     wb = openpyxl.Workbook()
+
+    if profile not in {"research", "business"}:
+        raise ValueError("unknown export profile: %s" % profile)
 
     # ---------- Sheet1 类目规划（人工维护） ----------
     ws_cat = wb.active
@@ -345,6 +349,9 @@ def export_workbook(records: List[Mapping],
                 cell.font = F_BODY
                 cell.alignment = WRAP
     ws_cat.freeze_panes = 'A2'
+
+    if profile == "business":
+        wb.remove(ws_cat)
 
     # ---------- Sheet2 西班牙语选品清单（不嵌图，§21/§23） ----------
     ws_es = wb.create_sheet('西班牙语选品清单')
