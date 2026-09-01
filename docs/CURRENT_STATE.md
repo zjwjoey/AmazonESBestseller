@@ -371,3 +371,7 @@ Two products had no usable primary Buy Box current price in the captured page;
 the collector left those values empty rather than using related-product prices.
 This smoke run is not a batch-collection authorization or proof of 4500-SKU
 coverage.
+
+`configs/tasks/scale_1000_recovery.json` now records the reusable historical
+1000-ASIN baseline, its ranking source and legacy detail cache. It is explicitly
+marked partial/access-stopped and preserves original collection timestamps.

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_id": "scale_1000_recovery_20260901",
+  "selection_mode": "exact_asins",
+  "target_unique": 1000,
+  "manifest_file": "outputs/scale_1000/manifest_1000.json",
+  "rankings_file": "outputs/scale_1000/rankings_pages_1_2.json",
+  "legacy_cache_dir": "outputs/scale_1000/detail_full",
+  "run_dir": "outputs/scale_1000/recovery_20260901",
+  "headful": true,
+  "request_delay_seconds": 3,
+  "request_timeout_seconds": 45,
+  "batch_size": 50,
+  "export_profile": "business",
+  "translation_policy": "ask",
+  "embed_original_images": true,
+  "status": "partial_access_stopped",
+  "evidence_note": "复用历史榜单与已保存详情；不得将历史采集时间改写为本次采集时间。"
+}
