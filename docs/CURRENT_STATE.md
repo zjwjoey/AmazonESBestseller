@@ -360,3 +360,14 @@ and is not Amazon data.
 Category-quota reconciliation now reports `target_count` and stage shortfalls
 even before a concrete ASIN manifest exists; a 4500-target shape check correctly
 reports the current 676-detail evidence as partial.
+
+## 31. Five-SKU visible-browser smoke (2026-09-01)
+
+Five serial detail requests across Hogar, DIY, Office, Garden and Automotive
+completed with HTTP 200 and `NORMAL` access state. All five preserved title,
+rating, review count and image evidence; each also preserved 10–36 raw detail
+attributes and 4–8 feature bullets. ASINs matched the requested/final URLs.
+Two products had no usable primary Buy Box current price in the captured page;
+the collector left those values empty rather than using related-product prices.
+This smoke run is not a batch-collection authorization or proof of 4500-SKU
+coverage.
