@@ -375,3 +375,7 @@ coverage.
 `configs/tasks/scale_1000_recovery.json` now records the reusable historical
 1000-ASIN baseline, its ranking source and legacy detail cache. It is explicitly
 marked partial/access-stopped and preserves original collection timestamps.
+
+阶段性 1500 目标配置 `configs/amazon_es_1500sku_categories.json` 已通过离线
+校验（15 个类目各 100 个）。旧 1000 manifest 只能覆盖其中 7 个类目，当前
+覆盖报告仍为 `ready=false`，所以尚未启动该阶段的批量提取。

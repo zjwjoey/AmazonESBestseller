@@ -201,6 +201,8 @@ python -m amazon_es_bestseller.cli collect `
 
 4500 SKU 任务配置位于 `configs/amazon_es_4500sku_categories.json`（15 个类目×300）。
 
+阶段性 1500 SKU 配置位于 `configs/amazon_es_1500sku_categories.json`（15 个类目×100），用于先验证多类目候选覆盖和详情闭环，再扩展到 4500。
+
 可在不联网的情况下检查候选覆盖：
 
 ```powershell

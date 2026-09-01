@@ -1,0 +1,22 @@
+{
+  "task_id": "amazon_es_1500_15x100",
+  "selection_mode": "category_quota",
+  "target_unique": 1500,
+  "categories": [
+    {"category_group": "car", "category_name": "Coche y moto", "url": "https://www.amazon.es/gp/bestsellers/automotive/", "quota": 100},
+    {"category_group": "baby", "category_name": "Bebé", "url": "https://www.amazon.es/gp/bestsellers/baby/", "quota": 100},
+    {"category_group": "beauty", "category_name": "Belleza", "url": "https://www.amazon.es/gp/bestsellers/beauty/", "quota": 100},
+    {"category_group": "electronics", "category_name": "Electrónica", "url": "https://www.amazon.es/gp/bestsellers/electronics/", "quota": 100},
+    {"category_group": "garden", "category_name": "Jardín", "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/", "quota": 100},
+    {"category_group": "grocery", "category_name": "Alimentación y bebidas", "url": "https://www.amazon.es/gp/bestsellers/grocery/", "quota": 100},
+    {"category_group": "health", "category_name": "Salud y cuidado personal", "url": "https://www.amazon.es/gp/bestsellers/hpc/", "quota": 100},
+    {"category_group": "hogar", "category_name": "Hogar y cocina", "url": "https://www.amazon.es/gp/bestsellers/kitchen/", "quota": 100},
+    {"category_group": "lighting", "category_name": "Iluminación", "url": "https://www.amazon.es/gp/bestsellers/lighting/", "quota": 100},
+    {"category_group": "luggage", "category_name": "Equipaje", "url": "https://www.amazon.es/gp/bestsellers/luggage/", "quota": 100},
+    {"category_group": "office", "category_name": "Oficina y papelería", "url": "https://www.amazon.es/gp/bestsellers/office/", "quota": 100},
+    {"category_group": "pets", "category_name": "Productos para mascotas", "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/", "quota": 100},
+    {"category_group": "sports", "category_name": "Deportes y aire libre", "url": "https://www.amazon.es/gp/bestsellers/sports/", "quota": 100},
+    {"category_group": "diy", "category_name": "Bricolaje y herramientas", "url": "https://www.amazon.es/gp/bestsellers/tools/", "quota": 100},
+    {"category_group": "toys", "category_name": "Juguetes y juegos", "url": "https://www.amazon.es/gp/bestsellers/toys/", "quota": 100}
+  ]
+}
