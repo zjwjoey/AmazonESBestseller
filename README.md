@@ -193,6 +193,17 @@ python -m amazon_es_bestseller.cli collect `
 需要外部监控时可加 `collect --progress outputs/run_progress.json`，该文件会在
 每个 ASIN 终态后更新。
 
+`collect` 启动时会先检查 Amazon.es 顶部的实际配送目的地。若目的地不是
+西班牙，程序会通过 Amazon 的正常“选择配送地点”弹窗设置西班牙邮编，默认
+使用马德里 `28001`；设置后会再次核验顶部目的地，无法确认时停止采集。可按
+任务所在城市覆盖邮编，例如 `collect --postal-code 08001 ...`。该检查只使用
+页面公开控件，不读取或导出 Cookie，也不绕过验证码或其他访问限制。
+
+若详情或榜单页遇到 Amazon 挑战页，程序默认等待 180 秒并分段检查页面是否
+自行恢复；恢复成功才继续，仍为挑战页则停止。需要人工接管时必须显式使用
+`--headful --manual-assist`，程序会在等待后暂停并让操作者自行处理页面，
+不会自动识别、输入或绕过验证码。
+
 详情完成后可用 `download-images --products products.json --out-dir images
 --report image_download.json` 按 ASIN 串行补齐原图缓存。
 

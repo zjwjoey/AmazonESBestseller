@@ -119,6 +119,7 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
     if not args.urls and not args.rankings_file:
         parser.error("collect 需要 --urls 或 --rankings-file")
     from .access.browser import BrowserSession
+    from .access.location import ensure_spain_delivery
     from .collection.detail import (CURRENT_DETAIL_SCHEMA_VERSION,
                                     collect_details, reparse_saved_details)
     from .collection.planning import DetailState, build_plan, collect_asins
@@ -128,6 +129,11 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
     out_dir = str(Path(args.out_dir).resolve())
     with BrowserSession(headless=not args.headful,
                         profile_dir=args.profile_dir or None) as session:
+        session.challenge_wait_seconds = args.challenge_wait_seconds
+        session.manual_assist = args.manual_assist
+        location = ensure_spain_delivery(session, args.postal_code)
+        if location is not None:
+            _safe_print("配送地点已确认：%s" % (location.text or "西班牙"))
         if args.rankings_file:
             rankings = _load_json(args.rankings_file)
         elif args.pages_per_url != 1:
@@ -523,6 +529,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--headful", action="store_true", help="有头浏览器（默认 headless）")
     c.add_argument("--profile-dir", default="",
                    help="可选：复用本机 Chrome 用户配置目录（例如 Chrome User Data）")
+    c.add_argument("--postal-code", default="28001",
+                   help="配送地点检查使用的西班牙邮编（默认 28001，马德里）")
+    c.add_argument("--challenge-wait-seconds", type=float, default=180.0,
+                   help="遇到挑战页时等待自动恢复的秒数（默认 180；分段轮询）")
+    c.add_argument("--manual-assist", action="store_true",
+                   help="等待后仍是挑战页时，在 --headful 浏览器中暂停并等待人工接管")
     c.add_argument("--pages-per-url", type=int, default=1,
                    help="每个榜单 URL 依次访问的页数；默认 1，使用 ?pg=N 分页")
     c.add_argument("--rankings-only", action="store_true", help="只采集榜单页，不访问详情页")
@@ -639,12 +651,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     from .access.detector import AccessStopError
+    from .access.location import DeliveryLocationError
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
         args.func(args)
-    except AccessStopError as e:
-        # 访问门禁（ARCHITECTURE §6）：非 NORMAL 停止采集，退出码 2
+    except (AccessStopError, DeliveryLocationError) as e:
+        # 访问门禁或配送地点无法确认：停止采集，退出码 2
         parser.exit(2, "!! %s\n" % e)
     return 0
 

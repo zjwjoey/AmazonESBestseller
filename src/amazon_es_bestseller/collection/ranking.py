@@ -175,6 +175,10 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
     访问门禁（ARCHITECTURE §6）：受限页 HTML 先落盘保留证据，随即抛
     AccessStopError，rankings.json 不写出（不产出不完整榜单数据）。
     """
+    # Real BrowserSession instances enforce the delivery-location invariant;
+    # offline fake sessions intentionally omit this method.
+    from ..access.location import ensure_spain_delivery
+    ensure_spain_delivery(session)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = os.path.join(str(out_dir), "runs", stamp)
     html_dir = os.path.join(run_dir, "html")
@@ -195,6 +199,16 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
                 f.write(html)  # 先保留证据，再判定访问状态
             page_index += 1
             state = detect_access_status(status, html)
+            from ..access.challenge import maybe_wait_for_challenge
+            original_html = html
+            state, html = maybe_wait_for_challenge(session, state, html, status)
+            if original_html != html and state.value == "NORMAL":
+                with open(os.path.join(html_dir, "ranking_%03d.html.challenge" % (page_index - 1)),
+                          "w", encoding="utf-8") as f:
+                    f.write(original_html)
+                with open(os.path.join(html_dir, "ranking_%03d.html" % (page_index - 1)),
+                          "w", encoding="utf-8") as f:
+                    f.write(html)
             require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
                                   % (status, page_url, page_index - 1))
             for r in parse_bestsellers_page(html, page_url, collected_at):

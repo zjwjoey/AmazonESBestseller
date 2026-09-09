@@ -683,6 +683,10 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
     记入失败并继续，不让一个慢页毁掉整批；访问受限仍由 require_normal_access
     抛 AccessStopError，不吞、不重试、不绕过。
     """
+    # Keep direct collector use safe as well as the CLI path.  The adapter is a
+    # no-op for offline fake sessions used by the test suite.
+    from ..access.location import ensure_spain_delivery
+    ensure_spain_delivery(session)
     html_dir = os.path.join(str(out_dir), "html")
     os.makedirs(html_dir, exist_ok=True)
 
@@ -759,6 +763,14 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             with open(path, "w", encoding="utf-8") as f:
                 f.write(html)  # 先保留证据，再判定访问状态
             state = detect_access_status(status, html)
+            from ..access.challenge import maybe_wait_for_challenge
+            original_html = html
+            state, html = maybe_wait_for_challenge(session, state, html, status)
+            if original_html != html and state.value == "NORMAL":
+                with open(path + ".challenge", "w", encoding="utf-8") as f:
+                    f.write(original_html)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(html)
             try:
                 require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
                                       % (status, asin, len(details)))
