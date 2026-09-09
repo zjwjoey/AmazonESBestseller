@@ -513,7 +513,21 @@ def _page_asin_candidates(soup) -> set[str]:
 
 def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessState, Optional[dict]]:
     """Classify saved evidence and return parsed data only for valid pages."""
-    access_state = detect_access_status(meta.get("status_code", 200), html)
+    # HTML evidence is always checked first.  This protects the historical
+    # 200 + validateCaptcha cache case and prevents recovery metadata from
+    # making a challenge page look valid.
+    html_state = detect_access_status(200, html)
+    if html_state is AccessState.CHALLENGE:
+        return "CHALLENGE", html_state, None
+
+    recovered = bool(meta.get("recovered_from_challenge"))
+    effective_state = str(meta.get("access_state") or "").upper()
+    if recovered and effective_state == AccessState.NORMAL.value:
+        # The initial 403/429 remains evidence, while the recovered document
+        # is judged by its final HTML and the explicit effective state.
+        access_state = AccessState.NORMAL
+    else:
+        access_state = detect_access_status(meta.get("status_code", 200), html)
     if access_state is not AccessState.NORMAL:
         return "CHALLENGE", access_state, None
     if not html.strip():
@@ -567,7 +581,9 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
             if asin in seen_asins:
                 continue
             rec.update({"status_code": meta.get("status_code"),
+                        "initial_access_state": meta.get("initial_access_state"),
                         "access_state": state_value.value,
+                        "recovered_from_challenge": bool(meta.get("recovered_from_challenge")),
                         "resumed_from_html": True})
             out.append(rec)
             seen_asins.add(asin)
@@ -621,7 +637,9 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                     status_meta = {}
             classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
             records.append({"asin": asin, "path": str(path), "classification": classification,
+                            "initial_access_state": status_meta.get("initial_access_state"),
                             "access_state": access_state.value,
+                            "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
                             "quarantined": bool(quarantine) and classification != "VALID_PRODUCT_PAGE",
                             "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
@@ -632,7 +650,9 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
             if state is not None:
                 update = parsed or {"asin": asin}
                 update.update({"status_code": status_meta.get("status_code"),
+                               "initial_access_state": status_meta.get("initial_access_state"),
                                "access_state": access_state.value,
+                               "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
                                "cache_classification": classification})
                 state.update([update])
     summary = {k: sum(r["classification"] == k for r in records)
@@ -721,16 +741,6 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
                 except (OSError, ValueError):
                     meta = {}
             cached_status = meta.get("status_code", 200)
-            state = detect_access_status(cached_status, html)
-            if state.value != "NORMAL":
-                raise AccessStopError(
-                    "已落盘证据受限（%s），ASIN %s，按策略停止。"
-                    "该文件是上一轮留下的历史证据，会阻断本轮全部续采；"
-                    "先用 amazon-es audit-detail-cache --html-dir %s "
-                    "--quarantine-dir <隔离目录> --move 把它移出活动缓存"
-                    "（移动不删除），再重跑本命令。"
-                    % (state.value, asin, html_dir))
-            require_normal_access(state, "缓存 HTML，ASIN %s" % asin)
             cached_url = meta.get("final_url") or ""
             if cached_url and not verify_asin_on_page(cached_url, asin):
                 quarantine_invalid(asin, path, meta_path)
@@ -738,8 +748,20 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
                                  "error": "缓存详情页 ASIN 不一致", "final_url": cached_url})
                 progress(asin, "asin_mismatch")
                 continue
+            cache_meta = {"status_code": cached_status, "final_url": cached_url,
+                          "initial_access_state": meta.get("initial_access_state"),
+                          "access_state": meta.get("access_state"),
+                          "recovered_from_challenge": meta.get("recovered_from_challenge")}
             classification, parsed_state, rec = _classify_saved_page(
-                html, asin, {"status_code": cached_status, "final_url": cached_url})
+                html, asin, cache_meta)
+            if classification == "CHALLENGE":
+                raise AccessStopError(
+                    "已落盘证据受限（%s），ASIN %s，按策略停止。"
+                    "该文件是上一轮留下的历史证据，会阻断本轮全部续采；"
+                    "先用 amazon-es audit-detail-cache --html-dir %s "
+                    "--quarantine-dir <隔离目录> --move 把它移出活动缓存"
+                    "（移动不删除），再重跑本命令。"
+                    % (parsed_state.value, asin, html_dir))
             if classification != "VALID_PRODUCT_PAGE":
                 quarantine_invalid(asin, path, meta_path)
                 write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
@@ -747,7 +769,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
                 progress(asin, "invalid")
                 continue
             rec["status_code"] = meta.get("status_code")
+            rec["initial_access_state"] = meta.get("initial_access_state")
             rec["access_state"] = parsed_state.value
+            rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
             rec["resumed_from_html"] = True
             details.append(rec)
             write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "success",
@@ -762,10 +786,11 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             html = session.page.content()
             with open(path, "w", encoding="utf-8") as f:
                 f.write(html)  # 先保留证据，再判定访问状态
-            state = detect_access_status(status, html)
+            initial_state = detect_access_status(status, html)
+            state = initial_state
             from ..access.challenge import maybe_wait_for_challenge
             original_html = html
-            state, html = maybe_wait_for_challenge(session, state, html, status)
+            state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
             if original_html != html and state.value == "NORMAL":
                 with open(path + ".challenge", "w", encoding="utf-8") as f:
                     f.write(original_html)
@@ -788,9 +813,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
                 continue
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"status_code": status, "final_url": final_url,
-                           "access_state": state.value}, f, ensure_ascii=False, indent=2)
+                           "initial_access_state": initial_state.value,
+                           "access_state": state.value,
+                           "recovered_from_challenge": recovered}, f,
+                          ensure_ascii=False, indent=2)
             classification, parsed_state, rec = _classify_saved_page(
-                html, asin, {"status_code": status, "final_url": final_url})
+                html, asin, {"status_code": status, "final_url": final_url,
+                             "initial_access_state": initial_state.value,
+                             "access_state": state.value,
+                             "recovered_from_challenge": recovered})
             if classification != "VALID_PRODUCT_PAGE":
                 quarantine_invalid(asin, path, meta_path)
                 write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
@@ -798,7 +829,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
                 progress(asin, "invalid")
                 continue
             rec["status_code"] = status
+            rec["initial_access_state"] = initial_state.value
             rec["access_state"] = parsed_state.value
+            rec["recovered_from_challenge"] = recovered
             details.append(rec)
             write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "success",
                              "source": "network", "record": rec})

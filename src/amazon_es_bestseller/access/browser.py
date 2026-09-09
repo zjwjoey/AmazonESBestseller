@@ -222,10 +222,9 @@ class BrowserSession:
         """
         wait_seconds = max(float(getattr(self, "challenge_wait_seconds", 180.0)), 0.0)
         current_html = html
-        current_state = detect_access_status(200 if status == 202 else status,
-                                             current_html)
+        current_state = detect_access_status(status, current_html)
         if current_state is not AccessState.CHALLENGE:
-            return current_state, current_html
+            return current_state, current_html, False
 
         _safe_print("检测到 Amazon 挑战页，将等待 %.0f 秒并检查是否自动恢复。" % wait_seconds)
         deadline = time.monotonic() + wait_seconds
@@ -235,10 +234,13 @@ class BrowserSession:
                 current_html = self._stable_page_content(timeout_seconds=5.0)
             except DeliveryLocationError:
                 continue
+            # A refreshed document has no reliable relationship to the
+            # initial response status.  Its HTML is the evidence for the
+            # final effective state; challenge markers remain authoritative.
             current_state = detect_access_status(200, current_html)
             if current_state is AccessState.NORMAL:
                 _safe_print("Amazon 挑战页已自动恢复，继续采集。")
-                return current_state, current_html
+                return current_state, current_html, True
 
         if getattr(self, "manual_assist", False):
             if self.headless:
@@ -256,6 +258,6 @@ class BrowserSession:
                 current_state = detect_access_status(200, current_html)
                 if current_state is AccessState.NORMAL:
                     _safe_print("人工协助后页面已恢复，继续采集。")
-                    return current_state, current_html
+                    return current_state, current_html, True
         _safe_print("等待后 Amazon 仍返回挑战页，按访问安全策略停止。")
-        return current_state, current_html
+        return current_state, current_html, False

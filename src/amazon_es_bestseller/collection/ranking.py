@@ -198,10 +198,11 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
             with open(os.path.join(html_dir, "ranking_%03d.html" % page_index), "w", encoding="utf-8") as f:
                 f.write(html)  # 先保留证据，再判定访问状态
             page_index += 1
-            state = detect_access_status(status, html)
+            initial_state = detect_access_status(status, html)
+            state = initial_state
             from ..access.challenge import maybe_wait_for_challenge
             original_html = html
-            state, html = maybe_wait_for_challenge(session, state, html, status)
+            state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
             if original_html != html and state.value == "NORMAL":
                 with open(os.path.join(html_dir, "ranking_%03d.html.challenge" % (page_index - 1)),
                           "w", encoding="utf-8") as f:
@@ -213,7 +214,9 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
                                   % (status, page_url, page_index - 1))
             for r in parse_bestsellers_page(html, page_url, collected_at):
                 r["status_code"] = status
+                r["initial_access_state"] = initial_state.value
                 r["access_state"] = state.value
+                r["recovered_from_challenge"] = recovered
                 records.append(r)
     with open(os.path.join(run_dir, "rankings.json"), "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
