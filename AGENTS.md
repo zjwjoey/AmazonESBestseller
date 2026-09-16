@@ -327,20 +327,24 @@ Derived → Display / Excel`, and classify an empty value as `SOURCE_MISSING`,
 must not be filled by guessing. Preserve raw evidence, keep `备注` human-owned, and
 never use Detail BSR as a fallback for `bestseller_rank`.
 
-## 27. Final 4,500-SKU completion phase (2026-09-14)
+## 27. Category-scale collection phase (2026-09-16)
 
-The current milestone is **controlled 4,500-SKU production validation** across
-15 approved Amazon.es physical-product categories, with a target of **300 unique
-ASINs per category** (4,500 SKUs total). Live ranking/detail collection for this
-milestone is explicitly allowed, subject to the safety controls below.
+The project may run controlled collection tasks across approved Amazon.es
+physical-product categories. There is **no permanent global 4,500-SKU limit**:
+any per-task category targets or quotas must come from the reviewed task
+configuration and must not be treated as a repository-wide ceiling. Live
+ranking/detail collection is allowed for an approved task, subject to the
+safety controls below.
 
-Collection rules for this final bounded phase:
+Collection rules for this controlled phase:
 
-- Collect **one category at a time, serially**, with a target of **300 unique
-  ASINs per category**. Do not use concurrent category or detail collection.
-- The former inter-category **1,800-second (30-minute) cooldown does not apply**
-  during this final completion run. Continue directly to the next category after
-  the prior category exits successfully.
+- Collect **one category at a time, serially**. Do not use concurrent category
+  or detail collection. A task may define its own reviewed per-category target.
+- Keep the inter-category cooldown enabled. The plan/configuration is the
+  source of the effective interval; the normal default is **1,800 seconds
+  (30 minutes)**. The process must remain alive during the countdown and resume
+  a persisted deadline after restart. A zero interval requires explicit task
+  authorization and must not be assumed globally.
 - Keep normal conservative per-request pacing and the existing serial scheduler;
   do not run categories or detail requests concurrently.
 - On any **Challenge, HTTP 403, HTTP 429, Robot Check, CAPTCHA, access denied or
@@ -355,16 +359,17 @@ Collection rules for this final bounded phase:
   evidence, and the frozen 3-sheet / 26-column export contract.
 - Resume from previously validated saved HTML/checkpoints where possible rather
   than re-requesting already completed ASINs.
-- If a category cannot reach 300 globally unique ASINs from valid configured
-  sources, report `QUOTA_UNIQUE_SHORTFALL`; do not silently fill the deficit
-  with duplicates or products from another category.
+- If a reviewed task declares a per-category unique-ASIN quota and the category
+  cannot reach it from valid configured sources, report
+  `QUOTA_UNIQUE_SHORTFALL`; do not silently fill the deficit with duplicates or
+  products from another category.
 - CI and default tests must remain offline and must not require Amazon
   credentials, DeepSeek credentials or a local browser profile.
 
-This authorization applies specifically to the final bounded **15 × 300 = 4,500
-SKU** completion milestone. It does not authorize unrestricted crawling,
-concurrent scraping, access-control bypass, a new database architecture, or an
-unrequested Excel-schema change.
+This authorization applies to the currently reviewed, bounded category-scale
+collection task and its configured targets. It does not authorize unrestricted
+crawling, concurrent scraping, access-control bypass, a new database
+architecture, or an unrequested Excel-schema change.
 
 When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
 the first valid record in the supplied directory order. CLI translation summaries
