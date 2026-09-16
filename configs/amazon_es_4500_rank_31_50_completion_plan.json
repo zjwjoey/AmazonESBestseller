@@ -11,7 +11,7 @@
   ],
   "target_records_per_source": 20,
   "maximum_ranking_records": 3460,
-  "cooldown_between_categories_seconds": 1800,
+  "cooldown_between_categories_seconds": 0,
   "normal_per_request_pacing": true,
   "dedupe_identity": "ASIN",
   "stop_on_access_signals": [

@@ -388,7 +388,16 @@ def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
         # A restart during the inter-category wait resumes the original
         # deadline; it never silently skips the configured cooling interval.
         persisted_until = state.get("cooldown_until")
-        if persisted_until:
+        if cooldown == 0:
+            # The final 4,500-SKU phase explicitly disabled inter-category
+            # cooling. Any deadline left by an older phase is stale state and
+            # must not block the next category (even if it is malformed).
+            if persisted_until is not None or state.get("cooldown_category") is not None:
+                print("[批处理] 当前配置已取消类目间冷却，已清除历史 cooldown 状态")
+                state["cooldown_until"] = None
+                state["cooldown_category"] = None
+                save_state(None)
+        elif persisted_until:
             try:
                 deadline = float(persisted_until)
             except (TypeError, ValueError):
@@ -493,7 +502,7 @@ def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
             save_state(None)
             print("[批处理] %s 完成：31–50 榜单 %d 条，新增详情 %d 条" %
                   (category_name, len(target), len(details)))
-            if group_index < len(pending_groups) - 1:
+            if group_index < len(pending_groups) - 1 and cooldown > 0:
                 state["cooldown_until"] = time.time() + cooldown
                 state["cooldown_category"] = category_name
                 save_state(group)
