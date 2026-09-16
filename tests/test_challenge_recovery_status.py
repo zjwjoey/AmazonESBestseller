@@ -140,6 +140,8 @@ def test_recovered_asin_mismatch_is_quarantined(tmp_path):
 
     assert collect_details([ASIN], _RecoveringSession(200), str(tmp_path)) == []
     assert (tmp_path / "quarantine" / ASIN / (ASIN + ".html")).exists()
+    checkpoint = json.loads((tmp_path / "checkpoints" / (ASIN + ".json")).read_text(encoding="utf-8"))
+    assert checkpoint["observed_page_asins"] == [other]
 
 
 def test_ranking_recovery_keeps_initial_status_and_final_state(tmp_path):
@@ -154,3 +156,46 @@ def test_ranking_recovery_keeps_initial_status_and_final_state(tmp_path):
     assert records[0]["initial_access_state"] == "CHALLENGE"
     assert records[0]["access_state"] == "NORMAL"
     assert records[0]["recovered_from_challenge"] is True
+
+
+def test_ranking_capture_scrolls_lazy_loaded_31_50(tmp_path):
+    """Root bestseller shells append ranks 31--50 only after scrolling."""
+    initial = (
+        "<html><body><div id='gridItemRoot'><a href='/dp/B078C6QR1C'>item</a>"
+        "<span class='zg-bdg-text'>#1</span></div></body></html>"
+    )
+    loaded = initial.replace(
+        "</body>",
+        "<div id='gridItemRoot'><a href='/dp/B0LAZY31AAA'>lazy</a>"
+        "<span class='zg-bdg-text'>#31</span></div></body>",
+    )
+
+    class _LazyPage(_Page):
+        def __init__(self):
+            super().__init__(initial)
+
+    class _LazySession:
+        def __init__(self):
+            self.page = _LazyPage()
+            self.scroll_calls = 0
+
+        def goto(self, url):
+            return 200
+
+        def wait_between_requests(self):
+            pass
+
+        def load_lazy_ranking_content(self):
+            self.scroll_calls += 1
+            self.page.html = loaded
+
+    session = _LazySession()
+    records = collect_rankings(
+        ["https://www.amazon.es/gp/bestsellers/beauty/ref=zg_bs_beauty_sm"],
+        session,
+        str(tmp_path),
+    )
+    assert session.scroll_calls == 1
+    assert {r["bestseller_rank"] for r in records} == {1, 31}
+    saved = list(tmp_path.glob("runs/*/html/ranking_000.html"))[0]
+    assert "B0LAZY31AAA" in saved.read_text(encoding="utf-8")

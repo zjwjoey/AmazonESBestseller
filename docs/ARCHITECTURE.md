@@ -342,6 +342,12 @@ Its primary job is:
 
 > identify products and preserve ranking context.
 
+Amazon.es root bestseller pages may render ranks 1–30 in the initial HTML and
+append ranks 31–50 only after scrolling. The browser collector therefore uses a
+bounded serial scroll, waits for the card set to stabilize, and only then saves
+the authoritative HTML snapshot. Rank values still come exclusively from the
+visible Amazon badge; scrolling is only a rendering trigger.
+
 ---
 
 # 12. Ranking collector output
@@ -379,6 +385,11 @@ monthly_bought_raw
 monthly_bought_min
 
 ranking_source_url
+ranking_source_type
+ranking_source_category
+ranking_source_category_path
+ranking_page_number
+bestseller_rank_raw
 collected_at
 ```
 
@@ -1310,6 +1321,7 @@ Implemented commands, grouped by whether they reach an external service:
 
 ```text
 online   collect          Best Sellers + detail pages (serial, explicit delay)
+         batch-collect    plan-driven category batches with resumable cooldown countdown
          translate-ds     DeepSeek display-field translation (explicit YES required)
 
 offline  select-quota     choose the globally unique ASIN quota from rankings

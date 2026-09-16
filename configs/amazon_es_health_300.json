@@ -1,0 +1,19 @@
+{
+  "task_id": "amazon_es_health_300",
+  "selection_mode": "category_quota",
+  "target_unique": 300,
+  "postal_code": "28001",
+  "execution_mode": "sequential",
+  "cooldown_seconds_before_start": 1800,
+  "cooldown_seconds_after_completion": 1800,
+  "output_dir": "outputs/health_300_spain_28001",
+  "categories": [
+    {
+      "category_group": "health",
+      "category_name_zh": "健康与个人护理",
+      "category_name_es": "Salud y cuidado personal",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/",
+      "quota": 300
+    }
+  ]
+}

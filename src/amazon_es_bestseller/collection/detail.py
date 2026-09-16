@@ -511,6 +511,14 @@ def _page_asin_candidates(soup) -> set[str]:
     return strong or weak
 
 
+def _page_asin_evidence(html: str) -> list[str]:
+    """Return explicit ASINs found in a saved page for mismatch diagnostics."""
+    try:
+        return sorted(_page_asin_candidates(BeautifulSoup(html, "lxml")))
+    except Exception:
+        return []
+
+
 def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessState, Optional[dict]]:
     """Classify saved evidence and return parsed data only for valid pages."""
     # HTML evidence is always checked first.  This protects the historical
@@ -745,7 +753,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             if cached_url and not verify_asin_on_page(cached_url, asin):
                 quarantine_invalid(asin, path, meta_path)
                 write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "asin_mismatch",
-                                 "error": "缓存详情页 ASIN 不一致", "final_url": cached_url})
+                                 "error": "缓存详情页 ASIN 不一致", "final_url": cached_url,
+                                 "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "asin_mismatch")
                 continue
             cache_meta = {"status_code": cached_status, "final_url": cached_url,
@@ -765,7 +774,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             if classification != "VALID_PRODUCT_PAGE":
                 quarantine_invalid(asin, path, meta_path)
                 write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
-                                 "classification": classification, "source": "cache"})
+                                 "classification": classification, "source": "cache",
+                                 "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "invalid")
                 continue
             rec["status_code"] = meta.get("status_code")
@@ -808,7 +818,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             if final_url and not verify_asin_on_page(final_url, asin):
                 quarantine_invalid(asin, path, meta_path)
                 write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "asin_mismatch",
-                                 "error": "详情页 ASIN 不一致", "final_url": final_url})
+                                 "error": "详情页 ASIN 不一致", "final_url": final_url,
+                                 "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "asin_mismatch")
                 continue
             with open(meta_path, "w", encoding="utf-8") as f:
@@ -825,7 +836,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             if classification != "VALID_PRODUCT_PAGE":
                 quarantine_invalid(asin, path, meta_path)
                 write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
-                                 "classification": classification, "source": "network"})
+                                 "classification": classification, "source": "network",
+                                 "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "invalid")
                 continue
             rec["status_code"] = status

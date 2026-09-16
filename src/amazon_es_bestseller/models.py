@@ -44,9 +44,14 @@ RANKING_KEYS = (
     "leaf_category",
     "browse_node_id",
     "bestseller_rank",
+    "bestseller_rank_raw",
     "monthly_bought_raw",
     "monthly_bought_min",
     "ranking_source_url",
+    "ranking_source_type",
+    "ranking_source_category",
+    "ranking_source_category_path",
+    "ranking_page_number",
     "collected_at",
 )
 
@@ -61,6 +66,7 @@ PRODUCT_KEYS = (
     "specification",
     "details_json",
     "date_first_available",
+    "ranking_contexts",
 )
 
 #: 详情原始证据键（docs/ARCHITECTURE.md §21 / DATA_MODEL §4-§8）
@@ -122,10 +128,16 @@ def merge_ranking_and_detail(
         if not a:
             continue
         prod = products.setdefault(a, {"asin": a})
+        context = {k: r[k] for k in RANKING_KEYS if k in r}
+        contexts = prod.setdefault("ranking_contexts", [])
+        if context and context not in contexts:
+            contexts.append(context)
         # 第一条榜单记录提供榜单上下文，后续不覆盖
         if "bestseller_rank" not in prod:
             for k in ("bestseller_rank", "ranking_source_url", "collected_at",
-                      "leaf_category", "browse_node_id", "category_l1",
+                      "bestseller_rank_raw", "ranking_source_type",
+                      "ranking_source_category", "ranking_source_category_path",
+                      "ranking_page_number", "leaf_category", "browse_node_id", "category_l1",
                       "category_l2", "category_l3", "monthly_bought_raw",
                       "monthly_bought_min", "index"):
                 if k in r:

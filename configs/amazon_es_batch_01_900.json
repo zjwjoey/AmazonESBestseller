@@ -1,0 +1,37 @@
+{
+  "task_id": "amazon_es_batch_01_900",
+  "description": "第一批：汽车与摩托车用品、母婴用品、美妆",
+  "execution_mode": "sequential",
+  "target_unique": 900,
+  "cooldown_seconds_between_categories": 180,
+  "postal_code": "28001",
+  "categories": [
+    {
+      "sequence": 1,
+      "category_group": "car",
+      "category_name_zh": "汽车与摩托车用品",
+      "category_name_es": "Coche y moto",
+      "url": "https://www.amazon.es/gp/bestsellers/automotive/",
+      "quota": 300,
+      "output_dir": "outputs/coche_moto_250_spain_28001"
+    },
+    {
+      "sequence": 2,
+      "category_group": "baby",
+      "category_name_zh": "母婴用品",
+      "category_name_es": "Bebé",
+      "url": "https://www.amazon.es/gp/bestsellers/baby/",
+      "quota": 300,
+      "output_dir": "outputs/bebe_300_spain_28001"
+    },
+    {
+      "sequence": 3,
+      "category_group": "beauty",
+      "category_name_zh": "美妆",
+      "category_name_es": "Belleza",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/",
+      "quota": 300,
+      "output_dir": "outputs/belleza_300_spain_28001"
+    }
+  ]
+}

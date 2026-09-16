@@ -24,7 +24,12 @@ def test_parse_three_rows(bestsellers_grid_html):
         "leaf_category": "Juegos de recipientes",
         "browse_node_id": "689078031",
         "bestseller_rank": 1,
+        "bestseller_rank_raw": "#1",
         "ranking_source_url": SRC,
+        "ranking_source_type": "subcategory",
+        "ranking_source_category": "Juegos de recipientes",
+        "ranking_source_category_path": "Hogar y cocina > Almacenamiento y organización > Juegos de recipientes",
+        "ranking_page_number": 1,
         "collected_at": T,
     }
     assert records[1]["bestseller_rank"] == 2
@@ -42,6 +47,9 @@ def test_browse_node_and_category_first_class(bestsellers_grid_html):
         assert r["category_l3"] == "Juegos de recipientes"
         assert r["leaf_category"] == "Juegos de recipientes"
         assert r["ranking_source_url"] == SRC
+        assert r["ranking_source_category"] == "Juegos de recipientes"
+        assert r["ranking_source_category_path"].startswith("Hogar y cocina >")
+        assert r["ranking_page_number"] == 1
 
 
 def test_browse_node_fallback_from_breadcrumb_when_url_bare(bestsellers_grid_html):
@@ -176,6 +184,9 @@ def test_modern_top_page_rank_category_node_none():
     assert records[0]["category_l1"] == "Hogar y cocina"
     assert records[0]["category_l2"] is None
     assert records[0]["browse_node_id"] is None          # 顶级页无节点号，不臆造
+    assert records[0]["ranking_source_type"] == "top_level"
+    assert records[0]["ranking_source_category"] == "Hogar y cocina"
+    assert records[0]["ranking_page_number"] == 1
     assert records[0]["asin"] == "B078C6QR1C"
 
 
@@ -187,7 +198,19 @@ def test_modern_subcategory_page_full_trail_and_node():
     r = records[0]
     assert r["bestseller_rank"] == 1
     assert r["browse_node_id"] == "3359926031"
+    assert r["ranking_source_type"] == "subcategory"
+    assert r["ranking_source_category"] == "Almacenamiento y organización"
     assert r["category_l1"] == "Hogar y cocina"
     assert r["category_l2"] == "Almacenamiento y organización"
     assert r["category_l3"] is None
     assert r["leaf_category"] == "Almacenamiento y organización"
+
+
+def test_trace_fields_keep_page_and_raw_rank():
+    url = "https://www.amazon.es/gp/bestsellers/kitchen/3359926031/?pg=2"
+    records = parse_bestsellers_page(MODERN_SUB_HTML, url, T)
+    assert records[0]["ranking_page_number"] == 2
+    assert records[0]["bestseller_rank_raw"] == "#1"
+    assert records[0]["ranking_source_category_path"] == (
+        "Hogar y cocina > Almacenamiento y organización"
+    )

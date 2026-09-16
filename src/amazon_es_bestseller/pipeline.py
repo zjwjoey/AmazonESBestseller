@@ -326,6 +326,11 @@ def legacy_flat_to_ranking(rec: Mapping, collected_at: str = "") -> dict:
         "leaf_category": None,
         "browse_node_id": None,
         "bestseller_rank": _to_int_spanish(rec.get("Rank")),
+        "bestseller_rank_raw": str(rec.get("Rank") or "").strip() or None,
         "ranking_source_url": "",
+        "ranking_source_type": "unknown",
+        "ranking_source_category": None,
+        "ranking_source_category_path": None,
+        "ranking_page_number": 1,
         "collected_at": collected_at,
     }

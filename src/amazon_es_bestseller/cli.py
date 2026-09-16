@@ -24,6 +24,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import List, Mapping, Optional
 
@@ -213,6 +214,297 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
                 shutil.copy(src, Path(out_dir) / "rankings.json")
     print("collect 完成：榜单 %d 条、详情 %d 条、离线重解析 %d 条、计划收集 %d 条"
           % (len(rankings), len(details), len(reparsed), len(plan["collect"])))
+
+
+def _batch_countdown(seconds: int, category_name: str) -> None:
+    """Keep the process alive during inter-category cooldown with a live timer."""
+    remaining = max(0, int(seconds))
+    while remaining > 0:
+        hours, rem = divmod(remaining, 3600)
+        minutes, secs = divmod(rem, 60)
+        print("\r[冷却倒计时] %s：%02d:%02d:%02d" %
+              (category_name, hours, minutes, secs), end="", flush=True)
+        time.sleep(1)
+        remaining -= 1
+    if seconds > 0:
+        print("\r[冷却完成] %s：开始下一类目                    " % category_name,
+              flush=True)
+
+
+def _batch_countdown_until(deadline: float, category_name: str) -> None:
+    """Resume an already persisted cooldown without resetting its deadline."""
+    while True:
+        remaining = max(0, int(deadline - time.time() + 0.999))
+        if remaining <= 0:
+            break
+        hours, rem = divmod(remaining, 3600)
+        minutes, secs = divmod(rem, 60)
+        print("\r[冷却倒计时] %s：%02d:%02d:%02d" %
+              (category_name, hours, minutes, secs), end="", flush=True)
+        time.sleep(min(1, remaining))
+    print("\r[冷却完成] %s：开始下一类目                    " % category_name,
+          flush=True)
+
+
+def _load_json_array_or_empty(path: Path) -> list:
+    if not path.exists():
+        return []
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit("批处理证据文件损坏，已停止（不会静默清空）: %s (%s)" %
+                         (path, exc))
+    if not isinstance(value, list):
+        raise SystemExit("批处理证据文件顶层必须是数组: %s" % path)
+    return value
+
+
+def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
+    """Run the corrected source plan category-by-category with resumable cooldown."""
+    if args.offline:
+        parser.error("batch-collect 需要联网，不能与 --offline 同用")
+    plan_path = Path(args.plan)
+    if not plan_path.exists():
+        parser.error("找不到提取计划: %s" % args.plan)
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    sources = plan.get("sources", []) if isinstance(plan, dict) else []
+    if not isinstance(sources, list) or not sources:
+        parser.error("提取计划没有 sources")
+    out_dir = Path(args.out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_path = out_dir / "batch_state.json"
+    state = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise SystemExit("批处理状态损坏，已停止（请人工检查后恢复）: %s (%s)" %
+                             (state_path, exc))
+        if not isinstance(state, dict):
+            raise SystemExit("批处理状态顶层必须是对象: %s" % state_path)
+    done_urls = set(str(u) for u in state.get("completed_source_urls", [])
+                    if str(u).strip())
+    done_categories = set(str(g) for g in state.get("completed_categories", [])
+                          if str(g).strip())
+    detail_asins = set(str(a).upper() for a in state.get("detail_asins", [])
+                       if str(a).strip())
+    pending_detail_asins = set(str(a).upper() for a in state.get("pending_detail_asins", [])
+                               if str(a).strip())
+    shortfall_sources = dict(state.get("shortfall_sources", {}) or {})
+    all_rankings = _load_json_array_or_empty(out_dir / "rankings.json")
+    all_details = _load_json_array_or_empty(out_dir / "details.json")
+    # Seed the batch with validated records from the preceding 4,500-SKU run.
+    for path_text in (getattr(args, "seed_rankings", ""),):
+        if path_text:
+            for row in _load_json_array_or_empty(Path(path_text)):
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    rank = int(row.get("bestseller_rank") or 0)
+                except (TypeError, ValueError):
+                    rank = 0
+                if not 31 <= rank <= 50:
+                    continue
+                key = (row.get("ranking_source_url"), rank,
+                       str(row.get("asin") or "").upper())
+                if key not in {(r.get("ranking_source_url"), r.get("bestseller_rank"),
+                                str(r.get("asin") or "").upper())
+                               for r in all_rankings if isinstance(r, dict)}:
+                    all_rankings.append(row)
+    existing_products_path = getattr(args, "existing_products", "")
+    if existing_products_path:
+        for row in _load_json_array_or_empty(Path(existing_products_path)):
+            if isinstance(row, dict) and row.get("asin"):
+                detail_asins.add(str(row["asin"]).upper())
+    existing_details_path = getattr(args, "existing_details", "")
+    if existing_details_path:
+        for row in _load_json_array_or_empty(Path(existing_details_path)):
+            if isinstance(row, dict) and row.get("asin"):
+                all_details.append(row)
+    detail_map = {str(r.get("asin") or "").upper(): r for r in all_details
+                  if isinstance(r, dict) and r.get("asin")}
+    detail_asins.update(detail_map)
+    ranking_keys = {(r.get("ranking_source_url"), r.get("bestseller_rank"),
+                     str(r.get("asin") or "").upper())
+                    for r in all_rankings if isinstance(r, dict)}
+    cooldown = (int(args.cooldown_seconds) if args.cooldown_seconds is not None
+                else int(plan.get("cooldown_between_categories_seconds", 1800)))
+    if cooldown < 0:
+        parser.error("--cooldown-seconds 不能为负数")
+
+    # Plan status is evidence: completed/source_missing sources are not
+    # requested again, even when the process was first started with empty state.
+    for source in sources:
+        if isinstance(source, dict) and source.get("status") in {"completed", "source_missing"}:
+            url = str(source.get("source_url") or "").strip()
+            if url:
+                done_urls.add(url)
+
+    grouped = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        group = str(source.get("category_group") or "unknown")
+        grouped.setdefault(group, []).append(source)
+    ordered_groups = sorted(grouped, key=lambda g: (
+        min(int(s.get("category_sequence") or 999) for s in grouped[g]), g))
+    pending_groups = []
+    for group in ordered_groups:
+        pending = [s for s in grouped[group]
+                   if s.get("status") == "pending" and
+                   str(s.get("source_url") or "") not in done_urls]
+        if pending:
+            pending_groups.append((group, pending))
+    if not pending_groups and (args.rankings_only or not pending_detail_asins):
+        print("batch-collect：计划中的待提取来源和详情已全部完成")
+        return
+    from .access.browser import BrowserSession
+    from .access.location import ensure_spain_delivery
+    from .collection.detail import collect_details
+    from .collection.ranking import collect_rankings
+
+    def save_state(active_group=None):
+        state_path.write_text(json.dumps({
+            "plan": str(plan_path),
+            "completed_source_urls": sorted(done_urls),
+            "completed_categories": sorted(done_categories),
+            "detail_asins": sorted(detail_asins),
+            "pending_detail_asins": sorted(pending_detail_asins),
+            "shortfall_sources": shortfall_sources,
+            "cooldown_until": state.get("cooldown_until"),
+            "cooldown_category": state.get("cooldown_category"),
+            "active_category": active_group,
+            "completed_category_count": len(done_categories),
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with BrowserSession(headless=not args.headful,
+                        profile_dir=args.profile_dir or None) as session:
+        session.challenge_wait_seconds = args.challenge_wait_seconds
+        session.manual_assist = args.manual_assist
+        location = ensure_spain_delivery(session, args.postal_code)
+        if location is not None:
+            _safe_print("配送地点已确认：%s" % (location.text or "西班牙"))
+
+        # A restart during the inter-category wait resumes the original
+        # deadline; it never silently skips the configured cooling interval.
+        persisted_until = state.get("cooldown_until")
+        if persisted_until:
+            try:
+                deadline = float(persisted_until)
+            except (TypeError, ValueError):
+                raise SystemExit("批处理冷却状态无效: cooldown_until")
+            if deadline > time.time():
+                _batch_countdown_until(deadline, str(state.get("cooldown_category") or "上一类目"))
+            state["cooldown_until"] = None
+            state["cooldown_category"] = None
+            save_state(None)
+
+        # Retry detail failures before moving on to a new category.  A failed
+        # ASIN remains pending and therefore survives a process restart.
+        if pending_detail_asins and not args.rankings_only:
+            retry = sorted(pending_detail_asins - detail_asins)
+            if retry:
+                retry_details = collect_details(retry, session, str(out_dir / "detail_cache"))
+                success = {str(r.get("asin") or "").upper() for r in retry_details if r.get("asin")}
+                for record in retry_details:
+                    asin = str(record.get("asin") or "").upper()
+                    if asin:
+                        detail_map[asin] = record
+                        detail_asins.add(asin)
+                pending_detail_asins.difference_update(success)
+                all_details = list(detail_map.values())
+                (out_dir / "details.json").write_text(json.dumps(all_details, ensure_ascii=False, indent=2), encoding="utf-8")
+                save_state(None)
+
+        for group_index, (group, group_sources) in enumerate(pending_groups):
+            category_name = str(group_sources[0].get("category_name_zh") or group)
+            category_dir = out_dir / "categories" / group
+            category_dir.mkdir(parents=True, exist_ok=True)
+            save_state(group)
+            urls = [str(s["source_url"]) for s in group_sources]
+            print("\n[批处理] %s：%d 个来源页，目标排名31–50" %
+                  (category_name, len(urls)))
+            rankings = collect_rankings(urls, session, str(category_dir), pages_per_url=1)
+            target = [r for r in rankings
+                      if 31 <= int(r.get("bestseller_rank") or 0) <= 50]
+            for r in target:
+                r["batch_target_rank_range"] = "31-50"
+                r["batch_category_group"] = group
+                key = (r.get("ranking_source_url"), r.get("bestseller_rank"),
+                       str(r.get("asin") or "").upper())
+                if key not in ranking_keys:
+                    all_rankings.append(r)
+                    ranking_keys.add(key)
+            (category_dir / "rankings_31_50.json").write_text(
+                json.dumps(target, ensure_ascii=False, indent=2), encoding="utf-8")
+            # Validate each source independently.  A short page is retryable;
+            # it must not be hidden by marking the whole category complete.
+            complete_urls = set()
+            for url in urls:
+                count = sum(1 for r in target if str(r.get("ranking_source_url") or "") == url)
+                if count == 20:
+                    complete_urls.add(url)
+                else:
+                    shortfall_sources[url] = {"expected": 20, "observed": count,
+                                              "status": "shortfall"}
+            unique_targets = []
+            seen_category = set()
+            for r in target:
+                asin = str(r.get("asin") or "").upper()
+                if asin and asin not in seen_category:
+                    seen_category.add(asin)
+                    unique_targets.append(r)
+            manifest = {"category_group": group, "records": unique_targets,
+                        "unique_asins": len(unique_targets), "rank_range": [31, 50]}
+            (category_dir / "manifest_31_50.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            new_asins = [str(r["asin"]).upper() for r in unique_targets
+                         if str(r["asin"]).upper() not in detail_asins]
+            # Persist ranking evidence and the detail work queue before the
+            # first detail request. An access stop during detail collection
+            # therefore leaves a resumable checkpoint instead of losing the
+            # just-collected source results.
+            if not args.rankings_only:
+                pending_detail_asins.update(new_asins)
+            (out_dir / "rankings.json").write_text(
+                json.dumps(all_rankings, ensure_ascii=False, indent=2), encoding="utf-8")
+            save_state(group)
+            details = [] if args.rankings_only else (
+                collect_details(new_asins, session, str(out_dir / "detail_cache"))
+                if new_asins else [])
+            for record in details:
+                asin = str(record.get("asin") or "").upper()
+                if asin:
+                    detail_map[asin] = record
+                    detail_asins.add(asin)
+            success_asins = {str(r.get("asin") or "").upper() for r in details if r.get("asin")}
+            pending_detail_asins.difference_update(success_asins)
+            all_details = list(detail_map.values())
+            (out_dir / "rankings.json").write_text(
+                json.dumps(all_rankings, ensure_ascii=False, indent=2), encoding="utf-8")
+            (out_dir / "details.json").write_text(
+                json.dumps(all_details, ensure_ascii=False, indent=2), encoding="utf-8")
+            done_urls.update(complete_urls)
+            if len(complete_urls) != len(urls):
+                print("[批处理] %s 来源短缺 %d/%d；未完成来源会在下次运行重试" %
+                      (category_name, len(urls) - len(complete_urls), len(urls)))
+            done_categories.add(group)
+            save_state(None)
+            print("[批处理] %s 完成：31–50 榜单 %d 条，新增详情 %d 条" %
+                  (category_name, len(target), len(details)))
+            if group_index < len(pending_groups) - 1:
+                state["cooldown_until"] = time.time() + cooldown
+                state["cooldown_category"] = category_name
+                save_state(group)
+                _batch_countdown_until(float(state["cooldown_until"]), category_name)
+                state["cooldown_until"] = None
+                state["cooldown_category"] = None
+                save_state(None)
+    if not pending_groups and not pending_detail_asins:
+        print("batch-collect：计划中的待提取来源和详情已全部完成")
+    print("batch-collect 完成：榜单 %d 条，详情 %d 条；状态文件 %s" %
+          (len(all_rankings), len(all_details), state_path))
 
 
 # ---------- select-quota（离线） ----------
@@ -542,6 +834,26 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--manifest", default="", help="详情采集 ASIN manifest JSON（与 --rankings-file 配合）")
     c.add_argument("--progress", default="", help="可选：逐 ASIN 写入运行进度 JSON")
     c.set_defaults(func=lambda a, p=c: cmd_collect(a, p))
+
+    bc = sub.add_parser("batch-collect", help="联网：按计划分批采集，类目间保持倒计时冷却并自动续跑")
+    bc.add_argument("--plan", required=True, help="来源页提取计划 JSON")
+    bc.add_argument("--out-dir", required=True, help="批处理输出目录")
+    bc.add_argument("--headful", action="store_true", help="有头浏览器")
+    bc.add_argument("--profile-dir", default="", help="可选：复用本机浏览器配置目录")
+    bc.add_argument("--postal-code", default="28001", help="配送地点检查使用的西班牙邮编")
+    bc.add_argument("--challenge-wait-seconds", type=float, default=180.0,
+                    help="挑战页等待人工接管的秒数")
+    bc.add_argument("--manual-assist", action="store_true", help="挑战页等待人工处理")
+    bc.add_argument("--cooldown-seconds", type=int, default=None,
+                    help="类目间冷却秒数；省略时读取计划，默认1800")
+    bc.add_argument("--existing-products", default="",
+                    help="已有规范化商品 JSON；其中 ASIN 不再重复请求详情")
+    bc.add_argument("--existing-details", default="",
+                    help="已有详情 JSON；合并写入批处理 details.json")
+    bc.add_argument("--seed-rankings", default="",
+                    help="已有31–50榜单 JSON；作为已完成来源的证据种子")
+    bc.add_argument("--rankings-only", action="store_true", help="只提取榜单，不访问详情页")
+    bc.set_defaults(func=lambda a, p=bc: cmd_batch_collect(a, p))
 
     s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")
     s.add_argument("--rankings", required=True, help="榜单记录 JSON")

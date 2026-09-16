@@ -91,6 +91,62 @@ class BrowserSession:
         """串行采集的显式页间延迟（默认 2.0 秒）。"""
         time.sleep(delay if delay is not None else self.PAGE_DELAY_SECONDS)
 
+    def load_lazy_ranking_content(self, max_scrolls: int = 18,
+                                  step_delay: float = 0.7,
+                                  stable_rounds: int = 2) -> None:
+        """Scroll a bestseller page so Amazon's lazy-loaded cards are rendered.
+
+        Amazon.es root bestseller pages can render cards 1--30 in the initial
+        HTML and append ranks 31--50 only after the user scrolls.  The ranking
+        parser intentionally remains HTML-only and badge-based, so the browser
+        session is responsible for triggering that rendering before ``content``
+        is captured.  The loop is bounded, serial and conservative; it never
+        attempts to bypass an access challenge.
+        """
+        if self.page is None:
+            return
+        max_scrolls = max(1, int(max_scrolls))
+        stable_rounds = max(1, int(stable_rounds))
+
+        metrics_script = """
+        () => {
+          const cards = Array.from(document.querySelectorAll('[id^="p13n-asin-index-"]'));
+          const ranks = cards.map(card => {
+            const m = (card.innerText || '').match(/#(\\d+)/);
+            return m ? Number(m[1]) : null;
+          }).filter(Boolean);
+          return {
+            count: cards.length,
+            maxRank: ranks.length ? Math.max(...ranks) : 0,
+            scrollY: window.scrollY || 0,
+            viewport: window.innerHeight || 0,
+            scrollHeight: document.documentElement.scrollHeight || document.body.scrollHeight || 0,
+          };
+        }
+        """
+        previous = None
+        stable = 0
+        for _ in range(max_scrolls):
+            try:
+                self.page.evaluate("window.scrollBy(0, Math.max((window.innerHeight || 700) * 0.85, 500));")
+                time.sleep(max(0.1, float(step_delay)))
+                current = self.page.evaluate(metrics_script)
+            except Exception:
+                # A navigation/challenge race is handled by the normal access
+                # gate after HTML capture; do not turn this helper into a retry.
+                return
+            signature = (current.get("count", 0), current.get("maxRank", 0),
+                         current.get("scrollHeight", 0))
+            if signature == previous:
+                stable += 1
+            else:
+                stable = 0
+            previous = signature
+            at_bottom = (current.get("scrollY", 0) + current.get("viewport", 0)
+                         >= current.get("scrollHeight", 0) - 24)
+            if at_bottom and stable >= stable_rounds:
+                break
+
     def _visible_locator(self, selectors, timeout_seconds: float = 5.0):
         """Return the first visible locator, using a short bounded poll."""
         deadline = time.monotonic() + max(float(timeout_seconds), 0.0)

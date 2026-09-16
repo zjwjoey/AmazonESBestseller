@@ -115,6 +115,8 @@ def test_merge_keeps_first_ranking_context_only():
     assert len(out) == 1
     assert out[0]["bestseller_rank"] == 3
     assert out[0]["ranking_source_url"] == "url-a"
+    assert len(out[0]["ranking_contexts"]) == 2
+    assert {c["ranking_source_url"] for c in out[0]["ranking_contexts"]} == {"url-a", "url-b"}
 
 
 def test_merge_detail_only_asin_included():

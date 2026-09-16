@@ -327,20 +327,44 @@ Derived → Display / Excel`, and classify an empty value as `SOURCE_MISSING`,
 must not be filled by guessing. Preserve raw evidence, keep `备注` human-owned, and
 never use Detail BSR as a fallback for `bestseller_rank`.
 
-## 27. Current production-hardening phase (2026-08-27)
+## 27. Final 4,500-SKU completion phase (2026-09-14)
 
-The current milestone is **Pipeline Production Hardening** for the frozen 200-SKU
-baseline. Work in this phase is limited to CLI reliability, offline smoke/integration
-tests, CI protection, documentation synchronization and the small Run Manifest
-observability foundation. Do not treat this phase as a crawler rewrite or a new
-collection milestone.
+The current milestone is **controlled 4,500-SKU production validation** across
+15 approved Amazon.es physical-product categories, with a target of **300 unique
+ASINs per category** (4,500 SKUs total). Live ranking/detail collection for this
+milestone is explicitly allowed, subject to the safety controls below.
 
-Agents must not start 1,000-SKU collection, full Bricolaje validation, a new
-`amazon-es run` orchestrator, a database, concurrency/proxy/CAPTCHA systems or a new
-Excel schema in this phase. Preserve the Access Gate, resume behavior, translation
-cache hash semantics, QA/Field Closure export gate, raw evidence and the 3-sheet /
-26-column contract. CI and default tests must remain offline and must not require
-Amazon credentials, DeepSeek credentials or a local browser profile.
+Collection rules for this final bounded phase:
+
+- Collect **one category at a time, serially**, with a target of **300 unique
+  ASINs per category**. Do not use concurrent category or detail collection.
+- The former inter-category **1,800-second (30-minute) cooldown does not apply**
+  during this final completion run. Continue directly to the next category after
+  the prior category exits successfully.
+- Keep normal conservative per-request pacing and the existing serial scheduler;
+  do not run categories or detail requests concurrently.
+- On any **Challenge, HTTP 403, HTTP 429, Robot Check, CAPTCHA, access denied or
+  equivalent access-restriction signal**, immediately stop live collection,
+  preserve the current evidence/state, and wait for explicit human handling or
+  approval before resuming.
+- Do not add or use **proxy rotation, CAPTCHA bypass/solving, stealth bypass,
+  cookie rotation, account rotation, IP rotation or other access-control
+  circumvention**.
+- Preserve the existing Access Gate, saved-HTML evidence, checkpoint/resume
+  behavior, translation-cache hash semantics, QA/Field Closure export gate, raw
+  evidence, and the frozen 3-sheet / 26-column export contract.
+- Resume from previously validated saved HTML/checkpoints where possible rather
+  than re-requesting already completed ASINs.
+- If a category cannot reach 300 globally unique ASINs from valid configured
+  sources, report `QUOTA_UNIQUE_SHORTFALL`; do not silently fill the deficit
+  with duplicates or products from another category.
+- CI and default tests must remain offline and must not require Amazon
+  credentials, DeepSeek credentials or a local browser profile.
+
+This authorization applies specifically to the final bounded **15 × 300 = 4,500
+SKU** completion milestone. It does not authorize unrestricted crawling,
+concurrent scraping, access-control bypass, a new database architecture, or an
+unrequested Excel-schema change.
 
 When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
 the first valid record in the supplied directory order. CLI translation summaries

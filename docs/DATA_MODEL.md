@@ -197,8 +197,18 @@ bestseller_rank
 monthly_bought_raw
 monthly_bought_min
 ranking_source_url
+ranking_source_type
+ranking_source_category
+ranking_source_category_path
+ranking_page_number
+bestseller_rank_raw
 collected_at
 ```
+
+`bestseller_rank_raw` preserves the visible Amazon badge (for example `#51`).
+The source-category and page fields are trace metadata; they must not be used
+to fill a missing rank. `ranking_page_number=2` may legitimately expose
+visible ranks beginning at 51 when Amazon omits 31–50 from the saved page.
 
 Same ASIN may appear in multiple ranking records.
 

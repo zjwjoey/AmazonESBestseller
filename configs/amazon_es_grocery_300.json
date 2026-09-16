@@ -1,0 +1,19 @@
+{
+  "task_id": "amazon_es_grocery_300",
+  "selection_mode": "category_quota",
+  "target_unique": 300,
+  "postal_code": "28001",
+  "execution_mode": "sequential",
+  "cooldown_seconds_before_start": 180,
+  "cooldown_seconds_after_completion": 1800,
+  "output_dir": "outputs/grocery_300_spain_28001",
+  "categories": [
+    {
+      "category_group": "grocery",
+      "category_name_zh": "食品与饮料",
+      "category_name_es": "Alimentación y bebidas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/",
+      "quota": 300
+    }
+  ]
+}

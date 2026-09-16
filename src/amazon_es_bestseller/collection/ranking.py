@@ -17,6 +17,7 @@ import os
 import re
 from datetime import datetime
 from typing import List, Mapping, Optional
+from urllib.parse import parse_qs, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -118,6 +119,30 @@ def _browse_node_id(source_url, soup) -> Optional[str]:
     return node
 
 
+def _ranking_page_number(source_url: str) -> int:
+    """Return Amazon's explicit ``pg`` value, defaulting to page 1.
+
+    The value is source metadata only.  It must never be used to fabricate a
+    rank when Amazon omits a visible badge.
+    """
+    try:
+        value = parse_qs(urlsplit(str(source_url or "")).query).get("pg", ["1"])[0]
+        page = int(value)
+        return page if page >= 1 else 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def _ranking_source_type(source_url: str, browse_node: Optional[str]) -> str:
+    """Classify the ranking URL without guessing a category name."""
+    if browse_node:
+        return "subcategory"
+    path = urlsplit(str(source_url or "")).path.rstrip("/")
+    if re.search(r"/gp/bestsellers/[^/]+(?:/ref=[^/]+)?$", path):
+        return "top_level"
+    return "unknown"
+
+
 def _monthly_bought_raw(item) -> str:
     text = item.get_text(" ", strip=True)
     match = _MONTHLY_RE.search(text)
@@ -131,8 +156,13 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
     解析一次并盖章到每条记录；同一页记录共享同一节点类目上下文。
     """
     soup = BeautifulSoup(html, "lxml")
-    l1, l2, l3, leaf = category_levels(_extract_category_trail(soup))
+    category_trail = _extract_category_trail(soup)
+    l1, l2, l3, leaf = category_levels(category_trail)
     browse_node = _browse_node_id(source_url, soup)
+    source_category = category_trail[-1] if category_trail else None
+    source_category_path = " > ".join(category_trail) if category_trail else None
+    page_number = _ranking_page_number(source_url)
+    source_type = _ranking_source_type(source_url, browse_node)
     records = []
     for i, item in enumerate(soup.select("#gridItemRoot")):
         a = item.select_one('a[href*="/dp/"]')
@@ -143,8 +173,10 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             continue
         badge = item.select_one("span.a-badge-text, span.zg-bdg-text")
         rank = None
+        rank_raw = None
         if badge is not None:
-            bm = re.match(r"#\s*(\d+)", badge.get_text(" ", strip=True))
+            rank_raw = badge.get_text(" ", strip=True) or None
+            bm = re.match(r"#\s*(\d+)", rank_raw or "")
             if bm:
                 rank = int(bm.group(1))
         record = {
@@ -156,7 +188,12 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "leaf_category": leaf,
             "browse_node_id": browse_node,
             "bestseller_rank": rank,
+            "bestseller_rank_raw": rank_raw,
             "ranking_source_url": source_url,
+            "ranking_source_type": source_type,
+            "ranking_source_category": source_category,
+            "ranking_source_category_path": source_category_path,
+            "ranking_page_number": page_number,
             "collected_at": collected_at,
         }
         monthly = _monthly_bought_raw(item)
@@ -194,12 +231,25 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
             page_url = url if page_no == 1 else (url + ("&" if "?" in url else "?") + "pg=%d" % page_no)
             status = session.goto(page_url)
             session.wait_between_requests()
-            html = session.page.content()
+            # Capture the initial shell first.  Root bestseller pages may only
+            # contain ranks 1--30 until the browser scrolls; trigger lazy
+            # loading on a normal page before taking the authoritative HTML
+            # snapshot.  Fake/offline sessions do not implement the helper.
+            initial_html = session.page.content()
+            initial_state = detect_access_status(status, initial_html)
+            html = initial_html
+            if initial_state.value == "NORMAL":
+                load_lazy = getattr(session, "load_lazy_ranking_content", None)
+                if callable(load_lazy):
+                    load_lazy()
+                    html = session.page.content()
             with open(os.path.join(html_dir, "ranking_%03d.html" % page_index), "w", encoding="utf-8") as f:
                 f.write(html)  # 先保留证据，再判定访问状态
             page_index += 1
-            initial_state = detect_access_status(status, html)
-            state = initial_state
+            # Reclassify the rendered snapshot as lazy loading can expose a
+            # challenge/error shell after navigation.  Keep ``initial_state``
+            # separately for audit and recovery metadata.
+            state = detect_access_status(status, html)
             from ..access.challenge import maybe_wait_for_challenge
             original_html = html
             state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
