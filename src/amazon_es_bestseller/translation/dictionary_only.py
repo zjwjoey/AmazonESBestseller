@@ -139,7 +139,10 @@ def profile_records(records: list[dict[str, Any]], *, top_n: int = 100) -> dict[
     """Build field profiles and candidate values from immutable source rows."""
     field_values: dict[str, list[str]] = defaultdict(list)
     value_occurrences: dict[tuple[str, str], dict[str, Any]] = {}
-    field_names = list(SCALAR_FIELDS) + ["product_details_label", "product_details_value", "feature_bullet"]
+    field_names = list(SCALAR_FIELDS) + [
+        "product_details_es", "feature_bullets_es",
+        "product_details_label", "product_details_value", "feature_bullet",
+    ]
     for record in records:
         asin = record.get("asin", "")
         for field in SCALAR_FIELDS:
@@ -151,6 +154,16 @@ def profile_records(records: list[dict[str, Any]], *, top_n: int = 100) -> dict[
                 hit["frequency"] += 1
                 if asin and len(hit["asins"]) < 5 and asin not in hit["asins"]:
                     hit["asins"].append(asin)
+        # Keep aggregate raw fields in the profile while collecting parsed
+        # detail/bullet candidates separately.  Long aggregate values are
+        # source evidence, not dictionary candidates.
+        for field, raw in (
+            ("product_details_es", record.get("product_details_es") or record.get("attributes")),
+            ("feature_bullets_es", record.get("feature_bullets_es") or record.get("feature_bullets_raw")),
+        ):
+            value = _text(raw)
+            if value:
+                field_values[field].append(value)
         for label, value in detail_items(record):
             for field, text in (("product_details_label", label), ("product_details_value", value)):
                 field_values[field].append(text)
@@ -170,7 +183,9 @@ def profile_records(records: list[dict[str, Any]], *, top_n: int = 100) -> dict[
     for field in field_names:
         values = field_values.get(field, [])
         stats = _length_stats(values)
-        stats["empty"] = len(records) - len(values) if field in SCALAR_FIELDS else 0
+        stats["empty"] = len(records) - len(values) if field in SCALAR_FIELDS or field in {
+            "product_details_es", "feature_bullets_es"
+        } else 0
         profiles[field] = stats
     top_values = {}
     for field in field_names:
@@ -320,10 +335,14 @@ def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[Dict
                         bucket = "unresolved"
                     field_counts[field][bucket] += 1
         outputs[asin] = {"asin": asin, "fields": out_fields, "resolution_status": "dictionary_only"}
-    total_units = sum(sum(c.values()) for c in field_counts.values())
+    observed_units = sum(sum(c.values()) for c in field_counts.values())
+    source_missing_units = sum(c["source_missing"] for c in field_counts.values())
+    total_units = observed_units - source_missing_units
     summary = {"total_skus": len(outputs), "unique_asins": len(outputs),
                "dictionary_entries": service.dictionary_counts(),
                "fields": {f: dict(c) for f, c in field_counts.items()},
+               "observed_units": observed_units,
+               "source_missing_units": source_missing_units,
                "total_units": total_units,
                "resolved_by_dictionary": sum(c["dictionary"] for c in field_counts.values()),
                "resolved_by_rules": sum(c["rule"] for c in field_counts.values()),
@@ -331,16 +350,21 @@ def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[Dict
                "protected": sum(c["protected"] for c in field_counts.values()),
                "remaining_for_qwen": sum(c["unresolved"] for c in field_counts.values()),
                "qwen_api_calls": 0, "other_translation_api_calls": 0}
-    summary["estimated_units_avoided"] = total_units - summary["remaining_for_qwen"]
+    summary["estimated_units_avoided"] = sum(
+        c.get(key, 0)
+        for c in field_counts.values()
+        for key in ("dictionary", "rule", "source_preserved", "protected")
+    )
     for field, counts in summary["fields"].items():
         nonmissing = sum(value for key, value in counts.items() if key != "source_missing")
         resolved = sum(counts.get(key, 0) for key in ("dictionary", "rule", "source_preserved", "protected"))
         counts["coverage_rate"] = round(resolved / nonmissing, 6) if nonmissing else 0.0
-    return {"schema_version": "translation-v2-dictionary-only.1", "summary": summary,
+    return {"schema_version": "translation-v2-dictionary-only.2",
+            "dictionary_directory": str(service.directory), "summary": summary,
             "profile": profile, "records": outputs}
 
 
-def write_reports(result: dict[str, Any], out_dir: str | Path) -> dict[str, str]:
+def write_reports(result: dict[str, Any], out_dir: str | Path, *, service: Optional[DictionaryService] = None) -> dict[str, str]:
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     profile = result["profile"]
     # ``occurrences`` is keyed by (field, value) internally for fast
@@ -362,7 +386,7 @@ def write_reports(result: dict[str, Any], out_dir: str | Path) -> dict[str, str]
         writer = csv.DictWriter(handle, fieldnames=fields); writer.writeheader()
         for field, data in profile["profiles"].items():
             writer.writerow({"field": field, **data})
-    service = DictionaryService()
+    service = service or DictionaryService(result.get("dictionary_directory") or None)
     candidates = []
     unresolved = []
     for (field, value), meta in profile["occurrences"].items():

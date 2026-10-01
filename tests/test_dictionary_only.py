@@ -1,4 +1,4 @@
-from amazon_es_bestseller.translation.dictionary_only import run_dictionary_only
+from amazon_es_bestseller.translation.dictionary_only import profile_records, run_dictionary_only
 
 
 def test_dictionary_only_is_offline_and_preserves_unresolved_source():
@@ -23,3 +23,13 @@ def test_dictionary_only_is_offline_and_preserves_unresolved_source():
     assert "OEM参考号：20002" in fields["product_details_zh"]["resolved_text"]
     assert fields["title_zh"]["status"] == "unresolved"
     assert fields["title_zh"]["resolved_text"] == fields["title_zh"]["source_text"]
+
+
+def test_profile_includes_raw_detail_and_bullet_fields():
+    profile = profile_records([{
+        "asin": "B000000002",
+        "product_details_es": "Marca: Metal\nPeso: 1 kg",
+        "feature_bullets_es": ["Resistente", "Compacto"],
+    }])
+    assert profile["profiles"]["product_details_es"]["nonempty"] == 1
+    assert profile["profiles"]["feature_bullets_es"]["nonempty"] == 1

@@ -1,4 +1,5 @@
 from amazon_es_bestseller.translation.dictionary_service import DictionaryService, resolve_exact
+from amazon_es_bestseller.translation.dictionary_service import PACKAGE_DICTIONARIES
 from amazon_es_bestseller.translation.full_detail import render_details_zh
 from amazon_es_bestseller.translation.protection import protect
 from amazon_es_bestseller.translation.zh import translate_value
@@ -28,3 +29,9 @@ def test_unidad_and_technical_tokens_keep_source_facts():
     assert "1" not in translate_value("Unidad")
     assert list(protect("5W-30").tokens.values()) == ["5W-30"]
     assert list(protect("5200 mAh").tokens.values()) == ["5200 mAh"]
+
+
+def test_split_dictionaries_are_present_in_source_package():
+    expected = {"categories", "attribute_labels", "units", "materials", "colors",
+                "booleans", "packaging", "protected_terms"}
+    assert expected == {path.stem for path in PACKAGE_DICTIONARIES.glob("*.json")}
