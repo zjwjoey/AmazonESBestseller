@@ -13,7 +13,11 @@
     "description_es",
     "product_details_es",
     "selected_variant_es",
-    "specification_es"
+    "specification_es",
+    "category_l1",
+    "category_l2",
+    "category_l3",
+    "leaf_category"
   ],
   "note": "API key is read only from QWEN_API_KEY or DASHSCOPE_API_KEY; endpoint may be supplied explicitly."
 }

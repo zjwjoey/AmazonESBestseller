@@ -21,6 +21,11 @@ Transport = Callable[[str, Dict[str, str], Dict[str, Any], float], Dict[str, Any
 
 class QwenMTProvider(TranslationProvider):
     name = "qwen-mt"
+    _LANGUAGE_NAMES = {
+        "es": "Spanish", "spanish": "Spanish",
+        "zh": "Chinese", "zh-cn": "Chinese", "zh_cn": "Chinese",
+        "simplified chinese": "Chinese", "chinese": "Chinese",
+    }
 
     def __init__(self, *, api_key: Optional[str] = None,
                  endpoint: Optional[str] = None,
@@ -61,20 +66,25 @@ class QwenMTProvider(TranslationProvider):
         except (URLError, TimeoutError, OSError) as exc:
             return {"status_code": 599, "error": str(exc)}
 
+    @classmethod
+    def _language_name(cls, value: str, fallback: str) -> str:
+        raw = str(value or fallback).strip()
+        return cls._LANGUAGE_NAMES.get(raw.casefold(), raw)
+
     def _payload(self, text: str, *, asin: str, field: str,
                  context: Dict[str, Any]) -> Dict[str, Any]:
+        translation_options = {
+            "source_lang": self._language_name(context.get("source_language"), "Spanish"),
+            "target_lang": self._language_name(context.get("target_language"), "Chinese"),
+        }
         if self.protocol == "openai_compatible":
-            prompt = ("Translate this Amazon.es field from Spanish to Simplified Chinese. "
-                      "Preserve every number, unit, model, brand, ASIN and technical token. "
-                      "Do not add facts. Return only the translation.\n\n" + text)
             return {"model": self._model, "messages": [
-                {"role": "system", "content": "You are a faithful product-data translator."},
-                {"role": "user", "content": prompt}],
-                "temperature": 0, "metadata": {"asin": asin, "field": field}}
+                {"role": "user", "content": text}],
+                "translation_options": translation_options}
         if self.protocol == "dashscope":
-            return {"model": self._model, "input": {"text": text},
-                    "parameters": {"temperature": 0},
-                    "metadata": {"asin": asin, "field": field}}
+            return {"model": self._model,
+                    "input": {"messages": [{"role": "user", "content": text}]},
+                    "parameters": {"translation_options": translation_options}}
         raise ValueError("unsupported Qwen protocol: %s" % self.protocol)
 
     @staticmethod
@@ -89,8 +99,15 @@ class QwenMTProvider(TranslationProvider):
             if content:
                 return str(content).strip()
         output = body.get("output") if isinstance(body, dict) else None
-        if isinstance(output, dict) and output.get("text"):
-            return str(output["text"]).strip()
+        if isinstance(output, dict):
+            choices = output.get("choices")
+            if choices and isinstance(choices[0], dict):
+                message = choices[0].get("message") or {}
+                content = message.get("content")
+                if content:
+                    return str(content).strip()
+            if output.get("text"):
+                return str(output["text"]).strip()
         if isinstance(body, dict) and body.get("text"):
             return str(body["text"]).strip()
         return ""

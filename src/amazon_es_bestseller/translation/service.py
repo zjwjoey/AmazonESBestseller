@@ -112,22 +112,27 @@ class TranslationService:
             return [line.strip() for line in value.splitlines() if line.strip()]
         return None
 
+    @classmethod
+    def _structured_items(cls, source_field: str, raw_value: Any) -> Optional[List[tuple[Optional[str], str]]]:
+        """Return lossless item boundaries used by both planning and execution."""
+        is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
+        if is_bullet_field:
+            bullets = cls._bullet_values(raw_value)
+            return [(None, value) for value in bullets] if bullets is not None else None
+        rows = cls._structured_rows(raw_value)
+        return list(rows) if rows is not None else None
+
     def _translate_structured(self, *, asin: str, source_field: str, target: str,
-                              source_text: str, raw_value: Any, record: Dict[str, Any]) -> Dict[str, Any]:
+                              source_text: str, raw_value: Any, record: Dict[str, Any],
+                              repair_partial: bool = False, repair_failed: bool = False) -> Dict[str, Any]:
         """Translate structured details/bullets item-by-item and re-render them.
 
         Labels and bullet boundaries remain deterministic; only each value/text
         item is sent to the provider.  This prevents a model from flattening a
         detail table or merging separate selling points.
         """
-        is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
-        rows = None if is_bullet_field else self._structured_rows(raw_value)
-        bullets = self._bullet_values(raw_value) if is_bullet_field else None
-        if rows is not None:
-            items = [(label, value) for label, value in rows]
-        elif bullets is not None:
-            items = [(None, value) for value in bullets]
-        else:
+        items = self._structured_items(source_field, raw_value)
+        if items is None:
             return {}
         rendered = []
         issues: List[Dict[str, Any]] = []
@@ -135,29 +140,48 @@ class TranslationService:
         attempts = 0
         errors = []
         for index, (label, value) in enumerate(items):
-            protected = protect(value, protected_values=[asin, str(record.get("brand") or "")])
-            response = self.provider.translate(
-                protected.text, asin=asin, field=source_field,
-                source_language=self.source_language, target_language=self.target_language,
-                context={"target_field": target, "item_index": index,
-                         "label": label, "protected_tokens": list(protected.tokens)})
-            attempts += response.attempts
-            if response.status == "success" and response.text:
-                qa = qa_field(protected, response.text, value, field=source_field,
-                              brand=record.get("brand", ""))
-                restored, restore_issues = restore(protected, response.text)
-                item_issues = list(qa["issues"]) + list(restore_issues)
-                if item_issues:
-                    statuses.append("qa_failed")
-                    issues.extend({"item_index": index, **issue} for issue in item_issues)
-                else:
-                    statuses.append("success")
-                rendered_value = postprocess(source_field, restored, value)
+            memory_key = self._memory_key(value, source_field)
+            memory = self._memory.get(memory_key) or self.cache.get_memory(memory_key)
+            if memory and ((memory.get("translation_status") == "partial" and repair_partial)
+                           or (memory.get("translation_status") in {"failed", "qa_failed"}
+                               and repair_failed)):
+                memory = None
+            if memory:
+                item_status = memory.get("translation_status", "success")
+                statuses.append(item_status)
+                item_issues = list(memory.get("qa_issues") or [])
+                issues.extend({"item_index": index, **issue} for issue in item_issues)
+                rendered_value = str(memory.get("translated_text") or "")
             else:
-                statuses.append("failed")
-                rendered_value = ""
-                if response.error:
-                    errors.append(str(response.error))
+                protected = protect(value, protected_values=[asin, str(record.get("brand") or "")])
+                response = self.provider.translate(
+                    protected.text, asin=asin, field=source_field,
+                    source_language=self.source_language, target_language=self.target_language,
+                    context={"target_field": target, "item_index": index,
+                             "label": label, "protected_tokens": list(protected.tokens)})
+                attempts += response.attempts
+                if response.status == "success" and response.text:
+                    qa = qa_field(protected, response.text, value, field=source_field,
+                                  brand=record.get("brand", ""))
+                    restored, restore_issues = restore(protected, response.text)
+                    item_issues = list(qa["issues"]) + list(restore_issues)
+                    item_status = "qa_failed" if item_issues else "success"
+                    statuses.append(item_status)
+                    issues.extend({"item_index": index, **issue} for issue in item_issues)
+                    rendered_value = postprocess(source_field, restored, value)
+                    memory_payload = {
+                        "translated_text": rendered_value,
+                        "translation_status": item_status,
+                        "qa_status": "qa_failed" if item_issues else "pass",
+                        "qa_issues": list(item_issues),
+                    }
+                    self._memory[memory_key] = memory_payload
+                    self.cache.put_memory(memory_key, memory_payload)
+                else:
+                    statuses.append("failed")
+                    rendered_value = ""
+                    if response.error:
+                        errors.append(str(response.error))
             if label is not None:
                 label_zh = LABEL_ES_ZH.get(label.strip().casefold(), label.strip())
                 rendered.append("%s：%s" % (label_zh, rendered_value))
@@ -266,16 +290,37 @@ class TranslationService:
                 bypass_memory = False
                 if cached and cached.get("translation_status") in {"success", "cached"}:
                     cache_hits += 1
+                    continue
+                if cached and cached.get("translation_status") in {"partial", "failed", "qa_failed"} \
+                        and not ((cached.get("translation_status") == "partial" and repair_partial)
+                                 or (cached.get("translation_status") in {"failed", "qa_failed"}
+                                     and repair_failed)):
+                    continue
+                if source == "specification_es" and specification_is_deterministic(text):
+                    continue
+                items = self._structured_items(source, record.get(source))
+                if items is not None:
+                    for _, item_text in items:
+                        item_memory = self.cache.get_memory(self._memory_key(item_text, source))
+                        item_bypass = item_memory and (
+                            (item_memory.get("translation_status") == "partial" and repair_partial)
+                            or (item_memory.get("translation_status") in {"failed", "qa_failed"}
+                                and repair_failed))
+                        if item_memory and not item_bypass:
+                            translation_memory_hits += 1
+                        else:
+                            unique_requests.add((translation_memory_field_type(source), source_hash(item_text),
+                                                 self.provider.name, self.provider.model))
                 else:
                     memory = self.cache.get_memory(self._memory_key(text, source))
                     bypass_memory = memory and ((memory.get("translation_status") == "partial" and repair_partial)
                                                 or (memory.get("translation_status") in {"failed", "qa_failed"}
                                                     and repair_failed))
-                if memory and not bypass_memory:
-                    translation_memory_hits += 1
-                else:
-                    unique_requests.add((translation_memory_field_type(source), digest,
-                                         self.provider.name, self.provider.model))
+                    if memory and not bypass_memory:
+                        translation_memory_hits += 1
+                    else:
+                        unique_requests.add((translation_memory_field_type(source), digest,
+                                             self.provider.name, self.provider.model))
                 rows.append({"asin": asin, "source_field": source, "target_field": target,
                              "source_hash": digest, "source_chars": len(text)})
         return {"schema_version": self.schema_version, "provider": self.provider.name,
@@ -314,16 +359,10 @@ class TranslationService:
             if has_structured_value:
                 structured_result = self._translate_structured(
                     asin=asin, source_field=source_field, target=target,
-                    source_text=text, raw_value=raw_value, record=record)
+                    source_text=text, raw_value=raw_value, record=record,
+                    repair_partial=repair_partial, repair_failed=repair_failed)
                 if structured_result:
                     self.cache.put(key, structured_result)
-                    if structured_result["translation_status"] in {"success", "qa_failed", "partial"}:
-                        self.cache.put_memory(self._memory_key(text, source_field), {
-                            "translated_text": structured_result["translated_text"],
-                            "translation_status": structured_result["translation_status"],
-                            "qa_status": structured_result["qa_status"],
-                            "qa_issues": list(structured_result["qa_issues"]),
-                        })
                     output_fields[target] = structured_result
                     continue
             deterministic_result = self._deterministic_spec_result(
