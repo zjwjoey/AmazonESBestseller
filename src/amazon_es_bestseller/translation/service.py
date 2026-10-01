@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -69,6 +71,10 @@ class TranslationService:
         self.target_language = target_language
         self.max_fields = set(max_fields) if max_fields else None
         self._memory: Dict[tuple, Dict[str, Any]] = {}
+        # Provider-pool execution may translate several ASINs at once.  The
+        # in-process TM is deliberately tiny, but it is still shared mutable
+        # state and must not race with cache reads/writes.
+        self._memory_lock = threading.RLock()
         # One shared lookup surface for deterministic labels.  The provider
         # still handles unresolved prose; this only prevents duplicate label
         # dictionaries from drifting between the offline and Qwen paths.
@@ -83,6 +89,15 @@ class TranslationService:
             text, self.source_language, self.target_language,
             translation_memory_field_type(field), self.provider.name,
             self.provider.model, self.schema_version, self.prompt_version)
+
+    def _memory_get(self, key: str) -> Optional[Dict[str, Any]]:
+        with self._memory_lock:
+            value = self._memory.get(key)
+        return dict(value) if value is not None else None
+
+    def _memory_put(self, key: str, value: Dict[str, Any]) -> None:
+        with self._memory_lock:
+            self._memory[key] = dict(value)
 
     @staticmethod
     def _structured_rows(value: Any) -> Optional[List[tuple[str, str]]]:
@@ -147,9 +162,10 @@ class TranslationService:
         rendered_items = []
         item_providers = []
         item_models = []
+        item_aliases = []
         for index, (label, value) in enumerate(items):
             memory_key = self._memory_key(value, source_field)
-            memory = self._memory.get(memory_key) or self.cache.get_memory(memory_key)
+            memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):
@@ -162,6 +178,7 @@ class TranslationService:
                 issues.extend({"item_index": index, **issue} for issue in item_issues)
                 rendered_value = str(memory.get("translated_text") or "")
                 item_provider = "cached"
+                item_alias = None
                 item_model = self.provider.model
                 item_attempts = 0
                 item_resolution = "cached"
@@ -172,6 +189,7 @@ class TranslationService:
                 item_status = "success"
                 statuses.append(item_status)
                 item_provider = "deterministic"
+                item_alias = None
                 item_model = "identity-v1"
                 item_attempts = 0
                 item_resolution = "source_preserved"
@@ -184,6 +202,7 @@ class TranslationService:
                     item_status = "success"
                     statuses.append(item_status)
                     item_provider = "deterministic"
+                    item_alias = None
                     item_model = "dictionary-v1"
                     item_attempts = 0
                     item_resolution = deterministic["resolution_source"]
@@ -196,6 +215,7 @@ class TranslationService:
                                  "label": label, "protected_tokens": list(protected.tokens)})
                     attempts += response.attempts
                     item_provider = response.provider or self.provider.name
+                    item_alias = (response.raw or {}).get("provider_alias")
                     item_model = response.model or self.provider.model
                     item_attempts = response.attempts
                     item_resolution = "provider"
@@ -214,7 +234,7 @@ class TranslationService:
                             "qa_status": "qa_failed" if item_issues else "pass",
                             "qa_issues": list(item_issues),
                         }
-                        self._memory[memory_key] = memory_payload
+                        self._memory_put(memory_key, memory_payload)
                         self.cache.put_memory(memory_key, memory_payload)
                     else:
                         statuses.append("failed")
@@ -223,11 +243,13 @@ class TranslationService:
                             errors.append(str(response.error))
             item_providers.append(item_provider)
             item_models.append(item_model)
+            item_aliases.append(item_alias)
             rendered_items.append({"item_index": index, "label": label,
                                    "source_text": value, "translated_text": rendered_value,
                                    "translation_status": item_status,
                                    "qa_status": "pass" if item_status == "success" else "pending",
                                    "provider": item_provider, "model": item_model,
+                                   "provider_alias": item_alias,
                                    "attempt_count": item_attempts,
                                    "resolution_source": item_resolution})
             if label is not None:
@@ -255,6 +277,7 @@ class TranslationService:
                 "translated_text": "\n".join(rendered),
                 "translation_status": overall, "qa_status": qa_status,
                 "provider": "deterministic" if all_deterministic else self.provider.name,
+                "provider_alias": next((alias for alias in item_aliases if alias), None),
                 "model": "identity-v1" if all_identity else ("dictionary-v1" if all_deterministic else self.provider.model),
                 "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                 "attempt_count": attempts, "last_error": "; ".join(errors) or None,
@@ -456,7 +479,7 @@ class TranslationService:
                 output_fields[target] = deterministic_result
                 continue
             memory_key = self._memory_key(text, source_field)
-            memory = self._memory.get(memory_key) or self.cache.get_memory(memory_key)
+            memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):
@@ -483,6 +506,7 @@ class TranslationService:
                           "source_text": text, "source_hash": digest,
                           "translated_text": response.text or "", "translation_status": response.status,
                           "qa_status": "pending", "provider": response.provider or self.provider.name,
+                          "provider_alias": (response.raw or {}).get("provider_alias"),
                           "model": response.model or self.provider.model,
                           "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                           "attempt_count": response.attempts, "last_error": response.error,
@@ -502,13 +526,14 @@ class TranslationService:
                     # the identical source later needs the same QA review.
                     restored, _ = restore(protected, response.text)
                     result["translated_text"] = postprocess(source_field, restored, text)
-                    self._memory[memory_key] = {
+                    memory_payload = {
                         "translated_text": result["translated_text"],
                         "translation_status": result["translation_status"],
                         "qa_status": result["qa_status"],
                         "qa_issues": list(result["qa_issues"]),
                     }
-                    self.cache.put_memory(memory_key, self._memory[memory_key])
+                    self._memory_put(memory_key, memory_payload)
+                    self.cache.put_memory(memory_key, memory_payload)
                 elif response.status == "success":
                     result["translation_status"] = "qa_failed"
                     result["qa_status"] = "qa_failed"
@@ -579,3 +604,43 @@ class TranslationService:
         for result in outputs.values():
             summary[result.get("translation_status", "pending")] = summary.get(result.get("translation_status", "pending"), 0) + 1
         return {"records": outputs, "summary": summary, "qa_report": build_qa_report(outputs.values())}
+
+    def translate_records_parallel(self, records: Sequence[Dict[str, Any]], pool: Any, *,
+                                   fields: Optional[Sequence[str]] = None,
+                                   offset: int = 0, limit: Optional[int] = None,
+                                   repair_partial: bool = False, repair_failed: bool = False,
+                                   dry_run: bool = False) -> Dict[str, Any]:
+        """Run record workers through a ProviderPool while preserving order.
+
+        Deterministic fields still short-circuit inside ``_translate_record``;
+        only unresolved provider units reach the pool.  Cache writes are
+        protected by TranslationCache's shared lock and saved once at the end.
+        """
+        if dry_run:
+            result = self.translate_records(records, fields=fields, offset=offset, limit=limit,
+                                            repair_partial=repair_partial, repair_failed=repair_failed,
+                                            dry_run=True)
+            result["pool"] = pool.snapshot()
+            return result
+        from .pool import PoolProviderAdapter
+        subset = list(records)[max(0, offset):]
+        if limit is not None:
+            subset = subset[:max(0, limit)]
+        original_provider = self.provider
+        self.provider = PoolProviderAdapter(pool, model=getattr(original_provider, "model", "qwen-mt-flash"))
+        try:
+            with ThreadPoolExecutor(max_workers=pool.max_workers, thread_name_prefix="translation-record") as executor:
+                futures = [executor.submit(self._translate_record, record, fields=fields,
+                                            repair_partial=repair_partial, repair_failed=repair_failed)
+                           for record in subset]
+                results = [future.result() for future in futures]
+        finally:
+            self.provider = original_provider
+        outputs = {result["asin"]: result for result in results if result.get("asin")}
+        self.cache.save()
+        summary = {"total": len(outputs)}
+        for result in outputs.values():
+            status = result.get("translation_status", "pending")
+            summary[status] = summary.get(status, 0) + 1
+        return {"records": outputs, "summary": summary,
+                "qa_report": build_qa_report(outputs.values()), "pool": pool.snapshot()}

@@ -6,12 +6,18 @@ DeepSeek or deterministic translation modules.
 
 ## Data flow
 
-`ASIN + Spanish source field` → source hash → protection → provider → token
-restore and QA → field cache → display translation. Raw Spanish fields are
-never overwritten. A field cache key includes ASIN, field, source hash,
-provider, model, schema version and prompt version. A separate persistent TM
-key uses source hash, language pair and field type, so the same category or
-attribute text can be reused by a different ASIN and a later process.
+`Raw Spanish` → `Pre-Clean` → `Dictionary / Rules` → `Identity Protection` →
+`Translation Memory` → `Provider Pool` → token restore and QA → exception
+queue → display translation. Raw Spanish fields are never overwritten. A field
+cache key includes ASIN, field, source hash, provider, model, schema version
+and prompt version. A separate persistent TM key uses source hash, language
+pair and field type, so the same category or attribute text can be reused by a
+different ASIN and a later process.
+
+Pre-Clean is deterministic and offline. It emits
+`translation_input_records.json` and audit CSV/JSON/Markdown reports; only
+`CLEAN` and `NORMALIZED` fields have `translate_allowed=true`. Review states
+remain in `review_queue.csv` and are not silently repaired.
 
 ## Provider and credentials
 
@@ -26,6 +32,24 @@ an older editable install from another checkout. The default serial limiter is
 `rate=0.5` calls/second; `--rate` or config can override it. Retry backoff is
 5 seconds, then 10 seconds by default.
 
+The reviewed dual-provider mode accepts aliases without storing keys in the
+configuration file:
+
+```json
+{
+  "providers": [
+    {"name": "qwen-a", "type": "qwen-mt", "endpoint_env": "QWEN_A_ENDPOINT", "api_key_env": "QWEN_A_API_KEY", "model": "qwen-mt-flash", "rate": 0.5},
+    {"name": "qwen-b", "type": "qwen-mt", "endpoint_env": "QWEN_B_ENDPOINT", "api_key_env": "QWEN_B_API_KEY", "model": "qwen-mt-flash", "rate": 0.5}
+  ],
+  "max_workers": 2
+}
+```
+
+`ProviderPool` uses one worker per provider, bounded round-robin assignment,
+in-flight task deduplication, shared completed/TM results, bounded network
+failover and provider health states. QA failures do not trigger automatic
+failover.
+
 ## CLI
 
 First inspect the work without making a network request:
@@ -33,6 +57,13 @@ First inspect the work without making a network request:
 ```text
 amazon-es --offline translate --products outputs/products.json \
   --config configs/translation_v2.json --out outputs/translation_plan.json --dry-run
+```
+
+Run the required offline preparation separately:
+
+```text
+amazon-es --offline preclean --products outputs/scale_4500_final/master/sku_list_7365_internal_research.csv \
+  --out-dir outputs/translation_v2_preclean
 ```
 
 Real calls require an explicit `YES` confirmation, or `--yes` in an approved
@@ -47,6 +78,10 @@ amazon-es translate --products outputs/products.json \
 Use `--repair-partial` and `--repair-failed` to retry only those field states;
 `--limit` and `--offset` support bounded batches. The command is serial and
 does not bypass Amazon or provider access controls.
+
+Enable the configured dual pool explicitly with `--parallel-providers`. Dry-run
+never creates API requests; real runs print both aliases, model/rate, worker
+count and still require `YES` confirmation.
 
 ## Statuses and recovery
 

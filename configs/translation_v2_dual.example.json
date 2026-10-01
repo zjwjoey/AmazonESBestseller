@@ -1,0 +1,26 @@
+{
+  "provider": "qwen-mt",
+  "model": "qwen-mt-flash",
+  "source_language": "es",
+  "target_language": "zh-CN",
+  "protocol": "openai_compatible",
+  "max_workers": 2,
+  "providers": [
+    {
+      "name": "qwen-a",
+      "type": "qwen-mt",
+      "endpoint_env": "QWEN_A_ENDPOINT",
+      "api_key_env": "QWEN_A_API_KEY",
+      "model": "qwen-mt-flash",
+      "rate": 0.5
+    },
+    {
+      "name": "qwen-b",
+      "type": "qwen-mt",
+      "endpoint_env": "QWEN_B_ENDPOINT",
+      "api_key_env": "QWEN_B_API_KEY",
+      "model": "qwen-mt-flash",
+      "rate": 0.5
+    }
+  ]
+}

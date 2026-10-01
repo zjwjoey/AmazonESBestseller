@@ -3,6 +3,8 @@
 """Legacy translation modules plus the opt-in Translation V2 pipeline."""
 
 from .cache import TranslationCache
+from .pool import ProviderPool, PoolProviderAdapter, TranslationTask
 from .service import TranslationService
 
-__all__ = ["TranslationCache", "TranslationService"]
+__all__ = ["TranslationCache", "TranslationService", "ProviderPool",
+           "PoolProviderAdapter", "TranslationTask"]

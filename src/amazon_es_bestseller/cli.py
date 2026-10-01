@@ -699,14 +699,28 @@ def cmd_translate(args) -> None:
     service = TranslationService(provider, cache,
                                  source_language=config.get("source_language", "es"),
                                  target_language=config.get("target_language", "zh-CN"))
+    parallel_requested = bool(getattr(args, "parallel_providers", False) or
+                              isinstance(config.get("providers"), list) and len(config["providers"]) > 1)
+    pool = None
+    if parallel_requested:
+        from .translation.pool import build_qwen_provider_pool
+        pool_config = dict(config)
+        pool_config.setdefault("max_workers", len(config.get("providers", [])) or 2)
+        pool = build_qwen_provider_pool(pool_config)
     if args.dry_run:
-        result = service.translate_records(products, fields=fields, offset=args.offset,
-                                           limit=args.limit, repair_partial=args.repair_partial,
-                                           repair_failed=args.repair_failed, dry_run=True)
+        if pool is not None:
+            result = service.translate_records_parallel(
+                products, pool, fields=fields, offset=args.offset, limit=args.limit,
+                repair_partial=args.repair_partial, repair_failed=args.repair_failed, dry_run=True)
+        else:
+            result = service.translate_records(products, fields=fields, offset=args.offset,
+                                               limit=args.limit, repair_partial=args.repair_partial,
+                                               repair_failed=args.repair_failed, dry_run=True)
         _save_json(result["summary"], args.out)
         plan = result["summary"]
-        print("translate dry-run：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、rate=%.3g/s（未调用 API）→ %s" %
-              (plan["total_records"], plan["total_fields"], plan["cache_hits"],
+        print("translate dry-run%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、rate=%.3g/s（未调用 API）→ %s" %
+              (" [parallel-providers]" if pool is not None else "",
+               plan["total_records"], plan["total_fields"], plan["cache_hits"],
                plan["translation_memory_hits"], plan["estimated_api_requests"],
                plan["source_missing"], provider.rate, args.out))
         return
@@ -714,10 +728,16 @@ def cmd_translate(args) -> None:
         raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
     plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit,
                         repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    print("translate V2 即将调用 %s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、model=%s、rate=%.3g/s" %
-          (provider.name, plan["total_records"], plan["total_fields"], plan["cache_hits"],
+    print("translate V2 即将调用 %s%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、model=%s、rate=%.3g/s" %
+          (provider.name, " [parallel-providers]" if pool is not None else "",
+           plan["total_records"], plan["total_fields"], plan["cache_hits"],
            plan["translation_memory_hits"], plan["estimated_api_requests"],
            plan["source_missing"], model, provider.rate))
+    if pool is not None:
+        print("Parallel workers = %d" % pool.max_workers)
+        for alias, spec in ((item.get("name") or item.get("alias"), item)
+                            for item in config.get("providers", [])):
+            print("  Provider %s: model=%s rate=%s" % (alias, spec.get("model", "qwen-mt-flash"), spec.get("rate", 0.5)))
     if not args.yes:
         try:
             confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
@@ -725,9 +745,14 @@ def cmd_translate(args) -> None:
             raise SystemExit("未确认，已取消 Translation V2 API 调用")
         if confirmation.strip().upper() != "YES":
             raise SystemExit("未确认，已取消 Translation V2 API 调用")
-    result = service.translate_records(products, fields=fields, offset=args.offset,
-                                       limit=args.limit, repair_partial=args.repair_partial,
-                                       repair_failed=args.repair_failed)
+    if pool is not None:
+        result = service.translate_records_parallel(
+            products, pool, fields=fields, offset=args.offset, limit=args.limit,
+            repair_partial=args.repair_partial, repair_failed=args.repair_failed)
+    else:
+        result = service.translate_records(products, fields=fields, offset=args.offset,
+                                           limit=args.limit, repair_partial=args.repair_partial,
+                                           repair_failed=args.repair_failed)
     _save_json(result["records"], args.out)
     qa_out = args.qa_out or str(Path(args.out).with_name("translation_qa.json"))
     _save_json(result["qa_report"], qa_out)
@@ -778,6 +803,25 @@ def cmd_dictionary_only(args) -> None:
            summary["resolved_by_dictionary"], summary["resolved_by_rules"],
            summary["source_preserved"] + summary["protected"],
            summary["remaining_for_qwen"], args.out))
+    for name, path in paths.items():
+        print("  %s -> %s" % (name, path))
+
+
+def cmd_preclean(args) -> None:
+    """Fully offline Translation V2 input preparation and audit."""
+    from .translation.preclean import run_preclean, write_reports
+    result = run_preclean(args.products)
+    paths = write_reports(result, args.out_dir)
+    summary = result["summary"]
+    print("Input file: %s" % args.products)
+    print("Row count: %d" % summary["input_rows"])
+    print("Unique ASIN: %d" % summary["unique_asins"])
+    print("Mode: preclean (offline)")
+    print("Qwen API: disabled")
+    print("Pre-Clean 完成：CLEAN/NORMALIZED=%d、review_queue=%d、cross_field=%d、identity=%d → %s" % (
+        sum(summary["status_counts"].get(key, 0) for key in ("CLEAN", "NORMALIZED")),
+        summary["review_queue_count"], summary["cross_field_issue_count"],
+        summary["identity_count"], args.out_dir))
     for name, path in paths.items():
         print("  %s -> %s" % (name, path))
 
@@ -1104,8 +1148,17 @@ def build_parser() -> argparse.ArgumentParser:
     tv2.add_argument("--limit", type=int, default=None)
     tv2.add_argument("--offset", type=int, default=0)
     tv2.add_argument("--dry-run", action="store_true", help="仅生成字段计划，不调用 API")
+    tv2.add_argument("--parallel-providers", action="store_true",
+                     help="按配置启用双 Provider 并行池（真实调用仍需 YES）")
     tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
     tv2.set_defaults(func=cmd_translate)
+
+    pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
+    pc.add_argument("--products", required=True,
+                    help="内部研究 CSV、规范化商品 JSON 数组，或带 records 的内部研究 JSON")
+    pc.add_argument("--out-dir", default=str(OUTPUTS / "translation_v2_preclean"),
+                    help="Pre-Clean 独立输出目录")
+    pc.set_defaults(func=cmd_preclean)
 
     do = sub.add_parser("dictionary-only", help="全离线：画像、字典候选与确定性解析（绝不调用翻译 API）")
     do.add_argument("--products", required=True,
