@@ -91,6 +91,17 @@ class TranslationService:
                 if label is not None and raw_value is not None and str(raw_value).strip():
                     rows.append((str(label), str(raw_value)))
             return rows
+        if isinstance(value, str) and "\n" in value:
+            rows = []
+            lines = [line.strip() for line in value.splitlines() if line.strip()]
+            for line in lines:
+                if ":" not in line and "：" not in line:
+                    return None
+                label, raw_value = re.split(r"[:：]", line, maxsplit=1)
+                if not label.strip() or not raw_value.strip():
+                    return None
+                rows.append((label.strip(), raw_value.strip()))
+            return rows or None
         return None
 
     @staticmethod
@@ -109,8 +120,9 @@ class TranslationService:
         item is sent to the provider.  This prevents a model from flattening a
         detail table or merging separate selling points.
         """
-        rows = self._structured_rows(raw_value)
-        bullets = None if rows is not None else self._bullet_values(raw_value)
+        is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
+        rows = None if is_bullet_field else self._structured_rows(raw_value)
+        bullets = self._bullet_values(raw_value) if is_bullet_field else None
         if rows is not None:
             items = [(label, value) for label, value in rows]
         elif bullets is not None:
@@ -296,8 +308,10 @@ class TranslationService:
                 output_fields[target] = cached
                 continue
             raw_value = record.get(source_field)
-            if (self._structured_rows(raw_value) is not None or
-                    self._bullet_values(raw_value) is not None):
+            is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
+            has_structured_value = (self._bullet_values(raw_value) is not None
+                                    if is_bullet_field else self._structured_rows(raw_value) is not None)
+            if has_structured_value:
                 structured_result = self._translate_structured(
                     asin=asin, source_field=source_field, target=target,
                     source_text=text, raw_value=raw_value, record=record)

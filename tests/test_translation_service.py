@@ -131,6 +131,16 @@ def test_structured_details_keep_labels_and_order(tmp_path):
     assert len(provider.calls) == 2
 
 
+def test_multiline_rendered_details_are_not_sent_as_one_free_article(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "product_details_es": "Material: Acero\nColor: Rojo"}
+    ])
+    detail = result["records"]["B00000001"]["fields"]["product_details_zh"]
+    assert len(provider.calls) == 2
+    assert detail["translated_text"].splitlines()[0].startswith("材质：")
+
+
 def test_known_specification_uses_deterministic_rules_before_provider(tmp_path):
     provider = FakeProvider()
     result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
