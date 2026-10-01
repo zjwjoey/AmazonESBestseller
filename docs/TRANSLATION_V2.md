@@ -18,8 +18,11 @@ attribute text can be reused by a different ASIN and a later process.
 The default provider is `qwen-mt` with model `qwen-mt-flash`. Credentials are
 read from `QWEN_API_KEY` or `DASHSCOPE_API_KEY`; no key is stored in source,
 config or cache. The request protocol is explicit (`openai_compatible` or
-`dashscope`) and the endpoint can be configured in `configs/translation_v2.json`
-or with `QWEN_API_ENDPOINT`.
+`dashscope`) and uses Qwen-MT's `translation_options` with Spanish → Chinese.
+The endpoint can be configured in `configs/translation_v2.json` or with
+`QWEN_API_ENDPOINT` / `DASHSCOPE_API_ENDPOINT`. When running from the isolated
+worktree, set `PYTHONPATH=<worktree>\\src` so the CLI does not accidentally load
+an older editable install from another checkout.
 
 ## CLI
 
@@ -67,7 +70,8 @@ they do not overwrite Spanish evidence.
 The confirmation line reports SKU count, field count, cache hits, source-missing
 records and the estimated provider request count. Category text shares one TM
 namespace across category levels, so identical Spanish labels are translated
-once per run.
+once per run. Structured detail values and bullet items use item-level TM and
+are counted item-by-item by dry-run.
 
 ## Migration and compatibility
 

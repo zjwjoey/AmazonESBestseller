@@ -117,6 +117,34 @@ def test_structured_bullets_are_translated_item_by_item(tmp_path):
     assert len(provider.calls) == 2
 
 
+def test_structured_item_memory_is_reused_across_asins(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(cache_path))
+    service.translate_records([{
+        "asin": "B00000001", "feature_bullets_raw": ["Primero", "Segundo"]
+    }])
+    result = TranslationService(provider, TranslationCache(cache_path)).translate_records([{
+        "asin": "B00000002", "feature_bullets_raw": ["Primero", "Tercero"]
+    }])
+    assert len(provider.calls) == 3
+    assert result["records"]["B00000002"]["translation_status"] == "success"
+
+
+def test_plan_counts_structured_items_and_deterministic_specs_correctly(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    structured = service.plan([{
+        "asin": "B00000001", "feature_bullets_raw": ["Primero", "Segundo"]
+    }])
+    deterministic = service.plan([{
+        "asin": "B00000002",
+        "specification_es": "Dimensiones: 30 x 20 cm; Capacidad: 500 ml"
+    }])
+    assert structured["estimated_api_requests"] == 2
+    assert deterministic["estimated_api_requests"] == 0
+
+
 def test_structured_details_keep_labels_and_order(tmp_path):
     provider = FakeProvider()
     result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([

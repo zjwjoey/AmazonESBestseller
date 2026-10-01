@@ -13,7 +13,27 @@ def test_qwen_openai_compatible_request_and_response():
     result = provider.translate("Bolsa", asin="B000000001", field="title_es_raw")
     assert result.text == "中文"
     assert seen["payload"]["model"] == "qwen-mt-flash"
+    assert seen["payload"]["messages"] == [{"role": "user", "content": "Bolsa"}]
+    assert seen["payload"]["translation_options"] == {
+        "source_lang": "Spanish", "target_lang": "Chinese"
+    }
     assert seen["headers"]["Authorization"] == "Bearer test-key"
+
+
+def test_qwen_dashscope_protocol_uses_native_message_shape():
+    seen = {}
+
+    def transport(url, headers, payload, timeout):
+        seen["payload"] = payload
+        return {"status_code": 200,
+                "body": {"output": {"choices": [{"message": {"content": "中文"}}]}}}
+
+    result = QwenMTProvider(api_key="test-key", protocol="dashscope",
+                            endpoint="https://example.invalid", transport=transport,
+                            max_retries=0).translate("Bolsa", asin="A", field="title")
+    assert result.text == "中文"
+    assert seen["payload"]["input"]["messages"] == [{"role": "user", "content": "Bolsa"}]
+    assert seen["payload"]["parameters"]["translation_options"]["target_lang"] == "Chinese"
 
 
 def test_qwen_retries_429_then_succeeds():
