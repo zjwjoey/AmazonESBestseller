@@ -33,6 +33,9 @@ DEFAULT_FIELD_MAP = {
     "features_es": "feature_bullets_zh",
     "description_es": "description_zh", "product_description_es": "description_zh",
     "product_description_raw": "description_zh",
+    "product_description": "description_zh",
+    "product_details": "product_details_zh",
+    "feature_bullets": "feature_bullets_zh",
     "product_details_es": "product_details_zh", "detail_attributes_raw": "product_details_zh",
     "selected_variation_raw": "selected_variation_zh", "selected_variant_es": "selected_variation_zh",
     "variation_es": "selected_variation_zh",
@@ -132,6 +135,17 @@ class TranslationService:
             return [line.strip() for line in value.splitlines() if line.strip()]
         return None
 
+    @staticmethod
+    def _prepared_value(record: Dict[str, Any], source_field: str) -> Any:
+        """Read a Pre-Clean envelope without bypassing its admission gate."""
+        prepared = record.get("fields")
+        if isinstance(prepared, dict) and source_field in prepared:
+            envelope = prepared[source_field]
+            if not isinstance(envelope, dict) or not envelope.get("translate_allowed"):
+                return None
+            return envelope.get("clean_text") or ""
+        return record.get(source_field)
+
     @classmethod
     def _structured_items(cls, source_field: str, raw_value: Any) -> Optional[List[tuple[Optional[str], str]]]:
         """Return lossless item boundaries used by both planning and execution."""
@@ -177,9 +191,9 @@ class TranslationService:
                 item_issues = list(memory.get("qa_issues") or [])
                 issues.extend({"item_index": index, **issue} for issue in item_issues)
                 rendered_value = str(memory.get("translated_text") or "")
-                item_provider = "cached"
-                item_alias = None
-                item_model = self.provider.model
+                item_provider = memory.get("provider", "cached")
+                item_alias = memory.get("provider_alias")
+                item_model = memory.get("model", self.provider.model)
                 item_attempts = 0
                 item_resolution = "cached"
             elif label is not None and is_identity_attribute(label):
@@ -212,7 +226,9 @@ class TranslationService:
                         protected.text, asin=asin, field=source_field,
                         source_language=self.source_language, target_language=self.target_language,
                         context={"target_field": target, "item_index": index,
-                                 "label": label, "protected_tokens": list(protected.tokens)})
+                                 "label": label, "protected_tokens": list(protected.tokens),
+                                 "schema_version": self.schema_version,
+                                 "prompt_version": self.prompt_version})
                     attempts += response.attempts
                     item_provider = response.provider or self.provider.name
                     item_alias = (response.raw or {}).get("provider_alias")
@@ -233,6 +249,10 @@ class TranslationService:
                             "translation_status": item_status,
                             "qa_status": "qa_failed" if item_issues else "pass",
                             "qa_issues": list(item_issues),
+                            "provider": item_provider,
+                            "provider_alias": item_alias,
+                            "model": item_model,
+                            "translated_at": self._now(),
                         }
                         self._memory_put(memory_key, memory_payload)
                         self.cache.put_memory(memory_key, memory_payload)
@@ -336,7 +356,7 @@ class TranslationService:
                 continue
             if requested and source not in requested and target not in requested:
                 continue
-            value = record.get(source)
+            value = self._prepared_value(record, source)
             if value is None or isinstance(value, (dict, list)):
                 # Structured details can still be translated losslessly as JSON text.
                 if isinstance(value, (dict, list)):
@@ -387,7 +407,7 @@ class TranslationService:
                     continue
                 if source == "specification_es" and specification_is_deterministic(text):
                     continue
-                items = self._structured_items(source, record.get(source))
+                items = self._structured_items(source, self._prepared_value(record, source))
                 if items is not None:
                     for item_label, item_text in items:
                         if item_label is not None and is_identity_attribute(item_label):
@@ -447,7 +467,7 @@ class TranslationService:
                 cached["translation_status"] = "cached"
                 output_fields[target] = cached
                 continue
-            raw_value = record.get(source_field)
+            raw_value = self._prepared_value(record, source_field)
             is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
             has_structured_value = (self._bullet_values(raw_value) is not None
                                     if is_bullet_field else self._structured_rows(raw_value) is not None)
@@ -490,7 +510,9 @@ class TranslationService:
                           "translated_text": memory["translated_text"],
                           "translation_status": "cached" if memory["translation_status"] == "success" else memory["translation_status"],
                           "qa_status": memory["qa_status"],
-                          "provider": self.provider.name, "model": self.provider.model,
+                          "provider": memory.get("provider", self.provider.name),
+                          "provider_alias": memory.get("provider_alias"),
+                          "model": memory.get("model", self.provider.model),
                           "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                           "attempt_count": 0, "last_error": None,
                           "qa_issues": list(memory["qa_issues"]), "translated_at": self._now()}
@@ -501,7 +523,9 @@ class TranslationService:
                 response = self.provider.translate(protected.text, asin=asin, field=source_field,
                                                    source_language=self.source_language,
                                                    target_language=self.target_language,
-                                                   context={"target_field": target, "protected_tokens": list(protected.tokens)})
+                                                   context={"target_field": target, "protected_tokens": list(protected.tokens),
+                                                            "schema_version": self.schema_version,
+                                                            "prompt_version": self.prompt_version})
                 result = {"asin": asin, "field": source_field, "target_field": target,
                           "source_text": text, "source_hash": digest,
                           "translated_text": response.text or "", "translation_status": response.status,
@@ -531,6 +555,10 @@ class TranslationService:
                         "translation_status": result["translation_status"],
                         "qa_status": result["qa_status"],
                         "qa_issues": list(result["qa_issues"]),
+                        "provider": result["provider"],
+                        "provider_alias": result.get("provider_alias"),
+                        "model": result["model"],
+                        "translated_at": result["translated_at"],
                     }
                     self._memory_put(memory_key, memory_payload)
                     self.cache.put_memory(memory_key, memory_payload)

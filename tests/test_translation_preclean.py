@@ -51,3 +51,28 @@ def test_description_metadata_is_flagged_not_repaired():
     assert field["clean_status"] == "NEEDS_REVIEW"
     assert "POSSIBLE_METADATA_IN_DESCRIPTION" in field["issues"]
     assert field["translate_allowed"] is False
+
+
+def test_cross_field_review_blocks_both_fields_and_enters_queue():
+    result = audit_records([{
+        "asin": "B00000004",
+        "title_es_raw": "Taladro profesional 18V",
+        "specification_es": "Taladro profesional 18V",
+    }])
+    row = result["translation_input_records"][0]
+    assert row["record_status"] == "NEEDS_REVIEW"
+    assert row["fields"]["title_es_raw"]["translate_allowed"] is False
+    assert row["fields"]["specification_es"]["translate_allowed"] is False
+    assert result["review_queue"]
+
+
+def test_exact_detail_duplicates_are_removed_only_from_derived_rows():
+    result = audit_records([{
+        "asin": "B00000005",
+        "product_details_es": "Modelo: X1\nModelo: X1",
+    }])
+    row = result["translation_input_records"][0]
+    assert len(row["details_structured"]) == 1
+    assert result["summary"]["identity_count"] == 2
+    assert row["raw_fields"]["product_details"]["source_present"] is True
+    assert row["fields"]["product_details"]["protected_tokens"] == []

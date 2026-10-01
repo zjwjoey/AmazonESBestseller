@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from amazon_es_bestseller.translation.cache import TranslationCache
+from amazon_es_bestseller.translation.preclean import audit_records
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
 from amazon_es_bestseller.translation.service import TranslationService
 
@@ -57,6 +58,22 @@ def test_service_dry_run_never_calls_provider(tmp_path):
     service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
     result = service.translate_records(records(100), dry_run=True, limit=5)
     assert result["summary"]["total_records"] == 5
+    assert not provider.calls
+
+
+def test_service_consumes_preclean_fields_and_respects_admission(tmp_path):
+    prepared = audit_records([{
+        "asin": "B00000001",
+        "title_es_raw": "Taladro 18V",
+    }, {
+        "asin": "B00000002",
+        "title_es_raw": "Taladro 18V",
+        "specification_es": "Taladro 18V",
+    }])["translation_input_records"]
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    plan = service.plan(prepared)
+    assert plan["total_fields"] == 1
     assert not provider.calls
 
 

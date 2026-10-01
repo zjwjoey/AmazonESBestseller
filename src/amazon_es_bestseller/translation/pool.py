@@ -79,6 +79,7 @@ class ProviderPool:
             raise ValueError("max_workers must be between 1 and provider count")
         self.failover = failover
         self._lock = threading.RLock()
+        self._provider_locks = {alias: threading.Lock() for alias in self.aliases}
         self._inflight: dict[str, Future[PoolResult]] = {}
         self._completed: dict[str, PoolResult] = dict(tm or {})
         self._cursor = 0
@@ -87,6 +88,11 @@ class ProviderPool:
     def _choose_alias(self, excluded: set[str] | None = None) -> str:
         excluded = excluded or set()
         with self._lock:
+            for _ in range(len(self.aliases)):
+                alias = self.aliases[self._cursor % len(self.aliases)]
+                self._cursor += 1
+                if alias not in excluded and self._stats[alias].state == HEALTHY:
+                    return alias
             for _ in range(len(self.aliases)):
                 alias = self.aliases[self._cursor % len(self.aliases)]
                 self._cursor += 1
@@ -110,14 +116,18 @@ class ProviderPool:
         stats = self._stats[alias]
         with self._lock:
             stats.requests += 1
-        response = provider.translate(task.text, asin=task.asin, field=task.field,
-                                      source_language=task.context.get("source_language", "es"),
-                                      target_language=task.context.get("target_language", "zh-CN"),
-                                      context={**task.context, "provider_alias": alias})
+        # A provider lock gives each endpoint one active request at a time,
+        # even when the shared executor has work queued for that alias.
+        with self._provider_locks[alias]:
+            response = provider.translate(task.text, asin=task.asin, field=task.field,
+                                          source_language=task.context.get("source_language", "es"),
+                                          target_language=task.context.get("target_language", "zh-CN"),
+                                          context={**task.context, "provider_alias": alias})
         response.raw = {**(response.raw or {}), "provider_alias": alias}
         if response.status == "success":
             with self._lock:
                 stats.success += 1
+                stats.state = HEALTHY
             return PoolResult(task.key, response, alias)
         classification = self._retry_class(response)
         with self._lock:
@@ -163,7 +173,16 @@ class ProviderPool:
                         continue
                     future = self._inflight.get(task.key)
                     if future is None:
-                        alias = self._choose_alias()
+                        try:
+                            alias = self._choose_alias()
+                        except RuntimeError:
+                            # Preserve the task as pending rather than
+                            # crashing a batch when every provider is down.
+                            results.append(PoolResult(
+                                task.key,
+                                ProviderResponse(status="failed", error="NO_HEALTHY_PROVIDER", attempts=0),
+                                source="pending"))
+                            continue
                         future = executor.submit(self._execute_task, task, alias)
                         self._inflight[task.key] = future
                     results.append(future)
@@ -173,7 +192,11 @@ class ProviderPool:
                 assert result is not None
                 output.append(result)
                 with self._lock:
-                    self._completed[result.task_key] = result
+                    # Failed/pending results must remain retryable after a
+                    # provider recovers; only successful results are shared
+                    # through the pool's completed/TM registry.
+                    if result.response.status == "success":
+                        self._completed[result.task_key] = result
                     self._inflight.pop(result.task_key, None)
             return output
 
@@ -182,8 +205,10 @@ class ProviderPool:
             return {alias: vars(stats).copy() for alias, stats in self._stats.items()}
 
     def snapshot(self) -> dict[str, Any]:
+        healthy = sum(1 for stats in self._stats.values() if stats.state == HEALTHY)
         return {"provider_count": len(self.providers), "max_workers": self.max_workers,
                 "in_flight": len(self._inflight), "completed": len(self._completed),
+                "degraded_to_single_provider": len(self.providers) > 1 and healthy == 1,
                 "providers": self.stats()}
 
 

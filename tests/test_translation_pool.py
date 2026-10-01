@@ -37,6 +37,18 @@ class PermanentFailureFake(PoolFake):
         return ProviderResponse(provider=self.name, model=self.model, status="failed", error="invalid request")
 
 
+class ToggleFake(PoolFake):
+    def __init__(self, name):
+        super().__init__(name)
+        self.fail_now = True
+
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((text, asin, field))
+        if self.fail_now:
+            return ProviderResponse(provider=self.name, model=self.model, status="failed", error="HTTP 599")
+        return ProviderResponse(text="ok", provider=self.name, model=self.model)
+
+
 def task(text, n):
     return TranslationTask.from_values(text, asin=f"B{n:08d}", field="title_es_raw")
 
@@ -93,6 +105,25 @@ def test_successful_unit_is_shared_as_tm_result_without_second_call():
     pool.submit([one])
     pool.submit([one])
     assert len(provider.calls) == 1
+
+
+def test_failed_unit_remains_retryable_after_provider_recovers():
+    provider = ToggleFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": provider})
+    one = task("retry", 1)
+    assert pool.submit([one])[0].response.status == "failed"
+    provider.fail_now = False
+    assert pool.submit([one])[0].response.status == "success"
+    assert len(provider.calls) == 2
+
+
+def test_all_disabled_providers_return_pending_instead_of_crashing():
+    a, b = PermanentFailureFake("qwen-mt"), PermanentFailureFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    pool.submit([task("a", 1), task("b", 2)])
+    pending = pool.submit([task("c", 3)])[0]
+    assert pending.source == "pending"
+    assert pending.response.error == "NO_HEALTHY_PROVIDER"
 
 
 def test_translation_cache_concurrent_writes_remain_valid(tmp_path):
