@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -16,7 +17,10 @@ from .protection import protect, restore
 from .providers.base import TranslationProvider
 from .qa import build_qa_report, qa_field
 from .schemas import TRANSLATION_SCHEMA_VERSION
-from .terminology import postprocess
+from .terminology import (postprocess, deterministic_specification,
+                          specification_is_deterministic)
+from .full_detail import LABEL_ES_ZH
+from .zh import spec_zh_from
 
 
 DEFAULT_FIELD_MAP = {
@@ -69,6 +73,137 @@ class TranslationService:
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    def _memory_key(self, text: str, field: str) -> str:
+        return self.cache.memory_key(
+            text, self.source_language, self.target_language,
+            translation_memory_field_type(field), self.provider.name,
+            self.provider.model, self.schema_version, self.prompt_version)
+
+    @staticmethod
+    def _structured_rows(value: Any) -> Optional[List[tuple[str, str]]]:
+        if isinstance(value, dict):
+            return [(str(k), str(v)) for k, v in value.items() if str(v).strip()]
+        if isinstance(value, list) and all(isinstance(row, dict) for row in value):
+            rows = []
+            for row in value:
+                label = row.get("label_raw") or row.get("label") or row.get("name")
+                raw_value = row.get("value_raw") or row.get("value")
+                if label is not None and raw_value is not None and str(raw_value).strip():
+                    rows.append((str(label), str(raw_value)))
+            return rows
+        return None
+
+    @staticmethod
+    def _bullet_values(value: Any) -> Optional[List[str]]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str) and "\n" in value:
+            return [line.strip() for line in value.splitlines() if line.strip()]
+        return None
+
+    def _translate_structured(self, *, asin: str, source_field: str, target: str,
+                              source_text: str, raw_value: Any, record: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate structured details/bullets item-by-item and re-render them.
+
+        Labels and bullet boundaries remain deterministic; only each value/text
+        item is sent to the provider.  This prevents a model from flattening a
+        detail table or merging separate selling points.
+        """
+        rows = self._structured_rows(raw_value)
+        bullets = None if rows is not None else self._bullet_values(raw_value)
+        if rows is not None:
+            items = [(label, value) for label, value in rows]
+        elif bullets is not None:
+            items = [(None, value) for value in bullets]
+        else:
+            return {}
+        rendered = []
+        issues: List[Dict[str, Any]] = []
+        statuses = []
+        attempts = 0
+        errors = []
+        for index, (label, value) in enumerate(items):
+            protected = protect(value, protected_values=[asin, str(record.get("brand") or "")])
+            response = self.provider.translate(
+                protected.text, asin=asin, field=source_field,
+                source_language=self.source_language, target_language=self.target_language,
+                context={"target_field": target, "item_index": index,
+                         "label": label, "protected_tokens": list(protected.tokens)})
+            attempts += response.attempts
+            if response.status == "success" and response.text:
+                qa = qa_field(protected, response.text, value, field=source_field,
+                              brand=record.get("brand", ""))
+                restored, restore_issues = restore(protected, response.text)
+                item_issues = list(qa["issues"]) + list(restore_issues)
+                if item_issues:
+                    statuses.append("qa_failed")
+                    issues.extend({"item_index": index, **issue} for issue in item_issues)
+                else:
+                    statuses.append("success")
+                rendered_value = postprocess(source_field, restored, value)
+            else:
+                statuses.append("failed")
+                rendered_value = ""
+                if response.error:
+                    errors.append(str(response.error))
+            if label is not None:
+                label_zh = LABEL_ES_ZH.get(label.strip().casefold(), label.strip())
+                rendered.append("%s：%s" % (label_zh, rendered_value))
+            else:
+                rendered.append(rendered_value)
+        if all(status == "success" for status in statuses):
+            overall = "success"
+            qa_status = "pass"
+        elif any(status == "success" for status in statuses):
+            overall = "partial"
+            qa_status = "qa_failed" if issues else "pending"
+        elif any(status == "qa_failed" for status in statuses):
+            overall = "qa_failed"
+            qa_status = "qa_failed"
+        else:
+            overall = "failed"
+            qa_status = "pending"
+        return {"asin": asin, "field": source_field, "target_field": target,
+                "source_text": source_text, "source_hash": source_hash(source_text),
+                "translated_text": "\n".join(rendered),
+                "translation_status": overall, "qa_status": qa_status,
+                "provider": self.provider.name, "model": self.provider.model,
+                "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                "attempt_count": attempts, "last_error": "; ".join(errors) or None,
+                "qa_issues": issues, "translated_at": self._now()}
+
+    def _deterministic_spec_result(self, *, asin: str, source_field: str,
+                                   target: str, text: str) -> Optional[Dict[str, Any]]:
+        if source_field != "specification_es" or not specification_is_deterministic(text):
+            return None
+        translated = deterministic_specification(text)
+        if not translated or translated == text:
+            return None
+        source_numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
+        result_numbers = re.findall(r"\d+(?:[.,]\d+)?", translated)
+        issues = []
+        if sorted(source_numbers) != sorted(result_numbers):
+            issues.append({"code": "NUMERIC_MISMATCH", "source": source_numbers,
+                           "result": result_numbers})
+        protected = protect(text)
+        for value in protected.tokens.values():
+            # Deterministic rules are allowed to convert units (cm→厘米,
+            # ml→毫升); numeric equality above covers the invariant here.
+            if re.search(r"(?:ml|cl|dl|kg|mg|mm|cm|kw|hz|ghz|mah|bar|psi|°c|%)$",
+                         value.strip().lower()):
+                continue
+            if value not in translated:
+                issues.append({"code": "PROTECTED_TOKEN_MISSING", "token": value})
+        status = "qa_failed" if issues else "success"
+        return {"asin": asin, "field": source_field, "target_field": target,
+                "source_text": text, "source_hash": source_hash(text),
+                "translated_text": translated, "translation_status": status,
+                "qa_status": "qa_failed" if issues else "pass",
+                "provider": "deterministic", "model": "rules-v1",
+                "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                "attempt_count": 0, "last_error": None, "qa_issues": issues,
+                "translated_at": self._now()}
+
     def selected_fields(self, record: Dict[str, Any], fields: Optional[Sequence[str]] = None) -> List[tuple[str, str, str]]:
         requested = set(fields or ())
         selected: List[tuple[str, str, str]] = []
@@ -95,12 +230,14 @@ class TranslationService:
         return selected
 
     def plan(self, records: Sequence[Dict[str, Any]], *, fields: Optional[Sequence[str]] = None,
-             offset: int = 0, limit: Optional[int] = None) -> Dict[str, Any]:
+             offset: int = 0, limit: Optional[int] = None,
+             repair_partial: bool = False, repair_failed: bool = False) -> Dict[str, Any]:
         subset = list(records)[max(0, offset):]
         if limit is not None:
             subset = subset[:max(0, limit)]
         rows = []
         cache_hits = 0
+        translation_memory_hits = 0
         source_missing = 0
         unique_requests = set()
         for record in subset:
@@ -113,8 +250,17 @@ class TranslationService:
                 key = self.cache.key(asin, source, digest, self.provider.name,
                                      self.provider.model, self.schema_version, self.prompt_version)
                 cached = self.cache.get(key)
+                memory = None
+                bypass_memory = False
                 if cached and cached.get("translation_status") in {"success", "cached"}:
                     cache_hits += 1
+                else:
+                    memory = self.cache.get_memory(self._memory_key(text, source))
+                    bypass_memory = memory and ((memory.get("translation_status") == "partial" and repair_partial)
+                                                or (memory.get("translation_status") in {"failed", "qa_failed"}
+                                                    and repair_failed))
+                if memory and not bypass_memory:
+                    translation_memory_hits += 1
                 else:
                     unique_requests.add((translation_memory_field_type(source), digest,
                                          self.provider.name, self.provider.model))
@@ -123,6 +269,7 @@ class TranslationService:
         return {"schema_version": self.schema_version, "provider": self.provider.name,
                 "model": self.provider.model, "total_records": len(subset),
                 "total_fields": len(rows), "cache_hits": cache_hits,
+                "translation_memory_hits": translation_memory_hits,
                 "source_missing": source_missing,
                 "estimated_api_requests": len(unique_requests), "fields": rows}
 
@@ -148,13 +295,45 @@ class TranslationService:
                 cached["translation_status"] = "cached"
                 output_fields[target] = cached
                 continue
-            memory_key = (translation_memory_field_type(source_field), digest,
-                          self.provider.name, self.provider.model)
-            if memory_key in self._memory:
-                memory = self._memory[memory_key]
+            raw_value = record.get(source_field)
+            if (self._structured_rows(raw_value) is not None or
+                    self._bullet_values(raw_value) is not None):
+                structured_result = self._translate_structured(
+                    asin=asin, source_field=source_field, target=target,
+                    source_text=text, raw_value=raw_value, record=record)
+                if structured_result:
+                    self.cache.put(key, structured_result)
+                    if structured_result["translation_status"] in {"success", "qa_failed", "partial"}:
+                        self.cache.put_memory(self._memory_key(text, source_field), {
+                            "translated_text": structured_result["translated_text"],
+                            "translation_status": structured_result["translation_status"],
+                            "qa_status": structured_result["qa_status"],
+                            "qa_issues": list(structured_result["qa_issues"]),
+                        })
+                    output_fields[target] = structured_result
+                    continue
+            deterministic_result = self._deterministic_spec_result(
+                asin=asin, source_field=source_field, target=target, text=text)
+            if deterministic_result:
+                self.cache.put(key, deterministic_result)
+                self.cache.put_memory(self._memory_key(text, source_field), {
+                    "translated_text": deterministic_result["translated_text"],
+                    "translation_status": deterministic_result["translation_status"],
+                    "qa_status": deterministic_result["qa_status"],
+                    "qa_issues": list(deterministic_result["qa_issues"]),
+                })
+                output_fields[target] = deterministic_result
+                continue
+            memory_key = self._memory_key(text, source_field)
+            memory = self._memory.get(memory_key) or self.cache.get_memory(memory_key)
+            if memory and ((memory.get("translation_status") == "partial" and repair_partial)
+                           or (memory.get("translation_status") in {"failed", "qa_failed"}
+                               and repair_failed)):
+                memory = None
+            if memory:
                 result = {"asin": asin, "field": source_field, "target_field": target,
                           "source_text": text, "source_hash": digest,
-                          "translated_text": memory["text"],
+                          "translated_text": memory["translated_text"],
                           "translation_status": "cached" if memory["translation_status"] == "success" else memory["translation_status"],
                           "qa_status": memory["qa_status"],
                           "provider": self.provider.name, "model": self.provider.model,
@@ -179,6 +358,7 @@ class TranslationService:
                           "qa_issues": [], "translated_at": self._now()}
                 if response.status == "success" and response.text:
                     qa = qa_field(protected, response.text, text, field=source_field,
+                                  brand=record.get("brand", ""),
                                   allowed_residual=[record.get("brand", "")])
                     result["qa_status"] = qa["qa_status"]
                     result["qa_issues"] = qa["issues"]
@@ -192,11 +372,12 @@ class TranslationService:
                     restored, _ = restore(protected, response.text)
                     result["translated_text"] = postprocess(source_field, restored, text)
                     self._memory[memory_key] = {
-                        "text": result["translated_text"],
+                        "translated_text": result["translated_text"],
                         "translation_status": result["translation_status"],
                         "qa_status": result["qa_status"],
                         "qa_issues": list(result["qa_issues"]),
                     }
+                    self.cache.put_memory(memory_key, self._memory[memory_key])
                 elif response.status == "success":
                     result["translation_status"] = "qa_failed"
                     result["qa_status"] = "qa_failed"
@@ -205,8 +386,27 @@ class TranslationService:
                     result["translation_status"] = "failed"
             self.cache.put(key, result)
             output_fields[target] = result
+        if fields:
+            requested = set(fields)
+            present_targets = set(output_fields)
+            for source_field, target in self.field_map.items():
+                if source_field not in requested and target not in requested:
+                    continue
+                if target in present_targets:
+                    continue
+                output_fields[target] = {
+                    "asin": asin, "field": source_field, "target_field": target,
+                    "source_text": "", "source_hash": "", "translated_text": "",
+                    "translation_status": "source_missing", "qa_status": "source_missing",
+                    "provider": self.provider.name, "model": self.provider.model,
+                    "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                    "attempt_count": 0, "last_error": None, "qa_issues": [],
+                    "translated_at": self._now(),
+                }
         statuses = [v.get("translation_status") for v in output_fields.values()]
         if not statuses:
+            overall = "source_missing"
+        elif all(s == "source_missing" for s in statuses):
             overall = "source_missing"
         elif all(s in {"success", "cached"} for s in statuses):
             overall = "success"
@@ -234,7 +434,8 @@ class TranslationService:
         if limit is not None:
             subset = subset[:max(0, limit)]
         if dry_run:
-            return {"records": {}, "summary": self.plan(records, fields=fields, offset=offset, limit=limit),
+            return {"records": {}, "summary": self.plan(records, fields=fields, offset=offset, limit=limit,
+                                                          repair_partial=repair_partial, repair_failed=repair_failed),
                     "qa_report": {"status": "dry_run"}}
         outputs: Dict[str, Dict[str, Any]] = {}
         for record in subset:

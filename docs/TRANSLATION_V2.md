@@ -8,8 +8,10 @@ DeepSeek or deterministic translation modules.
 
 `ASIN + Spanish source field` → source hash → protection → provider → token
 restore and QA → field cache → display translation. Raw Spanish fields are
-never overwritten. A cache key includes ASIN, field, source hash, provider,
-model, schema version and prompt version.
+never overwritten. A field cache key includes ASIN, field, source hash,
+provider, model, schema version and prompt version. A separate persistent TM
+key uses source hash, language pair and field type, so the same category or
+attribute text can be reused by a different ASIN and a later process.
 
 ## Provider and credentials
 
@@ -49,8 +51,14 @@ other fields. Cache writes use a temporary file, fsync and atomic replace. A
 corrupt cache is preserved with a `.corrupt-*` suffix and the run starts with
 an empty cache rather than silently accepting malformed data.
 
-`translation_qa.json` records numeric/unit/token, bullet-count and conservative
-residual-Spanish findings with stable zero-filled counters. Optional
+`product_details` structured attributes keep label order and translate values
+item-by-item; structured bullet arrays/newline bullets keep their boundaries
+and order. Known, fully structured specifications use the existing deterministic
+rules before any provider request; unknown/non-deterministic text remains
+eligible for the configured provider.
+
+`translation_qa.json` records numeric/unit/token, added-number, brand,
+bullet-count and conservative residual-Spanish findings with stable zero-filled counters. Optional
 `--audit-out` writes one JSONL row per translated field, including source hash,
 provider, model, status and QA status. Existing deterministic rules from
 `zh.py` and `full_detail.py` are applied as a terminology post-processing layer;

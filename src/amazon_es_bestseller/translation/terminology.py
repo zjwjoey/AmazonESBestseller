@@ -6,10 +6,18 @@ or replacing those legacy modules.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .full_detail import render_bullets_zh, render_details_zh
-from .zh import apply_terms
+from .zh import TERMS, apply_terms, translate_value
+
+SPEC_LABELS = {
+    "dimensiones": "尺寸", "dimension": "尺寸", "tamaño": "尺寸",
+    "capacidad": "容量", "peso": "重量", "cantidad": "件数",
+    "material": "材质", "potencia": "功率", "voltaje": "电压",
+    "color": "颜色", "modelo": "型号", "número de modelo": "型号",
+}
 
 
 def postprocess(field: str, translated: str, source: str) -> str:
@@ -36,3 +44,33 @@ def deterministic_detail(source: Any) -> str:
     if isinstance(source, dict):
         return render_details_zh([{"label_raw": k, "value_raw": v} for k, v in source.items()])
     return ""
+
+
+def deterministic_specification(source: str) -> str:
+    """Translate structured specification labels and known values only."""
+    parts = [part.strip() for part in re.split(r"[;；]\s*", str(source or "")) if part.strip()]
+    rendered = []
+    for part in parts:
+        match = re.match(r"^([^:：]+)\s*[:：]\s*(.*)$", part)
+        if match:
+            label = match.group(1).strip()
+            value = match.group(2).strip()
+            label_zh = SPEC_LABELS.get(label.casefold(), label)
+            rendered.append("%s：%s" % (label_zh, translate_value(value)))
+        else:
+            rendered.append(translate_value(part))
+    return "；".join(rendered)
+
+
+def specification_is_deterministic(source: str) -> bool:
+    """Conservative gate: only use rules when no unknown Spanish words remain."""
+    known_words = {"de", "del", "la", "el", "y", "con", "sin", "pack", "set",
+                   "unidad", "unidades", "por", "para"}
+    for spanish, _ in TERMS:
+        known_words.update(spanish.casefold().split())
+    for label in SPEC_LABELS:
+        known_words.update(label.split())
+    text = re.sub(r"\d+(?:[.,]\d+)?", " ", str(source or ""))
+    text = re.sub(r"\b[A-Z0-9]+(?:[-/][A-Z0-9]+)*\b", " ", text)
+    words = re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}", text.casefold())
+    return all(word in known_words for word in words)
