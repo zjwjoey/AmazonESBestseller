@@ -16,6 +16,7 @@ from .protection import protect, restore
 from .providers.base import TranslationProvider
 from .qa import build_qa_report, qa_field
 from .schemas import TRANSLATION_SCHEMA_VERSION
+from .terminology import postprocess
 
 
 DEFAULT_FIELD_MAP = {
@@ -40,18 +41,29 @@ def source_hash(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
 
 
+def translation_memory_field_type(field: str) -> str:
+    """Use one TM namespace for equivalent category labels across levels."""
+    if field in {"category_l1", "category_l2", "category_l3", "leaf_category",
+                 "category_l1_es", "category_l2_es", "category_l3_es", "leaf_category_es"}:
+        return "category"
+    return field
+
+
 class TranslationService:
     def __init__(self, provider: TranslationProvider, cache: TranslationCache,
                  *, field_map: Optional[Dict[str, str]] = None,
                  schema_version: str = TRANSLATION_SCHEMA_VERSION,
-                 prompt_version: str = "v1", max_fields: Optional[Sequence[str]] = None):
+                 prompt_version: str = "v1", max_fields: Optional[Sequence[str]] = None,
+                 source_language: str = "es", target_language: str = "zh-CN"):
         self.provider = provider
         self.cache = cache
         self.field_map = dict(field_map or DEFAULT_FIELD_MAP)
         self.schema_version = schema_version
         self.prompt_version = prompt_version
+        self.source_language = source_language
+        self.target_language = target_language
         self.max_fields = set(max_fields) if max_fields else None
-        self._memory: Dict[tuple, str] = {}
+        self._memory: Dict[tuple, Dict[str, Any]] = {}
 
     @staticmethod
     def _now() -> str:
@@ -60,6 +72,7 @@ class TranslationService:
     def selected_fields(self, record: Dict[str, Any], fields: Optional[Sequence[str]] = None) -> List[tuple[str, str, str]]:
         requested = set(fields or ())
         selected: List[tuple[str, str, str]] = []
+        seen_targets = set()
         for source, target in self.field_map.items():
             if self.max_fields and source not in self.max_fields and target not in self.max_fields:
                 continue
@@ -74,7 +87,10 @@ class TranslationService:
                     continue
             text = str(value).strip()
             if text:
+                if target in seen_targets:
+                    continue
                 selected.append((source, target, text))
+                seen_targets.add(target)
         # A custom field can be passed by its already-Chinese target/source name.
         return selected
 
@@ -84,14 +100,31 @@ class TranslationService:
         if limit is not None:
             subset = subset[:max(0, limit)]
         rows = []
+        cache_hits = 0
+        source_missing = 0
+        unique_requests = set()
         for record in subset:
             asin = str(record.get("asin") or "").strip().upper()
-            for source, target, text in self.selected_fields(record, fields):
+            selected = self.selected_fields(record, fields)
+            if not selected:
+                source_missing += 1
+            for source, target, text in selected:
+                digest = source_hash(text)
+                key = self.cache.key(asin, source, digest, self.provider.name,
+                                     self.provider.model, self.schema_version, self.prompt_version)
+                cached = self.cache.get(key)
+                if cached and cached.get("translation_status") in {"success", "cached"}:
+                    cache_hits += 1
+                else:
+                    unique_requests.add((translation_memory_field_type(source), digest,
+                                         self.provider.name, self.provider.model))
                 rows.append({"asin": asin, "source_field": source, "target_field": target,
-                             "source_hash": source_hash(text), "source_chars": len(text)})
+                             "source_hash": digest, "source_chars": len(text)})
         return {"schema_version": self.schema_version, "provider": self.provider.name,
                 "model": self.provider.model, "total_records": len(subset),
-                "total_fields": len(rows), "fields": rows}
+                "total_fields": len(rows), "cache_hits": cache_hits,
+                "source_missing": source_missing,
+                "estimated_api_requests": len(unique_requests), "fields": rows}
 
     def _translate_record(self, record: Dict[str, Any], *, fields: Optional[Sequence[str]] = None,
                           repair_partial: bool = False, repair_failed: bool = False) -> Dict[str, Any]:
@@ -115,20 +148,26 @@ class TranslationService:
                 cached["translation_status"] = "cached"
                 output_fields[target] = cached
                 continue
-            memory_key = (source_field, digest, self.provider.name, self.provider.model)
+            memory_key = (translation_memory_field_type(source_field), digest,
+                          self.provider.name, self.provider.model)
             if memory_key in self._memory:
-                translated = self._memory[memory_key]
+                memory = self._memory[memory_key]
                 result = {"asin": asin, "field": source_field, "target_field": target,
-                          "source_text": text, "source_hash": digest, "translated_text": translated,
-                          "translation_status": "cached", "qa_status": "success",
+                          "source_text": text, "source_hash": digest,
+                          "translated_text": memory["text"],
+                          "translation_status": "cached" if memory["translation_status"] == "success" else memory["translation_status"],
+                          "qa_status": memory["qa_status"],
                           "provider": self.provider.name, "model": self.provider.model,
                           "schema_version": self.schema_version, "prompt_version": self.prompt_version,
-                          "attempt_count": 0, "last_error": None, "qa_issues": [], "translated_at": self._now()}
+                          "attempt_count": 0, "last_error": None,
+                          "qa_issues": list(memory["qa_issues"]), "translated_at": self._now()}
             else:
                 # Protect numbers and explicit identity tokens.  Brand and ASIN
                 # are always protected even when translating another field.
                 protected = protect(text, protected_values=[asin, str(record.get("brand") or "")])
                 response = self.provider.translate(protected.text, asin=asin, field=source_field,
+                                                   source_language=self.source_language,
+                                                   target_language=self.target_language,
                                                    context={"target_field": target, "protected_tokens": list(protected.tokens)})
                 result = {"asin": asin, "field": source_field, "target_field": target,
                           "source_text": text, "source_hash": digest,
@@ -139,7 +178,7 @@ class TranslationService:
                           "attempt_count": response.attempts, "last_error": response.error,
                           "qa_issues": [], "translated_at": self._now()}
                 if response.status == "success" and response.text:
-                    qa = qa_field(protected, response.text, text,
+                    qa = qa_field(protected, response.text, text, field=source_field,
                                   allowed_residual=[record.get("brand", "")])
                     result["qa_status"] = qa["qa_status"]
                     result["qa_issues"] = qa["issues"]
@@ -147,12 +186,21 @@ class TranslationService:
                         result["translation_status"] = "qa_failed"
                     else:
                         restored, _ = restore(protected, response.text)
-                        result["translated_text"] = restored
+                        result["translated_text"] = postprocess(source_field, restored, text)
                     # Translation memory deduplicates provider calls even when
                     # the identical source later needs the same QA review.
                     restored, _ = restore(protected, response.text)
-                    result["translated_text"] = restored
-                    self._memory[memory_key] = restored
+                    result["translated_text"] = postprocess(source_field, restored, text)
+                    self._memory[memory_key] = {
+                        "text": result["translated_text"],
+                        "translation_status": result["translation_status"],
+                        "qa_status": result["qa_status"],
+                        "qa_issues": list(result["qa_issues"]),
+                    }
+                elif response.status == "success":
+                    result["translation_status"] = "qa_failed"
+                    result["qa_status"] = "qa_failed"
+                    result["qa_issues"] = [{"code": "EMPTY_TRANSLATION"}]
                 elif response.status == "failed":
                     result["translation_status"] = "failed"
             self.cache.put(key, result)
@@ -168,8 +216,15 @@ class TranslationService:
             overall = "qa_failed"
         else:
             overall = "failed"
-        return {"asin": asin, "fields": output_fields, "translation_status": overall,
-                "source_record_hash": source_hash(json.dumps(record, ensure_ascii=False, sort_keys=True))}
+        output = {"asin": asin, "fields": output_fields, "translation_status": overall,
+                  "source_record_hash": source_hash(json.dumps(record, ensure_ascii=False, sort_keys=True))}
+        # Keep a flat display overlay alongside the auditable field envelopes;
+        # this lets the existing enrich/export path consume V2 without knowing
+        # provider internals, while raw Spanish remains in the source product.
+        for target, value in output_fields.items():
+            if value.get("translated_text") and value.get("translation_status") in {"success", "cached"}:
+                output[target] = value["translated_text"]
+        return output
 
     def translate_records(self, records: Sequence[Dict[str, Any]], *, fields: Optional[Sequence[str]] = None,
                           offset: int = 0, limit: Optional[int] = None,

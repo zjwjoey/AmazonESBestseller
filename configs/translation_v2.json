@@ -1,6 +1,8 @@
 {
   "provider": "qwen-mt",
   "model": "qwen-mt-flash",
+  "source_language": "es",
+  "target_language": "zh-CN",
   "protocol": "openai_compatible",
   "timeout": 60,
   "max_retries": 2,

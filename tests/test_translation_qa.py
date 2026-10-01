@@ -13,3 +13,9 @@ def test_qa_report_counts_field_statuses():
     report = build_qa_report([{"asin": "A", "fields": {"title_zh": {
         "translation_status": "success", "qa_issues": []}}}])
     assert report["counts"]["success"] == 1
+
+
+def test_bullet_count_is_preserved():
+    protected = protect("Linea uno\nLinea dos")
+    result = qa_field(protected, "第一条", "Linea uno\nLinea dos", field="feature_bullets_es")
+    assert any(x["code"] == "BULLET_COUNT_MISMATCH" for x in result["issues"])

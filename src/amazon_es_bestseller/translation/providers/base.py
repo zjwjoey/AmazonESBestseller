@@ -26,13 +26,17 @@ class TranslationProvider(ABC):
 
     @abstractmethod
     def translate(self, text: str, *, asin: str, field: str,
+                  source_language: str = "es", target_language: str = "zh-CN",
                   context: Optional[Dict[str, Any]] = None) -> ProviderResponse:
         """Translate exactly one source field."""
 
     def translate_field(self, text: str, *, asin: str, field: str,
+                        source_language: str = "es", target_language: str = "zh-CN",
                         context: Optional[Dict[str, Any]] = None) -> ProviderResponse:
         """Readable alias used by integrations that call the operation a field translation."""
-        return self.translate(text, asin=asin, field=field, context=context)
+        return self.translate(text, asin=asin, field=field,
+                              source_language=source_language,
+                              target_language=target_language, context=context)
 
     @property
     def model(self) -> str:

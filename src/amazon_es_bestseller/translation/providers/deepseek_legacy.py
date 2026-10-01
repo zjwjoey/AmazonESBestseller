@@ -22,6 +22,7 @@ class DeepSeekLegacyProvider(TranslationProvider):
         return getattr(self.translator, "model", "deepseek-chat")
 
     def translate(self, text: str, *, asin: str, field: str,
+                  source_language: str = "es", target_language: str = "zh-CN",
                   context: Optional[Dict[str, Any]] = None) -> ProviderResponse:
         # Deliberately use the legacy request builder only when explicitly selected.
         try:
