@@ -9,6 +9,7 @@ import pytest
 from amazon_es_bestseller.collection.quota import (QuotaError, normalize_source_url,
                                                     select_research_quota)
 from amazon_es_bestseller.collection.discovery import parse_bestseller_navigation
+from amazon_es_bestseller.collection import task as task_module
 from amazon_es_bestseller.collection.task import (_cooldown_seconds, _needs_reserve_sources,
                                                    _run_category_live, resolve_task_path, run_task,
                                                    validate_task_plan)
@@ -36,6 +37,22 @@ def _plan():
              "sources": [{"source_url": "https://www.amazon.es/gp/bestsellers/kitchen/"}]},
         ],
     }
+
+
+def test_checkpoint_write_falls_back_when_windows_replace_is_denied(monkeypatch, tmp_path):
+    target = tmp_path / "batch_state_v2.json"
+    target.write_text(json.dumps({"old": True}), encoding="utf-8")
+
+    def deny_replace(*_args, **_kwargs):
+        raise PermissionError(13, "access denied")
+
+    monkeypatch.setattr(task_module.os, "replace", deny_replace)
+    monkeypatch.setattr(task_module.time, "sleep", lambda _seconds: None)
+
+    task_module._write_json_atomic(target, {"run_status": "RUNNING"})
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {"run_status": "RUNNING"}
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 def test_reviewed_task_plan_requires_real_sources_and_three_slots():
