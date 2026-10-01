@@ -749,6 +749,30 @@ def cmd_translate(args) -> None:
     print("translate V2 完成：%s → %s；QA → %s" % (result["summary"], args.out, qa_out))
 
 
+# ---------- dictionary-only（全离线） ----------
+
+def cmd_dictionary_only(args) -> None:
+    """Profile source data and run the conservative dictionary-only pipeline.
+
+    This command intentionally does not construct Qwen/DeepSeek clients.  It
+    is safe to run against the full internal-research dataset and writes all
+    reports to an independent directory.
+    """
+    from .translation.dictionary_only import load_records, run_dictionary_only, write_reports
+
+    products = load_records(args.products)
+    result = run_dictionary_only(products, top_n=args.top_n)
+    paths = write_reports(result, args.out)
+    summary = result["summary"]
+    print("dictionary-only 完成：SKU %d、唯一 ASIN %d、总处理单元 %d、字典 %d、规则 %d、保护/保留 %d、未解决 %d、Qwen API 0 → %s" %
+          (summary["total_skus"], summary["unique_asins"], summary["total_units"],
+           summary["resolved_by_dictionary"], summary["resolved_by_rules"],
+           summary["source_preserved"] + summary["protected"],
+           summary["remaining_for_qwen"], args.out))
+    for name, path in paths.items():
+        print("  %s -> %s" % (name, path))
+
+
 # ---------- enrich（离线） ----------
 
 def cmd_enrich(args) -> None:
@@ -1073,6 +1097,15 @@ def build_parser() -> argparse.ArgumentParser:
     tv2.add_argument("--dry-run", action="store_true", help="仅生成字段计划，不调用 API")
     tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
     tv2.set_defaults(func=cmd_translate)
+
+    do = sub.add_parser("dictionary-only", help="全离线：画像、字典候选与确定性解析（绝不调用翻译 API）")
+    do.add_argument("--products", required=True,
+                    help="内部研究 CSV、规范化商品 JSON 数组，或带 records 的内部研究 JSON")
+    do.add_argument("--out", default=str(OUTPUTS / "translation_v2_dictionary"),
+                    help="独立报告目录")
+    do.add_argument("--top-n", type=int, default=100,
+                    help="候选清单默认高频观察窗口（报告仍保留全部候选）")
+    do.set_defaults(func=cmd_dictionary_only)
 
     q = sub.add_parser("qa", help="离线：商品表 → QA 结果")
     q.add_argument("--products", default=str(OUTPUTS / "products.json"))

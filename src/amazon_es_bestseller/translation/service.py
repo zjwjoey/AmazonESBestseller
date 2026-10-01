@@ -21,6 +21,7 @@ from .terminology import (postprocess, deterministic_specification,
                           specification_is_deterministic)
 from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
+from .dictionary_service import DictionaryService
 
 
 DEFAULT_FIELD_MAP = {
@@ -68,6 +69,10 @@ class TranslationService:
         self.target_language = target_language
         self.max_fields = set(max_fields) if max_fields else None
         self._memory: Dict[tuple, Dict[str, Any]] = {}
+        # One shared lookup surface for deterministic labels.  The provider
+        # still handles unresolved prose; this only prevents duplicate label
+        # dictionaries from drifting between the offline and Qwen paths.
+        self.dictionary = DictionaryService()
 
     @staticmethod
     def _now() -> str:
@@ -183,7 +188,8 @@ class TranslationService:
                     if response.error:
                         errors.append(str(response.error))
             if label is not None:
-                label_zh = LABEL_ES_ZH.get(label.strip().casefold(), label.strip())
+                label_zh = (self.dictionary.lookup_attribute_label(label.strip())
+                            or LABEL_ES_ZH.get(label.strip().casefold(), label.strip()))
                 rendered.append("%s：%s" % (label_zh, rendered_value))
             else:
                 rendered.append(rendered_value)

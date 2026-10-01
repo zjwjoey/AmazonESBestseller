@@ -10,13 +10,18 @@ import re
 from typing import Any
 
 from .full_detail import render_bullets_zh, render_details_zh
-from .zh import TERMS, apply_terms, translate_value
+from .zh import TERMS, apply_terms, dedupe_technical_units, translate_value
 
 SPEC_LABELS = {
     "dimensiones": "尺寸", "dimension": "尺寸", "tamaño": "尺寸",
+    "dimensiones del producto": "产品尺寸", "dimensiones del paquete": "包装尺寸",
     "capacidad": "容量", "peso": "重量", "cantidad": "件数",
+    "peso del producto": "产品重量", "peso artículo": "商品重量",
     "material": "材质", "potencia": "功率", "voltaje": "电压",
+    "vataje": "功率", "frecuencia": "频率",
     "color": "颜色", "modelo": "型号", "número de modelo": "型号",
+    "referencia oem": "OEM参考号", "referencia del fabricante": "制造商参考编号",
+    "referencia": "参考号", "requiere montaje": "需要组装",
 }
 
 
@@ -28,6 +33,7 @@ def postprocess(field: str, translated: str, source: str) -> str:
         # Brand is identity data, never a translation target.
         return str(source)
     out = apply_terms(str(translated))
+    out = dedupe_technical_units(out)
     if field == "specification_es":
         # Only normalize labels/known values; the provider output remains the
         # source of non-deterministic text.
@@ -64,6 +70,16 @@ def deterministic_specification(source: str) -> str:
 
 def specification_is_deterministic(source: str) -> bool:
     """Conservative gate: only use rules when no unknown Spanish words remain."""
+    # Explicit model/OEM references are identity values.  Their labels can be
+    # translated deterministically while the value must be copied verbatim,
+    # even when it is a brand-like name such as ``Cera Tec``.
+    if re.match(
+        r"^\s*(?:modelo|n[uú]mero\s+de\s+modelo|referencia(?:\s+oem)?|"
+        r"referencia\s+del\s+fabricante)\s*[:：]\s*\S+",
+        str(source or ""),
+        re.I,
+    ):
+        return True
     known_words = {"de", "del", "la", "el", "y", "con", "sin", "pack", "set",
                    "unidad", "unidades", "por", "para"}
     for spanish, _ in TERMS:
