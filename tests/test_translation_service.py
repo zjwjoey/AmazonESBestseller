@@ -150,7 +150,9 @@ def test_preclean_brand_is_used_for_protection_across_scalar_translation(tmp_pat
         provider = FakeProvider()
         result = TranslationService(provider, TranslationCache(tmp_path / (brand.replace("-", "") + ".json"))).translate_records(prepared)
         field = result["records"]["B00000001"]["fields"]["title_zh"]
-        assert brand in provider.calls[0][2] or brand in field["translated_text"]
+        provider_input = provider.calls[0][2]
+        assert brand not in provider_input
+        assert "__T" in provider_input
         assert brand in field["translated_text"]
 
 
@@ -298,6 +300,101 @@ def test_plan_excludes_identity_detail_values_from_api_requests(tmp_path):
         "product_details_es": "Modelo: Cera Tec\nColor: Negro\nDescripción: Producto resistente",
     }])
     assert planned["estimated_api_requests"] == 1
+
+
+def test_structured_detail_tm_shares_only_the_same_label_semantic(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records([
+        {"asin": "B00000001", "product_details_es": "Color: Natural"},
+        {"asin": "B00000002", "product_details_es": "Color: Natural"},
+        {"asin": "B00000003", "product_details_es": "Material: Natural"},
+    ])
+    assert len(provider.calls) == 2
+    assert result["records"]["B00000002"]["fields"]["product_details_zh"]["items"][0]["resolution_source"] == "cached"
+
+
+def test_structured_detail_tm_does_not_share_different_labels_within_one_sku(tmp_path):
+    provider = FakeProvider()
+    TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([{
+        "asin": "B00000001", "product_details_es": "Color: Normal\nTipo: Normal"
+    }])
+    assert len(provider.calls) == 2
+
+
+def test_structured_detail_tm_ignores_detail_position_for_same_label(tmp_path):
+    provider = FakeProvider()
+    TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "product_details_es": "Modelo: Cera Tec\nColor: Natural"},
+        {"asin": "B00000002", "product_details_es": "Color: Natural"},
+    ])
+    assert len(provider.calls) == 1
+
+
+def test_structured_detail_persistent_tm_is_scoped_by_label(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    first = FakeProvider()
+    TranslationService(first, TranslationCache(cache_path)).translate_records([{
+        "asin": "B00000001", "product_details_es": "Color: Natural"
+    }])
+    same_label = FakeProvider()
+    TranslationService(same_label, TranslationCache(cache_path)).translate_records([{
+        "asin": "B00000002", "product_details_es": "Color: Natural"
+    }])
+    different_label = FakeProvider()
+    TranslationService(different_label, TranslationCache(cache_path)).translate_records([{
+        "asin": "B00000003", "product_details_es": "Material: Natural"
+    }])
+    assert len(first.calls) == 1
+    assert not same_label.calls
+    assert len(different_label.calls) == 1
+
+
+def test_structured_detail_plan_matches_actual_semantic_request_count(tmp_path):
+    records = [
+        {"asin": "B00000001", "product_details_es": "Color: Natural"},
+        {"asin": "B00000002", "product_details_es": "Color: Natural"},
+        {"asin": "B00000003", "product_details_es": "Material: Natural"},
+    ]
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    assert service.plan(records)["estimated_api_requests"] == 2
+    service.translate_records(records)
+    assert len(provider.calls) == 2
+
+
+def test_structured_identity_and_dictionary_values_stay_before_provider(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "product_details_es": "Modelo: Cera Tec"},
+        {"asin": "B00000002", "product_details_es": "Modelo: Cera Tec"},
+        {"asin": "B00000003", "product_details_es": "Color: Negro"},
+    ])
+    assert not provider.calls
+    assert "型号：Cera Tec" in result["records"]["B00000001"]["product_details_zh"]
+    assert "颜色：黑色" in result["records"]["B00000003"]["product_details_zh"]
+
+
+def test_parallel_structured_detail_inflight_dedup_respects_label_semantic(tmp_path):
+    same_a, same_b = SlowProvider(), SlowProvider()
+    same_a.name, same_b.name = "qwen-a", "qwen-b"
+    same_pool = ProviderPool({"qwen-a": same_a, "qwen-b": same_b})
+    same_service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "same.json"))
+    same_service.translate_records_parallel([
+        {"asin": "B00000001", "product_details_es": "Color: Natural"},
+        {"asin": "B00000002", "product_details_es": "Color: Natural"},
+    ], same_pool)
+    assert len(same_a.calls) + len(same_b.calls) == 1
+
+    different_a, different_b = SlowProvider(), SlowProvider()
+    different_a.name, different_b.name = "qwen-a", "qwen-b"
+    different_pool = ProviderPool({"qwen-a": different_a, "qwen-b": different_b})
+    different_service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "different.json"))
+    different_service.translate_records_parallel([
+        {"asin": "B00000003", "product_details_es": "Color: Natural"},
+        {"asin": "B00000004", "product_details_es": "Material: Natural"},
+    ], different_pool)
+    assert len(different_a.calls) + len(different_b.calls) == 2
 
 
 def test_structured_details_keep_labels_and_order(tmp_path):

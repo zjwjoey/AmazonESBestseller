@@ -16,7 +16,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from .providers.base import ProviderResponse, TranslationProvider
 from .providers.qwen_mt import QwenMTProvider
-from .field_contract import canonical_translation_field_type
+from .field_contract import canonical_translation_unit_field
 
 
 HEALTHY = "HEALTHY"
@@ -37,10 +37,11 @@ class TranslationTask:
     @classmethod
     def from_values(cls, text: str, *, asin: str, field: str,
                     source_language: str = "es", target_language: str = "zh-CN",
-                    schema_version: str = "", prompt_version: str = "") -> "TranslationTask":
+                    schema_version: str = "", prompt_version: str = "",
+                    translation_unit_field: Optional[str] = None) -> "TranslationTask":
         digest = hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
         key = "|".join((digest, source_language, target_language,
-                         canonical_translation_field_type(field),
+                         canonical_translation_unit_field(translation_unit_field or field),
                          schema_version, prompt_version))
         return cls(key=key, text=str(text or ""), asin=asin, field=field,
                    context={"source_language": source_language, "target_language": target_language},
@@ -328,7 +329,8 @@ class PoolProviderAdapter(TranslationProvider):
             text, asin=asin, field=field, source_language=source_language,
             target_language=target_language,
             schema_version=str((context or {}).get("schema_version", "")),
-            prompt_version=str((context or {}).get("prompt_version", "")))
+            prompt_version=str((context or {}).get("prompt_version", "")),
+            translation_unit_field=(context or {}).get("translation_unit_field"))
         task = TranslationTask(task.key, task.text, task.asin, task.field,
                                {**task.context, **(context or {})}, task.tm_key)
         result = self.pool.submit([task])[0]

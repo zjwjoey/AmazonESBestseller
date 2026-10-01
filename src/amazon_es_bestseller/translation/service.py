@@ -24,7 +24,7 @@ from .terminology import (postprocess, deterministic_specification,
 from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
-from .field_contract import canonical_translation_field_type
+from .field_contract import canonical_translation_field_type, canonical_translation_unit_field
 
 
 DEFAULT_FIELD_MAP = {
@@ -85,10 +85,10 @@ class TranslationService:
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _memory_key(self, text: str, field: str) -> str:
+    def _memory_key(self, text: str, field: str, *, label: Optional[str] = None) -> str:
         return self.cache.memory_key(
             text, self.source_language, self.target_language,
-            translation_memory_field_type(field), self.provider.name,
+            canonical_translation_unit_field(field, label=label), self.provider.name,
             self.provider.model, self.schema_version, self.prompt_version)
 
     def _memory_get(self, key: str) -> Optional[Dict[str, Any]]:
@@ -112,9 +112,11 @@ class TranslationService:
                 if label is not None and raw_value is not None and str(raw_value).strip():
                     rows.append((str(label), str(raw_value)))
             return rows
-        if isinstance(value, str) and "\n" in value:
+        if isinstance(value, str):
             rows = []
             lines = [line.strip() for line in value.splitlines() if line.strip()]
+            if not lines:
+                return None
             for line in lines:
                 if ":" not in line and "：" not in line:
                     return None
@@ -203,6 +205,8 @@ class TranslationService:
         if is_bullet_field:
             bullets = cls._bullet_values(raw_value)
             return [(None, value) for value in bullets] if bullets is not None else None
+        if source_field not in {"product_details", "product_details_es", "detail_attributes_raw"}:
+            return None
         rows = cls._structured_rows(raw_value)
         return list(rows) if rows is not None else None
 
@@ -228,7 +232,8 @@ class TranslationService:
         item_models = []
         item_aliases = []
         for index, (label, value) in enumerate(items):
-            memory_key = self._memory_key(value, source_field)
+            unit_field = canonical_translation_unit_field(source_field, label=label)
+            memory_key = self._memory_key(value, unit_field)
             memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
@@ -277,7 +282,8 @@ class TranslationService:
                         protected.text, asin=asin, field=source_field,
                         source_language=self.source_language, target_language=self.target_language,
                         context={"target_field": target, "item_index": index,
-                                 "label": label, "protected_tokens": list(protected.tokens),
+                                 "label": label, "translation_unit_field": unit_field,
+                                 "protected_tokens": list(protected.tokens),
                                  "schema_version": self.schema_version,
                                  "prompt_version": self.prompt_version})
                     attempts += response.attempts
@@ -503,7 +509,8 @@ class TranslationService:
                                 and resolve_exact(self.dictionary, item_text, kind="value",
                                                   field=normalize_key(item_label))["status"] == "resolved"):
                             continue
-                        item_memory = self.cache.get_memory(self._memory_key(item_text, source))
+                        unit_field = canonical_translation_unit_field(source, label=item_label)
+                        item_memory = self.cache.get_memory(self._memory_key(item_text, unit_field))
                         item_bypass = item_memory and (
                             (item_memory.get("translation_status") == "partial" and repair_partial)
                             or (item_memory.get("translation_status") in {"failed", "qa_failed"}
@@ -511,7 +518,7 @@ class TranslationService:
                         if item_memory and not item_bypass:
                             translation_memory_hits += 1
                         else:
-                            unique_requests.add((translation_memory_field_type(source), source_hash(item_text),
+                            unique_requests.add((unit_field, source_hash(item_text),
                                                  self.source_language, self.target_language,
                                                  self.provider.name, self.provider.model))
                 else:

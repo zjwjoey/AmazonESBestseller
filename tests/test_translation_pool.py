@@ -6,6 +6,7 @@ from amazon_es_bestseller.translation.cache import TranslationCache
 from amazon_es_bestseller.translation.pool import (
     DEGRADED, PoolProviderAdapter, ProviderPool, TranslationTask, build_qwen_provider_pool,
 )
+from amazon_es_bestseller.translation.field_contract import canonical_translation_unit_field
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
 
 
@@ -93,6 +94,35 @@ def test_translation_task_key_uses_canonical_field_and_languages():
     assert category_l1.key == category_l2.key
     assert title.key != category_l1.key
     assert english.key != category_l1.key
+
+
+def test_structured_translation_task_key_is_scoped_by_normalized_label():
+    color_a = TranslationTask.from_values(
+        "Natural", asin="B00000001", field="product_details_es",
+        translation_unit_field="product_details:color")
+    color_b = TranslationTask.from_values(
+        "Natural", asin="B00000002", field="product_details_es",
+        translation_unit_field="product_details:color")
+    material = TranslationTask.from_values(
+        "Natural", asin="B00000003", field="product_details_es",
+        translation_unit_field="product_details:material")
+    assert color_a.key == color_b.key
+    assert material.key != color_a.key
+    assert color_a.field == "product_details_es"
+    assert canonical_translation_unit_field("product_details_es", label="Tamaño") == "product_details:tamano"
+
+
+def test_pool_adapter_uses_structured_semantic_key_without_changing_provider_field():
+    provider = PoolFake("qwen-mt")
+    adapter = PoolProviderAdapter(ProviderPool({"qwen-a": provider}))
+    adapter.translate("Natural", asin="B00000001", field="product_details_es",
+                      context={"translation_unit_field": "product_details:color"})
+    adapter.translate("Natural", asin="B00000002", field="product_details_es",
+                      context={"translation_unit_field": "product_details:color"})
+    adapter.translate("Natural", asin="B00000003", field="product_details_es",
+                      context={"translation_unit_field": "product_details:material"})
+    assert len(provider.calls) == 2
+    assert {call[2] for call in provider.calls} == {"product_details_es"}
 
 
 def test_two_providers_overlap_and_round_robin():
