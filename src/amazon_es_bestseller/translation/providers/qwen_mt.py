@@ -1,0 +1,132 @@
+"""Qwen-MT provider adapter.
+
+The endpoint/protocol is explicit and injectable.  No credential or endpoint
+is hard-coded as a secret; the default endpoint is the public DashScope
+OpenAI-compatible endpoint and can be replaced by configuration.
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+from typing import Any, Callable, Dict, Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from .base import ProviderResponse, TranslationProvider
+
+
+Transport = Callable[[str, Dict[str, str], Dict[str, Any], float], Dict[str, Any]]
+
+
+class QwenMTProvider(TranslationProvider):
+    name = "qwen-mt"
+
+    def __init__(self, *, api_key: Optional[str] = None,
+                 endpoint: Optional[str] = None,
+                 model: str = "qwen-mt-flash",
+                 protocol: Optional[str] = None,
+                 timeout: float = 60.0, max_retries: int = 2,
+                 backoff_seconds: float = 1.0,
+                 transport: Optional[Transport] = None):
+        self.api_key = api_key or os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+        self.endpoint = endpoint or os.getenv("QWEN_API_ENDPOINT") or os.getenv(
+            "DASHSCOPE_API_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+        self._model = model or os.getenv("QWEN_MT_MODEL") or "qwen-mt-flash"
+        self.protocol = protocol or os.getenv("QWEN_API_PROTOCOL", "openai_compatible")
+        self.timeout = timeout
+        self.max_retries = max(0, int(max_retries))
+        self.backoff_seconds = max(0.0, float(backoff_seconds))
+        self.transport = transport or self._http_transport
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def _http_transport(self, url: str, headers: Dict[str, str],
+                        payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
+        request = Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                          headers=headers, method="POST")
+        try:
+            with urlopen(request, timeout=timeout) as response:  # nosec B310 - configured endpoint
+                body = response.read().decode("utf-8")
+                return {"status_code": response.status, "body": json.loads(body)}
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(body)
+            except ValueError:
+                parsed = {"error": body[:500]}
+            return {"status_code": exc.code, "body": parsed}
+        except (URLError, TimeoutError, OSError) as exc:
+            return {"status_code": 599, "error": str(exc)}
+
+    def _payload(self, text: str, *, asin: str, field: str,
+                 context: Dict[str, Any]) -> Dict[str, Any]:
+        if self.protocol == "openai_compatible":
+            prompt = ("Translate this Amazon.es field from Spanish to Simplified Chinese. "
+                      "Preserve every number, unit, model, brand, ASIN and technical token. "
+                      "Do not add facts. Return only the translation.\n\n" + text)
+            return {"model": self._model, "messages": [
+                {"role": "system", "content": "You are a faithful product-data translator."},
+                {"role": "user", "content": prompt}],
+                "temperature": 0, "metadata": {"asin": asin, "field": field}}
+        if self.protocol == "dashscope":
+            return {"model": self._model, "input": {"text": text},
+                    "parameters": {"temperature": 0},
+                    "metadata": {"asin": asin, "field": field}}
+        raise ValueError("unsupported Qwen protocol: %s" % self.protocol)
+
+    @staticmethod
+    def _extract(body: Dict[str, Any]) -> str:
+        choices = body.get("choices") if isinstance(body, dict) else None
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") or {}
+            content = message.get("content")
+            if isinstance(content, list):
+                content = "".join(str(x.get("text", "")) if isinstance(x, dict) else str(x)
+                                  for x in content)
+            if content:
+                return str(content).strip()
+        output = body.get("output") if isinstance(body, dict) else None
+        if isinstance(output, dict) and output.get("text"):
+            return str(output["text"]).strip()
+        if isinstance(body, dict) and body.get("text"):
+            return str(body["text"]).strip()
+        return ""
+
+    def translate(self, text: str, *, asin: str, field: str,
+                  context: Optional[Dict[str, Any]] = None) -> ProviderResponse:
+        if not self.api_key:
+            return ProviderResponse(provider=self.name, model=self._model,
+                                    status="failed", error="missing QWEN_API_KEY/DASHSCOPE_API_KEY",
+                                    attempts=0)
+        payload = self._payload(text, asin=asin, field=field, context=context or {})
+        headers = {"Authorization": "Bearer " + self.api_key,
+                   "Content-Type": "application/json"}
+        last_error = "provider request failed"
+        for attempt in range(1, self.max_retries + 2):
+            try:
+                response = self.transport(self.endpoint, headers, payload, self.timeout)
+            except Exception as exc:  # injectable transports may surface timeout/HTTP errors
+                response = {"status_code": 599, "error": str(exc)}
+            # Tests and alternate transports may return decoded provider JSON
+            # directly instead of the {status_code, body} envelope.
+            if isinstance(response, dict) and "status_code" not in response and (
+                    "choices" in response or "output" in response or "text" in response):
+                response = {"status_code": 200, "body": response}
+            code = int(response.get("status_code", 200) or 0)
+            body = response.get("body") if isinstance(response, dict) else {}
+            text_out = self._extract(body if isinstance(body, dict) else {})
+            if 200 <= code < 300 and text_out:
+                return ProviderResponse(text=text_out, provider=self.name,
+                                        model=self._model, attempts=attempt, raw=body or {})
+            detail = response.get("error") or (body.get("error") if isinstance(body, dict) else None)
+            last_error = "HTTP %s%s" % (code, (": " + str(detail)[:300]) if detail else "")
+            retryable = code == 429 or code >= 500 or code == 599
+            if not retryable or attempt > self.max_retries:
+                break
+            if self.backoff_seconds:
+                time.sleep(self.backoff_seconds * (2 ** (attempt - 1)))
+        return ProviderResponse(provider=self.name, model=self._model, status="failed",
+                                error=last_error, attempts=attempt, raw=response if isinstance(response, dict) else {})
