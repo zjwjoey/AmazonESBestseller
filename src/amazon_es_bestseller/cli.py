@@ -4,6 +4,8 @@
 主链按需要组合联网采集与离线处理命令。
   - collect：联网（榜单+详情，串行 + 显式延迟，无并发）；缺省输出
     ``outputs/rankings.json`` + ``outputs/details.json``。
+  - discover-tree：联网发现当前 Amazon.es Bestseller 类目树并保存快照。
+  - task-collect：审核后的类目规模任务，支持 parallel3 主模式和 serial 备用模式。
   - enrich / qa / export：全离线（不联网）。
   - translate-ds：联网且在首个请求前要求人工确认。
   - ``--offline``：全局标记；collect/translate-ds 拒绝离线。
@@ -516,6 +518,62 @@ def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
           (len(all_rankings), len(all_details), state_path))
 
 
+# ---------- reviewed task collection ----------
+
+def cmd_discover_tree(args, parser: argparse.ArgumentParser) -> None:
+    """Discover a bounded current Amazon Bestseller navigation snapshot."""
+    if args.offline:
+        parser.error("discover-tree 需要联网，不能与 --offline 同用")
+    if not args.urls:
+        parser.error("discover-tree 需要至少一个 --urls")
+    from .access.browser import BrowserSession
+    from .access.location import ensure_spain_delivery
+    from .collection.discovery import discover_bestseller_tree
+
+    with BrowserSession(headless=not args.headful,
+                       profile_dir=args.profile_dir or None) as session:
+        session.challenge_wait_seconds = args.challenge_wait_seconds
+        session.manual_assist = args.manual_assist
+        ensure_spain_delivery(session, args.postal_code)
+        result = discover_bestseller_tree(args.urls, session, args.out_dir,
+                                          max_depth=args.max_depth,
+                                          max_pages=args.max_pages)
+    _safe_print("类目发现完成：页面 %d，榜单链接 %d → %s" %
+                (result["page_count"], result["link_count"], args.out_dir))
+
+
+def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
+    """Run the reviewed 5,000-SKU task in parallel3 or serial mode."""
+    if args.offline:
+        parser.error("task-collect 需要联网，不能与 --offline 同用")
+    plan_path = Path(args.plan)
+    if not plan_path.exists():
+        parser.error("找不到任务计划: %s" % args.plan)
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        parser.error("任务计划不是有效 JSON: %s" % exc)
+    from .collection.task import run_task
+    # Runtime access controls are command-line overrides; the reviewed plan
+    # remains immutable on disk so a restart uses the same source contract.
+    plan = dict(plan)
+    if args.postal_code:
+        plan["postal_code"] = args.postal_code
+    if args.challenge_wait_seconds is not None:
+        plan["challenge_wait_seconds"] = args.challenge_wait_seconds
+    if args.manual_assist:
+        plan["manual_assist"] = True
+    try:
+        report = run_task(plan, args.out_dir, mode=args.mode,
+                          headful=args.headful, profile_dir=args.profile_dir)
+    except ValueError as exc:
+        parser.error(str(exc))
+    _safe_print("task-collect %s：%s；最终唯一 ASIN %d；报告 %s" %
+                (report["mode"], report["run_status"],
+                 report["final_unique_asins"],
+                 str(Path(args.out_dir) / "run_report.json")))
+
+
 # ---------- select-quota（离线） ----------
 
 def cmd_select_quota(args) -> None:
@@ -851,8 +909,9 @@ def build_parser() -> argparse.ArgumentParser:
     bc.add_argument("--profile-dir", default="", help="可选：复用本机浏览器配置目录")
     bc.add_argument("--postal-code", default="28001", help="配送地点检查使用的西班牙邮编")
     bc.add_argument("--challenge-wait-seconds", type=float, default=180.0,
-                    help="挑战页等待人工接管的秒数")
-    bc.add_argument("--manual-assist", action="store_true", help="挑战页等待人工处理")
+                    help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
+    bc.add_argument("--manual-assist", action="store_true",
+                    help="兼容参数；挑战页停止后需人工处理并重新启动")
     bc.add_argument("--cooldown-seconds", type=int, default=None,
                     help="类目间冷却秒数；省略时读取计划，默认1800")
     bc.add_argument("--existing-products", default="",
@@ -863,6 +922,38 @@ def build_parser() -> argparse.ArgumentParser:
                     help="已有31–50榜单 JSON；作为已完成来源的证据种子")
     bc.add_argument("--rankings-only", action="store_true", help="只提取榜单，不访问详情页")
     bc.set_defaults(func=lambda a, p=bc: cmd_batch_collect(a, p))
+
+    dt = sub.add_parser("discover-tree", help="联网：发现当前 Amazon.es Bestseller 类目树并保存快照")
+    dt.add_argument("--urls", nargs="+", required=True,
+                    help="要发现的 Amazon.es Bestseller 根类目 URL")
+    dt.add_argument("--out-dir", required=True, help="类目发现输出目录")
+    dt.add_argument("--max-depth", type=int, default=1,
+                    help="向下发现层级；默认1，只读取根页和直接子榜单")
+    dt.add_argument("--max-pages", type=int, default=200,
+                    help="最多访问页面数，默认200")
+    dt.add_argument("--headful", action="store_true", help="有头浏览器")
+    dt.add_argument("--profile-dir", default="", help="可选：复用本机浏览器配置目录")
+    dt.add_argument("--postal-code", default="28001", help="西班牙配送邮编")
+    dt.add_argument("--challenge-wait-seconds", type=float, default=180.0,
+                    help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
+    dt.add_argument("--manual-assist", action="store_true",
+                    help="兼容参数；挑战页停止后需人工处理并重新启动")
+    dt.set_defaults(func=lambda a, p=dt: cmd_discover_tree(a, p))
+
+    tc = sub.add_parser("task-collect", help="联网：运行审核后的5000 SKU任务")
+    tc.add_argument("--plan", required=True, help="本轮审核任务计划 JSON")
+    tc.add_argument("--out-dir", required=True, help="本轮独立输出目录")
+    tc.add_argument("--mode", choices=("parallel3", "serial"), default=None,
+                    help="parallel3=三类目并行主模块；serial=单类目备用模块")
+    tc.add_argument("--headful", action="store_true", help="有头浏览器")
+    tc.add_argument("--profile-dir", default="",
+                    help="仅串行模式使用的浏览器配置目录；parallel3不接受共享Profile")
+    tc.add_argument("--postal-code", default="28001", help="西班牙配送邮编")
+    tc.add_argument("--challenge-wait-seconds", type=float, default=None,
+                    help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
+    tc.add_argument("--manual-assist", action="store_true",
+                    help="兼容参数；挑战页停止后需人工处理并重新启动")
+    tc.set_defaults(func=lambda a, p=tc: cmd_task_collect(a, p))
 
     s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")
     s.add_argument("--rankings", required=True, help="榜单记录 JSON")
@@ -964,8 +1055,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--out", default=str(OUTPUTS / "选品清单.xlsx"))
     x.add_argument("--force", action="store_true",
                    help="跳过 QA 硬门禁（存在 P0/P1 也导出，保留上游证据）")
-    x.add_argument("--profile", choices=("research", "business"), default="research",
-                   help="research=类目规划+双语三表；business=仅西语/中文两表")
+    x.add_argument("--profile", choices=("research", "business", "task"), default="research",
+                   help="research=类目规划+双语三表；business=仅西语/中文两表；task=三表+采集任务元数据")
     x.set_defaults(func=cmd_export)
     return parser
 

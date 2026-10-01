@@ -371,6 +371,43 @@ collection task and its configured targets. It does not authorize unrestricted
 crawling, concurrent scraping, access-control bypass, a new database
 architecture, or an unrequested Excel-schema change.
 
+## 28. Reviewed 5,000-SKU scheduler authorization (2026-10-01)
+
+For the explicitly reviewed `amazon_es_bestseller_5000_202610` task only, the
+main scheduler may run up to **three research categories in parallel**. Each
+category remains serial internally: its source pages and detail requests are
+not concurrent with one another. The scheduler must use separate pages or
+contexts with conservative request pacing, preserve the shared Access Gate,
+and stop all new work when any worker observes a challenge, 403, 429, Robot
+Check, CAPTCHA or access-denied signal. It must not use proxy rotation, cookie
+rotation, account rotation, IP rotation or stealth bypass.
+
+After a category finishes, its worker slot observes the reviewed
+`cooldown_after_category_seconds` (normally 600 seconds for this task) before
+claiming another category. The existing one-category serial scheduler remains
+the approved fallback and uses its own reviewed cooldown (normally 1,800
+seconds). Both modes share the same plan, evidence, ASIN registry,
+checkpoint/resume state and completion Gate; switching modes must not repeat
+validated source pages or details.
+
+The parallel authorization does not apply to other tasks, does not permit
+parallel detail requests outside this bounded task, and does not relax the
+requirement for an approved current Bestseller category-tree snapshot and a
+reviewed source plan before live collection.
+
+An executable plan must carry `discovery_required=false`,
+`sources_reviewed=true`, and an existing `source_snapshot` evidence file.
+When the reviewed rank window extends beyond rank 50, the plan must request
+at least two pages per source (normally `pages_per_url=2`) so ranks 51--80 are
+not silently omitted. A category with pending detail ASINs is not complete;
+its retry queue must be persisted and the final manifest must remain blocked
+until the selected ASINs have detail evidence.
+
+Reviewed source mappings may separate `primary` and same-category `reserve`
+URLs. Reserve sources are activated only when the category lacks its unique
+quota or the source spread required by the per-source cap; a global quota
+shortfall persists the run so the next resume can activate unused reserve URLs.
+
 When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
 the first valid record in the supplied directory order. CLI translation summaries
 must report partial results separately from failures.

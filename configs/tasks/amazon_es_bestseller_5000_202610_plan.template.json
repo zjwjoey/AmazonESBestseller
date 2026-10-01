@@ -1,0 +1,36 @@
+{
+  "task_id": "amazon_es_bestseller_5000_202610",
+  "batch_id": "amazon_es_bestseller_5000_202610",
+  "target_unique": 5000,
+  "rank_start": 1,
+  "rank_end": 80,
+  "pages_per_url": 2,
+  "scheduler": {
+    "mode": "parallel3",
+    "max_parallel_categories": 3,
+    "cooldown_after_category_seconds": 600,
+    "fallback_mode": "serial",
+    "fallback_cooldown_seconds": 1800,
+    "stop_all_on_access_restriction": true
+  },
+  "discovery_required": true,
+  "sources_reviewed": false,
+  "source_snapshot": "category_tree_snapshot.json",
+  "categories": [
+    {"research_category": "居家生活", "target_unique": 450, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "厨房用品", "target_unique": 550, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "家务用品", "target_unique": 400, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "办公与文具", "target_unique": 250, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "兴趣爱好", "target_unique": 250, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "DIY与五金", "target_unique": 400, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "玩具", "target_unique": 400, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "花园", "target_unique": 300, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "旅行", "target_unique": 200, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "个人护理", "target_unique": 400, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "食品饮料", "target_unique": 250, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "数码多媒体", "target_unique": 400, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "时尚", "target_unique": 250, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "体育用品", "target_unique": 250, "max_single_source_share": 0.35, "sources": []},
+    {"research_category": "宠物用品", "target_unique": 250, "max_single_source_share": 0.35, "sources": []}
+  ]
+}

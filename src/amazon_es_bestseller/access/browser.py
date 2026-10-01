@@ -41,9 +41,8 @@ class BrowserSession:
         self.context = None
         self._delivery_location_checked = False
         self._delivery_location: Optional[DeliveryLocation] = None
-        # Challenge recovery is deliberately bounded and opt-in for human
-        # takeover.  CLI overrides these values without changing fake-session
-        # constructors used by offline tests.
+        # Retained for CLI compatibility and evidence metadata.  Challenges
+        # are now an immediate stop; no automatic polling or recovery occurs.
         self.challenge_wait_seconds = 180.0
         self.manual_assist = False
 
@@ -269,51 +268,12 @@ class BrowserSession:
         return current
 
     def wait_for_challenge_clear(self, html: str, status=None):
-        """Wait for a challenge page to clear, then optionally ask for takeover.
+        """Stop immediately on a challenge; recovery requires a new run.
 
-        Polling uses short sleeps so the browser remains responsive.  A normal
-        page after the wait is returned to the caller for parsing; a challenge
-        that remains is returned unchanged and the caller's access gate stops
-        the run.  Manual assistance is never attempted in headless mode.
+        The visible browser may be inspected by a human after the process
+        stops, but this method never polls, submits, or resumes collection.
         """
-        wait_seconds = max(float(getattr(self, "challenge_wait_seconds", 180.0)), 0.0)
-        current_html = html
-        current_state = detect_access_status(status, current_html)
-        if current_state is not AccessState.CHALLENGE:
-            return current_state, current_html, False
-
-        _safe_print("检测到 Amazon 挑战页，将等待 %.0f 秒并检查是否自动恢复。" % wait_seconds)
-        deadline = time.monotonic() + wait_seconds
-        while time.monotonic() < deadline:
-            time.sleep(min(5.0, max(deadline - time.monotonic(), 0.0)))
-            try:
-                current_html = self._stable_page_content(timeout_seconds=5.0)
-            except DeliveryLocationError:
-                continue
-            # A refreshed document has no reliable relationship to the
-            # initial response status.  Its HTML is the evidence for the
-            # final effective state; challenge markers remain authoritative.
-            current_state = detect_access_status(200, current_html)
-            if current_state is AccessState.NORMAL:
-                _safe_print("Amazon 挑战页已自动恢复，继续采集。")
-                return current_state, current_html, True
-
-        if getattr(self, "manual_assist", False):
-            if self.headless:
-                _safe_print("当前为无头浏览器，无法进行人工接管；请使用 --headful --manual-assist。")
-            else:
-                _safe_print("请在可见浏览器中人工完成 Amazon 挑战；程序不会替你识别或输入验证码。")
-                try:
-                    input("After taking over the visible browser, press Enter to recheck: ")
-                except (EOFError, KeyboardInterrupt):
-                    return current_state, current_html
-                try:
-                    current_html = self._stable_page_content(timeout_seconds=10.0)
-                except DeliveryLocationError:
-                    return current_state, current_html
-                current_state = detect_access_status(200, current_html)
-                if current_state is AccessState.NORMAL:
-                    _safe_print("人工协助后页面已恢复，继续采集。")
-                    return current_state, current_html, True
-        _safe_print("等待后 Amazon 仍返回挑战页，按访问安全策略停止。")
-        return current_state, current_html, False
+        current_state = detect_access_status(status, html)
+        if current_state is AccessState.CHALLENGE:
+            _safe_print("检测到 Amazon 挑战页，立即停止采集；请人工处理后重新启动任务。")
+        return current_state, html, False

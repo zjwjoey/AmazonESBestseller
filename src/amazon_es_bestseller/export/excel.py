@@ -63,6 +63,9 @@ HEAD_ES = [
 WIDTH_ES = [6, 14, 14, 40, 16, 10, 10, 8, 8, 9, 10,
             13, 13, 13, 20, 10, 24, 26, 38, 38, 12, 18, 26, 32, 18]
 
+TASK_META_HEADERS = ['ASIN', '采集研究类目', '采集批次', '采集时间']
+TASK_META_WIDTHS = [16, 22, 30, 22]
+
 
 def write_header(ws, row: int, headers: Iterable[str], widths: Iterable[int]) -> None:
     for ci, h in enumerate(headers, 1):
@@ -320,7 +323,7 @@ def export_workbook(records: List[Mapping],
 
     wb = openpyxl.Workbook()
 
-    if profile not in {"research", "business"}:
+    if profile not in {"research", "business", "task"}:
         raise ValueError("unknown export profile: %s" % profile)
 
     # ---------- Sheet1 类目规划（人工维护） ----------
@@ -377,6 +380,25 @@ def export_workbook(records: List[Mapping],
     if records:
         ws_zh.auto_filter.ref = 'A1:%s%d' % (
             get_column_letter(len(HEAD_ZH)), len(records) + 1)
+
+    # The explicit task profile keeps the frozen three-sheet contract intact
+    # and adds collection provenance in a separate sheet.  The default
+    # research/business profiles are unchanged.
+    if profile == "task":
+        ws_meta = wb.create_sheet('采集任务元数据')
+        write_header(ws_meta, 1, TASK_META_HEADERS, TASK_META_WIDTHS)
+        for row_index, rec in enumerate(records, 2):
+            values = [rec.get('asin') or '', rec.get('research_category') or '',
+                      rec.get('collection_batch') or '', rec.get('collection_time') or '']
+            for col_index, value in enumerate(values, 1):
+                cell = ws_meta.cell(row=row_index, column=col_index, value=value)
+                cell.border = BORDER
+                cell.font = F_BODY
+                cell.alignment = WRAP
+        ws_meta.freeze_panes = 'A2'
+        if records:
+            ws_meta.auto_filter.ref = 'A1:%s%d' % (
+                get_column_letter(len(TASK_META_HEADERS)), len(records) + 1)
 
     if out_path:
         wb.save(out_path)

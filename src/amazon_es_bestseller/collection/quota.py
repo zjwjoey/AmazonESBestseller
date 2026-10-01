@@ -7,7 +7,9 @@ set of unique ASINs; it never invents a category or ranking value.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+import math
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -15,6 +17,144 @@ class QuotaError(ValueError):
     """Raised when a configured group cannot satisfy its requested quota."""
 
     code = "QUOTA_UNIQUE_SHORTFALL"
+
+
+def _normalize_asin(value: object) -> str:
+    return str(value or "").strip().upper()
+
+
+def validate_research_categories(categories: object, target_unique: object = None) -> list[dict]:
+    """Validate the reviewed 5,000-SKU research-category contract.
+
+    This is deliberately separate from the historical 150/50 selector.  A
+    research category is an internal allocation bucket; Amazon's raw category
+    fields remain on every ranking record and are never overwritten.
+    """
+    if not isinstance(categories, list) or not categories:
+        raise QuotaError("研究类目配置必须是非空数组")
+    out: list[dict] = []
+    groups: set[str] = set()
+    for index, raw in enumerate(categories, 1):
+        if not isinstance(raw, Mapping):
+            raise QuotaError("研究类目第 %d 项必须是对象" % index)
+        group = str(raw.get("research_category") or raw.get("category_group") or "").strip()
+        if not group:
+            raise QuotaError("研究类目第 %d 缺少 research_category" % index)
+        if group in groups:
+            raise QuotaError("研究类目重复：%s" % group)
+        groups.add(group)
+        try:
+            quota = int(raw.get("target_unique"))
+        except (TypeError, ValueError):
+            raise QuotaError("研究类目 %s 的 target_unique 必须是整数" % group)
+        if quota < 1:
+            raise QuotaError("研究类目 %s 的 target_unique 必须为正数" % group)
+        share = raw.get("max_single_source_share", 0.35)
+        try:
+            share = float(share)
+        except (TypeError, ValueError):
+            raise QuotaError("研究类目 %s 的 max_single_source_share 无效" % group)
+        if not 0 < share <= 1:
+            raise QuotaError("研究类目 %s 的来源占比必须在(0,1]内" % group)
+        out.append({**dict(raw), "research_category": group,
+                     "target_unique": quota,
+                     "max_single_source_share": share})
+    if target_unique is not None:
+        try:
+            target = int(target_unique)
+        except (TypeError, ValueError):
+            raise QuotaError("target_unique 必须是整数")
+        total = sum(row["target_unique"] for row in out)
+        if total != target:
+            raise QuotaError("target_unique=%d 与研究类目配额总和=%d 不一致" % (target, total))
+    return out
+
+
+def _record_quality(record: Mapping) -> int:
+    """Small deterministic quality score used only to break rank ties."""
+    fields = ("title_es_raw", "current_price_raw", "image_url", "brand_raw",
+              "rating_raw", "review_count_raw", "product_url")
+    return sum(bool(str(record.get(key) or "").strip()) for key in fields)
+
+
+def select_research_quota(records: Iterable[Mapping], categories: Sequence[Mapping],
+                          target_unique: object = None) -> dict[str, list[dict]]:
+    """Allocate globally unique ASINs to reviewed research categories.
+
+    Records may contain multiple ranking contexts for one ASIN.  The selector
+    keeps the best eligible context for each category, preserves the raw
+    context on the returned row, applies a per-source cap, and raises the
+    machine-readable ``QUOTA_UNIQUE_SHORTFALL`` error instead of filling a
+    deficit with duplicates or another category's products.
+    """
+    config = validate_research_categories(list(categories), target_unique)
+    quotas = {row["research_category"]: row["target_unique"] for row in config}
+    shares = {row["research_category"]: row["max_single_source_share"] for row in config}
+    by_group: dict[str, dict[str, dict]] = defaultdict(dict)
+    for raw in records:
+        if not isinstance(raw, Mapping):
+            continue
+        group = str(raw.get("research_category") or raw.get("category_group") or "").strip()
+        asin = _normalize_asin(raw.get("asin") or raw.get("ASIN"))
+        if group not in quotas or not asin:
+            continue
+        candidate = dict(raw, asin=asin, research_category=group)
+        try:
+            rank = int(candidate.get("bestseller_rank") or 10**9)
+        except (TypeError, ValueError):
+            rank = 10**9
+        candidate["_selection_rank"] = rank
+        candidate["_selection_quality"] = _record_quality(candidate)
+        current = by_group[group].get(asin)
+        if current is None or (candidate["_selection_rank"], -candidate["_selection_quality"],
+                               str(candidate.get("ranking_source_url") or "")) < (
+                                   current["_selection_rank"], -current["_selection_quality"],
+                                   str(current.get("ranking_source_url") or "")):
+            by_group[group][asin] = candidate
+
+    eligible_groups: dict[str, set[str]] = {
+        group: set(rows) for group, rows in by_group.items()
+    }
+    asin_groups: dict[str, set[str]] = defaultdict(set)
+    for group, rows in eligible_groups.items():
+        for asin in rows:
+            asin_groups[asin].add(group)
+    # Scarce groups go first; shared ASINs go to the group that needs them most.
+    order = sorted(quotas, key=lambda group: (
+        len(eligible_groups.get(group, set())) / max(quotas[group], 1), group))
+    selected: dict[str, list[dict]] = {group: [] for group in quotas}
+    used_global: set[str] = set()
+    for group in order:
+        rows = list(by_group.get(group, {}).values())
+        rows.sort(key=lambda row: (
+            len(asin_groups.get(row["asin"], set())),
+            row["_selection_rank"],
+            -row["_selection_quality"],
+            row["asin"],
+        ))
+        source_cap = max(1, math.ceil(quotas[group] * shares[group]))
+        source_counts: dict[str, int] = defaultdict(int)
+        for row in rows:
+            if len(selected[group]) >= quotas[group]:
+                break
+            asin = row["asin"]
+            if asin in used_global:
+                continue
+            source = normalize_source_url(row.get("ranking_source_url")) or "<missing>"
+            if source_counts[source] >= source_cap:
+                continue
+            clean = {key: value for key, value in row.items()
+                     if not key.startswith("_selection_")}
+            selected[group].append(clean)
+            used_global.add(asin)
+            source_counts[source] += 1
+    shortfalls = {group: (quotas[group], len(selected[group]))
+                  for group in quotas if len(selected[group]) < quotas[group]}
+    if shortfalls:
+        detail = ", ".join("%s需要%d只有%d" % (group, need, actual)
+                           for group, (need, actual) in sorted(shortfalls.items()))
+        raise QuotaError("QUOTA_UNIQUE_SHORTFALL: " + detail)
+    return selected
 
 
 def normalize_group(value: object) -> str:
@@ -85,6 +225,20 @@ def normalize_source_url(value: object) -> str:
         return ""
     parts = urlsplit(raw)
     path = parts.path.rstrip("/") or "/"
+    # Bestseller navigation links sometimes encode Amazon's tracking ref as
+    # a path segment (``.../ref=zg_bs_nav_*``) instead of a query parameter.
+    if "/ref=" in path:
+        path = path.split("/ref=", 1)[0].rstrip("/") or "/"
+    # Amazon's locale prefix (for example ``/-/en``) is presentation noise;
+    # the same Bestseller node is emitted by discovery as ``/gp/bestsellers``.
+    locale_prefix = ("/-/en", "/-/es", "/-/pt")
+    for prefix in locale_prefix:
+        if path == prefix:
+            path = "/"
+            break
+        if path.startswith(prefix + "/"):
+            path = path[len(prefix):] or "/"
+            break
     return urlunsplit((parts.scheme.casefold(), parts.netloc.casefold(), path, "", ""))
 
 

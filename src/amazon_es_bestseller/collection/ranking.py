@@ -16,7 +16,7 @@ import json
 import os
 import re
 from datetime import datetime
-from typing import List, Mapping, Optional
+from typing import Callable, List, Mapping, Optional
 from urllib.parse import parse_qs, urlsplit
 
 from bs4 import BeautifulSoup
@@ -203,7 +203,8 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
     return records
 
 
-def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int = 1) -> List[dict]:
+def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int = 1,
+                    should_stop: Optional[Callable[[], bool]] = None) -> List[dict]:
     """串行采集榜单页：原始 HTML 落盘 runs/YYYYMMDD_HHMMSS/html/ + rankings.json。
 
     需要 BrowserSession（playwright 仅在 __enter__ 时导入）；联网仅发生在
@@ -228,6 +229,9 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
     page_index = 0
     for url in urls:
         for page_no in range(1, int(pages_per_url) + 1):
+            if should_stop is not None and should_stop():
+                from ..access.detector import AccessStopError
+                raise AccessStopError("其他工作槽触发访问限制，停止新的榜单请求")
             page_url = url if page_no == 1 else (url + ("&" if "?" in url else "?") + "pg=%d" % page_no)
             status = session.goto(page_url)
             session.wait_between_requests()

@@ -1,0 +1,176 @@
+{
+  "居家生活": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2822691031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2844123031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/3249995031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/3605952031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/3359926031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165325031"
+    ],
+    "reserve": ["https://www.amazon.es/-/en/gp/bestsellers/kitchen/3244779031"]
+  },
+  "厨房用品": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165154031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165444031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165211031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165553031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/92039396031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165363031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165212031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165217031"
+    ]
+  },
+  "家务用品": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/3678025031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165660031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165679031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/2165711031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/hpc/6348071031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/3360028031",
+      "https://www.amazon.es/-/en/gp/bestsellers/kitchen/3360059031"
+    ]
+  },
+  "办公与文具": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/office/4352791031",
+      "https://www.amazon.es/-/en/gp/bestsellers/office/4352788031",
+      "https://www.amazon.es/-/en/gp/bestsellers/office/4352794031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/office/4352792031",
+      "https://www.amazon.es/-/en/gp/bestsellers/office/4352793031"
+    ]
+  },
+  "兴趣爱好": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments/4965350031",
+      "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments/4965355031",
+      "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments/4965358031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments/4965353031",
+      "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments/4965354031"
+    ]
+  },
+  "DIY与五金": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/tools/3049288031",
+      "https://www.amazon.es/-/en/gp/bestsellers/tools/3049285031",
+      "https://www.amazon.es/-/en/gp/bestsellers/tools/3049293031",
+      "https://www.amazon.es/-/en/gp/bestsellers/tools/5940100031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/tools/3049284031",
+      "https://www.amazon.es/-/en/gp/bestsellers/tools/3049291031"
+    ]
+  },
+  "玩具": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/toys/1641927031",
+      "https://www.amazon.es/-/en/gp/bestsellers/toys/1641940031",
+      "https://www.amazon.es/-/en/gp/bestsellers/toys/1642084031",
+      "https://www.amazon.es/-/en/gp/bestsellers/toys/1641995031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/toys/1642133031",
+      "https://www.amazon.es/-/en/gp/bestsellers/toys/1641912031"
+    ]
+  },
+  "花园": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden/5940346031",
+      "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden/26381675031",
+      "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden/5940567031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden/5940707031",
+      "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden/5940280031"
+    ]
+  },
+  "旅行": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/luggage/2007986031",
+      "https://www.amazon.es/-/en/gp/bestsellers/luggage/2007999031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/luggage/11967757031",
+      "https://www.amazon.es/-/en/gp/bestsellers/luggage/11960906031"
+    ]
+  },
+  "个人护理": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/beauty/6397934031",
+      "https://www.amazon.es/-/en/gp/bestsellers/beauty/4347698031",
+      "https://www.amazon.es/-/en/gp/bestsellers/beauty/4347676031",
+      "https://www.amazon.es/-/en/gp/bestsellers/beauty/4346878031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/beauty/6397823031",
+      "https://www.amazon.es/-/en/gp/bestsellers/beauty/27064662031"
+    ]
+  },
+  "食品饮料": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/grocery/6347509031",
+      "https://www.amazon.es/-/en/gp/bestsellers/grocery/27967586031",
+      "https://www.amazon.es/-/en/gp/bestsellers/grocery/6373017031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/grocery/6372475031",
+      "https://www.amazon.es/-/en/gp/bestsellers/grocery/6349251031"
+    ]
+  },
+  "数码多媒体": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/electronics/683279031",
+      "https://www.amazon.es/-/en/gp/bestsellers/electronics/665492031",
+      "https://www.amazon.es/-/en/gp/bestsellers/electronics/934120031",
+      "https://www.amazon.es/-/en/gp/bestsellers/electronics/664659031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/electronics/665477031",
+      "https://www.amazon.es/-/en/gp/bestsellers/electronics/664660031"
+    ]
+  },
+  "时尚": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/fashion/5517558031",
+      "https://www.amazon.es/-/en/gp/bestsellers/fashion/5517557031",
+      "https://www.amazon.es/-/en/gp/bestsellers/fashion/12710835031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/fashion/5874918031",
+      "https://www.amazon.es/-/en/gp/bestsellers/fashion/3074031031"
+    ]
+  },
+  "体育用品": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/sports/2928495031",
+      "https://www.amazon.es/-/en/gp/bestsellers/sports/2928471031",
+      "https://www.amazon.es/-/en/gp/bestsellers/sports/2928487031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/sports/2928518031",
+      "https://www.amazon.es/-/en/gp/bestsellers/sports/2928472031"
+    ]
+  },
+  "宠物用品": {
+    "primary": [
+      "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies/13441887031",
+      "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies/13441885031",
+      "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies/13441881031"
+    ],
+    "reserve": [
+      "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies/13441882031",
+      "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies/13441884031"
+    ]
+  }
+}

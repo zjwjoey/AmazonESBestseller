@@ -53,6 +53,11 @@ RANKING_KEYS = (
     "ranking_source_category_path",
     "ranking_page_number",
     "collected_at",
+    # Task-local allocation metadata; Amazon's raw category fields remain
+    # unchanged and these fields are optional for historical records.
+    "research_category",
+    "collection_batch",
+    "collection_time",
 )
 
 #: 商品表规范键（docs/ARCHITECTURE.md §23 / DATA_MODEL.md）
@@ -139,7 +144,8 @@ def merge_ranking_and_detail(
                       "ranking_source_category", "ranking_source_category_path",
                       "ranking_page_number", "leaf_category", "browse_node_id", "category_l1",
                       "category_l2", "category_l3", "monthly_bought_raw",
-                      "monthly_bought_min", "index"):
+                      "monthly_bought_min", "index", "research_category",
+                      "collection_batch", "collection_time"):
                 if k in r:
                     prod[k] = r[k]
         if a in details_by_asin:

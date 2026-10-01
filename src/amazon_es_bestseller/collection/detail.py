@@ -11,7 +11,7 @@ import os
 import re
 import shutil
 import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from bs4 import BeautifulSoup
 
@@ -692,7 +692,8 @@ def verify_asin_on_page(url: str, asin: str) -> bool:
     return m.group(1).upper() == str(asin).strip().upper()
 
 
-def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -> List[dict]:
+def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
+                    should_stop: Optional[Callable[[], bool]] = None) -> List[dict]:
     """串行采集详情页：原始 HTML 落盘 html/<asin>.html + 结果 details.json。
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
@@ -736,6 +737,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None) -
             if os.path.exists(source):
                 shutil.move(source, os.path.join(target, os.path.basename(source)))
     for asin in asins:
+        if should_stop is not None and should_stop():
+            raise AccessStopError("其他工作槽触发访问限制，停止新的详情请求")
         path = os.path.join(html_dir, asin + ".html")
         meta_path = os.path.splitext(path)[0] + ".meta.json"
         if os.path.exists(path):

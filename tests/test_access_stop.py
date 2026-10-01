@@ -79,6 +79,32 @@ def test_collect_details_stops_on_challenge(tmp_path):
     assert not (tmp_path / "details.json").exists()
 
 
+def test_collect_details_honors_cooperative_global_stop_before_next_asin(tmp_path):
+    """A peer access stop must prevent the next detail navigation."""
+    from amazon_es_bestseller.collection.detail import collect_details
+    session = _FakeSessionFlaky(200, NORMAL_HTML)
+    with pytest.raises(AccessStopError, match="其他工作槽"):
+        collect_details(["B008YETL18", "B0CK2B7GW5"], session, str(tmp_path),
+                        should_stop=lambda: True)
+    assert session.goto_calls == []
+    assert not (tmp_path / "details.json").exists()
+
+
+def test_browser_challenge_handler_stops_without_polling(monkeypatch):
+    """The real browser policy never auto-waits or resumes a challenge."""
+    from amazon_es_bestseller.access.browser import BrowserSession
+    from amazon_es_bestseller.access.detector import detect_access_status
+    session = BrowserSession()
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.time.sleep",
+                        lambda *_: (_ for _ in ()).throw(AssertionError("must not poll")))
+    state = detect_access_status(403, CHALLENGE_HTML)
+    final_state, final_html, recovered = session.wait_for_challenge_clear(
+        CHALLENGE_HTML, 403)
+    assert final_state is state
+    assert final_html == CHALLENGE_HTML
+    assert recovered is False
+
+
 def test_collect_details_stops_on_403(tmp_path):
     from amazon_es_bestseller.collection.detail import collect_details
     session = _FakeSession(403, NORMAL_HTML)
@@ -97,6 +123,15 @@ def test_collect_rankings_stops_on_403(tmp_path):
     html_files = list(tmp_path.glob("runs/*/html/*.html"))
     assert len(html_files) == 1
     assert not list(tmp_path.glob("runs/*/rankings.json"))
+
+
+def test_collect_rankings_honors_cooperative_global_stop(tmp_path):
+    from amazon_es_bestseller.collection.ranking import collect_rankings
+    session = _FakeSessionFlaky(200, NORMAL_HTML)
+    with pytest.raises(AccessStopError, match="其他工作槽"):
+        collect_rankings(["https://www.amazon.es/zgbs/1"], session, str(tmp_path),
+                         pages_per_url=2, should_stop=lambda: True)
+    assert session.goto_calls == []
 
 
 def test_collect_normal_still_writes(tmp_path):

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "root_urls": [
+    "https://www.amazon.es/gp/bestsellers/beauty",
+    "https://www.amazon.es/gp/bestsellers/kitchen"
+  ],
+  "pages": [
+    {"source_url": "https://www.amazon.es/gp/bestsellers/beauty", "http_status": 200,
+     "html_file": "html/beauty.html"},
+    {"source_url": "https://www.amazon.es/gp/bestsellers/kitchen", "http_status": 200,
+     "html_file": "html/kitchen.html"}
+  ],
+  "page_count": 2,
+  "links": [],
+  "link_count": 0
+}
