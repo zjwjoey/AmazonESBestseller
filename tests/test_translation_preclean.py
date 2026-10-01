@@ -1,6 +1,6 @@
 import json
 
-from amazon_es_bestseller.translation.preclean import audit_records, clean_text, numeric_profile, write_reports
+from amazon_es_bestseller.translation.preclean import audit_records, clean_text, numeric_profile, write_reports, language_label
 
 
 def test_preclean_preserves_raw_and_removes_only_deterministic_noise(tmp_path):
@@ -87,6 +87,16 @@ def test_numeric_profile_flags_contradictory_capacity_and_glued_units():
     profile = numeric_profile("Capacidad: 9 L / 25,4 L; peso: 12kgpeso")
     assert "CONTRADICTORY_CAPACITY" in profile["issues"]
     assert "GLUED_UNIT" in profile["issues"]
+
+
+def test_numeric_profile_does_not_flag_valid_alternatives_or_compact_units():
+    assert numeric_profile("5.5L diesel o 7.0L gas")["issues"] == []
+    assert numeric_profile("Dimensiones 12cmx12cm; 70litros; 2x8ML; 500grs")["issues"] == []
+
+
+def test_language_profile_prefers_dominant_language_over_shared_metadata_words():
+    assert language_label("Color material modelo") == "Unknown"
+    assert language_label("del tamaño") == "Spanish"
 
 
 def test_field_misplacement_is_suspicious_not_needs_review():

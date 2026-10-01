@@ -11,7 +11,7 @@ import os
 import threading
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional, Sequence
 
 from .providers.base import ProviderResponse, TranslationProvider
@@ -83,6 +83,7 @@ class ProviderPool:
         self._provider_locks = {alias: threading.Lock() for alias in self.aliases}
         self._inflight: dict[str, Future[PoolResult]] = {}
         self._completed: dict[str, PoolResult] = dict(tm or {})
+        self._transient_failures: dict[str, set[str]] = {}
         self._cursor = 0
         self._stats = {alias: ProviderStats(alias=alias) for alias in self.aliases}
 
@@ -93,11 +94,6 @@ class ProviderPool:
                 alias = self.aliases[self._cursor % len(self.aliases)]
                 self._cursor += 1
                 if alias not in excluded and self._stats[alias].state == HEALTHY:
-                    return alias
-            for _ in range(len(self.aliases)):
-                alias = self.aliases[self._cursor % len(self.aliases)]
-                self._cursor += 1
-                if alias not in excluded and self._stats[alias].state != DISABLED:
                     return alias
         raise RuntimeError("no healthy provider available")
 
@@ -120,10 +116,16 @@ class ProviderPool:
         # A provider lock gives each endpoint one active request at a time,
         # even when the shared executor has work queued for that alias.
         with self._provider_locks[alias]:
-            response = provider.translate(task.text, asin=task.asin, field=task.field,
-                                          source_language=task.context.get("source_language", "es"),
-                                          target_language=task.context.get("target_language", "zh-CN"),
-                                          context={**task.context, "provider_alias": alias})
+            try:
+                response = provider.translate(task.text, asin=task.asin, field=task.field,
+                                              source_language=task.context.get("source_language", "es"),
+                                              target_language=task.context.get("target_language", "zh-CN"),
+                                              context={**task.context, "provider_alias": alias})
+            except Exception as exc:
+                response = ProviderResponse(provider=getattr(provider, "name", ""),
+                                            model=getattr(provider, "model", ""),
+                                            status="failed", error="network error: %s" % exc,
+                                            attempts=1)
         with self._lock:
             # Provider-level retry attempts are part of the provider's own
             # response envelope; expose them in pool stats as well as pool
@@ -137,15 +139,20 @@ class ProviderPool:
             return PoolResult(task.key, response, alias)
         classification = self._retry_class(response)
         with self._lock:
+            stats.failed += 1
             if classification == RATE_LIMITED:
                 stats.rate_limited += 1
                 stats.state = RATE_LIMITED
             elif classification == DEGRADED:
-                stats.http_5xx += 1 if "5" in str(response.error or "") else 0
-                stats.network_errors += 1 if classification == DEGRADED and "5" not in str(response.error or "") else 0
+                error = str(response.error or "").casefold()
+                if any(token in error for token in ("599", "timeout", "network", "connection")):
+                    stats.network_errors += 1
+                else:
+                    stats.http_5xx += 1
                 stats.state = DEGRADED
+            if classification in {RATE_LIMITED, DEGRADED}:
+                self._transient_failures.setdefault(task.key, set()).add(alias)
             else:
-                stats.failed += 1
                 stats.state = DISABLED
         return PoolResult(task.key, response, alias)
 
@@ -176,6 +183,15 @@ class ProviderPool:
         represented as pending rather than already having been sent to dead
         providers by an unbounded executor queue.
         """
+        # A retry of the exact failed task is an explicit probe/resume.  Do
+        # not reset transient states for unrelated new tasks: when both
+        # endpoints are unavailable those tasks must remain pending.
+        task_keys = {task.key for task in tasks}
+        with self._lock:
+            if task_keys and all(key in self._transient_failures for key in task_keys):
+                for stats in self._stats.values():
+                    if stats.state in {DEGRADED, RATE_LIMITED}:
+                        stats.state = HEALTHY
         entries: list[tuple[str, Future[PoolResult] | PoolResult | None]] = []
         pending: deque[TranslationTask] = deque()
         queued_keys: set[str] = set()
@@ -312,7 +328,11 @@ class PoolProviderAdapter(TranslationProvider):
             prompt_version=str((context or {}).get("prompt_version", "")))
         task = TranslationTask(task.key, task.text, task.asin, task.field,
                                {**task.context, **(context or {})}, task.tm_key)
-        return self.pool.submit([task])[0].response
+        result = self.pool.submit([task])[0]
+        response = result.response
+        if result.source == "pending":
+            response = replace(response, status="pending", error=response.error or "NO_HEALTHY_PROVIDER")
+        return response
 
 
 def build_qwen_provider_pool(config: Mapping[str, Any], *, transport_factory: Any = None) -> ProviderPool:
@@ -328,6 +348,7 @@ def build_qwen_provider_pool(config: Mapping[str, Any], *, transport_factory: An
         endpoint = os.getenv(str(spec.get("endpoint_env", "QWEN_API_ENDPOINT")))
         api_key = os.getenv(str(spec.get("api_key_env", "QWEN_API_KEY")))
         kwargs = dict(model=spec.get("model", "qwen-mt-flash"), endpoint=endpoint, api_key=api_key,
+                      protocol=spec.get("protocol", config.get("protocol")),
                       rate=float(spec.get("rate", 0.5)), timeout=float(spec.get("timeout", 60)),
                       max_retries=int(spec.get("max_retries", 2)),
                       backoff_seconds=float(spec.get("backoff_seconds", 5.0)))
