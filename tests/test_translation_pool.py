@@ -62,6 +62,13 @@ def test_two_providers_overlap_and_round_robin():
     assert {result.provider_alias for result in results} == {"qwen-a", "qwen-b"}
 
 
+def test_ten_units_are_distributed_to_both_provider_aliases():
+    a, b = PoolFake("qwen-mt"), PoolFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    pool.submit([task(f"unit-{index}", index) for index in range(10)])
+    assert len(a.calls) > 0 and len(b.calls) > 0
+
+
 def test_duplicate_translation_unit_has_one_provider_call():
     provider = PoolFake("qwen-mt")
     pool = ProviderPool({"qwen-a": provider})
@@ -79,6 +86,7 @@ def test_network_failure_fails_over_once_and_marks_provider_degraded():
     assert result.response.status == "success"
     assert result.provider_alias == "qwen-b"
     assert pool.stats()["qwen-a"]["state"] == DEGRADED
+    assert pool.snapshot()["degraded_to_single_provider"] is True
     assert len(a.calls) == 1 and len(b.calls) == 1
 
 

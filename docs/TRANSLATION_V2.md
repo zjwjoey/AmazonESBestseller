@@ -17,7 +17,10 @@ different ASIN and a later process.
 Pre-Clean is deterministic and offline. It emits
 `translation_input_records.json` and audit CSV/JSON/Markdown reports; only
 `CLEAN` and `NORMALIZED` fields have `translate_allowed=true`. Review states
-remain in `review_queue.csv` and are not silently repaired.
+remain in `review_queue.csv` and are not silently repaired. TranslationService
+can consume this derived record shape directly and refuses fields whose
+`translate_allowed` flag is false. The audit also reports an offline workload
+estimate; the dictionary stage remains explicitly separate.
 
 ## Provider and credentials
 
@@ -45,10 +48,11 @@ configuration file:
 }
 ```
 
-`ProviderPool` uses one worker per provider, bounded round-robin assignment,
-in-flight task deduplication, shared completed/TM results, bounded network
-failover and provider health states. QA failures do not trigger automatic
-failover.
+`ProviderPool` uses bounded round-robin assignment with a per-provider request
+lock, in-flight task deduplication, shared successful TM results, retryable
+failed/pending tasks, bounded network failover and provider health states. QA
+failures do not trigger automatic failover; when all providers are unavailable,
+new tasks remain pending for resume.
 
 ## CLI
 
