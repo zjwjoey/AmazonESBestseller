@@ -60,6 +60,16 @@ def test_service_dry_run_never_calls_provider(tmp_path):
     assert not provider.calls
 
 
+def test_brand_is_identity_data_and_never_calls_provider(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records([{"asin": "B00000001", "brand": "HOVVIDA"}])
+    field = result["records"]["B00000001"]["fields"]["brand_zh"]
+    assert not provider.calls
+    assert field["translated_text"] == "HOVVIDA"
+    assert field["provider"] == "deterministic"
+
+
 def test_category_translation_memory_is_shared_across_levels(tmp_path):
     provider = FakeProvider()
     service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))

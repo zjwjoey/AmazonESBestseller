@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from io import BytesIO
 import json
 import os
@@ -55,6 +56,41 @@ def _load_json(path: Optional[str]) -> list:
         raise SystemExit("找不到输入文件: %s" % path)
     with p.open(encoding="utf-8") as f:
         return json.load(f)
+
+
+TRANSLATION_RESEARCH_CSV_FIELDS = {
+    "ASIN": "asin",
+    "商品名称（西语）": "title_es_raw",
+    "品牌": "brand",
+    "一级类目": "category_l1",
+    "二级类目": "category_l2",
+    "三级类目": "category_l3",
+    "细分类目": "leaf_category",
+    "当前选中规格 / 变体（西语）": "selected_variant_es",
+    "核心规格（西语）": "specification_es",
+    "完整商品详情（西语原文）": "product_details_es",
+    "商品卖点（西语原文）": "feature_bullets_es",
+}
+
+
+def _load_translation_products(path: Optional[str]) -> list:
+    """Load V2 JSON records or the frozen internal-research CSV contract."""
+    if not path or Path(path).suffix.casefold() != ".csv":
+        return _load_json(path)
+    p = Path(path)
+    if not p.exists():
+        raise SystemExit("找不到输入文件: %s" % path)
+    with p.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        headers = set(reader.fieldnames or ())
+        if "ASIN" not in headers:
+            raise SystemExit("Translation V2 CSV 缺少 ASIN 列: %s" % path)
+        records = []
+        for row in reader:
+            record = {target: (row.get(source) or "").strip()
+                      for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items()}
+            records.append(record)
+    return records
 
 
 def _save_json(data, path: str) -> None:
@@ -632,7 +668,7 @@ def cmd_translate_ds(args) -> None:
 
 def cmd_translate(args) -> None:
     """Field-level Translation V2; dry-run is always offline and side-effect free."""
-    products = _load_json(args.products)
+    products = _load_translation_products(args.products)
     if not isinstance(products, list):
         raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
     from .translation.cache import TranslationCache
@@ -652,7 +688,10 @@ def cmd_translate(args) -> None:
                               endpoint=config.get("endpoint"),
                               protocol=config.get("protocol"),
                               timeout=float(config.get("timeout", config.get("timeout_seconds", 60))),
-                              max_retries=int(config.get("max_retries", 2)))
+                              max_retries=int(config.get("max_retries", 2)),
+                              backoff_seconds=float(config.get("backoff_seconds", 5.0)),
+                              rate=float(args.rate if args.rate is not None
+                                         else config.get("rate", 0.5)))
     cache = TranslationCache(args.cache)
     fields = args.field or ([args.fields] if args.fields else None) or config.get("fields") or None
     if fields:
@@ -666,19 +705,19 @@ def cmd_translate(args) -> None:
                                            repair_failed=args.repair_failed, dry_run=True)
         _save_json(result["summary"], args.out)
         plan = result["summary"]
-        print("translate dry-run：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d（未调用 API）→ %s" %
+        print("translate dry-run：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、rate=%.3g/s（未调用 API）→ %s" %
               (plan["total_records"], plan["total_fields"], plan["cache_hits"],
                plan["translation_memory_hits"], plan["estimated_api_requests"],
-               plan["source_missing"], args.out))
+               plan["source_missing"], provider.rate, args.out))
         return
     if args.offline:
         raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
     plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit,
                         repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    print("translate V2 即将调用 %s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、model=%s" %
+    print("translate V2 即将调用 %s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、model=%s、rate=%.3g/s" %
           (provider.name, plan["total_records"], plan["total_fields"], plan["cache_hits"],
            plan["translation_memory_hits"], plan["estimated_api_requests"],
-           plan["source_missing"], model))
+           plan["source_missing"], model, provider.rate))
     if not args.yes:
         try:
             confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
@@ -1014,9 +1053,12 @@ def build_parser() -> argparse.ArgumentParser:
     t.set_defaults(func=cmd_translate_ds)
 
     tv2 = sub.add_parser("translate", help="Translation V2：字段级 Qwen-MT 翻译（默认先 dry-run）")
-    tv2.add_argument("--products", required=True, help="规范化商品 JSON 数组")
+    tv2.add_argument("--products", required=True,
+                     help="规范化商品 JSON 数组，或内部研究 CSV（按 ASIN/西语字段映射）")
     tv2.add_argument("--provider", default="qwen-mt", choices=("qwen-mt",), help="翻译提供商")
     tv2.add_argument("--model", default="", help="模型名（默认 qwen-mt-flash）")
+    tv2.add_argument("--rate", type=float, default=None,
+                     help="Qwen API 最大调用速率（次/秒，默认 0.5；0 表示不限速）")
     tv2.add_argument("--cache", default=str(OUTPUTS / "translation_v2_cache.json"), help="字段级翻译缓存")
     tv2.add_argument("--out", required=True, help="ASIN → Translation V2 结果 JSON")
     tv2.add_argument("--qa-out", default="", help="translation_qa.json 输出路径")
