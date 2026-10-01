@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from amazon_es_bestseller.translation.cache import TranslationCache
+from amazon_es_bestseller.translation.pool import ProviderPool
 from amazon_es_bestseller.translation.preclean import audit_records
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
 from amazon_es_bestseller.translation.service import TranslationService
@@ -22,6 +23,12 @@ class FakeProvider(TranslationProvider):
             return ProviderResponse(provider=self.name, model=self.model, status="failed", error="synthetic")
         return ProviderResponse(text=self.response_text if self.response_text is not None else "中文 " + text,
                                 provider=self.name, model=self.model)
+
+
+class WrongNumericProvider(FakeProvider):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((asin, field, text))
+        return ProviderResponse(text="250 ml", provider=self.name, model=self.model)
 
 
 def records(n=100):
@@ -75,6 +82,30 @@ def test_service_consumes_preclean_fields_and_respects_admission(tmp_path):
     plan = service.plan(prepared)
     assert plan["total_fields"] == 1
     assert not provider.calls
+
+
+def test_parallel_qa_failed_does_not_fail_over_to_provider_b(tmp_path):
+    a, b = WrongNumericProvider(), FakeProvider()
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records_parallel(
+        [{"asin": "B00000003", "title_es_raw": "Capacidad 500 ml"}], pool)
+    field = result["records"]["B00000003"]["fields"]["title_zh"]
+    assert field["translation_status"] == "qa_failed"
+    assert len(a.calls) == 1 and len(b.calls) == 0
+
+
+def test_parallel_identity_detail_bypasses_both_providers(tmp_path):
+    a, b = FakeProvider(), FakeProvider()
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records_parallel([{
+        "asin": "B00000004",
+        "product_details_es": "Modelo: Cera Tec\nReferencia OEM: 20002\nMarca: HOVVIDA",
+    }], pool)
+    field = result["records"]["B00000004"]["fields"]["product_details_zh"]
+    assert field["translation_status"] == "success"
+    assert len(a.calls) == 0 and len(b.calls) == 0
 
 
 def test_brand_is_identity_data_and_never_calls_provider(tmp_path):
