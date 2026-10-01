@@ -611,6 +611,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
     summary = {
         "input_rows": len(records), "unique_asins": len(asins),
+        "final_state": "READY_FOR_PRECLEAN_REVIEW",
         "duplicate_asins": sum(max(0, count - 1) for count in asins.values()),
         "missing_asin": missing_asin, "clean_schema_version": CLEAN_SCHEMA_VERSION,
         "total_fields": len(records) * len(AUDIT_FIELDS),

@@ -27,6 +27,7 @@ def test_preclean_statuses_and_reports_are_reproducible(tmp_path):
     assert json.dumps(first["translation_input_records"], ensure_ascii=False, sort_keys=True) == \
            json.dumps(second["translation_input_records"], ensure_ascii=False, sort_keys=True)
     assert first["translation_input_records"][0]["fields"]["title_es_raw"]["clean_status"] == "SOURCE_MISSING"
+    assert first["summary"]["final_state"] == "READY_FOR_PRECLEAN_REVIEW"
     paths = write_reports(first, tmp_path)
     for name in ("preclean_audit.json", "preclean_audit.md", "field_quality.csv",
                  "sku_quality.csv", "cross_field_issues.csv", "structure_issues.csv",

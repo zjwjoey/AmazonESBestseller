@@ -863,7 +863,8 @@ def cmd_preclean(args) -> None:
     print("Unique ASIN: %d" % summary["unique_asins"])
     print("Mode: preclean (offline)")
     print("Qwen API: disabled")
-    print("Pre-Clean 完成：CLEAN/NORMALIZED=%d、review_queue=%d、cross_field=%d、identity=%d → %s" % (
+    print("Pre-Clean 完成：状态=%s、CLEAN/NORMALIZED=%d、review_queue=%d、cross_field=%d、identity=%d → %s" % (
+        summary["final_state"],
         sum(summary["status_counts"].get(key, 0) for key in ("CLEAN", "NORMALIZED")),
         summary["review_queue_count"], summary["cross_field_issue_count"],
         summary["identity_count"], args.out_dir))
