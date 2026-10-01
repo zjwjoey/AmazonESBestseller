@@ -72,6 +72,8 @@ ENGLISH_WORDS = {"the", "for", "with", "without", "product", "color", "size", "m
 GERMAN_WORDS = {"und", "der", "die", "das", "gewicht", "farbe", "größe", "modell"}
 FRENCH_WORDS = {"pour", "avec", "sans", "produit", "couleur", "taille", "modèle", "poids"}
 ITALIAN_WORDS = {"per", "con", "senza", "prodotto", "colore", "taglia", "modello", "peso"}
+LANGUAGE_SHARED_WORDS = {"color", "material", "modelo", "model", "producto", "product",
+                         "peso", "weight", "número", "number", "para", "con", "sin", "size"}
 
 
 def _text(value: Any) -> str:
@@ -247,20 +249,22 @@ def parse_bullets(value: Any) -> dict[str, Any]:
 
 def language_label(value: str) -> str:
     words = set(re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}", value.casefold()))
+    exclusive = words - LANGUAGE_SHARED_WORDS
     scores = {
-        "Spanish": len(words & SPANISH_WORDS), "English": len(words & ENGLISH_WORDS),
-        "German": len(words & GERMAN_WORDS), "French": len(words & FRENCH_WORDS),
-        "Italian": len(words & ITALIAN_WORDS),
+        "Spanish": len(exclusive & SPANISH_WORDS), "English": len(exclusive & ENGLISH_WORDS),
+        "German": len(exclusive & GERMAN_WORDS), "French": len(exclusive & FRENCH_WORDS),
+        "Italian": len(exclusive & ITALIAN_WORDS),
     }
     ranked = sorted(scores.items(), key=lambda row: (-row[1], row[0]))
     if not words or ranked[0][1] == 0:
         return "Unknown"
-    if len([score for _, score in ranked if score > 0]) > 1:
+    positive = [score for _, score in ranked if score > 0]
+    if len(positive) > 1 and positive[1] >= 2 and positive[1] / max(1, positive[0]) >= 0.5:
         return "Mixed"
     return ranked[0][0]
 
 
-def numeric_profile(value: str) -> dict[str, Any]:
+def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     matches = NUMERIC_UNIT_RE.findall(value)
     units = [match[1].strip().casefold() for match in matches]
     issues = []
@@ -275,7 +279,9 @@ def numeric_profile(value: str) -> dict[str, Any]:
         {name.casefold() for name in UNIT_CANONICAL if len(name) >= 2}
         | {"mah", "mhz", "ghz", "khz", "psi", "bar", "kw"},
         key=len, reverse=True)
-    if any(any(token.casefold().startswith(prefix) and len(token) > len(prefix)
+    glued_suffixes = {"peso", "capacidad", "volumen", "potencia", "voltaje", "dimensiones"}
+    if any(any(token.casefold().startswith(prefix) and
+               token.casefold()[len(prefix):] in glued_suffixes
                for prefix in unit_prefixes)
            for token in (match.group("token") for match in glued_token_re.finditer(value))):
         # A glued unit is specifically a unit with no whitespace after the
@@ -296,8 +302,10 @@ def numeric_profile(value: str) -> dict[str, Any]:
     # in the same field are an ambiguity that must be reviewed.  Equivalent
     # representations (500 ml / 0,5 L) are deliberately accepted.
     capacity_factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
+    capacity_context = bool(re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", value, re.I)) if label is None else bool(
+        re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", str(label), re.I))
     capacity_values = [item["numeric_value"] * capacity_factors[item["canonical_unit"]]
-                       for item in values if item["canonical_unit"] in capacity_factors]
+                       for item in values if item["canonical_unit"] in capacity_factors] if capacity_context else []
     if len(capacity_values) > 1:
         baseline = max(capacity_values)
         if baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001):
@@ -378,7 +386,18 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 result["clean_status"] = "NEEDS_REVIEW"
                 result["translate_allowed"] = False
             result["language"] = language_label(result.get("clean_text", ""))
-            result["numeric"] = numeric_profile(result.get("clean_text", ""))
+            if field == "product_details" and detail.get("rows"):
+                # Evaluate capacities per labeled detail row.  Aggregating a
+                # whole table would incorrectly compare unrelated facts such
+                # as airflow, package volume and product quantity.
+                row_profiles = [numeric_profile(str(row.get("value") or ""), label=str(row.get("label") or ""))
+                                for row in detail["rows"]]
+                result["numeric"] = {
+                    "values": [item for profile in row_profiles for item in profile["values"]],
+                    "issues": sorted({issue for profile in row_profiles for issue in profile["issues"]}),
+                }
+            else:
+                result["numeric"] = numeric_profile(result.get("clean_text", ""))
             result["issues"] = sorted(set(result.get("issues", []) + result["numeric"].get("issues", [])))
             if result["issues"] and result["clean_status"] in {"CLEAN", "NORMALIZED"}:
                 result["clean_status"] = "NEEDS_REVIEW"

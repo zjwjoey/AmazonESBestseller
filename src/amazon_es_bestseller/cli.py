@@ -78,7 +78,10 @@ TRANSLATION_RESEARCH_CSV_FIELDS = {
 def _load_translation_products(path: Optional[str]) -> list:
     """Load V2 JSON records or the frozen internal-research CSV contract."""
     if not path or Path(path).suffix.casefold() != ".csv":
-        return _load_json(path)
+        data = _load_json(path)
+        if isinstance(data, dict) and isinstance(data.get("records"), list):
+            return data["records"]
+        return data
     p = Path(path)
     if not p.exists():
         raise SystemExit("找不到输入文件: %s" % path)
@@ -731,6 +734,13 @@ def cmd_translate(args) -> None:
     products = _load_translation_products(args.products)
     if not isinstance(products, list):
         raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
+    # Raw CSV/list input is admitted through the same deterministic Pre-Clean
+    # gate as the standalone command.  Already prepared records are reused so
+    # a rerun never mutates source evidence or repeats cleanup.
+    if not all(isinstance(row, dict) and isinstance(row.get("fields"), dict)
+               for row in products):
+        from .translation.preclean import audit_records
+        products = audit_records(products)["translation_input_records"]
     from .translation.cache import TranslationCache
     from .translation.providers.qwen_mt import QwenMTProvider
     from .translation.service import TranslationService
@@ -830,11 +840,17 @@ def cmd_translate(args) -> None:
     _save_json(result["records"], args.out)
     qa_out = args.qa_out or str(Path(args.out).with_name("translation_qa.json"))
     _save_json(result["qa_report"], qa_out)
+    summary_out = getattr(args, "summary_out", "") or str(Path(args.out).with_name("translation_run.json"))
+    _save_json({"summary": result.get("summary", {}), "pool": result.get("pool"),
+                "qa_report": result.get("qa_report", {}), "provider": provider.name,
+                "model": model, "api_calls": result.get("pool", {}).get("providers", {})}, summary_out)
     if args.audit_out:
         audit = []
         for record in result["records"].values():
             for field, value in (record.get("fields") or {}).items():
                 audit.append({"asin": record.get("asin"), "field": field,
+                              "source_field": value.get("field", field),
+                              "target_field": value.get("target_field", field),
                               "source_hash": value.get("source_hash"),
                               "provider": value.get("provider"), "model": value.get("model"),
                               "status": value.get("translation_status"),
@@ -845,7 +861,7 @@ def cmd_translate(args) -> None:
         with Path(args.audit_out).open("w", encoding="utf-8") as handle:
             for row in audit:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print("translate V2 完成：%s → %s；QA → %s" % (result["summary"], args.out, qa_out))
+    print("translate V2 完成：%s → %s；QA → %s；运行摘要 → %s" % (result["summary"], args.out, qa_out, summary_out))
 
 
 # ---------- dictionary-only（全离线） ----------
@@ -1247,6 +1263,7 @@ def build_parser() -> argparse.ArgumentParser:
     tv2.add_argument("--out", required=True, help="ASIN → Translation V2 结果 JSON")
     tv2.add_argument("--qa-out", default="", help="translation_qa.json 输出路径")
     tv2.add_argument("--audit-out", default="", help="可选字段审计 JSONL")
+    tv2.add_argument("--summary-out", default="", help="翻译运行摘要（含池状态与 QA 汇总）")
     tv2.add_argument("--config", default="", help="configs/translation_v2.json")
     tv2.add_argument("--field", action="append", default=[], help="只翻译指定 source/target 字段，可重复")
     tv2.add_argument("--fields", default="", help="逗号分隔的字段名（--field 的简写）")

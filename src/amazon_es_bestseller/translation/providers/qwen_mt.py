@@ -159,6 +159,13 @@ class QwenMTProvider(TranslationProvider):
             if 200 <= code < 300 and text_out:
                 return ProviderResponse(text=text_out, provider=self.name,
                                         model=self._model, attempts=attempt, raw=body or {})
+            if 200 <= code < 300 and not text_out:
+                # An HTTP success without translated content is a QA failure,
+                # not a transport failure.  Keep the marker so the service can
+                # persist it and expose it in the field-closure report.
+                return ProviderResponse(provider=self.name, model=self._model,
+                                        status="failed", error="EMPTY_TRANSLATION",
+                                        attempts=attempt, raw=body or {})
             detail = response.get("error") or (body.get("error") if isinstance(body, dict) else None)
             last_error = "HTTP %s%s" % (code, (": " + str(detail)[:300]) if detail else "")
             retryable = code == 429 or code >= 500 or code == 599

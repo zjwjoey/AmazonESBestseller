@@ -10,7 +10,7 @@ import hashlib
 import json
 import re
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -149,7 +149,7 @@ class TranslationService:
     @classmethod
     def _structured_items(cls, source_field: str, raw_value: Any) -> Optional[List[tuple[Optional[str], str]]]:
         """Return lossless item boundaries used by both planning and execution."""
-        is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
+        is_bullet_field = source_field in {"feature_bullets", "feature_bullets_es", "feature_bullets_raw", "features_es"}
         if is_bullet_field:
             bullets = cls._bullet_values(raw_value)
             return [(None, value) for value in bullets] if bullets is not None else None
@@ -256,7 +256,26 @@ class TranslationService:
                         }
                         self._memory_put(memory_key, memory_payload)
                         self.cache.put_memory(memory_key, memory_payload)
+                    elif response.status == "success":
+                        item_status = "qa_failed"
+                        statuses.append("qa_failed")
+                        rendered_value = ""
+                        item_issues = [{"code": "EMPTY_TRANSLATION"}]
+                        issues.extend({"item_index": index, **issue} for issue in item_issues)
+                    elif response.status == "failed" and response.error == "EMPTY_TRANSLATION":
+                        item_status = "qa_failed"
+                        statuses.append("qa_failed")
+                        rendered_value = ""
+                        item_issues = [{"code": "EMPTY_TRANSLATION"}]
+                        issues.extend({"item_index": index, **issue} for issue in item_issues)
+                    elif response.status == "pending":
+                        item_status = "pending"
+                        statuses.append("pending")
+                        rendered_value = ""
+                        if response.error:
+                            errors.append(str(response.error))
                     else:
+                        item_status = "failed"
                         statuses.append("failed")
                         rendered_value = ""
                         if response.error:
@@ -267,7 +286,8 @@ class TranslationService:
             rendered_items.append({"item_index": index, "label": label,
                                    "source_text": value, "translated_text": rendered_value,
                                    "translation_status": item_status,
-                                   "qa_status": "pass" if item_status == "success" else "pending",
+                                   "qa_status": ("pass" if item_status == "success" else
+                                                 "qa_failed" if item_status == "qa_failed" else "pending"),
                                    "provider": item_provider, "model": item_model,
                                    "provider_alias": item_alias,
                                    "attempt_count": item_attempts,
@@ -287,6 +307,9 @@ class TranslationService:
         elif any(status == "qa_failed" for status in statuses):
             overall = "qa_failed"
             qa_status = "qa_failed"
+        elif any(status == "pending" for status in statuses):
+            overall = "pending"
+            qa_status = "pending"
         else:
             overall = "failed"
             qa_status = "pending"
@@ -382,12 +405,20 @@ class TranslationService:
         cache_hits = 0
         translation_memory_hits = 0
         source_missing = 0
+        review_blocked = 0
         unique_requests = set()
         for record in subset:
             asin = str(record.get("asin") or "").strip().upper()
             selected = self.selected_fields(record, fields)
             if not selected:
-                source_missing += 1
+                envelopes = record.get("fields") if isinstance(record.get("fields"), dict) else {}
+                blocked = sum(1 for envelope in envelopes.values()
+                              if isinstance(envelope, dict) and envelope.get("source_text")
+                              and not envelope.get("translate_allowed"))
+                if blocked:
+                    review_blocked += blocked
+                else:
+                    source_missing += 1
             for source, target, text in selected:
                 digest = source_hash(text)
                 key = self.cache.key(asin, source, digest, self.provider.name,
@@ -443,6 +474,7 @@ class TranslationService:
                 "total_fields": len(rows), "cache_hits": cache_hits,
                 "translation_memory_hits": translation_memory_hits,
                 "source_missing": source_missing,
+                "review_blocked": review_blocked,
                 "estimated_api_requests": len(unique_requests), "fields": rows}
 
     def _translate_record(self, record: Dict[str, Any], *, fields: Optional[Sequence[str]] = None,
@@ -468,7 +500,7 @@ class TranslationService:
                 output_fields[target] = cached
                 continue
             raw_value = self._prepared_value(record, source_field)
-            is_bullet_field = source_field in {"feature_bullets_es", "feature_bullets_raw", "features_es"}
+            is_bullet_field = source_field in {"feature_bullets", "feature_bullets_es", "feature_bullets_raw", "features_es"}
             has_structured_value = (self._bullet_values(raw_value) is not None
                                     if is_bullet_field else self._structured_rows(raw_value) is not None)
             if has_structured_value:
@@ -500,6 +532,8 @@ class TranslationService:
                 continue
             memory_key = self._memory_key(text, source_field)
             memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
+            if memory and memory.get("translation_status") == "pending":
+                memory = None
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):
@@ -548,8 +582,6 @@ class TranslationService:
                         result["translated_text"] = postprocess(source_field, restored, text)
                     # Translation memory deduplicates provider calls even when
                     # the identical source later needs the same QA review.
-                    restored, _ = restore(protected, response.text)
-                    result["translated_text"] = postprocess(source_field, restored, text)
                     memory_payload = {
                         "translated_text": result["translated_text"],
                         "translation_status": result["translation_status"],
@@ -563,6 +595,10 @@ class TranslationService:
                     self._memory_put(memory_key, memory_payload)
                     self.cache.put_memory(memory_key, memory_payload)
                 elif response.status == "success":
+                    result["translation_status"] = "qa_failed"
+                    result["qa_status"] = "qa_failed"
+                    result["qa_issues"] = [{"code": "EMPTY_TRANSLATION"}]
+                elif response.status == "failed" and response.error == "EMPTY_TRANSLATION":
                     result["translation_status"] = "qa_failed"
                     result["qa_status"] = "qa_failed"
                     result["qa_issues"] = [{"code": "EMPTY_TRANSLATION"}]
@@ -598,6 +634,8 @@ class TranslationService:
             overall = "partial"
         elif any(s == "qa_failed" for s in statuses):
             overall = "qa_failed"
+        elif any(s == "pending" for s in statuses):
+            overall = "pending"
         else:
             overall = "failed"
         output = {"asin": asin, "fields": output_fields, "translation_status": overall,
@@ -656,16 +694,22 @@ class TranslationService:
             subset = subset[:max(0, limit)]
         original_provider = self.provider
         self.provider = PoolProviderAdapter(pool, model=getattr(original_provider, "model", "qwen-mt-flash"))
+        results: list[Optional[Dict[str, Any]]] = [None] * len(subset)
         try:
             with ThreadPoolExecutor(max_workers=pool.max_workers, thread_name_prefix="translation-record") as executor:
-                futures = [executor.submit(self._translate_record, record, fields=fields,
-                                            repair_partial=repair_partial, repair_failed=repair_failed)
-                           for record in subset]
-                results = [future.result() for future in futures]
+                futures = {executor.submit(self._translate_record, record, fields=fields,
+                                            repair_partial=repair_partial, repair_failed=repair_failed): index
+                           for index, record in enumerate(subset)}
+                for future in as_completed(futures):
+                    index = futures[future]
+                    results[index] = future.result()
+                    # Persist each completed record so interruption or a later
+                    # worker exception never discards already completed work.
+                    self.cache.save()
         finally:
             self.provider = original_provider
-        outputs = {result["asin"]: result for result in results if result.get("asin")}
-        self.cache.save()
+            self.cache.save()
+        outputs = {result["asin"]: result for result in results if result and result.get("asin")}
         summary = {"total": len(outputs)}
         for result in outputs.values():
             status = result.get("translation_status", "pending")

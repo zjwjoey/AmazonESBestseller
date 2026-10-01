@@ -39,3 +39,9 @@ def test_model_value_and_legal_entity_are_protected_as_identity():
     assert "Cera Tec" in model.tokens.values()
     company = protect("Energía Eléctrica Eficiente SL")
     assert "Energía Eléctrica Eficiente SL" in company.tokens.values()
+
+
+def test_bare_numeric_tokens_are_protected_without_swallowing_units():
+    protected = protect("Pack de 6, 500 ml")
+    assert "6" in protected.tokens.values()
+    assert "500 ml" in protected.tokens.values()

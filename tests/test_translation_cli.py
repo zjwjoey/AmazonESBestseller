@@ -50,3 +50,16 @@ def test_parallel_dry_run_reports_pool_without_api_calls(tmp_path, capsys):
     assert plan["pool"]["max_workers"] == 2
     assert set(plan["estimated_provider_requests"]) == {"qwen-a", "qwen-b"}
     assert "Provider qwen-a" in capsys.readouterr().out
+
+
+def test_translate_cli_consumes_preclean_wrapper(tmp_path):
+    products = tmp_path / "translation_input_records.json"
+    out = tmp_path / "plan.json"
+    products.write_text(json.dumps({"clean_schema_version": "preclean-v1", "records": [{
+        "asin": "B00000001", "clean_schema_version": "preclean-v1",
+        "fields": {"title_es_raw": {"source_text": "Taladro", "clean_text": "Taladro",
+                                       "translate_allowed": True}},
+    }]}, ensure_ascii=False), encoding="utf-8")
+    assert main(["--offline", "translate", "--products", str(products),
+                 "--out", str(out), "--dry-run"]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["total_fields"] == 1

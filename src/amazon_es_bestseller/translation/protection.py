@@ -9,6 +9,7 @@ TOKEN_RE = re.compile(
     r"(?<!\w)(?:\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)+\b"
     r"|\d+(?:[.,]\d+)?\s*(?i:ml|cl|dl|l|g|kg|mg|mm|cm|m|w|kw|v|a|hz|ghz|mah|bar|psi|°c|%)"
     r"|\d+(?:[.,]\d+)?(?:[×x*]\d+(?:[.,]\d+)?)+(?:\s*(?i:mm|cm|m))?"
+    r"|\b\d+(?:[.,]\d+)?\b(?!\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])"
     r"|(?i:usb[- ]?c|usb[- ]?a|pd\s*\d+(?:\.\d+)?|ip\w+|e\d{2}|a\d|m\d+|[a-z]{1,8}-\d{1,4})"
     r"|\b[A-Z]{2,}[A-Z0-9]*(?:[-/]?[A-Z0-9]+)*\b|\b[A-Z0-9]{8,10}\b)(?!\w)")
 PLACEHOLDER_RE = re.compile(r"__T(\d{4})__")

@@ -4,7 +4,7 @@ import time
 
 from amazon_es_bestseller.translation.cache import TranslationCache
 from amazon_es_bestseller.translation.pool import (
-    DEGRADED, ProviderPool, TranslationTask, build_qwen_provider_pool,
+    DEGRADED, PoolProviderAdapter, ProviderPool, TranslationTask, build_qwen_provider_pool,
 )
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
 
@@ -52,6 +52,17 @@ class ToggleFake(PoolFake):
 class SlowInvalidFake(PermanentFailureFake):
     def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         time.sleep(0.02)
+        return super().translate(text, asin=asin, field=field, source_language=source_language,
+                                 target_language=target_language, context=context)
+
+
+class BarrierInvalidFake(PermanentFailureFake):
+    def __init__(self, name, barrier):
+        super().__init__(name)
+        self.barrier = barrier
+
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.barrier.wait(timeout=2)
         return super().translate(text, asin=asin, field=field, source_language=source_language,
                                  target_language=target_language, context=context)
 
@@ -147,8 +158,18 @@ def test_all_disabled_providers_return_pending_instead_of_crashing():
     assert pending.response.error == "NO_HEALTHY_PROVIDER"
 
 
+def test_pool_adapter_preserves_pending_status_for_service_resume():
+    a, b = PermanentFailureFake("qwen-mt"), PermanentFailureFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    pool.submit([task("first", 1), task("second", 2)])
+    response = PoolProviderAdapter(pool).translate("third", asin="B00000003", field="title_es_raw")
+    assert response.status == "pending"
+    assert response.error == "NO_HEALTHY_PROVIDER"
+
+
 def test_bulk_submission_stops_after_provider_health_boundary():
-    a, b = SlowInvalidFake("qwen-mt"), SlowInvalidFake("qwen-mt")
+    barrier = threading.Barrier(2)
+    a, b = BarrierInvalidFake("qwen-mt", barrier), BarrierInvalidFake("qwen-mt", barrier)
     pool = ProviderPool({"qwen-a": a, "qwen-b": b})
     results = pool.submit([task(f"bulk-{index}", index) for index in range(20)])
     assert len(a.calls) + len(b.calls) <= 2

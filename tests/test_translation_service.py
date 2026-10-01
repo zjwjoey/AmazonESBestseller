@@ -31,6 +31,12 @@ class WrongNumericProvider(FakeProvider):
         return ProviderResponse(text="250 ml", provider=self.name, model=self.model)
 
 
+class EmptyProvider(FakeProvider):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((asin, field, text))
+        return ProviderResponse(provider=self.name, model=self.model, status="success", text="")
+
+
 def records(n=100):
     return [{"asin": "B%08d" % i, "title_es_raw": "Bolsa 500 ml", "brand": "Acme",
              "feature_bullets_es": "Para coche"} for i in range(1, n + 1)]
@@ -58,6 +64,15 @@ def test_service_isolates_failed_fields(tmp_path):
     assert row["translation_status"] == "partial"
     assert row["fields"]["title_zh"]["translation_status"] in {"success", "cached"}
     assert row["fields"]["feature_bullets_zh"]["translation_status"] == "failed"
+
+
+def test_empty_provider_response_is_reported_as_qa_failure(tmp_path):
+    result = TranslationService(EmptyProvider(), TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "title_es_raw": "Taladro"}
+    ])
+    field = result["records"]["B00000001"]["fields"]["title_zh"]
+    assert field["translation_status"] == "qa_failed"
+    assert {issue["code"] for issue in field["qa_issues"]} == {"EMPTY_TRANSLATION"}
 
 
 def test_service_dry_run_never_calls_provider(tmp_path):
@@ -173,6 +188,16 @@ def test_structured_bullets_are_translated_item_by_item(tmp_path):
     assert row["translation_status"] == "success"
     assert row["feature_bullets_zh"].count("\n") == 1
     assert len(provider.calls) == 2
+
+
+def test_preclean_canonical_bullets_are_translated_item_by_item(tmp_path):
+    prepared = audit_records([{
+        "asin": "B00000001", "feature_bullets_es": ["Primero", "Segundo"]
+    }])["translation_input_records"]
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records(prepared)
+    assert len(provider.calls) == 2
+    assert result["records"]["B00000001"]["translation_status"] == "success"
 
 
 def test_structured_item_memory_is_reused_across_asins(tmp_path):
