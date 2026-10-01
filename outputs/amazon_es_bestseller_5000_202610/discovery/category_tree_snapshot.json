@@ -1,0 +1,3522 @@
+{
+  "schema_version": 1,
+  "discovered_at": "2026-10-01T16:47:37",
+  "root_urls": [
+    "https://www.amazon.es/-/en/gp/bestsellers/kitchen",
+    "https://www.amazon.es/-/en/gp/bestsellers/hpc",
+    "https://www.amazon.es/-/en/gp/bestsellers/office",
+    "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments",
+    "https://www.amazon.es/-/en/gp/bestsellers/tools",
+    "https://www.amazon.es/-/en/gp/bestsellers/toys",
+    "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden",
+    "https://www.amazon.es/-/en/gp/bestsellers/luggage",
+    "https://www.amazon.es/-/en/gp/bestsellers/beauty",
+    "https://www.amazon.es/-/en/gp/bestsellers/grocery",
+    "https://www.amazon.es/-/en/gp/bestsellers/electronics",
+    "https://www.amazon.es/-/en/gp/bestsellers/fashion",
+    "https://www.amazon.es/-/en/gp/bestsellers/sports",
+    "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+  ],
+  "max_depth": 1,
+  "pages": [
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:46:48",
+      "links": [
+        {
+          "name": "Almacenamiento de cocina y despensa",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165211031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Almacenamiento y organización",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3359926031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "3359926031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Aspiración, limpieza y cuidado de suelo y ventanas",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165679031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165679031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Baño",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3244779031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "3244779031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Café y té",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165154031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165154031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Climatización y calefacción",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3605952031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "3605952031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Costura y manualidades",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/4358016031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "4358016031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Cubertería, Vajilla y Cristalería",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165444031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165444031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Decoración del hogar",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2844123031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2844123031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Fabricación de cerveza y vino",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165325031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165325031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Garantías",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165710031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165710031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Jarras, filtros y cartuchos",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165711031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165711031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Menaje y repostería",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/92039396031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "92039396031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Muebles",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2822691031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2822691031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Pequeño electrodoméstico",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165363031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165363031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Planchas, centros de planchado y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165660031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165660031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Productos y utensilios de limpieza",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3678025031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "3678025031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Textiles del hogar",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3249995031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "3249995031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "Utensilios",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165553031/ref=zg_bs_nav_kitchen_1",
+          "browse_node_id": "2165553031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_pg_1_kitchen",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_pg_2_kitchen",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0000.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:46:52",
+      "links": [
+        {
+          "name": "Bebé y puericultura",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346879031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346879031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Bienestar",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346880031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346880031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Cuidado bucal",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346882031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346882031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Cuidado de la salud",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346884031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346884031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Cuidado de la vista",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346881031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346881031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Cuidado y limpieza del hogar",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/6348071031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "6348071031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Dieta y nutrición",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346918031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346918031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Higiene íntima",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/6691131031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "6691131031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Sexo y sensualidad",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346885031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346885031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Suministros y equipamiento médico",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4346886031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4346886031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "Vitaminas, minerales y suplementos",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/4347039031/ref=zg_bs_nav_hpc_1",
+          "browse_node_id": "4347039031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/ref=zg_bs_pg_1_hpc",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/hpc/ref=zg_bs_pg_2_hpc",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0001.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/office",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:46:55",
+      "links": [
+        {
+          "name": "Bolígrafos, lápices y útiles de escritura",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352788031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352788031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Calendarios, agendas y organizadores personales",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352789031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352789031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Electrónica de oficina",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352790031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352790031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Material de oficina",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352791031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352791031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Material escolar y educativo",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352792031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352792031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Muebles y lámparas",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352793031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352793031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Productos de papel para oficina",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352794031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352794031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "Sobres y suministros para el correo",
+          "url": "https://www.amazon.es/gp/bestsellers/office/4352795031/ref=zg_bs_nav_office_1",
+          "browse_node_id": "4352795031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/office/ref=zg_bs_pg_1_office",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/office/ref=zg_bs_pg_2_office",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0002.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:46:59",
+      "links": [
+        {
+          "name": "Accesorios para músicos y producción musical",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965350031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965350031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Bajos y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965351031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965351031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Equipo de DJ y VJ",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965352031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965352031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Equipos de karaoke",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965353031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965353031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Grabación y procesado informático",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965354031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965354031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Guitarras y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965355031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965355031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Instrumentos de cuerda",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965356031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965356031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Instrumentos de viento",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965357031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965357031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Micrófonos",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965358031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965358031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Partituras, cancioneros y letras",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/14759594031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "14759594031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Percusión",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965359031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965359031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Pianos y teclados",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965360031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965360031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Sintetizadores, samplers e instrumentos digitales",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965361031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965361031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "Sistemas de escenario y megafonía",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965362031/ref=zg_bs_nav_musical-instruments_1",
+          "browse_node_id": "4965362031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/ref=zg_bs_pg_1_musical-instruments",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/ref=zg_bs_pg_2_musical-instruments",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0003.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/tools",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:02",
+      "links": [
+        {
+          "name": "Chimeneas y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/2844284031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "2844284031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Cortacéspedes y herramientas eléctricas para exteriores",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "5940100031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Ferretería",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049285031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049285031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Fontanería",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049287031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049287031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Herramientas manuales y eléctricas",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049288031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049288031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Instalación de baño y cocina",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049286031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049286031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Instalación eléctrica",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049284031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049284031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Organización y almacenaje en casa",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049290031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049290031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Pinturas, herramientas y tratamiento de paredes",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049291031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049291031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Prevención y seguridad",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049292031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049292031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "Suministros de construcción",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/3049293031/ref=zg_bs_nav_tools_1",
+          "browse_node_id": "3049293031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_pg_1_tools",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_pg_2_tools",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0004.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/toys",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:06",
+      "links": [
+        {
+          "name": "Actividades creativas",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641736031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641736031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Aire libre y deportes",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641779031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641779031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Aprendizaje y educacion",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641972031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641972031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Bebés y primera infancia",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642110031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642110031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Calendarios de adviento",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641877031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641877031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Coleccionables",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641878031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641878031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Instrumentos musicales para niños",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641912031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641912031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Juegos de construcción",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641927031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641927031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Juegos de imitación",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641928031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641928031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Juegos y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641940031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641940031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Juguetes electrónicos",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641995031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641995031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Marionetas y títeres",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642008031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642008031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Muñecas y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642084031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642084031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Muñecos y figuras",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642096031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642096031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Peluches",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642104031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642104031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Puzzles y rompecabezas",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642133031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642133031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Radiocontrol",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1642143031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1642143031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Regalos originales y de broma",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/1641842031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "1641842031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "Vehículos",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/14525595031/ref=zg_bs_nav_toys_1",
+          "browse_node_id": "14525595031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/ref=zg_bs_pg_1_toys",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/toys/ref=zg_bs_pg_2_toys",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0005.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:10",
+      "links": [
+        {
+          "name": "Almacenamiento de exterior",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5939985031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5939985031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Aves y animales de jardín",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5939994031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5939994031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Barbacoa y comedor al aire libre",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940020031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940020031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Calentadores, fogatas y chimeneas",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940087031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940087031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Cortacéspedes y herramientas eléctricas para exteriores",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940100031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940100031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Cubiertas y vallas",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940754031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940754031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Decoración de exterior",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940280031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940280031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Herramientas de jardinería y equipos de riego",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/26381675031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "26381675031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Jardinería",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940346031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940346031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Limpieza de nieve",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940557031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940557031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Muebles y accesorios de jardín",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940567031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940567031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Piscinas, bañeras de hidromasaje y suministros",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940640031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940640031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Plantas, semillas y bulbos",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940707031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940707031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "Termómetros e instrumentos meteorológicos",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940747031/ref=zg_bs_nav_lawn-garden_1",
+          "browse_node_id": "5940747031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/ref=zg_bs_pg_1_lawn-garden",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/ref=zg_bs_pg_2_lawn-garden",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0006.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:13",
+      "links": [
+        {
+          "name": "Accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/11967757031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "11967757031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Bolsas de gimnasia",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/2928480031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "2928480031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Bolsas y cestas de la compra",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/3360059031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "3360059031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Bolsos",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/2007965031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "2007965031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Bolsos bandolera",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/2646608031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "2646608031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Carteras, monederos y tarjeteros",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/11960924031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "11960924031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Maletas y bolsas de viaje",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/2007999031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "2007999031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Maletines y bolsas para portátil",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/11960906031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "11960906031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Mochilas",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/2007986031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "2007986031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Mochilas, estuches y sets escolares",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/1642025031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "1642025031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Paraguas",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/3333716031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "3333716031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        },
+        {
+          "name": "Riñoneras",
+          "url": "https://www.amazon.es/gp/bestsellers/luggage/11960907031/ref=zg_bs_nav_luggage_1",
+          "browse_node_id": "11960907031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0007.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:16",
+      "links": [
+        {
+          "name": "Afeitado y depilación",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/4346878031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "4346878031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Baño e higiene personal",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/4347676031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "4347676031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Cuidado de la piel",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/6397934031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "6397934031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Cuidado del cabello",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/4347698031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "4347698031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Equipo de salón y spa",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/27064662031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "27064662031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Manicura y pedicura",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/6397879031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "6397879031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Maquillaje",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/6397823031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "6397823031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Perfumes y fragancias",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/6397798031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "6397798031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "Utensilios y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/6398009031/ref=zg_bs_nav_beauty_1",
+          "browse_node_id": "6398009031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/ref=zg_bs_pg_1_beauty",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/beauty/ref=zg_bs_pg_2_beauty",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0008.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:20",
+      "links": [
+        {
+          "name": "Aceites, vinagres y aliños para ensalada",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347360031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347360031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Alimentación infantil",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347831031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347831031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Café, té y bebidas",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347509031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347509031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Carnes, caza y aves",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/22249338031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "22249338031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Cereal de desayuno",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/88389865031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "88389865031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Cervezas, vinos y licores",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347711031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347711031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Cestas regalo y regalos gourmet",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347817031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347817031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Comida fresca y refrigerada",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/21902130031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "21902130031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Congelados",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6348167031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6348167031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Conservas",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347860031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347860031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Dieta y nutrición",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/4346918031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "4346918031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Flores frescas y plantas de interior",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6348166031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6348166031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Frutas deshidratadas, frutos secos y semillas",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6349251031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6349251031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Frutas y verduras frescas",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372474031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372474031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Hierbas, especias y condimentos",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6349315031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6349315031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Ingredientes para destilación casera de cerveza y vino",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6349419031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6349419031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Legumbres, arroces y harinas",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6349951031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6349951031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Lácteos, huevos y alternativas de origen vegetal",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6349444031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6349444031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Mermeladas, miel y pastas para untar",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372251031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372251031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Olivas, encurtidos y condimentos",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372266031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372266031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Panadería y bollería",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372314031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372314031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Pastas y fideos",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372434031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372434031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Pescados y mariscos",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6347663031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6347663031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Platos preparados envasados",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372450031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372450031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Productos para cocina y repostería",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6372475031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6372475031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Salsas",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/6373017031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "6373017031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "Snacks y dulces",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/27967586031/ref=zg_bs_nav_grocery_1",
+          "browse_node_id": "27967586031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/ref=zg_bs_pg_1_grocery",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/grocery/ref=zg_bs_pg_2_grocery",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0009.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:24",
+      "links": [
+        {
+          "name": "Accesorios de alimentación",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/970144031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "970144031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Audio y vídeo portátil",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/665477031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "665477031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Comunicación móvil y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/665492031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "665492031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Electrónica para vehículos",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/928456031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "928456031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Equipos de audio y Hi-Fi",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/665476031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "665476031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Fotografía y videocámaras",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/664660031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "664660031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "GPS y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/664661031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "664661031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Garantías",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/928460031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "928460031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Informática",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/683279031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "683279031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Lectores de eBooks y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/928457031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "928457031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Pilas y cargadores",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/934120031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "934120031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Radiocomunicación",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/928459031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "928459031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "TV, vídeo y home cinema",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/664659031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "664659031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "Telefonía fija y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/928458031/ref=zg_bs_nav_electronics_1",
+          "browse_node_id": "928458031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/ref=zg_bs_pg_1_electronics",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/electronics/ref=zg_bs_pg_2_electronics",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0010.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:27",
+      "links": [
+        {
+          "name": "Accesorios para calzado, relojes y joyería",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/12422085031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "12422085031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Bebé",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/5518994031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "5518994031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Bisutería barata",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/5874918031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "5874918031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Equipaje y accesorios de viaje",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/12710835031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "12710835031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Hombre",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/5517557031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "5517557031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Mujer",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/5517558031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "5517558031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Niña",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/5518992031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "5518992031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Niño",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/5518993031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "5518993031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Ropa divertida y de uso especial",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/3074031031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "3074031031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "Ropa específica deportiva",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/26984259031/ref=zg_bs_nav_fashion_1",
+          "browse_node_id": "26984259031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/ref=zg_bs_pg_1_fashion",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/fashion/ref=zg_bs_pg_2_fashion",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0011.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/sports",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:30",
+      "links": [
+        {
+          "name": "Acampada y senderismo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928471031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928471031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Airsoft",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928472031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928472031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Artes marciales",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928473031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928473031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Atletismo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928474031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928474031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Baloncesto",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928475031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928475031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Balonmano",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928477031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928477031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Balonmano americano",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928476031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928476031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Billar",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928478031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928478031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Bolos",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928479031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928479031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Bolsas de gimnasia",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928480031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928480031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Boxeo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928481031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928481031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Bádminton",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928482031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928482031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Béisbol",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928483031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928483031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Calzado deportivo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928484031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928484031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Caza",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928485031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928485031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Cheerleading y animación",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928486031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928486031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Ciclismo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928487031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928487031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Criquet",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928488031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928488031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Danza",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928489031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928489031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Dardos y dianas",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928490031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928490031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Deportes acuáticos",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928491031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928491031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Deportes de disco",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928492031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928492031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Deportes de invierno",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928493031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928493031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Deportes recreativos",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928494031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928494031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Ejercicio y fitness",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928495031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928495031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Electrónica y dispositivos",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928496031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928496031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Escalada",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928497031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928497031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Fútbol",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928501031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928501031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Fútbol americano",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928499031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928499031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Fútbol sala",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928500031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928500031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Gimnasia",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928502031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928502031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Golf",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928503031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928503031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Hockey sobre hierba",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928504031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928504031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Hockey sobre patines",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928505031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928505031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Hípica",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928506031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928506031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Lacrosse",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928507031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928507031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Lucha libre",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928508031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928508031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Netball",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928509031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928509031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Paintball",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928510031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928510031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Paracaidismo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928511031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928511031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Patines sobre ruedas",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928512031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928512031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Patinetes y equipación",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928513031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928513031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Pesca",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928514031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928514031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Ping pong",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928515031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928515031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Polo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928516031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928516031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Productos para fans",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928517031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928517031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Pádel",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928518031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928518031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Racketball",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928519031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928519031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Rodeo",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928520031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928520031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Ropa deportiva",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928521031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928521031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Rugby",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928522031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928522031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Running",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928523031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928523031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Skateboarding",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928524031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928524031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Snooker",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928525031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928525031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Soft tenis",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928526031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928526031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Squash",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928527031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928527031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Tenis",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928529031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928529031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Tiro con arco",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928530031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928530031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Trofeos, medallas y premios",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928531031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928531031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Voleibol",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928532031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928532031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "Waveboard",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/2928533031/ref=zg_bs_nav_sports_1",
+          "browse_node_id": "2928533031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/ref=zg_bs_pg_1_sports",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/sports/ref=zg_bs_pg_2_sports",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0012.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": null,
+      "is_top_level": true,
+      "discovered_at": "2026-10-01T16:47:34",
+      "links": [
+        {
+          "name": "Acuáticos",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441881031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441881031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Animales pequeños",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441882031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441882031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Aves y animales de jardín",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/5939994031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "5939994031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Caballos",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441884031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441884031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Gatos",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441885031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441885031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Insectos",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441886031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441886031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Perros",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441887031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441887031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Pájaros",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441888031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441888031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "Reptiles y anfibios",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441889031/ref=zg_bs_nav_pet-supplies_1",
+          "browse_node_id": "13441889031",
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/ref=zg_bs_pg_1_pet-supplies",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/ref=zg_bs_pg_2_pet-supplies",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+        }
+      ],
+      "depth": 0,
+      "parent_url": "",
+      "http_status": 200,
+      "html_file": "html/page_0013.html"
+    },
+    {
+      "source_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1",
+      "title": "Los más vendidos de Amazon",
+      "browse_node_id": "2165211031",
+      "is_top_level": false,
+      "discovered_at": "2026-10-01T16:47:37",
+      "links": [
+        {
+          "name": "Hogar y cocina",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_unv_kitchen_1_2165211031_1",
+          "browse_node_id": null,
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Almacenamiento de alimentos",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165223031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "2165223031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Basura y reciclaje",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3360028031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "3360028031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Bolsas y cestas de la compra",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/3360059031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "3360059031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Botes herméticos y accesorios",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165212031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "2165212031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Dosificadores de aliño y especias",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165217031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "2165217031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Estantes y soportes",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165238031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "2165238031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Fundas para bebidas",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/9733235031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "9733235031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "Termos",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165252031/ref=zg_bs_nav_kitchen_2_2165211031",
+          "browse_node_id": "2165252031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "1",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_pg_1_kitchen",
+          "browse_node_id": "2165211031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        },
+        {
+          "name": "2",
+          "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_pg_2_kitchen",
+          "browse_node_id": "2165211031",
+          "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+        }
+      ],
+      "depth": 1,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen",
+      "http_status": 200,
+      "html_file": "html/page_0014.html"
+    }
+  ],
+  "links": [
+    {
+      "name": "Almacenamiento de cocina y despensa",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165211031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Almacenamiento y organización",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3359926031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "3359926031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Aspiración, limpieza y cuidado de suelo y ventanas",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165679031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165679031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Baño",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3244779031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "3244779031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Café y té",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165154031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165154031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Climatización y calefacción",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3605952031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "3605952031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Costura y manualidades",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/4358016031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "4358016031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Cubertería, Vajilla y Cristalería",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165444031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165444031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Decoración del hogar",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2844123031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2844123031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Fabricación de cerveza y vino",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165325031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165325031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Garantías",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165710031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165710031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Jarras, filtros y cartuchos",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165711031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165711031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Menaje y repostería",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/92039396031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "92039396031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Muebles",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2822691031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2822691031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Pequeño electrodoméstico",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165363031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165363031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Planchas, centros de planchado y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165660031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165660031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Productos y utensilios de limpieza",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3678025031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "3678025031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Textiles del hogar",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3249995031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "3249995031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Utensilios",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165553031/ref=zg_bs_nav_kitchen_1",
+      "browse_node_id": "2165553031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_pg_1_kitchen",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_pg_2_kitchen",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/kitchen"
+    },
+    {
+      "name": "Bebé y puericultura",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346879031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346879031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Bienestar",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346880031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346880031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Cuidado bucal",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346882031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346882031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Cuidado de la salud",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346884031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346884031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Cuidado de la vista",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346881031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346881031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Cuidado y limpieza del hogar",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/6348071031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "6348071031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Dieta y nutrición",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346918031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346918031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Higiene íntima",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/6691131031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "6691131031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Sexo y sensualidad",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346885031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346885031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Suministros y equipamiento médico",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4346886031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4346886031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Vitaminas, minerales y suplementos",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/4347039031/ref=zg_bs_nav_hpc_1",
+      "browse_node_id": "4347039031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/ref=zg_bs_pg_1_hpc",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/hpc/ref=zg_bs_pg_2_hpc",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/hpc"
+    },
+    {
+      "name": "Bolígrafos, lápices y útiles de escritura",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352788031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352788031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Calendarios, agendas y organizadores personales",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352789031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352789031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Electrónica de oficina",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352790031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352790031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Material de oficina",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352791031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352791031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Material escolar y educativo",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352792031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352792031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Muebles y lámparas",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352793031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352793031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Productos de papel para oficina",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352794031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352794031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Sobres y suministros para el correo",
+      "url": "https://www.amazon.es/gp/bestsellers/office/4352795031/ref=zg_bs_nav_office_1",
+      "browse_node_id": "4352795031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/office/ref=zg_bs_pg_1_office",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/office/ref=zg_bs_pg_2_office",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/office"
+    },
+    {
+      "name": "Accesorios para músicos y producción musical",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965350031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965350031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Bajos y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965351031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965351031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Equipo de DJ y VJ",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965352031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965352031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Equipos de karaoke",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965353031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965353031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Grabación y procesado informático",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965354031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965354031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Guitarras y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965355031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965355031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Instrumentos de cuerda",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965356031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965356031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Instrumentos de viento",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965357031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965357031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Micrófonos",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965358031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965358031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Partituras, cancioneros y letras",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/14759594031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "14759594031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Percusión",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965359031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965359031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Pianos y teclados",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965360031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965360031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Sintetizadores, samplers e instrumentos digitales",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965361031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965361031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Sistemas de escenario y megafonía",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965362031/ref=zg_bs_nav_musical-instruments_1",
+      "browse_node_id": "4965362031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/ref=zg_bs_pg_1_musical-instruments",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/musical-instruments/ref=zg_bs_pg_2_musical-instruments",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/musical-instruments"
+    },
+    {
+      "name": "Chimeneas y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/2844284031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "2844284031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Cortacéspedes y herramientas eléctricas para exteriores",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "5940100031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Ferretería",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049285031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049285031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Fontanería",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049287031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049287031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Herramientas manuales y eléctricas",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049288031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049288031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Instalación de baño y cocina",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049286031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049286031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Instalación eléctrica",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049284031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049284031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Organización y almacenaje en casa",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049290031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049290031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Pinturas, herramientas y tratamiento de paredes",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049291031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049291031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Prevención y seguridad",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049292031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049292031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Suministros de construcción",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/3049293031/ref=zg_bs_nav_tools_1",
+      "browse_node_id": "3049293031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_pg_1_tools",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_pg_2_tools",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/tools"
+    },
+    {
+      "name": "Actividades creativas",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641736031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641736031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Aire libre y deportes",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641779031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641779031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Aprendizaje y educacion",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641972031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641972031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Bebés y primera infancia",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642110031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642110031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Calendarios de adviento",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641877031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641877031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Coleccionables",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641878031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641878031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Instrumentos musicales para niños",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641912031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641912031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Juegos de construcción",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641927031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641927031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Juegos de imitación",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641928031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641928031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Juegos y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641940031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641940031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Juguetes electrónicos",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641995031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641995031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Marionetas y títeres",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642008031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642008031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Muñecas y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642084031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642084031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Muñecos y figuras",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642096031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642096031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Peluches",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642104031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642104031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Puzzles y rompecabezas",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642133031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642133031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Radiocontrol",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1642143031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1642143031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Regalos originales y de broma",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/1641842031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "1641842031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Vehículos",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/14525595031/ref=zg_bs_nav_toys_1",
+      "browse_node_id": "14525595031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/ref=zg_bs_pg_1_toys",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/toys/ref=zg_bs_pg_2_toys",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/toys"
+    },
+    {
+      "name": "Almacenamiento de exterior",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5939985031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5939985031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Aves y animales de jardín",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5939994031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5939994031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Barbacoa y comedor al aire libre",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940020031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940020031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Calentadores, fogatas y chimeneas",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940087031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940087031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Cortacéspedes y herramientas eléctricas para exteriores",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940100031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940100031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Cubiertas y vallas",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940754031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940754031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Decoración de exterior",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940280031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940280031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Herramientas de jardinería y equipos de riego",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/26381675031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "26381675031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Jardinería",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940346031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940346031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Limpieza de nieve",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940557031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940557031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Muebles y accesorios de jardín",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940567031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940567031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Piscinas, bañeras de hidromasaje y suministros",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940640031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940640031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Plantas, semillas y bulbos",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940707031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940707031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Termómetros e instrumentos meteorológicos",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/5940747031/ref=zg_bs_nav_lawn-garden_1",
+      "browse_node_id": "5940747031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/ref=zg_bs_pg_1_lawn-garden",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/ref=zg_bs_pg_2_lawn-garden",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/lawn-garden"
+    },
+    {
+      "name": "Accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/11967757031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "11967757031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Bolsas de gimnasia",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/2928480031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "2928480031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Bolsas y cestas de la compra",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/3360059031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "3360059031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Bolsos",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/2007965031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "2007965031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Bolsos bandolera",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/2646608031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "2646608031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Carteras, monederos y tarjeteros",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/11960924031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "11960924031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Maletas y bolsas de viaje",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/2007999031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "2007999031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Maletines y bolsas para portátil",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/11960906031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "11960906031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Mochilas",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/2007986031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "2007986031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Mochilas, estuches y sets escolares",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/1642025031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "1642025031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Paraguas",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/3333716031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "3333716031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Riñoneras",
+      "url": "https://www.amazon.es/gp/bestsellers/luggage/11960907031/ref=zg_bs_nav_luggage_1",
+      "browse_node_id": "11960907031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/luggage"
+    },
+    {
+      "name": "Afeitado y depilación",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/4346878031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "4346878031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Baño e higiene personal",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/4347676031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "4347676031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Cuidado de la piel",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/6397934031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "6397934031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Cuidado del cabello",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/4347698031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "4347698031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Equipo de salón y spa",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/27064662031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "27064662031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Manicura y pedicura",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/6397879031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "6397879031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Maquillaje",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/6397823031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "6397823031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Perfumes y fragancias",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/6397798031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "6397798031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Utensilios y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/6398009031/ref=zg_bs_nav_beauty_1",
+      "browse_node_id": "6398009031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/ref=zg_bs_pg_1_beauty",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/beauty/ref=zg_bs_pg_2_beauty",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/beauty"
+    },
+    {
+      "name": "Aceites, vinagres y aliños para ensalada",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347360031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347360031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Alimentación infantil",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347831031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347831031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Café, té y bebidas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347509031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347509031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Carnes, caza y aves",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/22249338031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "22249338031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Cereal de desayuno",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/88389865031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "88389865031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Cervezas, vinos y licores",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347711031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347711031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Cestas regalo y regalos gourmet",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347817031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347817031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Comida fresca y refrigerada",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/21902130031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "21902130031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Congelados",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6348167031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6348167031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Conservas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347860031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347860031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Dieta y nutrición",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/4346918031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "4346918031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Flores frescas y plantas de interior",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6348166031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6348166031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Frutas deshidratadas, frutos secos y semillas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6349251031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6349251031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Frutas y verduras frescas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372474031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372474031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Hierbas, especias y condimentos",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6349315031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6349315031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Ingredientes para destilación casera de cerveza y vino",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6349419031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6349419031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Legumbres, arroces y harinas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6349951031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6349951031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Lácteos, huevos y alternativas de origen vegetal",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6349444031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6349444031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Mermeladas, miel y pastas para untar",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372251031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372251031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Olivas, encurtidos y condimentos",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372266031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372266031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Panadería y bollería",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372314031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372314031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Pastas y fideos",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372434031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372434031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Pescados y mariscos",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6347663031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6347663031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Platos preparados envasados",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372450031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372450031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Productos para cocina y repostería",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6372475031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6372475031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Salsas",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/6373017031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "6373017031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Snacks y dulces",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/27967586031/ref=zg_bs_nav_grocery_1",
+      "browse_node_id": "27967586031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/ref=zg_bs_pg_1_grocery",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/grocery/ref=zg_bs_pg_2_grocery",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/grocery"
+    },
+    {
+      "name": "Accesorios de alimentación",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/970144031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "970144031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Audio y vídeo portátil",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/665477031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "665477031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Comunicación móvil y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/665492031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "665492031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Electrónica para vehículos",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/928456031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "928456031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Equipos de audio y Hi-Fi",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/665476031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "665476031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Fotografía y videocámaras",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/664660031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "664660031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "GPS y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/664661031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "664661031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Garantías",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/928460031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "928460031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Informática",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/683279031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "683279031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Lectores de eBooks y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/928457031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "928457031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Pilas y cargadores",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/934120031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "934120031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Radiocomunicación",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/928459031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "928459031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "TV, vídeo y home cinema",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/664659031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "664659031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Telefonía fija y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/928458031/ref=zg_bs_nav_electronics_1",
+      "browse_node_id": "928458031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/ref=zg_bs_pg_1_electronics",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/electronics/ref=zg_bs_pg_2_electronics",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/electronics"
+    },
+    {
+      "name": "Accesorios para calzado, relojes y joyería",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/12422085031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "12422085031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Bebé",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/5518994031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "5518994031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Bisutería barata",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/5874918031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "5874918031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Equipaje y accesorios de viaje",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/12710835031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "12710835031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Hombre",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/5517557031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "5517557031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Mujer",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/5517558031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "5517558031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Niña",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/5518992031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "5518992031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Niño",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/5518993031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "5518993031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Ropa divertida y de uso especial",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/3074031031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "3074031031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Ropa específica deportiva",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/26984259031/ref=zg_bs_nav_fashion_1",
+      "browse_node_id": "26984259031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/ref=zg_bs_pg_1_fashion",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/fashion/ref=zg_bs_pg_2_fashion",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/fashion"
+    },
+    {
+      "name": "Acampada y senderismo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928471031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928471031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Airsoft",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928472031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928472031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Artes marciales",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928473031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928473031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Atletismo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928474031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928474031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Baloncesto",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928475031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928475031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Balonmano",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928477031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928477031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Balonmano americano",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928476031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928476031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Billar",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928478031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928478031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Bolos",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928479031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928479031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Bolsas de gimnasia",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928480031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928480031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Boxeo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928481031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928481031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Bádminton",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928482031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928482031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Béisbol",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928483031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928483031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Calzado deportivo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928484031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928484031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Caza",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928485031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928485031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Cheerleading y animación",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928486031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928486031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Ciclismo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928487031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928487031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Criquet",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928488031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928488031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Danza",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928489031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928489031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Dardos y dianas",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928490031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928490031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Deportes acuáticos",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928491031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928491031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Deportes de disco",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928492031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928492031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Deportes de invierno",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928493031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928493031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Deportes recreativos",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928494031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928494031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Ejercicio y fitness",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928495031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928495031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Electrónica y dispositivos",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928496031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928496031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Escalada",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928497031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928497031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Fútbol",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928501031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928501031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Fútbol americano",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928499031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928499031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Fútbol sala",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928500031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928500031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Gimnasia",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928502031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928502031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Golf",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928503031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928503031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Hockey sobre hierba",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928504031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928504031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Hockey sobre patines",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928505031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928505031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Hípica",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928506031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928506031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Lacrosse",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928507031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928507031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Lucha libre",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928508031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928508031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Netball",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928509031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928509031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Paintball",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928510031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928510031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Paracaidismo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928511031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928511031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Patines sobre ruedas",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928512031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928512031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Patinetes y equipación",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928513031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928513031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Pesca",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928514031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928514031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Ping pong",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928515031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928515031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Polo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928516031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928516031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Productos para fans",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928517031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928517031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Pádel",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928518031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928518031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Racketball",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928519031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928519031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Rodeo",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928520031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928520031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Ropa deportiva",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928521031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928521031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Rugby",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928522031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928522031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Running",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928523031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928523031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Skateboarding",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928524031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928524031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Snooker",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928525031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928525031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Soft tenis",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928526031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928526031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Squash",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928527031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928527031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Tenis",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928529031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928529031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Tiro con arco",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928530031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928530031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Trofeos, medallas y premios",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928531031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928531031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Voleibol",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928532031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928532031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Waveboard",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/2928533031/ref=zg_bs_nav_sports_1",
+      "browse_node_id": "2928533031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/ref=zg_bs_pg_1_sports",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/sports/ref=zg_bs_pg_2_sports",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/sports"
+    },
+    {
+      "name": "Acuáticos",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441881031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441881031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Animales pequeños",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441882031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441882031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Aves y animales de jardín",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/5939994031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "5939994031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Caballos",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441884031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441884031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Gatos",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441885031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441885031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Insectos",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441886031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441886031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Perros",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441887031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441887031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Pájaros",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441888031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441888031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Reptiles y anfibios",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/13441889031/ref=zg_bs_nav_pet-supplies_1",
+      "browse_node_id": "13441889031",
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/ref=zg_bs_pg_1_pet-supplies",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/pet-supplies/ref=zg_bs_pg_2_pet-supplies",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/-/en/gp/bestsellers/pet-supplies"
+    },
+    {
+      "name": "Hogar y cocina",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_unv_kitchen_1_2165211031_1",
+      "browse_node_id": null,
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Almacenamiento de alimentos",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165223031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "2165223031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Basura y reciclaje",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3360028031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "3360028031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Bolsas y cestas de la compra",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/3360059031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "3360059031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Botes herméticos y accesorios",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165212031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "2165212031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Dosificadores de aliño y especias",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165217031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "2165217031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Estantes y soportes",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165238031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "2165238031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Fundas para bebidas",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/9733235031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "9733235031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "Termos",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165252031/ref=zg_bs_nav_kitchen_2_2165211031",
+      "browse_node_id": "2165252031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "1",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_pg_1_kitchen",
+      "browse_node_id": "2165211031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    },
+    {
+      "name": "2",
+      "url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_pg_2_kitchen",
+      "browse_node_id": "2165211031",
+      "parent_url": "https://www.amazon.es/gp/bestsellers/kitchen/2165211031/ref=zg_bs_nav_kitchen_1"
+    }
+  ],
+  "page_count": 15,
+  "link_count": 275
+}

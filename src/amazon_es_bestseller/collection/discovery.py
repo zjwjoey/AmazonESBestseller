@@ -111,7 +111,8 @@ def discover_bestseller_tree(urls: Iterable[str], session, out_dir: str,
         require_normal_access(state, "类目发现 HTTP %s，URL %s" % (status, url))
         snapshot = parse_bestseller_navigation(html, url)
         snapshot.update({"depth": depth, "parent_url": parent,
-                         "http_status": status, "html_file": str(Path("html") / file_name)})
+                         "http_status": status,
+                         "html_file": (Path("html") / file_name).as_posix()})
         pages.append(snapshot)
         if depth < max(0, int(max_depth)):
             for link in snapshot["links"]:
