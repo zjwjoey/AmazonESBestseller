@@ -776,8 +776,22 @@ def cmd_translate(args) -> None:
             result = service.translate_records(products, fields=fields, offset=args.offset,
                                                limit=args.limit, repair_partial=args.repair_partial,
                                                repair_failed=args.repair_failed, dry_run=True)
-        _save_json(result["summary"], args.out)
         plan = result["summary"]
+        if pool is not None:
+            plan["pool"] = result.get("pool", pool.snapshot())
+            aliases = [str(item.get("name") or item.get("alias"))
+                       for item in config.get("providers", [])]
+            if aliases:
+                total_requests = int(plan.get("estimated_api_requests", 0))
+                plan["estimated_provider_requests"] = {
+                    alias: total_requests // len(aliases) + (1 if index < total_requests % len(aliases) else 0)
+                    for index, alias in enumerate(aliases)}
+            print("Parallel workers = %d" % pool.max_workers)
+            for alias, spec in ((item.get("name") or item.get("alias"), item)
+                                for item in config.get("providers", [])):
+                print("  Provider %s: model=%s rate=%s" %
+                      (alias, spec.get("model", "qwen-mt-flash"), spec.get("rate", 0.5)))
+        _save_json(plan, args.out)
         print("translate dry-run%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、rate=%.3g/s（未调用 API）→ %s" %
               (" [parallel-providers]" if pool is not None else "",
                plan["total_records"], plan["total_fields"], plan["cache_hits"],
