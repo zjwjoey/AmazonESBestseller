@@ -45,7 +45,7 @@ def build_qa_report(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
                 "added_numbers"):
         counts.setdefault(key, 0)
     for alias, code in aliases.items():
-        if alias not in counts:
-            counts[alias] = counts.get(code, 0)
+        # Keep the human-facing aggregate aligned with the canonical issue code.
+        counts[alias] = counts.get(code, 0)
     return {"schema_version": "translation-v2.1", "counts": dict(counts),
             "issues": issues, "status": "pass" if not issues else "qa_failed"}
