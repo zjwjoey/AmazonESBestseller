@@ -63,8 +63,11 @@ _TERMS_BASE = [
     ("congelador", "冷冻室"), ("microondas", "微波炉"), ("lavavajillas", "洗碗机"),
     ("Apilable", "可堆叠"), ("Extraíble", "可拆卸"), ("Extraible", "可拆卸"),
     ("Desmontable", "可拆卸"), ("Reciclable", "可回收"),
-    ("Reutilizable", "可重复使用"), ("uds", "件"), ("unidades", "件"),
-    ("unidad", "件"), ("Sí", "是"),
+    ("Reutilizable", "可重复使用"), ("uds", "件"), ("Uds", "件"),
+    ("unidades", "件"), ("Unidades", "件"), ("unidad", "件"),
+    ("Unidad", "单件"), ("Sí", "是"), ("sí", "是"),
+    ("true", "是"), ("True", "是"), ("TRUE", "是"),
+    ("false", "否"), ("False", "否"), ("FALSE", "否"),
 ]
 
 _TERMS_MAT = [
@@ -164,6 +167,21 @@ def apply_terms(s, terms=TERMS) -> str:
     return s.strip()
 
 
+def dedupe_technical_units(s: str) -> str:
+    """Remove a duplicated mAh suffix introduced around a protected token.
+
+    When a model emits ``__T0000__mAh`` for a protected ``5200 mAh`` token,
+    restoration would otherwise produce ``5200 mAhmAh``. Only this narrow,
+    numeric-unit pattern is normalized; arbitrary repeated words are left
+    untouched so raw/source evidence is not guessed or rewritten broadly.
+    """
+    return re.sub(
+        r"(?i)(?<!\w)(\d+(?:[.,]\d+)?\s*mAh)\s*mAh(?!\w)",
+        r"\1",
+        str(s or ""),
+    )
+
+
 def translate_value(v) -> str:
     """西语值 → 中文（尺寸走简式 dim_zh；单位/材质/颜色用确定性词典）。"""
     if not v:
@@ -174,6 +192,7 @@ def translate_value(v) -> str:
         return dz
     s = re.sub(r'\s+x\s+', '×', s)
     s = apply_terms(s)
+    s = dedupe_technical_units(s)
     # 件数 "1.0件"/"1.0 件" → "1件"
     s = re.sub(r'(?<=\d)\s*\.0\s*(?=件)', '', s)
     s = re.sub(r'(?<=\d)\s+(?=件)', '', s)

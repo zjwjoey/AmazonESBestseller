@@ -14,7 +14,10 @@ import re
 import unicodedata
 
 from ..normalization.text import strip_zero_width
-from .zh import apply_terms, translate_value
+from .dictionary_service import DictionaryService
+from .zh import apply_terms, dedupe_technical_units, translate_value
+
+_DICTIONARY_SERVICE = DictionaryService()
 
 #: 属性标签：西语（小写键）→ 中文。来自真实页面采集的标签集 + 通用 Amazon 标签。
 LABEL_ES_ZH = {
@@ -51,8 +54,22 @@ LABEL_ES_ZH = {
     "nombre tipo artículo": "商品类型名称",
     "número modelo": "型号",
     "número de modelo": "型号",
+    "modelo": "型号",
+    "peso": "重量",
+    "peso del producto": "产品重量",
+    "peso artículo": "商品重量",
+    "dimensiones": "尺寸",
+    "dimensiones del paquete": "包装尺寸",
+    "dimensiones del producto": "产品尺寸",
+    "voltaje": "电压",
+    "potencia": "功率",
+    "frecuencia": "频率",
     "número pieza": "零件号",
     "número de pieza del fabricante": "制造商零件号",
+    "referencia oem": "OEM参考号",
+    "referencia del fabricante": "制造商参考编号",
+    "referencia": "参考号",
+    "requiere montaje": "需要组装",
     "garantía producto": "产品保修",
     "clasificación en los más vendidos de amazon": "Amazon 畅销榜排名",
     "valoración media de los clientes": "客户平均评分",
@@ -181,6 +198,7 @@ def clean_display_zh(text: str) -> str:
         # a real numeric value (e.g. ``产品体积：10``), but drop an empty row.
         line = re.sub(r"\s*(?:未知修饰符|modificador desconocido)\b", "", line,
                       flags=re.I)
+        line = dedupe_technical_units(line)
         line = re.sub(r"\s{2,}", " ", line).strip(" ：:;；,，")
         if not line:
             continue
@@ -274,6 +292,15 @@ def _humanize_es_label(label: str) -> str:
     return text[:1].upper() + text[1:]
 
 
+def _identity_value_label(label: str) -> bool:
+    key = str(label or "").casefold().strip()
+    return (key in {"marca", "fabricante", "modelo", "nombre del modelo", "nombre modelo",
+                    "número de modelo", "número modelo", "número de modelo del producto",
+                    "referencia", "referencia oem", "referencia del fabricante",
+                    "número pieza", "número de pieza del fabricante", "upc", "asin", "ean"}
+            or "número de modelo" in key or "número de pieza" in key)
+
+
 def render_details_es(attributes) -> str:
     """完整商品详情（西语原文）：逐行 ``label: value``（多行，供 Excel WRAP 单元格）。"""
     rows = _display_rows(attributes)
@@ -296,8 +323,11 @@ def render_details_zh(attributes) -> str:
     order: list = []
     for label, value in rows:
         label = _humanize_es_label(label)
-        zh_label = LABEL_ES_ZH.get(label.lower(), label)
-        zh_value = translate_value(value)
+        zh_label = (_DICTIONARY_SERVICE.lookup_attribute_label(label)
+                    or LABEL_ES_ZH.get(label.lower(), label))
+        # Identity and legal-entity values are source evidence.  For example,
+        # ``Marca: Metal`` is a brand named Metal, not a material value.
+        zh_value = value if _identity_value_label(label) else translate_value(value)
         key = zh_label.lower()
         if key not in best:
             best[key] = (len(order), zh_label, zh_value)
@@ -317,6 +347,7 @@ def render_bullets_es(bullets) -> str:
 def _bullet_zh(b) -> str:
     """单条卖点：词典关键词翻译，未覆盖词保留西语原文（不臆造）。"""
     s = apply_terms(str(b).strip())
+    s = dedupe_technical_units(s)
     s = re.sub(r"(?<=\d)\s+(?=[克升毫升瓦件磅千米])", "", s)
     return clean_display_zh(s)
 
