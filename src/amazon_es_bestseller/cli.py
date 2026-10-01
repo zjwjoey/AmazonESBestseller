@@ -711,25 +711,30 @@ def cmd_translate(args) -> None:
     provider = QwenMTProvider(model=model,
                               endpoint=config.get("endpoint"),
                               protocol=config.get("protocol"),
-                              timeout=float(config.get("timeout", 60)),
+                              timeout=float(config.get("timeout", config.get("timeout_seconds", 60))),
                               max_retries=int(config.get("max_retries", 2)))
     cache = TranslationCache(args.cache)
     fields = args.field or ([args.fields] if args.fields else None) or config.get("fields") or None
     if fields:
         fields = [item.strip() for value in fields for item in str(value).split(",") if item.strip()]
-    service = TranslationService(provider, cache)
+    service = TranslationService(provider, cache,
+                                 source_language=config.get("source_language", "es"),
+                                 target_language=config.get("target_language", "zh-CN"))
     if args.dry_run:
         result = service.translate_records(products, fields=fields, offset=args.offset,
                                            limit=args.limit, dry_run=True)
         _save_json(result["summary"], args.out)
-        print("translate dry-run：%d 条商品、%d 个字段（未调用 API）→ %s" %
-              (result["summary"]["total_records"], result["summary"]["total_fields"], args.out))
+        plan = result["summary"]
+        print("translate dry-run：SKU %d、待翻译字段 %d、缓存命中 %d、预计 API 请求 %d、source_missing %d（未调用 API）→ %s" %
+              (plan["total_records"], plan["total_fields"], plan["cache_hits"],
+               plan["estimated_api_requests"], plan["source_missing"], args.out))
         return
     if args.offline:
         raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
-    subset_count = len(products[max(0, args.offset):]) if args.limit is None else min(args.limit, len(products[max(0, args.offset):]))
-    print("translate V2 即将调用 %s：%d 个 ASIN，model=%s" %
-          (provider.name, subset_count, model))
+    plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit)
+    print("translate V2 即将调用 %s：SKU %d、待翻译字段 %d、缓存命中 %d、预计 API 请求 %d、source_missing %d、model=%s" %
+          (provider.name, plan["total_records"], plan["total_fields"], plan["cache_hits"],
+           plan["estimated_api_requests"], plan["source_missing"], model))
     if not args.yes:
         try:
             confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
@@ -748,8 +753,11 @@ def cmd_translate(args) -> None:
         for record in result["records"].values():
             for field, value in (record.get("fields") or {}).items():
                 audit.append({"asin": record.get("asin"), "field": field,
+                              "source_hash": value.get("source_hash"),
+                              "provider": value.get("provider"), "model": value.get("model"),
+                              "status": value.get("translation_status"),
                               "translation_status": value.get("translation_status"),
-                              "qa_status": value.get("qa_status"), "source_hash": value.get("source_hash"),
+                              "qa_status": value.get("qa_status"),
                               "last_error": value.get("last_error")})
         Path(args.audit_out).parent.mkdir(parents=True, exist_ok=True)
         with Path(args.audit_out).open("w", encoding="utf-8") as handle:

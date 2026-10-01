@@ -96,12 +96,15 @@ class QwenMTProvider(TranslationProvider):
         return ""
 
     def translate(self, text: str, *, asin: str, field: str,
+                  source_language: str = "es", target_language: str = "zh-CN",
                   context: Optional[Dict[str, Any]] = None) -> ProviderResponse:
         if not self.api_key:
             return ProviderResponse(provider=self.name, model=self._model,
                                     status="failed", error="missing QWEN_API_KEY/DASHSCOPE_API_KEY",
                                     attempts=0)
-        payload = self._payload(text, asin=asin, field=field, context=context or {})
+        payload = self._payload(text, asin=asin, field=field,
+                                context={"source_language": source_language,
+                                         "target_language": target_language, **(context or {})})
         headers = {"Authorization": "Bearer " + self.api_key,
                    "Content-Type": "application/json"}
         last_error = "provider request failed"

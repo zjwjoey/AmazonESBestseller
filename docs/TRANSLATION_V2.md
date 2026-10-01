@@ -49,6 +49,14 @@ other fields. Cache writes use a temporary file, fsync and atomic replace. A
 corrupt cache is preserved with a `.corrupt-*` suffix and the run starts with
 an empty cache rather than silently accepting malformed data.
 
-`translation_qa.json` records numeric/unit/token and conservative residual
-Spanish findings. Optional `--audit-out` writes one JSONL row per translated
-field for audit/retry analysis.
+`translation_qa.json` records numeric/unit/token, bullet-count and conservative
+residual-Spanish findings with stable zero-filled counters. Optional
+`--audit-out` writes one JSONL row per translated field, including source hash,
+provider, model, status and QA status. Existing deterministic rules from
+`zh.py` and `full_detail.py` are applied as a terminology post-processing layer;
+they do not overwrite Spanish evidence.
+
+The confirmation line reports SKU count, field count, cache hits, source-missing
+records and the estimated provider request count. Category text shares one TM
+namespace across category levels, so identical Spanish labels are translated
+once per run.

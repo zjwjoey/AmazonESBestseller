@@ -9,7 +9,7 @@ class FakeProvider(TranslationProvider):
         self.calls = []
         self.fail_fields = set(fail_fields)
 
-    def translate(self, text, *, asin, field, context=None):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         self.calls.append((asin, field, text, context or {}))
         if field in self.fail_fields:
             return ProviderResponse(provider=self.name, model=self.model, status="failed", error="synthetic")
