@@ -2,7 +2,7 @@ import json
 import shutil
 import threading
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -119,7 +119,8 @@ def test_task_paths_are_portable_across_worktrees(tmp_path):
     plan["source_snapshot"] = relative
     assert validate_task_plan(plan, plan_path=project_root / "plan.json",
                               project_root=project_root)["source_snapshot"] == relative
-    assert resolve_task_path(r"F:\AmazonESBestseller\outputs\snapshot.json").drive == "F:"
+    # Parse a Windows absolute path portably even when CI runs on Ubuntu.
+    assert PureWindowsPath(r"F:\AmazonESBestseller\outputs\snapshot.json").drive == "F:"
     with pytest.raises(ValueError, match="项目根目录"):
         snapshot_reference(tmp_path / "outside.json", project_root)
     missing = dict(plan, source_snapshot="outputs/discovery/missing.json")
