@@ -1,6 +1,6 @@
 import json
 
-from amazon_es_bestseller.translation.preclean import audit_records, clean_text, write_reports
+from amazon_es_bestseller.translation.preclean import audit_records, clean_text, numeric_profile, write_reports
 
 
 def test_preclean_preserves_raw_and_removes_only_deterministic_noise(tmp_path):
@@ -76,3 +76,8 @@ def test_exact_detail_duplicates_are_removed_only_from_derived_rows():
     assert result["summary"]["identity_count"] == 2
     assert row["raw_fields"]["product_details"]["source_present"] is True
     assert row["fields"]["product_details"]["protected_tokens"] == []
+
+
+def test_numeric_profile_recognizes_spanish_unit_names():
+    profile = numeric_profile("Peso: 4,25 kilogramos; capacidad: 500 mililitros; 220 voltios")
+    assert [item["canonical_unit"] for item in profile["values"]] == ["kg", "ml", "V"]

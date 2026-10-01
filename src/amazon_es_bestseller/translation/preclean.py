@@ -46,9 +46,27 @@ PROTECTED_TOKEN_RE = re.compile(
     r"IP\w+|E\d{2}|A\d|M\d+|\d+(?:[.,]\d+)?\s*(?:mAh|Ah|PSI|bar|V|W|kW|Hz|MHz|GHz|°C|%)|"
     r"\d+(?:[-/]\d+)+)(?!\w)", re.I)
 NUMERIC_UNIT_RE = re.compile(
-    r"(?P<number>\d+(?:[.,]\d+)?)\s*(?P<unit>mAh|Ah|MHz|GHz|kHz|Hz|kW|W|V|PSI|bar|°C|kg|mg|ml|cl|L|g|km|cm|mm|m|A|%)\b",
+    r"(?<!\w)(?P<number>\d+(?:[.,]\d+)?)\s*(?P<unit>"
+    r"miliamperios?\s*hora|amperios?\s*hora|mil[ií]metros?|cent[ií]metros?|kil[oó]metros?|"
+    r"kilogramos?|miligramos?|mililitros?|centilitros?|litros?|gramos?|metros?|"
+    r"megahercios?|gigahercios?|kilohercios?|hercios?|kilovatios?|vatios?|voltios?|amperios?|"
+    r"mAh|Ah|MHz|GHz|kHz|Hz|kW|W|V|PSI|bar|°C|kg|mg|ml|cl|L|g|km|cm|mm|m|A|%)"
+    r"(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ])",
     re.I,
 )
+UNIT_CANONICAL = {
+    "gramo": "g", "gramos": "g", "kg": "kg", "kilogramo": "kg", "kilogramos": "kg",
+    "mg": "mg", "miligramo": "mg", "miligramos": "mg", "ml": "ml", "mililitro": "ml", "mililitros": "ml",
+    "cl": "cl", "centilitro": "cl", "centilitros": "cl", "l": "L", "litro": "L", "litros": "L",
+    "mm": "mm", "milímetro": "mm", "milímetros": "mm", "cm": "cm", "centímetro": "cm", "centímetros": "cm",
+    "m": "m", "metro": "m", "metros": "m", "km": "km", "kilómetro": "km", "kilómetros": "km",
+    "v": "V", "voltio": "V", "voltios": "V", "w": "W", "vatio": "W", "vatios": "W",
+    "kw": "kW", "kilovatio": "kW", "kilovatios": "kW", "a": "A", "amperio": "A", "amperios": "A",
+    "hz": "Hz", "hercio": "Hz", "hercios": "Hz", "khz": "kHz", "kilohercio": "kHz", "kilohercios": "kHz",
+    "mhz": "MHz", "megahercio": "MHz", "megahercios": "MHz", "ghz": "GHz", "gigahercio": "GHz", "gigahercios": "GHz",
+    "mah": "mAh", "miliamperio hora": "mAh", "miliamperios hora": "mAh", "ah": "Ah", "amperio hora": "Ah", "amperios hora": "Ah",
+    "bar": "bar", "psi": "PSI", "°c": "°C", "%": "%",
+}
 SPANISH_WORDS = {"para", "del", "de", "con", "sin", "producto", "color", "tamaño", "modelo", "material", "peso", "número"}
 ENGLISH_WORDS = {"the", "for", "with", "without", "product", "color", "size", "model", "material", "weight", "number"}
 GERMAN_WORDS = {"und", "der", "die", "das", "gewicht", "farbe", "größe", "modell"}
@@ -244,7 +262,7 @@ def language_label(value: str) -> str:
 
 def numeric_profile(value: str) -> dict[str, Any]:
     matches = NUMERIC_UNIT_RE.findall(value)
-    units = [match[1].lower() for match in matches]
+    units = [match[1].strip().casefold() for match in matches]
     issues = []
     if re.search(r"\b\d+(?:[.,]\d+)?\s*mAhmAh\b", value, re.I):
         issues.append("DUPLICATE_UNIT")
@@ -255,7 +273,7 @@ def numeric_profile(value: str) -> dict[str, Any]:
     for number, unit in matches:
         try:
             values.append({"numeric_value": float(number.replace(",", ".")), "unit_raw": unit,
-                           "canonical_unit": unit.lower()})
+                           "canonical_unit": UNIT_CANONICAL.get(unit.strip().casefold(), unit.strip())})
         except ValueError:
             issues.append("INVALID_NUMBER")
     return {"values": values, "issues": sorted(set(issues))}
