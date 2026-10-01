@@ -15,8 +15,10 @@ class TranslationCache:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.entries: Dict[str, Dict[str, Any]] = {}
+        self.memory: Dict[str, Dict[str, Any]] = {}
         self.recovered_from_corruption = False
         self.corruption_error: Optional[str] = None
+        self._corruption_preserved = False
         self.load()
 
     @staticmethod
@@ -30,17 +32,27 @@ class TranslationCache:
             return
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            self.entries = dict(data.get("entries", data)) if isinstance(data, dict) else {}
+            if isinstance(data, dict) and "entries" in data:
+                self.entries = dict(data.get("entries") or {})
+                self.memory = dict(data.get("memory") or {})
+            else:
+                # Backward-compatible V1 cache shape: old records remain
+                # field entries; no implicit migration is attempted.
+                self.entries = dict(data) if isinstance(data, dict) else {}
+                self.memory = {}
         except (OSError, ValueError, TypeError) as exc:
             self.recovered_from_corruption = True
             self.corruption_error = str(exc)
             # Preserve the bad evidence; never delete or silently overwrite it.
-            stamp = str(int(time.time()))
+            stamp = str(time.time_ns())
             corrupt = self.path.with_name(self.path.name + ".corrupt-" + stamp)
             try:
                 self.path.replace(corrupt)
+                self._corruption_preserved = True
             except OSError:
-                pass
+                # Do not later overwrite a malformed cache if its evidence
+                # could not be moved out of the way.
+                self._corruption_preserved = False
             self.entries = {}
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
@@ -50,9 +62,28 @@ class TranslationCache:
     def put(self, key: str, value: Dict[str, Any]) -> None:
         self.entries[key] = dict(value)
 
+    @staticmethod
+    def memory_key(source_text: str, source_language: str, target_language: str,
+                   field_type: str, provider: str, model: str,
+                   schema_version: str, prompt_version: str) -> str:
+        import hashlib
+        digest = hashlib.sha256(str(source_text or "").encode("utf-8")).hexdigest()
+        return "|".join((digest, source_language, target_language, field_type,
+                          provider, model, schema_version, prompt_version))
+
+    def get_memory(self, key: str) -> Optional[Dict[str, Any]]:
+        value = self.memory.get(key)
+        return dict(value) if isinstance(value, dict) else None
+
+    def put_memory(self, key: str, value: Dict[str, Any]) -> None:
+        self.memory[key] = dict(value)
+
     def save(self) -> None:
+        if self.recovered_from_corruption and not self._corruption_preserved and self.path.exists():
+            raise RuntimeError("corrupt translation cache could not be preserved: %s" % self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"cache_version": self.VERSION, "entries": self.entries}
+        payload = {"cache_version": self.VERSION, "entries": self.entries,
+                   "memory": self.memory}
         fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".tmp-", dir=str(self.path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:

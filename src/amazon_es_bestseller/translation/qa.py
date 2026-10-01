@@ -9,8 +9,10 @@ from .validators import validate_translation
 
 
 def qa_field(protected, translated: str, source: str, *, field: str = "",
+             brand: str = "",
              allowed_residual: Iterable[str] = ()) -> Dict[str, Any]:
     issues = validate_translation(protected, translated, source, field=field,
+                                  brand=brand,
                                   allowed_residual=allowed_residual)
     return {"qa_status": "pass" if not issues else "qa_failed", "issues": issues}
 
@@ -35,9 +37,9 @@ def build_qa_report(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
         "brand_abnormal": "BRAND_ABNORMAL",
         "empty_translation": "EMPTY_TRANSLATION",
         "spanish_residual": "SPANISH_RESIDUAL",
-        "added_numbers": "NUMERIC_MISMATCH",
+        "added_numbers": "ADDED_NUMBER",
     }
-    for key in ("success", "cached", "partial", "failed", "qa_failed",
+    for key in ("pending", "success", "cached", "partial", "failed", "source_missing", "qa_failed",
                 "numeric_errors", "unit_errors", "protected_token_missing",
                 "brand_abnormal", "empty_translation", "spanish_residual",
                 "added_numbers"):
