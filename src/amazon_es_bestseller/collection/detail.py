@@ -767,30 +767,43 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, cache_meta)
             if classification == "CHALLENGE":
-                raise AccessStopError(
-                    "已落盘证据受限（%s），ASIN %s，按策略停止。"
-                    "该文件是上一轮留下的历史证据，会阻断本轮全部续采；"
-                    "先用 amazon-es audit-detail-cache --html-dir %s "
-                    "--quarantine-dir <隔离目录> --move 把它移出活动缓存"
-                    "（移动不删除），再重跑本命令。"
-                    % (parsed_state.value, asin, html_dir))
-            if classification != "VALID_PRODUCT_PAGE":
+                if not getattr(session, "manual_assist", False):
+                    raise AccessStopError(
+                        "已落盘证据受限（%s），ASIN %s，按策略停止。"
+                        "该文件是上一轮留下的历史证据，会阻断本轮全部续采；"
+                        "先用 amazon-es audit-detail-cache --html-dir %s "
+                        "--quarantine-dir <隔离目录> --move 把它移出活动缓存"
+                        "（移动不删除），再重跑本命令。"
+                        % (parsed_state.value, asin, html_dir))
+                # In explicit manual-assist mode, retain the old challenge
+                # evidence in quarantine and request the page again.  The
+                # visible browser will then pause on a live challenge until a
+                # human clears it; no cached challenge is treated as success.
                 quarantine_invalid(asin, path, meta_path)
-                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
-                                 "classification": classification, "source": "cache",
-                                 "observed_page_asins": _page_asin_evidence(html)})
-                progress(asin, "invalid")
+                write_checkpoint(checkpoint_dir, asin, {
+                    "asin": asin, "status": "challenge_cached",
+                    "access_state": parsed_state.value,
+                    "source": "cache_quarantined_for_manual_assist",
+                })
+                progress(asin, "challenge_cached")
+            else:
+                if classification != "VALID_PRODUCT_PAGE":
+                    quarantine_invalid(asin, path, meta_path)
+                    write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
+                                     "classification": classification, "source": "cache",
+                                     "observed_page_asins": _page_asin_evidence(html)})
+                    progress(asin, "invalid")
+                    continue
+                rec["status_code"] = meta.get("status_code")
+                rec["initial_access_state"] = meta.get("initial_access_state")
+                rec["access_state"] = parsed_state.value
+                rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
+                rec["resumed_from_html"] = True
+                details.append(rec)
+                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "success",
+                                 "source": "cache", "record": rec})
+                progress(asin, "success")
                 continue
-            rec["status_code"] = meta.get("status_code")
-            rec["initial_access_state"] = meta.get("initial_access_state")
-            rec["access_state"] = parsed_state.value
-            rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
-            rec["resumed_from_html"] = True
-            details.append(rec)
-            write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "success",
-                             "source": "cache", "record": rec})
-            progress(asin, "success")
-            continue
         try:
             status = session.goto("https://www.amazon.es/dp/" + asin)
             session.wait_for_product_page()

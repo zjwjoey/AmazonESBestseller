@@ -79,6 +79,26 @@ def test_collect_details_stops_on_challenge(tmp_path):
     assert not (tmp_path / "details.json").exists()
 
 
+def test_manual_assist_quarantines_cached_challenge_before_retry(tmp_path):
+    from amazon_es_bestseller.collection.detail import collect_details
+
+    asin = "B008YETL18"
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / f"{asin}.html").write_text(CHALLENGE_HTML, encoding="utf-8")
+    (html_dir / f"{asin}.meta.json").write_text(
+        json.dumps({"status_code": 200}), encoding="utf-8")
+    session = _FakeSession(200, CHALLENGE_HTML)
+    session.manual_assist = True
+    session.wait_for_challenge_clear = lambda html, status=None: (
+        AccessState.CHALLENGE, html, False)
+
+    with pytest.raises(AccessStopError):
+        collect_details([asin], session, str(tmp_path))
+
+    assert (tmp_path / "quarantine" / asin / f"{asin}.html").exists()
+
+
 def test_collect_details_honors_cooperative_global_stop_before_next_asin(tmp_path):
     """A peer access stop must prevent the next detail navigation."""
     from amazon_es_bestseller.collection.detail import collect_details
