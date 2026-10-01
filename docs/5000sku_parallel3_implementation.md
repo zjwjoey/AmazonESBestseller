@@ -15,6 +15,9 @@
 3. 使用 `scripts/build_5000_task_plan.py` 生成可执行计划。
 4. 计划必须包含 15 类、总计 5,000、真实 Amazon.es 来源 URL，
    `discovery_required=false`、`sources_reviewed=true` 和当前快照路径；空来源模板不能直接运行。
+   正式 plan 中的 `source_snapshot` 使用相对项目根目录的 POSIX 路径（例如
+   `outputs/.../category_tree_snapshot.json`），不会写入开发机盘符。运行时由
+   `resolve_task_path` 以当前 worktree 项目根目录解析；快照必须位于项目根目录内。
 5. 任务目标为 1–80 排名时，每个来源默认抓取两页（`pages_per_url=2`），覆盖第一页和第二页排名。
 
 来源映射支持 `primary` 和同类目的 `reserve` 两组。主来源不足以满足类目
@@ -39,6 +42,10 @@ python scripts/build_5000_task_plan.py `
   --mapping configs/tasks/amazon_es_bestseller_5000_202610_mapping.template.json `
   --out configs/tasks/amazon_es_bestseller_5000_202610_plan.json
 ```
+
+脚本默认以仓库根目录为 `--project-root`。如果在脚本外部调用，可显式传入
+`--project-root`；快照不在项目根目录内时脚本会拒绝生成计划，避免把本机绝对路径
+写入可提交配置。
 
 ## 正式运行
 

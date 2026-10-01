@@ -15,7 +15,7 @@
   },
   "discovery_required": false,
   "sources_reviewed": true,
-  "source_snapshot": "F:\\AmazonESBestseller\\outputs\\amazon_es_bestseller_5000_202610\\discovery\\category_tree_snapshot.json",
+  "source_snapshot": "outputs/amazon_es_bestseller_5000_202610/discovery/category_tree_snapshot.json",
   "categories": [
     {
       "research_category": "居家生活",
@@ -223,31 +223,31 @@
       "max_single_source_share": 0.35,
       "sources": [
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965350031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/kitchen/4358016031",
           "role": "primary",
           "status": "pending",
           "pages_per_url": 2
         },
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965355031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1641736031",
           "role": "primary",
           "status": "pending",
           "pages_per_url": 2
         },
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965358031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1642133031",
           "role": "primary",
           "status": "pending",
           "pages_per_url": 2
         },
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965353031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1641878031",
           "role": "reserve",
           "status": "pending",
           "pages_per_url": 2
         },
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/musical-instruments/4965354031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1642008031",
           "role": "reserve",
           "status": "pending",
           "pages_per_url": 2
@@ -329,13 +329,13 @@
           "pages_per_url": 2
         },
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1642133031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1641912031",
           "role": "reserve",
           "status": "pending",
           "pages_per_url": 2
         },
         {
-          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1641912031",
+          "source_url": "https://www.amazon.es/gp/bestsellers/toys/1642096031",
           "role": "reserve",
           "status": "pending",
           "pages_per_url": 2

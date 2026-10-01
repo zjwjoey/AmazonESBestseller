@@ -565,7 +565,9 @@ def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
         plan["manual_assist"] = True
     try:
         report = run_task(plan, args.out_dir, mode=args.mode,
-                          headful=args.headful, profile_dir=args.profile_dir)
+                          headful=args.headful, profile_dir=args.profile_dir,
+                          plan_path=plan_path,
+                          project_root=Path(__file__).resolve().parents[2])
     except ValueError as exc:
         parser.error(str(exc))
     _safe_print("task-collect %s：%s；最终唯一 ASIN %d；报告 %s" %

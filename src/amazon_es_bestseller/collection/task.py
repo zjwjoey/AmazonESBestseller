@@ -43,7 +43,31 @@ def _normalize_url(url: object) -> str:
     return str(url or "").strip().rstrip("/")
 
 
-def validate_task_plan(plan: Mapping) -> dict:
+def _default_project_root() -> Path:
+    # task.py lives at <project>/src/amazon_es_bestseller/collection/task.py.
+    return Path(__file__).resolve().parents[3]
+
+
+def resolve_task_path(value: str | Path, *, plan_path: str | Path | None = None,
+                     project_root: str | Path | None = None) -> Path:
+    """Resolve a task-plan path against the project root.
+
+    ``source_snapshot`` is intentionally stored as a project-root-relative
+    path.  ``plan_path`` is accepted for callers that need to report the
+    originating plan, while the explicit project-root contract keeps a copied
+    plan deterministic across worktrees and drive letters.  Absolute paths are
+    still accepted for backwards-compatible offline validation, but are not
+    emitted by the plan builder.
+    """
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    root = Path(project_root).expanduser().resolve() if project_root else _default_project_root()
+    return (root / raw).resolve()
+
+
+def validate_task_plan(plan: Mapping, *, plan_path: str | Path | None = None,
+                       project_root: str | Path | None = None) -> dict:
     """Validate the new task plan before any network request is made."""
     if not isinstance(plan, Mapping):
         raise ValueError("任务计划必须是 JSON 对象")
@@ -58,12 +82,14 @@ def validate_task_plan(plan: Mapping) -> dict:
     snapshot_value = str(plan.get("source_snapshot") or "").strip()
     if not snapshot_value:
         raise ValueError("任务计划缺少 source_snapshot 审核证据")
-    if not Path(snapshot_value).is_file():
-        raise ValueError("source_snapshot 不存在：%s" % snapshot_value)
+    snapshot_path = resolve_task_path(snapshot_value, plan_path=plan_path,
+                                      project_root=project_root)
+    if not snapshot_path.is_file():
+        raise ValueError("source_snapshot 不存在：%s" % snapshot_path)
     if plan.get("sources_reviewed") is not True:
         raise ValueError("任务计划缺少 sources_reviewed=true 审核标记")
     try:
-        snapshot = json.loads(Path(snapshot_value).read_text(encoding="utf-8"))
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ValueError("source_snapshot 不是有效 JSON：%s" % exc)
     if not isinstance(snapshot, Mapping):
@@ -71,7 +97,7 @@ def validate_task_plan(plan: Mapping) -> dict:
     snapshot_pages = snapshot.get("pages")
     if not isinstance(snapshot_pages, list) or not snapshot_pages:
         raise ValueError("source_snapshot 缺少逐页发现证据")
-    snapshot_root = Path(snapshot_value).parent
+    snapshot_root = snapshot_path.parent
     for page in snapshot_pages:
         if not isinstance(page, Mapping):
             raise ValueError("source_snapshot 页面记录无效")
@@ -400,9 +426,11 @@ def _write_summary(output: Path, categories: list[Mapping], rankings: list,
 
 
 def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
-             headful: bool = False, profile_dir: str = "") -> dict:
+             headful: bool = False, profile_dir: str = "",
+             plan_path: str | Path | None = None,
+             project_root: str | Path | None = None) -> dict:
     """Run a reviewed plan in ``parallel3`` or ``serial`` mode."""
-    plan = validate_task_plan(plan)
+    plan = validate_task_plan(plan, plan_path=plan_path, project_root=project_root)
     scheduler = plan["scheduler"]
     mode = mode or scheduler["mode"]
     if mode not in {"parallel3", "serial"}:
@@ -481,9 +509,18 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     last_cooldown_log = [0.0] * slots
 
     def run_one(group: str, slot: int):
-        return _run_category_live(category_map[group], plan, output, slot + 1,
-                                   headful, profile_dir, claim_asins, release_asins,
-                                   set(state.get("completed_source_urls", [])), stop_event)
+        try:
+            return _run_category_live(category_map[group], plan, output, slot + 1,
+                                      headful, profile_dir, claim_asins, release_asins,
+                                      set(state.get("completed_source_urls", [])), stop_event)
+        except Exception as exc:
+            # Trip the shared gate in the worker that observed access
+            # restriction, before the scheduler gets a chance to inspect the
+            # future.  Other workers therefore stop before their next request.
+            from ..access.detector import AccessStopError
+            if isinstance(exc, AccessStopError):
+                stop_event.set()
+            raise
 
     with ThreadPoolExecutor(max_workers=slots, thread_name_prefix="amazon-es-category") as executor:
         futures: dict[Future, tuple[int, str]] = {}

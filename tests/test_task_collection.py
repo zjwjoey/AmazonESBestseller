@@ -1,14 +1,20 @@
 import json
+import shutil
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
-from amazon_es_bestseller.collection.quota import QuotaError, select_research_quota
+from amazon_es_bestseller.collection.quota import (QuotaError, normalize_source_url,
+                                                    select_research_quota)
 from amazon_es_bestseller.collection.discovery import parse_bestseller_navigation
 from amazon_es_bestseller.collection.task import (_cooldown_seconds, _needs_reserve_sources,
-                                                   _run_category_live, run_task, validate_task_plan)
+                                                   _run_category_live, resolve_task_path, run_task,
+                                                   validate_task_plan)
 from amazon_es_bestseller.export.excel import export_workbook
 from amazon_es_bestseller import cli
+from scripts.build_5000_task_plan import snapshot_reference
 
 
 def _plan():
@@ -98,6 +104,59 @@ def test_reviewed_task_plan_requires_saved_html_snapshot_evidence(tmp_path):
         validate_task_plan(plan)
 
 
+def test_task_paths_are_portable_across_worktrees(tmp_path):
+    project_root = tmp_path / "clone"
+    snapshot_dir = project_root / "outputs" / "discovery"
+    snapshot_dir.mkdir(parents=True)
+    fixture_dir = Path(__file__).parent / "fixtures"
+    shutil.copy2(fixture_dir / "task_source_snapshot.json", snapshot_dir / "snapshot.json")
+    shutil.copytree(fixture_dir / "html", snapshot_dir / "html")
+
+    relative = "outputs/discovery/snapshot.json"
+    assert snapshot_reference(snapshot_dir / "snapshot.json", project_root) == relative
+    assert resolve_task_path(relative, project_root=project_root) == (project_root / relative).resolve()
+    plan = _plan()
+    plan["source_snapshot"] = relative
+    assert validate_task_plan(plan, plan_path=project_root / "plan.json",
+                              project_root=project_root)["source_snapshot"] == relative
+    assert resolve_task_path(r"F:\AmazonESBestseller\outputs\snapshot.json").drive == "F:"
+    with pytest.raises(ValueError, match="项目根目录"):
+        snapshot_reference(tmp_path / "outside.json", project_root)
+    missing = dict(plan, source_snapshot="outputs/discovery/missing.json")
+    with pytest.raises(ValueError, match="source_snapshot 不存在"):
+        validate_task_plan(missing, project_root=project_root)
+
+
+def test_formal_5000_plan_static_contract():
+    root = Path(__file__).parents[1]
+    path = root / "configs" / "tasks" / "amazon_es_bestseller_5000_202610_plan.json"
+    plan = json.loads(path.read_text(encoding="utf-8"))
+    assert plan["target_unique"] == 5000
+    assert len(plan["categories"]) == 15
+    assert sum(row["target_unique"] for row in plan["categories"]) == 5000
+    assert not Path(plan["source_snapshot"]).is_absolute()
+    assert plan["rank_start"] == 1 and plan["rank_end"] == 80
+    assert plan["pages_per_url"] >= 2
+    assert plan["scheduler"]["max_parallel_categories"] == 3
+    hobby = next(row for row in plan["categories"] if row["research_category"] == "兴趣爱好")
+    hobby_urls = [source["source_url"] for source in hobby["sources"]]
+    assert not any("musical-instruments" in url for url in hobby_urls)
+    snapshot = json.loads((root / plan["source_snapshot"]).read_text(encoding="utf-8"))
+    pages = {normalize_source_url(row["source_url"]): row for row in snapshot["pages"]}
+    links = {normalize_source_url(row["url"]): row for row in snapshot["links"]}
+    hobby_names = {links[normalize_source_url(url)]["name"] for url in hobby_urls}
+    assert hobby_names == {"Costura y manualidades", "Actividades creativas",
+                           "Puzzles y rompecabezas", "Coleccionables", "Marionetas y títeres"}
+    assert all(links[normalize_source_url(url)]["browse_node_id"] for url in hobby_urls)
+    assert all(pages[normalize_source_url(links[normalize_source_url(url)]["parent_url"])]
+               ["http_status"] == 200 for url in hobby_urls)
+    assert all(url.startswith("https://www.amazon.es/") for row in plan["categories"]
+               for source in row["sources"] for url in [source["source_url"]])
+    assert len({source["source_url"] for row in plan["categories"]
+                for source in row["sources"]}) == sum(len(row["sources"]) for row in plan["categories"])
+    validate_task_plan(plan, project_root=root)
+
+
 def test_research_selector_prefers_rare_shared_asins_and_enforces_source_cap():
     categories = [
         {"research_category": "A", "target_unique": 2, "max_single_source_share": 0.5},
@@ -171,6 +230,37 @@ def test_parallel_task_runner_writes_manifest_and_report(monkeypatch, tmp_path):
     assert json.loads((tmp_path / "run" / "final_manifest.json").read_text(encoding="utf-8"))
     assert (tmp_path / "run" / "category_summary.csv").exists()
     assert (tmp_path / "run" / "run_report.json").exists()
+
+
+def test_parallel_access_stop_closes_worker_request_gate(monkeypatch, tmp_path):
+    plan = _plan()
+    a_raised = threading.Event()
+    navigated_after_stop = []
+
+    def racing_category(category, plan, output, worker_id, headful, profile_dir,
+                        claim_asins, release_asins, completed_urls, stop_event=None):
+        group = category["research_category"]
+        if group == "A":
+            a_raised.set()
+            from amazon_es_bestseller.access.detector import AccessStopError
+            raise AccessStopError("simulated worker access stop")
+        assert a_raised.wait(1), "worker B did not overlap worker A"
+        deadline = time.monotonic() + 1
+        while not stop_event.is_set() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if not stop_event.is_set():
+            navigated_after_stop.append(True)
+        return {
+            "research_category": group, "status": "COMPLETE",
+            "rankings": [], "details": [], "completed_source_urls": [],
+            "raw_ranking_records": 0, "unique_asins": 0, "detail_records": 0,
+        }
+
+    monkeypatch.setattr("amazon_es_bestseller.collection.task._run_category_live",
+                        racing_category)
+    report = run_task(plan, str(tmp_path / "run"), mode="parallel3")
+    assert report["run_status"] == "ACCESS_STOP"
+    assert navigated_after_stop == []
 
 
 def test_task_export_keeps_core_sheets_and_adds_provenance_sheet():

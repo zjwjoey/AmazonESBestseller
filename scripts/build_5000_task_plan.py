@@ -17,6 +17,9 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 def canonical(value: str) -> str:
     parts = urlsplit(str(value or "").strip())
     path = parts.path.rstrip("/") or "/"
@@ -32,12 +35,36 @@ def canonical(value: str) -> str:
     return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, "", ""))
 
 
+def snapshot_reference(snapshot: str | Path, project_root: str | Path = PROJECT_ROOT) -> str:
+    """Return a portable project-root-relative snapshot reference.
+
+    The executable plan is committed to Git and must work after a clone on a
+    different drive or worktree.  A snapshot outside the selected project root
+    is rejected instead of leaking a machine-specific absolute path into the
+    plan.
+    """
+    snapshot_path = Path(snapshot).expanduser()
+    if not snapshot_path.is_absolute():
+        snapshot_path = Path.cwd() / snapshot_path
+    snapshot_path = snapshot_path.resolve()
+    root = Path(project_root).expanduser().resolve()
+    try:
+        relative = snapshot_path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            "snapshot 必须位于项目根目录内，不能写入机器绝对路径：%s" % snapshot_path
+        ) from exc
+    return relative.as_posix()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", required=True)
     parser.add_argument("--snapshot", required=True)
     parser.add_argument("--mapping", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--project-root", default=str(PROJECT_ROOT),
+                        help="项目根目录；source_snapshot 将相对此目录写入")
     args = parser.parse_args()
     template = json.loads(Path(args.template).read_text(encoding="utf-8"))
     snapshot = json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
@@ -90,7 +117,10 @@ def main() -> int:
         category["sources"] = sources
     template["discovery_required"] = False
     template["sources_reviewed"] = True
-    template["source_snapshot"] = str(Path(args.snapshot).resolve())
+    try:
+        template["source_snapshot"] = snapshot_reference(args.snapshot, args.project_root)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
     default_pages = int(template.get("pages_per_url", 2) or 2)
     for category in template["categories"]:
         category_pages = int(category.get("pages_per_url", default_pages) or default_pages)
