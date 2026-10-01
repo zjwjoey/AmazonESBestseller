@@ -15,6 +15,15 @@ def test_qa_report_counts_field_statuses():
     assert report["counts"]["success"] == 1
 
 
+def test_qa_report_alias_counts_follow_canonical_issue_codes():
+    report = build_qa_report([{"asin": "A", "fields": {"title_zh": {
+        "translation_status": "qa_failed",
+        "qa_issues": [{"code": "NUMERIC_MISMATCH"}, {"code": "ADDED_NUMBER"}],
+    }}}])
+    assert report["counts"]["numeric_errors"] == 1
+    assert report["counts"]["added_numbers"] == 1
+
+
 def test_bullet_count_is_preserved():
     protected = protect("Linea uno\nLinea dos")
     result = qa_field(protected, "第一条", "Linea uno\nLinea dos", field="feature_bullets_es")
