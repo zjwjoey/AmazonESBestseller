@@ -16,6 +16,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from .providers.base import ProviderResponse, TranslationProvider
 from .providers.qwen_mt import QwenMTProvider
+from .field_contract import canonical_translation_field_type
 
 
 HEALTHY = "HEALTHY"
@@ -38,7 +39,9 @@ class TranslationTask:
                     source_language: str = "es", target_language: str = "zh-CN",
                     schema_version: str = "", prompt_version: str = "") -> "TranslationTask":
         digest = hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
-        key = "|".join((digest, field, schema_version, prompt_version, target_language))
+        key = "|".join((digest, source_language, target_language,
+                         canonical_translation_field_type(field),
+                         schema_version, prompt_version))
         return cls(key=key, text=str(text or ""), asin=asin, field=field,
                    context={"source_language": source_language, "target_language": target_language},
                    tm_key=key)

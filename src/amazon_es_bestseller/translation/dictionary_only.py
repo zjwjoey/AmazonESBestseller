@@ -47,6 +47,13 @@ TARGETS = {
     "description_es": "description_zh", "product_details_es": "product_details_zh",
     "feature_bullets_es": "feature_bullets_zh",
 }
+PREPARED_FIELDS = {
+    "title_es_raw": "title_es_raw", "brand": "brand", "category_l1": "category_l1",
+    "category_l2": "category_l2", "category_l3": "category_l3", "leaf_category": "leaf_category",
+    "selected_variation_raw": "selected_variation_raw", "specification_es": "specification_es",
+    "description_es": "product_description", "product_details_es": "product_details",
+    "feature_bullets_es": "feature_bullets",
+}
 
 
 def _is_category_field(field: str) -> bool:
@@ -84,6 +91,10 @@ def _normalize_record(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _source_value(record: Mapping[str, Any], field: str) -> Any:
+    prepared = record.get("fields")
+    prepared_field = PREPARED_FIELDS.get(field, field)
+    if isinstance(prepared, Mapping) and isinstance(prepared.get(prepared_field), Mapping):
+        return prepared[prepared_field].get("clean_text", "")
     if field == "selected_variation_raw":
         for alias in VARIATION_SOURCE_ALIASES:
             value = record.get(alias)
@@ -91,6 +102,13 @@ def _source_value(record: Mapping[str, Any], field: str) -> Any:
                 return value
         return ""
     return record.get(field)
+
+
+def _prepared_envelope(record: Mapping[str, Any], field: str) -> Optional[Mapping[str, Any]]:
+    prepared = record.get("fields")
+    prepared_field = PREPARED_FIELDS.get(field, field)
+    envelope = prepared.get(prepared_field) if isinstance(prepared, Mapping) else None
+    return envelope if isinstance(envelope, Mapping) else None
 
 
 def _text(value: Any) -> str:
@@ -102,7 +120,7 @@ def _text(value: Any) -> str:
 
 
 def detail_items(record: Mapping[str, Any]) -> list[tuple[str, str]]:
-    raw = record.get("product_details_es") or record.get("attributes") or ""
+    raw = _source_value(record, "product_details_es") or record.get("attributes") or ""
     if isinstance(raw, Mapping):
         return [(str(k).strip(), str(v).strip()) for k, v in raw.items()
                 if str(k).strip() and str(v).strip()]
@@ -130,7 +148,7 @@ def detail_items(record: Mapping[str, Any]) -> list[tuple[str, str]]:
 
 
 def bullet_items(record: Mapping[str, Any]) -> list[str]:
-    raw = record.get("feature_bullets_es") or record.get("feature_bullets_raw") or ""
+    raw = _source_value(record, "feature_bullets_es") or record.get("feature_bullets_raw") or ""
     if isinstance(raw, list):
         return [str(x).strip() for x in raw if str(x).strip()]
     return [line.strip() for line in str(raw).splitlines() if line.strip()]
@@ -175,8 +193,8 @@ def profile_records(records: list[dict[str, Any]], *, top_n: int = 100) -> dict[
         # detail/bullet candidates separately.  Long aggregate values are
         # source evidence, not dictionary candidates.
         for field, raw in (
-            ("product_details_es", record.get("product_details_es") or record.get("attributes")),
-            ("feature_bullets_es", record.get("feature_bullets_es") or record.get("feature_bullets_raw")),
+            ("product_details_es", _source_value(record, "product_details_es") or record.get("attributes")),
+            ("feature_bullets_es", _source_value(record, "feature_bullets_es") or record.get("feature_bullets_raw")),
         ):
             value = _text(raw)
             if value:
@@ -267,9 +285,18 @@ def _resolve_detail_value(service: DictionaryService, label: str, value: str) ->
 def _resolve_field(service: DictionaryService, record: Mapping[str, Any], field: str) -> dict[str, Any]:
     source = _text(_source_value(record, field))
     target = TARGETS.get(field, field)
+    envelope = _prepared_envelope(record, field)
+    trace = {"clean_status": envelope.get("clean_status") if envelope else None,
+             "translate_allowed": envelope.get("translate_allowed") if envelope else None,
+             "source_hash": (record.get("raw_fields", {}).get(PREPARED_FIELDS.get(field, field), {}).get("source_hash")
+                             if isinstance(record.get("raw_fields"), Mapping) else None),
+             "raw_source_text": envelope.get("source_text") if envelope else None}
+    if envelope is not None and not envelope.get("translate_allowed"):
+        return {"source_text": source, "resolved_text": source, "status": "preclean_blocked",
+                "resolution_source": "preclean_blocked", "target_field": target, "items": [], **trace}
     if not source:
         return {"source_text": "", "resolved_text": "", "status": "source_missing",
-                "resolution_source": "source_missing", "target_field": target, "items": []}
+                "resolution_source": "source_missing", "target_field": target, "items": [], **trace}
     if _is_category_field(field):
         row = resolve_exact(service, source, kind="category")
         return {**row, "target_field": target, "items": []}
@@ -355,7 +382,17 @@ def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[Dict
         out_fields = {}
         for field in fields:
             result = _resolve_field(service, record, field)
+            envelope = _prepared_envelope(record, field)
+            if envelope is not None:
+                result["clean_status"] = envelope.get("clean_status")
+                result["translate_allowed"] = bool(envelope.get("translate_allowed"))
+                result["raw_source_text"] = envelope.get("source_text")
+                raw_meta = record.get("raw_fields") if isinstance(record.get("raw_fields"), Mapping) else {}
+                result["source_hash"] = raw_meta.get(PREPARED_FIELDS.get(field, field), {}).get("source_hash")
             out_fields[result["target_field"]] = result
+            if result["status"] == "preclean_blocked":
+                field_counts[field]["review_blocked"] += 1
+                continue
             units = result["items"] or ([result] if result["status"] != "source_missing" else [])
             if not units:
                 field_counts[field]["source_missing"] += 1
@@ -387,7 +424,8 @@ def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[Dict
     primary_counts = [field_counts[field] for field in fields]
     observed_units = sum(sum(c.values()) for c in primary_counts)
     source_missing_units = sum(c["source_missing"] for c in primary_counts)
-    total_units = observed_units - source_missing_units
+    review_blocked_units = sum(c["review_blocked"] for c in primary_counts)
+    total_units = observed_units - source_missing_units - review_blocked_units
     category_stats = {}
     for field in ("category_l1", "category_l2", "category_l3", "leaf_category"):
         values = [(value, meta["frequency"])
@@ -428,6 +466,8 @@ def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[Dict
                ],
                "observed_units": observed_units,
                "source_missing_units": source_missing_units,
+               "review_blocked_units": review_blocked_units,
+               "review_blocked": review_blocked_units,
                "total_units": total_units,
                "resolved_by_dictionary": sum(c["dictionary"] for c in primary_counts),
                "resolved_by_rules": sum(c["rule"] for c in primary_counts),

@@ -185,7 +185,9 @@ def parse_details(value: Any) -> dict[str, Any]:
                      "value_clean": value_clean})
     raw_rows = list(rows)
     # Deduplicate only exact label/value pairs in the derived input.  The
-    # original source remains intact in source_text and raw_fields.
+    # original source remains intact in source_text and raw_fields.  A safe
+    # duplicate is informational; only the same label with different values
+    # is a conflicting duplicate that blocks admission.
     exact_seen: set[tuple[str, str]] = set()
     deduped_rows: list[dict[str, Any]] = []
     exact_duplicates = 0
@@ -198,21 +200,30 @@ def parse_details(value: Any) -> dict[str, Any]:
         deduped_rows.append(row)
     rows = deduped_rows
     counts = Counter(normalize_key(row["label"]) for row in rows)
-    duplicate_labels = sum(max(0, count - 1) for count in counts.values())
-    if duplicate_labels or exact_duplicates:
-        issues.append("DUPLICATE_LABEL")
+    conflicting_duplicate_labels = sum(max(0, count - 1) for count in counts.values())
+    safe_duplicate_rows = exact_duplicates
+    if safe_duplicate_rows:
+        issues.append("SAFE_DUPLICATE")
+    if conflicting_duplicate_labels:
+        issues.append("CONFLICTING_DUPLICATE")
     if not source.strip():
         status = "SOURCE_MISSING"
     elif not rows:
         status = "BLOCKED" if issues else "SUSPICIOUS"
-    elif issues:
+    elif conflicting_duplicate_labels or any(issue != "SAFE_DUPLICATE" for issue in issues):
         status = "NEEDS_REVIEW"
+    elif safe_duplicate_rows:
+        status = "NORMALIZED"
     else:
         status = "CLEAN"
     return {"source_text": source, "rows": rows, "raw_rows": raw_rows, "issues": sorted(set(issues)),
-            "duplicate_labels": duplicate_labels + exact_duplicates, "status": status,
-            "fully_structured": bool(rows) and not issues,
-            "partially_structured": bool(rows) and bool(issues),
+            "duplicate_labels": conflicting_duplicate_labels,
+            "safe_duplicate_rows": safe_duplicate_rows,
+            "conflicting_duplicate_labels": conflicting_duplicate_labels,
+            "actions": ["DEDUPLICATE_DETAIL_ROW"] if safe_duplicate_rows else [],
+            "status": status,
+            "fully_structured": bool(rows) and not any(issue != "SAFE_DUPLICATE" for issue in issues),
+            "partially_structured": bool(rows) and any(issue != "SAFE_DUPLICATE" for issue in issues),
             "unstructured": bool(source.strip()) and not rows}
 
 
@@ -368,7 +379,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             if field == "product_details":
                 result = {"source_text": detail["source_text"], "clean_text": "\n".join(
                     f"{row['label']}: {row['value']}" for row in detail["rows"]),
-                    "clean_status": detail["status"], "actions": [], "issues": detail["issues"],
+                    "clean_status": detail["status"], "actions": detail.get("actions", []), "issues": detail["issues"],
                     "translate_allowed": detail["status"] in {"CLEAN", "NORMALIZED"},
                     "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(detail["source_text"])), key=str.casefold)}
             elif field == "feature_bullets":
@@ -399,7 +410,8 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             else:
                 result["numeric"] = numeric_profile(result.get("clean_text", ""))
             result["issues"] = sorted(set(result.get("issues", []) + result["numeric"].get("issues", [])))
-            if result["issues"] and result["clean_status"] in {"CLEAN", "NORMALIZED"}:
+            blocking_issues = [issue for issue in result["issues"] if issue != "SAFE_DUPLICATE"]
+            if blocking_issues and result["clean_status"] in {"CLEAN", "NORMALIZED"}:
                 result["clean_status"] = "NEEDS_REVIEW"
                 result["translate_allowed"] = False
             cleanup_counts["removed_ui_artifacts"] += int(result.get("removed_ui_artifacts", 0))
@@ -493,7 +505,8 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         queued_before = len(review_queue)
         if status not in {"CLEAN", "NORMALIZED"}:
             for field, result in clean_fields.items():
-                if result["clean_status"] not in {"CLEAN", "NORMALIZED", "SOURCE_MISSING"} or result.get("issues"):
+                blocking = [issue for issue in result.get("issues", []) if issue != "SAFE_DUPLICATE"]
+                if result["clean_status"] not in {"CLEAN", "NORMALIZED", "SOURCE_MISSING"} or blocking:
                     review_queue.append({"asin": asin, "field": field, "source_text": result["source_text"],
                                          "clean_text": result["clean_text"], "clean_status": result["clean_status"],
                                          "issue_codes": ";".join(result.get("issues", [])),
@@ -554,7 +567,9 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                              if item["detail_unstructured"]),
         "source_missing": sum(1 for item in translation_input
                                if item["detail_parser_status"] == "SOURCE_MISSING"),
-        "duplicate_labels": sum(1 for issue in structure_issues if issue["issue_code"] == "DUPLICATE_LABEL"),
+        "safe_duplicate_rows": sum(1 for issue in structure_issues if issue["issue_code"] == "SAFE_DUPLICATE"),
+        "conflicting_duplicate_labels": sum(1 for issue in structure_issues if issue["issue_code"] == "CONFLICTING_DUPLICATE"),
+        "duplicate_labels": sum(1 for issue in structure_issues if issue["issue_code"] == "CONFLICTING_DUPLICATE"),
     }
     bullet_summary = {
         "total_bullets": sum(len(item["bullet_items"]) for item in translation_input),
@@ -601,17 +616,21 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 elif resolve_exact(service, text, kind="value", field=normalize_key(field))["status"] == "resolved":
                     workload_dictionary += 1
     translation_workload = {
+        "potential_units": workload_total + workload_identity,
         "translation_units_total": workload_total + workload_identity,
         "deterministic_resolved": workload_deterministic,
         "identity_preserved": workload_identity,
         "dictionary_resolved": workload_dictionary,
         "remaining_for_qwen": max(0, workload_total - workload_deterministic - workload_dictionary),
+        "review_blocked": review_fields,
+        "source_missing": source_missing_fields,
+        "remaining_for_qwen_estimate": max(0, workload_total - workload_deterministic - workload_dictionary),
         "qwen_api_calls": 0,
         "stage": "offline_preclean_estimate",
     }
     summary = {
         "input_rows": len(records), "unique_asins": len(asins),
-        "final_state": "READY_FOR_PRECLEAN_REVIEW",
+        "final_state": "READY_FOR_TRANSLATION_V2_REMOTE_REVIEW",
         "duplicate_asins": sum(max(0, count - 1) for count in asins.values()),
         "missing_asin": missing_asin, "clean_schema_version": CLEAN_SCHEMA_VERSION,
         "total_fields": len(records) * len(AUDIT_FIELDS),

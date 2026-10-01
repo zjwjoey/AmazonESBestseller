@@ -1,4 +1,5 @@
 from amazon_es_bestseller.translation.dictionary_only import profile_records, run_dictionary_only
+from amazon_es_bestseller.translation.preclean import audit_records
 
 
 def test_dictionary_only_is_offline_and_preserves_unresolved_source():
@@ -36,3 +37,16 @@ def test_profile_includes_raw_detail_and_bullet_fields():
     }])
     assert profile["profiles"]["product_details_es"]["nonempty"] == 1
     assert profile["profiles"]["feature_bullets_es"]["nonempty"] == 1
+
+
+def test_dictionary_only_consumes_preclean_clean_text_and_blocks_review_fields():
+    prepared = audit_records([{
+        "asin": "B000000003", "title_es_raw": "Unidad Ver más",
+        "selected_variant_es": "Unidad", "product_details_es": "Modelo: X1\nModelo: X2",
+    }])["translation_input_records"]
+    result = run_dictionary_only(prepared)
+    fields = result["records"]["B000000003"]["fields"]
+    assert fields["selected_variation_zh"]["resolved_text"] == "单件"
+    assert fields["product_details_zh"]["status"] == "preclean_blocked"
+    assert result["summary"]["review_blocked"] >= 1
+    assert fields["product_details_zh"]["raw_source_text"] == "Modelo: X1\nModelo: X2"
