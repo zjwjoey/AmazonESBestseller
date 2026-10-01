@@ -14,7 +14,7 @@ import re
 import unicodedata
 
 from ..normalization.text import strip_zero_width
-from .dictionary_service import DictionaryService
+from .dictionary_service import DictionaryService, is_identity_attribute
 from .zh import apply_terms, dedupe_technical_units, translate_value
 
 _DICTIONARY_SERVICE = DictionaryService()
@@ -52,8 +52,12 @@ LABEL_ES_ZH = {
     "país de origen": "原产国",
     "componentes incluidos": "内含组件",
     "nombre tipo artículo": "商品类型名称",
+    "nombre del modelo": "型号",
+    "nombre modelo": "型号",
     "número modelo": "型号",
+    "núm. de modelo": "型号",
     "número de modelo": "型号",
+    "número de modelo del producto": "型号",
     "modelo": "型号",
     "peso": "重量",
     "peso del producto": "产品重量",
@@ -65,7 +69,11 @@ LABEL_ES_ZH = {
     "potencia": "功率",
     "frecuencia": "频率",
     "número pieza": "零件号",
+    "núm. de pieza": "零件号",
+    "número de pieza": "零件号",
     "número de pieza del fabricante": "制造商零件号",
+    "part number": "零件号",
+    "oem": "OEM",
     "referencia oem": "OEM参考号",
     "referencia del fabricante": "制造商参考编号",
     "referencia": "参考号",
@@ -88,7 +96,9 @@ LABEL_ES_ZH = {
     "tipo de cama o colchones": "床型",
     "dimensiones pantalla artículo": "商品尺寸",
     "upc": "UPC",
+    "ean": "EAN",
     "asin": "ASIN",
+    "isbn": "ISBN",
 }
 
 #: 与既有 Excel 列重复、纯元信息的标签（展示层剔除；原始 attributes 仍在数据层保留）
@@ -293,12 +303,8 @@ def _humanize_es_label(label: str) -> str:
 
 
 def _identity_value_label(label: str) -> bool:
-    key = str(label or "").casefold().strip()
-    return (key in {"marca", "fabricante", "modelo", "nombre del modelo", "nombre modelo",
-                    "número de modelo", "número modelo", "número de modelo del producto",
-                    "referencia", "referencia oem", "referencia del fabricante",
-                    "número pieza", "número de pieza del fabricante", "upc", "asin", "ean"}
-            or "número de modelo" in key or "número de pieza" in key)
+    """Compatibility wrapper around the shared identity-label classifier."""
+    return is_identity_attribute(label)
 
 
 def render_details_es(attributes) -> str:

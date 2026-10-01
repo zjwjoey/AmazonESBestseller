@@ -762,6 +762,13 @@ def cmd_dictionary_only(args) -> None:
     from .translation.dictionary_service import DictionaryService
 
     products = load_records(args.products)
+    input_asins = [str(row.get("asin") or row.get("ASIN") or "").strip().upper() for row in products]
+    present_asins = [asin for asin in input_asins if asin]
+    print("Input file: %s" % args.products)
+    print("Row count: %d" % len(products))
+    print("Unique ASIN: %d" % len(set(present_asins)))
+    print("Mode: dictionary-only")
+    print("Qwen API: disabled")
     service = DictionaryService()
     result = run_dictionary_only(products, service=service, top_n=args.top_n)
     paths = write_reports(result, args.out, service=service)

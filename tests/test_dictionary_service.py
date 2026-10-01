@@ -1,5 +1,6 @@
-from amazon_es_bestseller.translation.dictionary_service import DictionaryService, resolve_exact
-from amazon_es_bestseller.translation.dictionary_service import PACKAGE_DICTIONARIES
+from amazon_es_bestseller.translation.dictionary_service import (
+    DictionaryService, PACKAGE_DICTIONARIES, is_identity_attribute, resolve_exact,
+)
 from amazon_es_bestseller.translation.full_detail import render_details_zh
 from amazon_es_bestseller.translation.protection import protect
 from amazon_es_bestseller.translation.zh import translate_value
@@ -35,3 +36,14 @@ def test_split_dictionaries_are_present_in_source_package():
     expected = {"categories", "attribute_labels", "units", "materials", "colors",
                 "booleans", "packaging", "protected_terms"}
     assert expected == {path.stem for path in PACKAGE_DICTIONARIES.glob("*.json")}
+
+
+def test_identity_attribute_aliases_are_normalized_once():
+    for label in (
+        "Marca", "Fabricante", "Modelo", "Nombre del modelo", "Número de modelo",
+        "Número de modelo del producto", "Referencia", "Referencia OEM",
+        "Referencia del fabricante", "Número pieza", "Número de pieza",
+        "Número de pieza del fabricante", "Part Number", "OEM", "UPC", "EAN",
+        "ASIN", "ISBN", "Núm. de modelo", "Part-Number",
+    ):
+        assert is_identity_attribute(label), label

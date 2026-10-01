@@ -21,7 +21,7 @@ from .terminology import (postprocess, deterministic_specification,
                           specification_is_deterministic)
 from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
-from .dictionary_service import DictionaryService
+from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
 
 
 DEFAULT_FIELD_MAP = {
@@ -32,8 +32,8 @@ DEFAULT_FIELD_MAP = {
     "description_es": "description_zh", "product_description_es": "description_zh",
     "product_description_raw": "description_zh",
     "product_details_es": "product_details_zh", "detail_attributes_raw": "product_details_zh",
-    "selected_variant_es": "selected_variant_zh", "selected_variation_raw": "selected_variation_zh",
-    "variation_es": "selected_variant_zh",
+    "selected_variation_raw": "selected_variation_zh", "selected_variant_es": "selected_variation_zh",
+    "variation_es": "selected_variation_zh",
     "specification_es": "specification_zh", "category_l1": "category_l1_zh",
     "category_l2": "category_l2_zh", "category_l3": "category_l3_zh",
     "leaf_category": "leaf_category_zh", "category_l1_es": "category_l1_zh",
@@ -144,6 +144,9 @@ class TranslationService:
         statuses = []
         attempts = 0
         errors = []
+        rendered_items = []
+        item_providers = []
+        item_models = []
         for index, (label, value) in enumerate(items):
             memory_key = self._memory_key(value, source_field)
             memory = self._memory.get(memory_key) or self.cache.get_memory(memory_key)
@@ -151,42 +154,82 @@ class TranslationService:
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):
                 memory = None
+            item_issues = []
             if memory:
                 item_status = memory.get("translation_status", "success")
                 statuses.append(item_status)
                 item_issues = list(memory.get("qa_issues") or [])
                 issues.extend({"item_index": index, **issue} for issue in item_issues)
                 rendered_value = str(memory.get("translated_text") or "")
+                item_provider = "cached"
+                item_model = self.provider.model
+                item_attempts = 0
+                item_resolution = "cached"
+            elif label is not None and is_identity_attribute(label):
+                # Identity values (models, OEM/part numbers, company names,
+                # UPC/EAN/ASIN/ISBN) never need machine translation.
+                rendered_value = value
+                item_status = "success"
+                statuses.append(item_status)
+                item_provider = "deterministic"
+                item_model = "identity-v1"
+                item_attempts = 0
+                item_resolution = "source_preserved"
             else:
-                protected = protect(value, protected_values=[asin, str(record.get("brand") or "")])
-                response = self.provider.translate(
-                    protected.text, asin=asin, field=source_field,
-                    source_language=self.source_language, target_language=self.target_language,
-                    context={"target_field": target, "item_index": index,
-                             "label": label, "protected_tokens": list(protected.tokens)})
-                attempts += response.attempts
-                if response.status == "success" and response.text:
-                    qa = qa_field(protected, response.text, value, field=source_field,
-                                  brand=record.get("brand", ""))
-                    restored, restore_issues = restore(protected, response.text)
-                    item_issues = list(qa["issues"]) + list(restore_issues)
-                    item_status = "qa_failed" if item_issues else "success"
+                deterministic = (resolve_exact(
+                    self.dictionary, value, kind="value", field=normalize_key(label))
+                    if label is not None else None)
+                if deterministic and deterministic["status"] == "resolved":
+                    rendered_value = deterministic["resolved_text"]
+                    item_status = "success"
                     statuses.append(item_status)
-                    issues.extend({"item_index": index, **issue} for issue in item_issues)
-                    rendered_value = postprocess(source_field, restored, value)
-                    memory_payload = {
-                        "translated_text": rendered_value,
-                        "translation_status": item_status,
-                        "qa_status": "qa_failed" if item_issues else "pass",
-                        "qa_issues": list(item_issues),
-                    }
-                    self._memory[memory_key] = memory_payload
-                    self.cache.put_memory(memory_key, memory_payload)
+                    item_provider = "deterministic"
+                    item_model = "dictionary-v1"
+                    item_attempts = 0
+                    item_resolution = deterministic["resolution_source"]
                 else:
-                    statuses.append("failed")
-                    rendered_value = ""
-                    if response.error:
-                        errors.append(str(response.error))
+                    protected = protect(value, protected_values=[asin, str(record.get("brand") or "")])
+                    response = self.provider.translate(
+                        protected.text, asin=asin, field=source_field,
+                        source_language=self.source_language, target_language=self.target_language,
+                        context={"target_field": target, "item_index": index,
+                                 "label": label, "protected_tokens": list(protected.tokens)})
+                    attempts += response.attempts
+                    item_provider = response.provider or self.provider.name
+                    item_model = response.model or self.provider.model
+                    item_attempts = response.attempts
+                    item_resolution = "provider"
+                    if response.status == "success" and response.text:
+                        qa = qa_field(protected, response.text, value, field=source_field,
+                                      brand=record.get("brand", ""))
+                        restored, restore_issues = restore(protected, response.text)
+                        item_issues = list(qa["issues"]) + list(restore_issues)
+                        item_status = "qa_failed" if item_issues else "success"
+                        statuses.append(item_status)
+                        issues.extend({"item_index": index, **issue} for issue in item_issues)
+                        rendered_value = postprocess(source_field, restored, value)
+                        memory_payload = {
+                            "translated_text": rendered_value,
+                            "translation_status": item_status,
+                            "qa_status": "qa_failed" if item_issues else "pass",
+                            "qa_issues": list(item_issues),
+                        }
+                        self._memory[memory_key] = memory_payload
+                        self.cache.put_memory(memory_key, memory_payload)
+                    else:
+                        statuses.append("failed")
+                        rendered_value = ""
+                        if response.error:
+                            errors.append(str(response.error))
+            item_providers.append(item_provider)
+            item_models.append(item_model)
+            rendered_items.append({"item_index": index, "label": label,
+                                   "source_text": value, "translated_text": rendered_value,
+                                   "translation_status": item_status,
+                                   "qa_status": "pass" if item_status == "success" else "pending",
+                                   "provider": item_provider, "model": item_model,
+                                   "attempt_count": item_attempts,
+                                   "resolution_source": item_resolution})
             if label is not None:
                 label_zh = (self.dictionary.lookup_attribute_label(label.strip())
                             or LABEL_ES_ZH.get(label.strip().casefold(), label.strip()))
@@ -205,13 +248,17 @@ class TranslationService:
         else:
             overall = "failed"
             qa_status = "pending"
+        all_deterministic = bool(item_providers) and all(p == "deterministic" for p in item_providers)
+        all_identity = all_deterministic and all(m == "identity-v1" for m in item_models)
         return {"asin": asin, "field": source_field, "target_field": target,
                 "source_text": source_text, "source_hash": source_hash(source_text),
                 "translated_text": "\n".join(rendered),
                 "translation_status": overall, "qa_status": qa_status,
-                "provider": self.provider.name, "model": self.provider.model,
+                "provider": "deterministic" if all_deterministic else self.provider.name,
+                "model": "identity-v1" if all_identity else ("dictionary-v1" if all_deterministic else self.provider.model),
                 "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                 "attempt_count": attempts, "last_error": "; ".join(errors) or None,
+                "items": rendered_items,
                 "qa_issues": issues, "translated_at": self._now()}
 
     def _deterministic_spec_result(self, *, asin: str, source_field: str,
@@ -319,7 +366,13 @@ class TranslationService:
                     continue
                 items = self._structured_items(source, record.get(source))
                 if items is not None:
-                    for _, item_text in items:
+                    for item_label, item_text in items:
+                        if item_label is not None and is_identity_attribute(item_label):
+                            continue
+                        if (item_label is not None
+                                and resolve_exact(self.dictionary, item_text, kind="value",
+                                                  field=normalize_key(item_label))["status"] == "resolved"):
+                            continue
                         item_memory = self.cache.get_memory(self._memory_key(item_text, source))
                         item_bypass = item_memory and (
                             (item_memory.get("translation_status") == "partial" and repair_partial)
