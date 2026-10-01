@@ -18,11 +18,14 @@ def test_dictionary_only_is_offline_and_preserves_unresolved_source():
     assert summary["qwen_api_calls"] == 0
     fields = result["records"]["B000000001"]["fields"]
     assert fields["category_l1_zh"]["resolved_text"] == "汽车与摩托车用品"
-    assert fields["selected_variant_zh"]["resolved_text"] == "单件"
+    assert fields["selected_variation_zh"]["resolved_text"] == "单件"
+    assert "selected_variant_zh" not in fields
     assert fields["product_details_zh"]["status"] == "resolved"
     assert "OEM参考号：20002" in fields["product_details_zh"]["resolved_text"]
     assert fields["title_zh"]["status"] == "unresolved"
     assert fields["title_zh"]["resolved_text"] == fields["title_zh"]["source_text"]
+    assert result["summary"]["fields"]["product_details_label"]["dictionary"] >= 3
+    assert result["summary"]["identity_attributes"][0]["source_preserved"] >= 1
 
 
 def test_profile_includes_raw_detail_and_bullet_fields():

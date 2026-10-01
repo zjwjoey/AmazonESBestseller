@@ -155,6 +155,15 @@ def test_plan_counts_structured_items_and_deterministic_specs_correctly(tmp_path
     assert deterministic["estimated_api_requests"] == 0
 
 
+def test_plan_excludes_identity_detail_values_from_api_requests(tmp_path):
+    service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "cache.json"))
+    planned = service.plan([{
+        "asin": "B00000001",
+        "product_details_es": "Modelo: Cera Tec\nColor: Negro\nDescripción: Producto resistente",
+    }])
+    assert planned["estimated_api_requests"] == 1
+
+
 def test_structured_details_keep_labels_and_order(tmp_path):
     provider = FakeProvider()
     result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
@@ -166,7 +175,7 @@ def test_structured_details_keep_labels_and_order(tmp_path):
     text = result["records"]["B00000001"]["fields"]["product_details_zh"]["translated_text"]
     assert text.splitlines()[0].startswith("材质：")
     assert text.splitlines()[1].startswith("颜色：")
-    assert len(provider.calls) == 2
+    assert len(provider.calls) == 1
 
 
 def test_multiline_rendered_details_are_not_sent_as_one_free_article(tmp_path):
@@ -175,8 +184,48 @@ def test_multiline_rendered_details_are_not_sent_as_one_free_article(tmp_path):
         {"asin": "B00000001", "product_details_es": "Material: Acero\nColor: Rojo"}
     ])
     detail = result["records"]["B00000001"]["fields"]["product_details_zh"]
-    assert len(provider.calls) == 2
+    assert len(provider.calls) == 0
     assert detail["translated_text"].splitlines()[0].startswith("材质：")
+
+
+def test_identity_detail_values_bypass_provider_and_preserve_source(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "product_details_es":
+         "Modelo: Cera Tec\nReferencia OEM: 20002\nModelo: 26431\nFabricante: Energía Eléctrica Eficiente SL"}
+    ])
+    detail = result["records"]["B00000001"]["fields"]["product_details_zh"]
+    assert not provider.calls
+    assert detail["provider"] == "deterministic"
+    assert detail["model"] == "identity-v1"
+    assert detail["attempt_count"] == 0
+    assert "型号：Cera Tec" in detail["translated_text"]
+    assert "OEM参考号：20002" in detail["translated_text"]
+    assert "型号：26431" in detail["translated_text"]
+    assert "制造商：Energía Eléctrica Eficiente SL" in detail["translated_text"]
+    assert all(item["provider"] == "deterministic" for item in detail["items"])
+
+
+def test_mixed_identity_detail_only_sends_natural_language_value(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "product_details_es":
+         "Modelo: Cera Tec\nColor: Negro\nDescripción: Producto resistente"}
+    ])
+    detail = result["records"]["B00000001"]["fields"]["product_details_zh"]
+    assert len(provider.calls) == 1
+    assert provider.calls[0][2] == "Producto resistente"
+    assert "型号：Cera Tec" in detail["translated_text"]
+
+
+def test_variation_aliases_share_only_canonical_target(tmp_path):
+    service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "cache.json"))
+    assert service.field_map["selected_variant_es"] == "selected_variation_zh"
+    assert service.field_map["selected_variation_raw"] == "selected_variation_zh"
+    assert service.field_map["variation_es"] == "selected_variation_zh"
+    selected = service.selected_fields({"asin": "B00000001", "selected_variant_es": "Unidad"})
+    assert selected == [("selected_variant_es", "selected_variation_zh", "Unidad")]
+    assert all(target != "selected_variant_zh" for _, target, _ in selected)
 
 
 def test_known_specification_uses_deterministic_rules_before_provider(tmp_path):

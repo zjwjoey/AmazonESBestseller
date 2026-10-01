@@ -18,12 +18,45 @@ from typing import Any, Iterable, Mapping, Optional
 PACKAGE_DICTIONARIES = Path(__file__).with_name("dictionaries")
 
 
+# Attribute labels whose values are product identity or legal-entity evidence.
+# These values must be copied verbatim; only the label is translated.
+_IDENTITY_ATTRIBUTE_KEYS = frozenset({
+    "marca", "fabricante", "modelo", "nombre del modelo", "nombre modelo",
+    "numero de modelo", "numero modelo", "numero de modelo del producto",
+    "referencia", "referencia oem", "referencia del fabricante",
+    "numero pieza", "numero de pieza", "numero de pieza del fabricante",
+    "part number", "oem", "upc", "ean", "asin", "isbn", "gtin",
+    "numero de identificacion comercial global",
+})
+
+
 def normalize_key(value: Any) -> str:
     """Normalize only for lookup; never use this value for display output."""
     text = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return re.sub(r"\s+", " ", text)
+
+
+def is_identity_attribute(label: Any) -> bool:
+    """Return whether a detail label identifies a product/entity value.
+
+    Normalization is lookup-only: source labels and values remain unchanged.
+    The matcher accepts common Spanish/English label variants while avoiding
+    broad substring matches that could classify ordinary prose as identity.
+    """
+    key = normalize_key(label).replace("_", " ")
+    key = re.sub(r"\bnum\.", "numero", key)
+    key = re.sub(r"\bnum\b", "numero", key)
+    key = re.sub(r"[-/]+", " ", key)
+    key = re.sub(r"\s+", " ", key).strip()
+    if key in _IDENTITY_ATTRIBUTE_KEYS:
+        return True
+    return (
+        key.startswith("numero de modelo ")
+        or key.startswith("numero de pieza ")
+        or key.startswith("referencia ") and key.endswith(" fabricante")
+    )
 
 
 def _load_json(name: str) -> dict[str, str]:
@@ -101,7 +134,8 @@ class DictionaryService:
             return self.lookup_normalized(text, "materials")
         if field in {"color", "colors"}:
             return self.lookup_normalized(text, "colors")
-        if field in {"packaging", "variation", "selected_variant_es"}:
+        if field in {"packaging", "variation", "selected_variant_es",
+                     "selected_variation_raw"}:
             return self.lookup_normalized(text, "packaging")
         return (self.lookup_normalized(text, "materials")
                 or self.lookup_normalized(text, "colors")
@@ -164,4 +198,3 @@ def resolve_exact(service: DictionaryService, value: Any, *, kind: str,
                 "status": "unresolved", "resolution_source": "unresolved"}
     return {"source_text": source, "resolved_text": translated,
             "status": "resolved", "resolution_source": origin}
-

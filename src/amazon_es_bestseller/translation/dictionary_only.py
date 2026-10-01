@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
 from ..normalization.specification import translate_spec_es_to_zh
-from .dictionary_service import DictionaryService, normalize_key, resolve_exact
+from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
 
 
 CSV_FIELDS = {
@@ -30,9 +30,11 @@ CSV_FIELDS = {
     "商品卖点（西语原文）": "feature_bullets_es",
 }
 
+VARIATION_SOURCE_ALIASES = ("selected_variation_raw", "selected_variant_es", "variation_es")
+
 SCALAR_FIELDS = (
     "title_es_raw", "brand", "category_l1", "category_l2", "category_l3",
-    "leaf_category", "selected_variant_es", "specification_es",
+    "leaf_category", "selected_variation_raw", "specification_es",
     "description_es",
 )
 DETAIL_FIELDS = ("product_details_es", "attributes")
@@ -41,7 +43,7 @@ TARGETS = {
     "title_es_raw": "title_zh", "brand": "brand_zh",
     "category_l1": "category_l1_zh", "category_l2": "category_l2_zh",
     "category_l3": "category_l3_zh", "leaf_category": "leaf_category_zh",
-    "selected_variant_es": "selected_variant_zh", "specification_es": "specification_zh",
+    "selected_variation_raw": "selected_variation_zh", "specification_es": "specification_zh",
     "description_es": "description_zh", "product_details_es": "product_details_zh",
     "feature_bullets_es": "feature_bullets_zh",
 }
@@ -73,7 +75,22 @@ def _normalize_record(row: Mapping[str, Any]) -> dict[str, Any]:
         out = {target: row.get(source, "") for source, target in CSV_FIELDS.items()}
         out.setdefault("description_es", row.get("商品描述（西语原文）", ""))
     out["asin"] = str(out.get("asin") or out.get("ASIN") or "").strip().upper()
+    if not out.get("selected_variation_raw"):
+        for alias in VARIATION_SOURCE_ALIASES:
+            if out.get(alias):
+                out["selected_variation_raw"] = out[alias]
+                break
     return out
+
+
+def _source_value(record: Mapping[str, Any], field: str) -> Any:
+    if field == "selected_variation_raw":
+        for alias in VARIATION_SOURCE_ALIASES:
+            value = record.get(alias)
+            if value not in (None, ""):
+                return value
+        return ""
+    return record.get(field)
 
 
 def _text(value: Any) -> str:
@@ -146,7 +163,7 @@ def profile_records(records: list[dict[str, Any]], *, top_n: int = 100) -> dict[
     for record in records:
         asin = record.get("asin", "")
         for field in SCALAR_FIELDS:
-            value = _text(record.get(field))
+            value = _text(_source_value(record, field))
             if value:
                 field_values[field].append(value)
                 value_occurrences.setdefault((field, value), {"frequency": 0, "asins": [], "contexts": []})
@@ -224,11 +241,7 @@ def _classify_candidate(service: DictionaryService, *, field: str, value: str) -
 
 def _resolve_detail_value(service: DictionaryService, label: str, value: str) -> dict[str, str]:
     normalized_label = normalize_key(label)
-    identity = ("modelo" in normalized_label or "numero de modelo" in normalized_label
-                or "referencia" in normalized_label or "numero de pieza" in normalized_label
-                or "oem" in normalized_label or "fabricante" in normalized_label
-                or normalized_label in {"marca", "upc", "asin", "ean"})
-    if identity:
+    if is_identity_attribute(label):
         return {"source_text": value, "resolved_text": value, "status": "resolved",
                 "resolution_source": "source_preserved"}
     exact = resolve_exact(service, value, kind="value", field=normalized_label)
@@ -252,7 +265,7 @@ def _resolve_detail_value(service: DictionaryService, label: str, value: str) ->
 
 
 def _resolve_field(service: DictionaryService, record: Mapping[str, Any], field: str) -> dict[str, Any]:
-    source = _text(record.get(field))
+    source = _text(_source_value(record, field))
     target = TARGETS.get(field, field)
     if not source:
         return {"source_text": "", "resolved_text": "", "status": "source_missing",
@@ -263,7 +276,7 @@ def _resolve_field(service: DictionaryService, record: Mapping[str, Any], field:
     if field == "brand":
         return {"source_text": source, "resolved_text": source, "status": "resolved",
                 "resolution_source": "source_preserved", "target_field": target, "items": []}
-    if field == "selected_variant_es":
+    if field == "selected_variation_raw":
         row = resolve_exact(service, source, kind="packaging", field=field)
         if row["status"] == "unresolved" and service.is_protected(source):
             row = {"source_text": source, "resolved_text": source, "status": "resolved",
@@ -285,6 +298,10 @@ def _resolve_field(service: DictionaryService, record: Mapping[str, Any], field:
             items.append({"label": label, "label_zh": label_row["resolved_text"],
                           "value": value, "value_zh": value_row["resolved_text"],
                           "status": item_status,
+                          "label_status": label_row["status"],
+                          "label_resolution_source": label_row["resolution_source"],
+                          "value_status": value_row["status"],
+                          "value_resolution_source": value_row["resolution_source"],
                           "resolution_source": "+".join(sorted({label_row["resolution_source"], value_row["resolution_source"]}))})
         rendered = "\n".join(f"{x['label_zh']}：{x['value_zh']}" for x in items)
         resolved = bool(items) and all(x["status"] == "resolved" for x in items)
@@ -301,15 +318,38 @@ def _resolve_field(service: DictionaryService, record: Mapping[str, Any], field:
             "resolution_source": "unresolved", "target_field": target, "items": []}
 
 
+def _resolution_bucket(origin: str) -> str:
+    if "source_preserved" in origin:
+        return "source_preserved"
+    if "protected" in origin:
+        return "protected"
+    if "rule" in origin:
+        return "rule"
+    if "dictionary" in origin:
+        return "dictionary"
+    return "unresolved"
+
+
 def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[DictionaryService] = None,
                         top_n: int = 100) -> dict[str, Any]:
     service = service or DictionaryService()
     profile = profile_records(records, top_n=top_n)
     fields = list(TARGETS)
-    field_counts = {field: Counter() for field in fields}
+    auxiliary_fields = ("product_details_label", "product_details_value", "feature_bullet")
+    field_counts = {field: Counter() for field in (*fields, *auxiliary_fields)}
+    identity_counts: Counter[str] = Counter()
+    identity_preserved: Counter[str] = Counter()
     outputs = {}
+    asin_counts: Counter[str] = Counter()
+    missing_asins = 0
     for record in records:
-        asin = record.get("asin", "")
+        asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
+        if asin:
+            asin_counts[asin] += 1
+        else:
+            missing_asins += 1
+    for record in records:
+        asin = str(record.get("asin") or record.get("ASIN") or "").strip().upper()
         if not asin:
             continue
         out_fields = {}
@@ -319,47 +359,93 @@ def run_dictionary_only(records: list[dict[str, Any]], *, service: Optional[Dict
             units = result["items"] or ([result] if result["status"] != "source_missing" else [])
             if not units:
                 field_counts[field]["source_missing"] += 1
+                if field == "product_details_es":
+                    field_counts["product_details_label"]["source_missing"] += 1
+                    field_counts["product_details_value"]["source_missing"] += 1
+                elif field == "feature_bullets_es":
+                    field_counts["feature_bullet"]["source_missing"] += 1
             else:
                 for unit in units:
                     source = unit.get("value") if "value" in unit else unit.get("source_text", "")
                     origin = unit.get("resolution_source", "unresolved")
-                    if "source_preserved" in origin:
-                        bucket = "source_preserved"
-                    elif "protected" in origin:
-                        bucket = "protected"
-                    elif "rule" in origin:
-                        bucket = "rule"
-                    elif "dictionary" in origin:
-                        bucket = "dictionary"
-                    else:
-                        bucket = "unresolved"
+                    bucket = _resolution_bucket(origin)
                     field_counts[field][bucket] += 1
+                    if field == "product_details_es":
+                        label = str(unit.get("label") or "").strip()
+                        if label:
+                            field_counts["product_details_label"][_resolution_bucket(
+                                unit.get("label_resolution_source", "unresolved"))] += 1
+                            field_counts["product_details_value"][_resolution_bucket(
+                                unit.get("value_resolution_source", "unresolved"))] += 1
+                            if is_identity_attribute(label):
+                                identity_counts[label] += 1
+                                if unit.get("value_resolution_source") == "source_preserved":
+                                    identity_preserved[label] += 1
+                    elif field == "feature_bullets_es":
+                        field_counts["feature_bullet"][bucket] += 1
         outputs[asin] = {"asin": asin, "fields": out_fields, "resolution_status": "dictionary_only"}
-    observed_units = sum(sum(c.values()) for c in field_counts.values())
-    source_missing_units = sum(c["source_missing"] for c in field_counts.values())
+    primary_counts = [field_counts[field] for field in fields]
+    observed_units = sum(sum(c.values()) for c in primary_counts)
+    source_missing_units = sum(c["source_missing"] for c in primary_counts)
     total_units = observed_units - source_missing_units
-    summary = {"total_skus": len(outputs), "unique_asins": len(outputs),
+    category_stats = {}
+    for field in ("category_l1", "category_l2", "category_l3", "leaf_category"):
+        values = [(value, meta["frequency"])
+                  for (candidate_field, value), meta in profile["occurrences"].items()
+                  if candidate_field == field]
+        hit = sum(freq for value, freq in values if service.lookup_category(value) is not None)
+        category_stats[field] = {"unique_values": len(values), "dictionary_hit": hit,
+                                 "unresolved": sum(freq for _, freq in values) - hit,
+                                 "coverage_rate": round(hit / sum(freq for _, freq in values), 6)
+                                 if values else 0.0}
+    label_values = [(value, meta["frequency"])
+                    for (candidate_field, value), meta in profile["occurrences"].items()
+                    if candidate_field == "product_details_label"]
+    unresolved_labels = sorted(
+        ({"label": value, "frequency": freq} for value, freq in label_values
+         if service.lookup_attribute_label(value) is None),
+        key=lambda row: (-row["frequency"], row["label"]))
+    attribute_label_stats = {
+        "unique_labels": len(label_values),
+        "resolved_labels": len(label_values) - len(unresolved_labels),
+        "unresolved_labels": len(unresolved_labels),
+        "top_unresolved": unresolved_labels[:30],
+    }
+    summary = {"input_rows": len(records), "total_skus": len(outputs),
+               "unique_asins": len(asin_counts),
+               "duplicate_asins": sum(max(0, count - 1) for count in asin_counts.values()),
+               "missing_asin": missing_asins,
                "dictionary_entries": service.dictionary_counts(),
                "fields": {f: dict(c) for f, c in field_counts.items()},
+               "category_stats": category_stats,
+               "attribute_label_stats": attribute_label_stats,
+               "identity_attributes": [
+                   {"label": label, "occurrences": identity_counts[label],
+                    "source_preserved": identity_preserved[label],
+                    "unresolved": identity_counts[label] - identity_preserved[label]}
+                   for label in sorted(identity_counts,
+                                       key=lambda value: (-identity_counts[value], value))
+               ],
                "observed_units": observed_units,
                "source_missing_units": source_missing_units,
                "total_units": total_units,
-               "resolved_by_dictionary": sum(c["dictionary"] for c in field_counts.values()),
-               "resolved_by_rules": sum(c["rule"] for c in field_counts.values()),
-               "source_preserved": sum(c["source_preserved"] for c in field_counts.values()),
-               "protected": sum(c["protected"] for c in field_counts.values()),
-               "remaining_for_qwen": sum(c["unresolved"] for c in field_counts.values()),
-               "qwen_api_calls": 0, "other_translation_api_calls": 0}
+               "resolved_by_dictionary": sum(c["dictionary"] for c in primary_counts),
+               "resolved_by_rules": sum(c["rule"] for c in primary_counts),
+               "source_preserved": sum(c["source_preserved"] for c in primary_counts),
+               "protected": sum(c["protected"] for c in primary_counts),
+               "remaining_for_qwen": sum(c["unresolved"] for c in primary_counts),
+               "qwen_api_calls": 0, "deepseek_api_calls": 0,
+               "openai_api_calls": 0, "other_translation_api_calls": 0}
     summary["estimated_units_avoided"] = sum(
         c.get(key, 0)
-        for c in field_counts.values()
+        for c in primary_counts
         for key in ("dictionary", "rule", "source_preserved", "protected")
     )
     for field, counts in summary["fields"].items():
         nonmissing = sum(value for key, value in counts.items() if key != "source_missing")
         resolved = sum(counts.get(key, 0) for key in ("dictionary", "rule", "source_preserved", "protected"))
         counts["coverage_rate"] = round(resolved / nonmissing, 6) if nonmissing else 0.0
-    return {"schema_version": "translation-v2-dictionary-only.2",
+    return {"schema_version": "translation-v2-dictionary-only.3",
             "dictionary_directory": str(service.directory), "summary": summary,
             "profile": profile, "records": outputs}
 
@@ -406,13 +492,34 @@ def write_reports(result: dict[str, Any], out_dir: str | Path, *, service: Optio
     _write_csv(category_review, out / "category_review_candidates.csv")
     coverage = result["summary"] | {"profile_record_count": profile["record_count"], "profile_unique_asins": profile["unique_asins"]}
     _write_json(coverage, out / "dictionary_coverage.json")
-    lines = ["# Translation V2 dictionary-only coverage", "", f"- SKU: {coverage['total_skus']}",
-             f"- Unique ASIN: {coverage['unique_asins']}", "- Qwen API calls: 0", "- Other translation API calls: 0", "",
+    lines = ["# Translation V2 dictionary-only coverage", "", f"- Input rows: {coverage['input_rows']}",
+             f"- SKU outputs: {coverage['total_skus']}", f"- Unique ASIN: {coverage['unique_asins']}",
+             f"- Duplicate ASIN rows: {coverage['duplicate_asins']}",
+             f"- Missing ASIN rows: {coverage['missing_asin']}",
+             "- Mode: dictionary-only", "- Qwen API calls: 0", "- DeepSeek API calls: 0",
+             "- OpenAI API calls: 0", "- Other translation API calls: 0", "",
              "## Dictionary entries", ""]
     for name, count in coverage["dictionary_entries"].items(): lines.append(f"- {name}: {count}")
     lines += ["", "## Resolution coverage", "", "| Field | Dictionary | Rule | Source preserved | Protected | Unresolved | Coverage |", "|---|---:|---:|---:|---:|---:|---:|"]
     for field, counts in coverage["fields"].items():
         lines.append("| %s | %d | %d | %d | %d | %d | %.1f%% |" % (field, counts.get("dictionary", 0), counts.get("rule", 0), counts.get("source_preserved", 0), counts.get("protected", 0), counts.get("unresolved", 0), 100 * counts.get("coverage_rate", 0)))
+    lines += ["", "## Category coverage", "", "| Field | Unique values | Dictionary hit | Unresolved | Coverage |", "|---|---:|---:|---:|---:|"]
+    for field, stats in coverage["category_stats"].items():
+        lines.append("| %s | %d | %d | %d | %.1f%% |" % (
+            field, stats["unique_values"], stats["dictionary_hit"],
+            stats["unresolved"], 100 * stats["coverage_rate"]))
+    lines += ["", "## Identity attributes", "", "| Label | Occurrences | Source preserved | Unresolved |", "|---|---:|---:|---:|"]
+    for row in coverage["identity_attributes"]:
+        lines.append("| %s | %d | %d | %d |" % (
+            row["label"], row["occurrences"], row["source_preserved"], row["unresolved"]))
+    label_stats = coverage["attribute_label_stats"]
+    lines += ["", "## Attribute label coverage", "",
+              f"- Unique labels: {label_stats['unique_labels']}",
+              f"- Resolved labels: {label_stats['resolved_labels']}",
+              f"- Unresolved labels: {label_stats['unresolved_labels']}",
+              "", "### TOP 30 unresolved attribute labels", ""]
+    for row in label_stats["top_unresolved"]:
+        lines.append(f"- {row['frequency']} × `{row['label']}`")
     lines += ["", "## Top unresolved values", ""]
     for row in unresolved[:30]: lines.append(f"- {row['frequency']} × `{row['source_text']}` ({row['field_type']})")
     (out / "dictionary_coverage.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

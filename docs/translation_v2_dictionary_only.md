@@ -26,3 +26,10 @@ The independent output directory contains:
 Resolution provenance is explicit: `dictionary`, `rule`, `source_preserved`,
 `protected`, `unresolved`, or `source_missing`. Unresolved values retain their
 Spanish source and are not converted to empty strings.
+
+Identity attributes (`Marca`, `Fabricante`, model/reference/OEM/part-number
+labels, UPC/EAN/ASIN/ISBN) are classified by the shared
+`is_identity_attribute()` function. Their values are copied with
+`identity-v1` provenance and never sent to a translation provider. The three
+variation input aliases (`selected_variant_es`, `selected_variation_raw`, and
+`variation_es`) all write only `selected_variation_zh`.
