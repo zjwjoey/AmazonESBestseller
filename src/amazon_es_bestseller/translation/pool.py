@@ -9,7 +9,8 @@ from __future__ import annotations
 import hashlib
 import os
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
@@ -123,6 +124,11 @@ class ProviderPool:
                                           source_language=task.context.get("source_language", "es"),
                                           target_language=task.context.get("target_language", "zh-CN"),
                                           context={**task.context, "provider_alias": alias})
+        with self._lock:
+            # Provider-level retry attempts are part of the provider's own
+            # response envelope; expose them in pool stats as well as pool
+            # failover retries.
+            stats.retries += max(0, int(response.attempts or 1) - 1)
         response.raw = {**(response.raw or {}), "provider_alias": alias}
         if response.status == "success":
             with self._lock:
@@ -163,41 +169,112 @@ class ProviderPool:
         return self._call_one(task, second)
 
     def submit(self, tasks: Sequence[TranslationTask]) -> list[PoolResult]:
-        """Execute tasks concurrently, preserving input order and deduping keys."""
-        results: list[Optional[Future[PoolResult] | PoolResult]] = []
+        """Execute tasks with bounded admission, preserving order and deduping keys.
+
+        Only ``max_workers`` new tasks are admitted at a time.  This matters
+        for provider health: once all endpoints fail, the remaining batch is
+        represented as pending rather than already having been sent to dead
+        providers by an unbounded executor queue.
+        """
+        entries: list[tuple[str, Future[PoolResult] | PoolResult | None]] = []
+        pending: deque[TranslationTask] = deque()
+        queued_keys: set[str] = set()
         with ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="qwen-pool") as executor:
+            # First resolve cache hits and futures owned by another submitter.
+            # New work is kept in a queue so admission can stop at the health
+            # boundary instead of filling ThreadPoolExecutor's unbounded
+            # internal queue.
             for task in tasks:
                 with self._lock:
-                    if task.key in self._completed:
-                        results.append(self._completed[task.key])
-                        continue
-                    future = self._inflight.get(task.key)
-                    if future is None:
+                    cached = self._completed.get(task.key)
+                    existing = self._inflight.get(task.key)
+                if cached is not None:
+                    entries.append((task.key, cached))
+                elif existing is not None:
+                    entries.append((task.key, existing))
+                elif task.key in queued_keys:
+                    entries.append((task.key, None))
+                else:
+                    queued_keys.add(task.key)
+                    pending.append(task)
+                    entries.append((task.key, None))
+
+            active: dict[Future[PoolResult], str] = {}
+            resolved: dict[str, PoolResult] = {}
+            external: dict[str, Future[PoolResult]] = {}
+
+            def admit() -> bool:
+                admitted = False
+                while pending and len(active) < self.max_workers:
+                    task = pending[0]
+                    with self._lock:
+                        cached = self._completed.get(task.key)
+                        existing = self._inflight.get(task.key)
+                        if cached is not None:
+                            resolved[task.key] = cached
+                            pending.popleft()
+                            continue
+                        if existing is not None:
+                            # Another submitter won the race.  Keep this task
+                            # as an external future and do not duplicate it.
+                            external[task.key] = existing
+                            pending.popleft()
+                            continue
                         try:
                             alias = self._choose_alias()
                         except RuntimeError:
-                            # Preserve the task as pending rather than
-                            # crashing a batch when every provider is down.
-                            results.append(PoolResult(
-                                task.key,
-                                ProviderResponse(status="failed", error="NO_HEALTHY_PROVIDER", attempts=0),
-                                source="pending"))
-                            continue
+                            break
                         future = executor.submit(self._execute_task, task, alias)
                         self._inflight[task.key] = future
-                    results.append(future)
+                    pending.popleft()
+                    active[future] = task.key
+                    admitted = True
+                return admitted
+
+            admit()
+            while active:
+                done, _ = wait(tuple(active), return_when=FIRST_COMPLETED)
+                for future in done:
+                    key = active.pop(future)
+                    result = future.result()
+                    resolved[key] = result
+                    with self._lock:
+                        if result.response.status == "success":
+                            self._completed[result.task_key] = result
+                        if self._inflight.get(result.task_key) is future:
+                            self._inflight.pop(result.task_key, None)
+                admit()
+
+            # If no active task can restore provider health, all remaining
+            # work is explicitly pending and can be retried by the caller.
+            while pending:
+                task = pending.popleft()
+                resolved[task.key] = PoolResult(
+                    task.key,
+                    ProviderResponse(status="failed", error="NO_HEALTHY_PROVIDER", attempts=0),
+                    source="pending")
+
             output: list[PoolResult] = []
-            for item in results:
-                result = item.result() if isinstance(item, Future) else item
-                assert result is not None
+            for key, item in entries:
+                if isinstance(item, Future):
+                    result = item.result()
+                    with self._lock:
+                        if result.response.status == "success":
+                            self._completed[result.task_key] = result
+                        if self._inflight.get(result.task_key) is item:
+                            self._inflight.pop(result.task_key, None)
+                elif isinstance(item, PoolResult):
+                    result = item
+                else:
+                    future = external.get(key)
+                    result = future.result() if future is not None else resolved[key]
+                    if future is not None:
+                        with self._lock:
+                            if result.response.status == "success":
+                                self._completed[result.task_key] = result
+                            if self._inflight.get(result.task_key) is future:
+                                self._inflight.pop(result.task_key, None)
                 output.append(result)
-                with self._lock:
-                    # Failed/pending results must remain retryable after a
-                    # provider recovers; only successful results are shared
-                    # through the pool's completed/TM registry.
-                    if result.response.status == "success":
-                        self._completed[result.task_key] = result
-                    self._inflight.pop(result.task_key, None)
             return output
 
     def stats(self) -> dict[str, dict[str, Any]]:

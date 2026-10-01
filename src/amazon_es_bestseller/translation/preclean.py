@@ -266,6 +266,22 @@ def numeric_profile(value: str) -> dict[str, Any]:
     issues = []
     if re.search(r"\b\d+(?:[.,]\d+)?\s*mAhmAh\b", value, re.I):
         issues.append("DUPLICATE_UNIT")
+    # Amazon occasionally concatenates a unit with the following word (for
+    # example ``12kgpeso``).  The normal parser intentionally rejects that
+    # token, so detect it separately instead of silently dropping the fact.
+    glued_token_re = re.compile(
+        r"(?<!\w)\d+(?:[.,]\d+)?(?P<token>[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)", re.I)
+    unit_prefixes = sorted(
+        {name.casefold() for name in UNIT_CANONICAL if len(name) >= 2}
+        | {"mah", "mhz", "ghz", "khz", "psi", "bar", "kw"},
+        key=len, reverse=True)
+    if any(any(token.casefold().startswith(prefix) and len(token) > len(prefix)
+               for prefix in unit_prefixes)
+           for token in (match.group("token") for match in glued_token_re.finditer(value))):
+        # A glued unit is specifically a unit with no whitespace after the
+        # number (``12kgpeso``).  Matching the longest known unit prefix
+        # avoids treating ``400ml-Lubrica`` or ``217 Gramos`` as malformed.
+        issues.append("GLUED_UNIT")
     # A details blob legitimately contains several unit types (dimensions,
     # weight and voltage). Mixed units alone are not an anomaly; duplicate or
     # malformed unit syntax is actionable without guessing product facts.
@@ -276,6 +292,16 @@ def numeric_profile(value: str) -> dict[str, Any]:
                            "canonical_unit": UNIT_CANONICAL.get(unit.strip().casefold(), unit.strip())})
         except ValueError:
             issues.append("INVALID_NUMBER")
+    # Capacity values can be written in mixed units, but contradictory values
+    # in the same field are an ambiguity that must be reviewed.  Equivalent
+    # representations (500 ml / 0,5 L) are deliberately accepted.
+    capacity_factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
+    capacity_values = [item["numeric_value"] * capacity_factors[item["canonical_unit"]]
+                       for item in values if item["canonical_unit"] in capacity_factors]
+    if len(capacity_values) > 1:
+        baseline = max(capacity_values)
+        if baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001):
+            issues.append("CONTRADICTORY_CAPACITY")
     return {"values": values, "issues": sorted(set(issues))}
 
 
@@ -387,11 +413,11 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                                          "source_text": bullets["source_text"]})
         values_for_overlap = {field: clean_fields[field].get("clean_text", "") for field in
                               ("title_es_raw", "specification_es", "product_description", "product_details", "feature_bullets")}
-        def mark_field_review(field: str, issue: str) -> None:
+        def mark_field_review(field: str, issue: str, *, status: str = "NEEDS_REVIEW") -> None:
             result = clean_fields[field]
             result["issues"] = sorted(set(result.get("issues", [])) | {issue})
             if result["clean_status"] != "BLOCKED":
-                result["clean_status"] = "NEEDS_REVIEW"
+                result["clean_status"] = status
             result["translate_allowed"] = False
 
         for left, right in (("title_es_raw", "specification_es"), ("specification_es", "product_description"),
@@ -423,22 +449,26 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             record_issues.append("POSSIBLE_FIELD_MISPLACEMENT")
             issue_counts["POSSIBLE_FIELD_MISPLACEMENT"] += 1
             if brand and (len(brand) > 200 or "http" in brand.casefold()):
-                mark_field_review("brand", "POSSIBLE_FIELD_MISPLACEMENT")
+                mark_field_review("brand", "POSSIBLE_FIELD_MISPLACEMENT", status="SUSPICIOUS")
             for field in ("category_l1", "category_l2", "category_l3", "leaf_category"):
                 if "http" in clean_fields[field]["clean_text"].casefold():
-                    mark_field_review(field, "POSSIBLE_FIELD_MISPLACEMENT")
+                    mark_field_review(field, "POSSIBLE_FIELD_MISPLACEMENT", status="SUSPICIOUS")
             if clean_fields["title_es_raw"]["clean_text"].strip().isdigit():
-                mark_field_review("title_es_raw", "POSSIBLE_FIELD_MISPLACEMENT")
+                mark_field_review("title_es_raw", "POSSIBLE_FIELD_MISPLACEMENT", status="SUSPICIOUS")
             if len(clean_fields["specification_es"]["clean_text"]) > 8000:
-                mark_field_review("specification_es", "POSSIBLE_FIELD_MISPLACEMENT")
-        severe = {"POSSIBLE_FIELD_MISPLACEMENT", "CROSS_FIELD_OVERLAP", "DUPLICATE_UNIT", "MULTIPLE_UNITS"}
+                mark_field_review("specification_es", "POSSIBLE_FIELD_MISPLACEMENT", status="SUSPICIOUS")
+        severe = {"CROSS_FIELD_OVERLAP", "DUPLICATE_UNIT", "MULTIPLE_UNITS", "GLUED_UNIT",
+                  "CONTRADICTORY_CAPACITY"}
         status = "NEEDS_REVIEW" if any(issue in severe for issue in record_issues) else (
+            "SUSPICIOUS" if "POSSIBLE_FIELD_MISPLACEMENT" in record_issues else (
             "NORMALIZED" if any(result["clean_status"] == "NORMALIZED" for result in clean_fields.values())
-            else "CLEAN")
+            else "CLEAN"))
         if any(result["clean_status"] == "BLOCKED" for result in clean_fields.values()):
             status = "BLOCKED"
         elif any(result["clean_status"] == "NEEDS_REVIEW" for result in clean_fields.values()):
             status = "NEEDS_REVIEW"
+        elif any(result["clean_status"] == "SUSPICIOUS" for result in clean_fields.values()):
+            status = "SUSPICIOUS"
         if not asin:
             status = "BLOCKED"
         queued_before = len(review_queue)
@@ -458,6 +488,10 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         translation_input.append({"asin": asin, "clean_schema_version": CLEAN_SCHEMA_VERSION,
                                   "raw_fields": raw_fields, "fields": clean_fields,
                                   "details_structured": detail["rows"], "bullet_items": bullets["items"],
+                                  "detail_parser_status": detail["status"],
+                                  "detail_fully_structured": detail["fully_structured"],
+                                  "detail_partially_structured": detail["partially_structured"],
+                                  "detail_unstructured": detail["unstructured"],
                                   "identity": record_identity,
                                   "record_status": status})
         sku_quality.append({"asin": asin, "status": status, "issue_codes": ";".join(sorted(set(record_issues))),
@@ -494,12 +528,13 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     detail_summary = {
         "total_skus": len(records),
         "fully_structured": sum(1 for item in translation_input
-                                 if item["fields"]["product_details"]["clean_status"] == "CLEAN"
-                                 and item["details_structured"]),
+                                 if item["detail_fully_structured"]),
         "partially_structured": sum(1 for item in translation_input
-                                     if item["fields"]["product_details"]["clean_status"] == "NEEDS_REVIEW"),
+                                     if item["detail_partially_structured"]),
         "unstructured": sum(1 for item in translation_input
-                             if item["fields"]["product_details"]["clean_status"] in {"BLOCKED", "SUSPICIOUS"}),
+                             if item["detail_unstructured"]),
+        "source_missing": sum(1 for item in translation_input
+                               if item["detail_parser_status"] == "SOURCE_MISSING"),
         "duplicate_labels": sum(1 for issue in structure_issues if issue["issue_code"] == "DUPLICATE_LABEL"),
     }
     bullet_summary = {

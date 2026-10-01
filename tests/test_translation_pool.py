@@ -49,6 +49,19 @@ class ToggleFake(PoolFake):
         return ProviderResponse(text="ok", provider=self.name, model=self.model)
 
 
+class SlowInvalidFake(PermanentFailureFake):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        time.sleep(0.02)
+        return super().translate(text, asin=asin, field=field, source_language=source_language,
+                                 target_language=target_language, context=context)
+
+
+class InternalRetryFake(PoolFake):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((text, asin, field))
+        return ProviderResponse(text="ok", provider=self.name, model=self.model, attempts=3)
+
+
 def task(text, n):
     return TranslationTask.from_values(text, asin=f"B{n:08d}", field="title_es_raw")
 
@@ -132,6 +145,21 @@ def test_all_disabled_providers_return_pending_instead_of_crashing():
     pending = pool.submit([task("c", 3)])[0]
     assert pending.source == "pending"
     assert pending.response.error == "NO_HEALTHY_PROVIDER"
+
+
+def test_bulk_submission_stops_after_provider_health_boundary():
+    a, b = SlowInvalidFake("qwen-mt"), SlowInvalidFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    results = pool.submit([task(f"bulk-{index}", index) for index in range(20)])
+    assert len(a.calls) + len(b.calls) <= 2
+    assert sum(result.source == "pending" for result in results) >= 18
+
+
+def test_provider_internal_attempts_are_counted_as_retries():
+    provider = InternalRetryFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": provider})
+    pool.submit([task("retry-stats", 1)])
+    assert pool.stats()["qwen-a"]["retries"] == 2
 
 
 def test_translation_cache_concurrent_writes_remain_valid(tmp_path):
