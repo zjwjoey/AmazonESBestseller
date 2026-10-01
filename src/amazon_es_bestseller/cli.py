@@ -759,10 +759,12 @@ def cmd_dictionary_only(args) -> None:
     reports to an independent directory.
     """
     from .translation.dictionary_only import load_records, run_dictionary_only, write_reports
+    from .translation.dictionary_service import DictionaryService
 
     products = load_records(args.products)
-    result = run_dictionary_only(products, top_n=args.top_n)
-    paths = write_reports(result, args.out)
+    service = DictionaryService()
+    result = run_dictionary_only(products, service=service, top_n=args.top_n)
+    paths = write_reports(result, args.out, service=service)
     summary = result["summary"]
     print("dictionary-only 完成：SKU %d、唯一 ASIN %d、总处理单元 %d、字典 %d、规则 %d、保护/保留 %d、未解决 %d、Qwen API 0 → %s" %
           (summary["total_skus"], summary["unique_asins"], summary["total_units"],

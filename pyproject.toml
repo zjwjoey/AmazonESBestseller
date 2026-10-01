@@ -25,6 +25,9 @@ amazon-es = "amazon_es_bestseller.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"amazon_es_bestseller.translation" = ["dictionaries/*.json"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
