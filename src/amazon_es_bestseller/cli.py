@@ -680,7 +680,22 @@ def cmd_translate(args) -> None:
     if not all(isinstance(row, dict) and isinstance(row.get("fields"), dict)
                for row in products):
         from .translation.preclean import audit_records
-        products = audit_records(products)["translation_input_records"]
+        # Keep already prepared rows intact when a batch is resumed from a
+        # mixed source; only raw rows need the offline audit pass.
+        prepared = []
+        raw_indexes = []
+        raw_rows = []
+        for index, row in enumerate(products):
+            if isinstance(row, dict) and isinstance(row.get("fields"), dict):
+                prepared.append(row)
+            else:
+                prepared.append(None)
+                raw_indexes.append(index)
+                raw_rows.append(row)
+        cleaned = audit_records(raw_rows)["translation_input_records"]
+        for index, row in zip(raw_indexes, cleaned):
+            prepared[index] = row
+        products = prepared
     from .translation.cache import TranslationCache
     from .translation.providers.qwen_mt import QwenMTProvider
     from .translation.service import TranslationService
