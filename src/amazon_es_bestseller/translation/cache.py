@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -19,6 +20,7 @@ class TranslationCache:
         self.recovered_from_corruption = False
         self.corruption_error: Optional[str] = None
         self._corruption_preserved = False
+        self._lock = threading.RLock()
         self.load()
 
     @staticmethod
@@ -56,11 +58,13 @@ class TranslationCache:
             self.entries = {}
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
-        value = self.entries.get(key)
-        return dict(value) if isinstance(value, dict) else None
+        with self._lock:
+            value = self.entries.get(key)
+            return dict(value) if isinstance(value, dict) else None
 
     def put(self, key: str, value: Dict[str, Any]) -> None:
-        self.entries[key] = dict(value)
+        with self._lock:
+            self.entries[key] = dict(value)
 
     @staticmethod
     def memory_key(source_text: str, source_language: str, target_language: str,
@@ -72,28 +76,31 @@ class TranslationCache:
                           provider, model, schema_version, prompt_version))
 
     def get_memory(self, key: str) -> Optional[Dict[str, Any]]:
-        value = self.memory.get(key)
-        return dict(value) if isinstance(value, dict) else None
+        with self._lock:
+            value = self.memory.get(key)
+            return dict(value) if isinstance(value, dict) else None
 
     def put_memory(self, key: str, value: Dict[str, Any]) -> None:
-        self.memory[key] = dict(value)
+        with self._lock:
+            self.memory[key] = dict(value)
 
     def save(self) -> None:
-        if self.recovered_from_corruption and not self._corruption_preserved and self.path.exists():
-            raise RuntimeError("corrupt translation cache could not be preserved: %s" % self.path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"cache_version": self.VERSION, "entries": self.entries,
-                   "memory": self.memory}
-        fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".tmp-", dir=str(self.path.parent))
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, ensure_ascii=False, indent=2)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp_name, self.path)
-        finally:
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
+        with self._lock:
+            if self.recovered_from_corruption and not self._corruption_preserved and self.path.exists():
+                raise RuntimeError("corrupt translation cache could not be preserved: %s" % self.path)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {"cache_version": self.VERSION, "entries": dict(self.entries),
+                       "memory": dict(self.memory)}
+            fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".tmp-", dir=str(self.path.parent))
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, ensure_ascii=False, indent=2)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temp_name, self.path)
+            finally:
+                if os.path.exists(temp_name):
+                    os.unlink(temp_name)
 
     def __len__(self) -> int:
         return len(self.entries)
