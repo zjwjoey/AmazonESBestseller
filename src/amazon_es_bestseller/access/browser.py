@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import re
-from typing import Optional
+from typing import Callable, Optional
 
 from .detector import detect_access_status, require_normal_access
 from .location import (DEFAULT_SPAIN_POSTAL_CODE, DeliveryLocation,
@@ -42,9 +42,12 @@ class BrowserSession:
         self._delivery_location_checked = False
         self._delivery_location: Optional[DeliveryLocation] = None
         # Retained for CLI compatibility and evidence metadata.  Challenges
-        # are now an immediate stop; no automatic polling or recovery occurs.
+        # are never solved automatically; explicit manual-assist mode can keep
+        # the visible page open while a human clears the challenge.
         self.challenge_wait_seconds = 180.0
         self.manual_assist = False
+        self.on_challenge: Optional[Callable[[], None]] = None
+        self.on_challenge_resolved: Optional[Callable[[], None]] = None
 
     def __enter__(self) -> "BrowserSession":
         from playwright.sync_api import sync_playwright
@@ -268,12 +271,41 @@ class BrowserSession:
         return current
 
     def wait_for_challenge_clear(self, html: str, status=None):
-        """Stop immediately on a challenge; recovery requires a new run.
+        """Pause for explicit human handling when manual assist is enabled.
 
-        The visible browser may be inspected by a human after the process
-        stops, but this method never polls, submits, or resumes collection.
+        This method never clicks, submits, solves, refreshes, or otherwise
+        bypasses a challenge. It only polls the already-open visible page for
+        a human-resolved normal document. Default mode remains immediate stop.
+        A non-positive ``challenge_wait_seconds`` means wait indefinitely.
         """
         current_state = detect_access_status(status, html)
         if current_state is AccessState.CHALLENGE:
-            _safe_print("检测到 Amazon 挑战页，立即停止采集；请人工处理后重新启动任务。")
+            if callable(self.on_challenge):
+                self.on_challenge()
+            if not self.manual_assist:
+                _safe_print("检测到 Amazon 挑战页，立即停止采集；请人工处理后重新启动任务。")
+                return current_state, html, False
+
+            _safe_print("检测到 Amazon 挑战页，已暂停新请求；请在可见浏览器中人工处理。")
+            timeout = float(self.challenge_wait_seconds or 0)
+            deadline = time.monotonic() + timeout if timeout > 0 else None
+            while True:
+                if deadline is not None and time.monotonic() >= deadline:
+                    _safe_print("人工处理等待超时，保存状态并停止采集。")
+                    return current_state, html, False
+                time.sleep(1.0)
+                try:
+                    candidate_html = self.page.content() if self.page is not None else html
+                except Exception:
+                    continue
+                # The original response may have been 403/429 even after a
+                # human clears the visible page. Treat the refreshed DOM as a
+                # successful 200-equivalent only after rechecking challenge
+                # markers; no network request or browser action is issued.
+                candidate_state = detect_access_status(200, candidate_html)
+                if candidate_state is AccessState.NORMAL:
+                    if callable(self.on_challenge_resolved):
+                        self.on_challenge_resolved()
+                    _safe_print("检测到人工处理完成，恢复采集。")
+                    return candidate_state, candidate_html, True
         return current_state, html, False

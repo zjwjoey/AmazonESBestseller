@@ -91,7 +91,7 @@ def test_collect_details_honors_cooperative_global_stop_before_next_asin(tmp_pat
 
 
 def test_browser_challenge_handler_stops_without_polling(monkeypatch):
-    """The real browser policy never auto-waits or resumes a challenge."""
+    """Default mode still stops immediately and never polls a challenge."""
     from amazon_es_bestseller.access.browser import BrowserSession
     from amazon_es_bestseller.access.detector import detect_access_status
     session = BrowserSession()
@@ -103,6 +103,36 @@ def test_browser_challenge_handler_stops_without_polling(monkeypatch):
     assert final_state is state
     assert final_html == CHALLENGE_HTML
     assert recovered is False
+
+
+def test_browser_challenge_manual_assist_waits_for_human_resolution(monkeypatch):
+    """Manual-assist mode observes a human-cleared visible page only."""
+    from amazon_es_bestseller.access.browser import BrowserSession
+
+    class ChangingPage:
+        def __init__(self):
+            self.calls = 0
+
+        def content(self):
+            self.calls += 1
+            return CHALLENGE_HTML if self.calls == 1 else NORMAL_HTML
+
+    session = BrowserSession()
+    session.page = ChangingPage()
+    session.manual_assist = True
+    session.challenge_wait_seconds = 5
+    events = []
+    session.on_challenge = lambda: events.append("challenge")
+    session.on_challenge_resolved = lambda: events.append("resolved")
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.time.sleep", lambda *_: None)
+
+    final_state, final_html, recovered = session.wait_for_challenge_clear(
+        CHALLENGE_HTML, 200)
+
+    assert final_state is AccessState.NORMAL
+    assert final_html == NORMAL_HTML
+    assert recovered is True
+    assert events == ["challenge", "resolved"]
 
 
 def test_collect_details_stops_on_403(tmp_path):

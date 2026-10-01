@@ -260,7 +260,8 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
                        claim_asins: Callable[[list[str]], list[str]],
                        release_asins: Callable[[list[str]], None],
                        completed_urls: set[str],
-                       stop_event: threading.Event | None = None) -> dict:
+                       stop_event: threading.Event | None = None,
+                       challenge_pause: threading.Event | None = None) -> dict:
     """Collect one category serially inside one worker/browser session."""
     from ..access.browser import BrowserSession
     from ..access.location import ensure_spain_delivery
@@ -312,6 +313,19 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
     with BrowserSession(headless=not headful, profile_dir=profile_dir or None) as session:
         session.challenge_wait_seconds = float(plan.get("challenge_wait_seconds", 180))
         session.manual_assist = bool(plan.get("manual_assist", False))
+        if challenge_pause is not None:
+            session.on_challenge = challenge_pause.set
+            session.on_challenge_resolved = challenge_pause.clear
+
+        def should_stop() -> bool:
+            # Manual challenge handling pauses every worker before its next
+            # request. A peer access stop still terminates the whole task.
+            while challenge_pause is not None and challenge_pause.is_set():
+                if stop_event is not None and stop_event.is_set():
+                    return True
+                time.sleep(0.25)
+            return stop_event.is_set() if stop_event is not None else False
+
         location = ensure_spain_delivery(session, str(plan.get("postal_code", "28001")))
         if location is not None:
             print("[%s][槽位%d] 配送地点已确认" % (group, worker_id))
@@ -331,7 +345,7 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
                     fresh = collect_details(claimed, session, detail_dir)
                 else:
                     fresh = collect_details(claimed, session, detail_dir,
-                                            should_stop=stop_event.is_set)
+                                            should_stop=should_stop)
                 successes = {str(row.get("asin") or "").upper() for row in fresh if row.get("asin")}
                 for row in fresh:
                     asin = str(row.get("asin") or "").upper()
@@ -357,7 +371,7 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
             if role == "reserve" and not plan.get("force_reserve_sources") \
                     and not _needs_reserve_sources(category, rankings):
                 break
-            if stop_event is not None and stop_event.is_set():
+            if should_stop():
                 from ..access.detector import AccessStopError
                 raise AccessStopError("其他工作槽触发访问限制，停止新请求")
             url = _normalize_url(source["source_url"])
@@ -367,7 +381,7 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
                 current = collect_rankings([url], session, str(category_dir), pages_per_url=pages)
             else:
                 current = collect_rankings([url], session, str(category_dir), pages_per_url=pages,
-                                           should_stop=stop_event.is_set)
+                                           should_stop=should_stop)
             filtered = []
             for row in current:
                 if not _category_rank_filter(row, category, plan):
@@ -390,7 +404,7 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
                 if asin and asin not in seen:
                     seen.add(asin)
                     candidates.append(asin)
-            if stop_event is not None and stop_event.is_set():
+            if should_stop():
                 from ..access.detector import AccessStopError
                 raise AccessStopError("其他工作槽触发访问限制，停止新请求")
             collect_detail_batch(candidates)
@@ -539,13 +553,19 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     save_state("RUNNING", ready_at, [])
     stop_all = False
     stop_event = threading.Event()
+    challenge_pause = threading.Event()
     last_cooldown_log = [0.0] * slots
 
     def run_one(group: str, slot: int):
         try:
-            return _run_category_live(category_map[group], plan, output, slot + 1,
-                                      headful, profile_dir, claim_asins, release_asins,
-                                      set(state.get("completed_source_urls", [])), stop_event)
+            args = (category_map[group], plan, output, slot + 1, headful,
+                    profile_dir, claim_asins, release_asins,
+                    set(state.get("completed_source_urls", [])), stop_event)
+            if plan.get("manual_assist"):
+                return _run_category_live(*args, challenge_pause=challenge_pause)
+            # Preserve compatibility with legacy/offline worker doubles that
+            # implement the original positional signature.
+            return _run_category_live(*args)
         except Exception as exc:
             # Trip the shared gate in the worker that observed access
             # restriction, before the scheduler gets a chance to inspect the
