@@ -81,3 +81,28 @@ def test_exact_detail_duplicates_are_removed_only_from_derived_rows():
 def test_numeric_profile_recognizes_spanish_unit_names():
     profile = numeric_profile("Peso: 4,25 kilogramos; capacidad: 500 mililitros; 220 voltios")
     assert [item["canonical_unit"] for item in profile["values"]] == ["kg", "ml", "V"]
+
+
+def test_numeric_profile_flags_contradictory_capacity_and_glued_units():
+    profile = numeric_profile("Capacidad: 9 L / 25,4 L; peso: 12kgpeso")
+    assert "CONTRADICTORY_CAPACITY" in profile["issues"]
+    assert "GLUED_UNIT" in profile["issues"]
+
+
+def test_field_misplacement_is_suspicious_not_needs_review():
+    result = audit_records([{"asin": "B00000006", "brand": "https://example.com/brand"}])
+    row = result["translation_input_records"][0]
+    assert row["fields"]["brand"]["clean_status"] == "SUSPICIOUS"
+    assert row["record_status"] == "SUSPICIOUS"
+
+
+def test_detail_structure_metrics_ignore_cross_field_review_status():
+    result = audit_records([{
+        "asin": "B00000007",
+        "product_details_es": "Modelo: X1\nColor: Negro",
+        "feature_bullets_es": ["Modelo: X1", "Color: Negro"],
+    }])
+    summary = result["summary"]["structure"]
+    assert summary["fully_structured"] == 1
+    assert summary["partially_structured"] == 0
+    assert summary["unstructured"] == 0
