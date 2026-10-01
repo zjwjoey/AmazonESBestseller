@@ -31,8 +31,8 @@ FIELD_ALIASES = {
     "category_l3": ("category_l3", "category_l3_es"),
     "leaf_category": ("leaf_category", "leaf_category_es"),
     "specification_es": ("specification_es", "spec_v2"),
-    "product_details": ("attributes", "product_details_es", "detail_attributes_raw"),
-    "feature_bullets": ("feature_bullets_raw", "feature_bullets_es", "features_es"),
+    "product_details": ("product_details", "attributes", "product_details_es", "detail_attributes_raw"),
+    "feature_bullets": ("feature_bullets", "feature_bullets_raw", "feature_bullets_es", "features_es"),
     "product_description": ("product_description_raw", "description_es", "product_description_es"),
     "brand": ("brand", "brand_es"),
 }
