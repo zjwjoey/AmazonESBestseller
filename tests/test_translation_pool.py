@@ -77,6 +77,24 @@ def task(text, n):
     return TranslationTask.from_values(text, asin=f"B{n:08d}", field="title_es_raw")
 
 
+def test_translation_task_key_uses_canonical_field_and_languages():
+    category_l1 = TranslationTask.from_values(
+        "Hogar y cocina", asin="B00000001", field="category_l1",
+        source_language="es", target_language="zh-CN")
+    category_l2 = TranslationTask.from_values(
+        "Hogar y cocina", asin="B00000002", field="category_l2",
+        source_language="es", target_language="zh-CN")
+    title = TranslationTask.from_values(
+        "Hogar y cocina", asin="B00000003", field="title_es_raw",
+        source_language="es", target_language="zh-CN")
+    english = TranslationTask.from_values(
+        "Hogar y cocina", asin="B00000004", field="category_l1",
+        source_language="en", target_language="zh-CN")
+    assert category_l1.key == category_l2.key
+    assert title.key != category_l1.key
+    assert english.key != category_l1.key
+
+
 def test_two_providers_overlap_and_round_robin():
     barrier = threading.Barrier(2)
     a, b = PoolFake("qwen-mt", barrier=barrier), PoolFake("qwen-mt", barrier=barrier)

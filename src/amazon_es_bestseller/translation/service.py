@@ -24,6 +24,7 @@ from .terminology import (postprocess, deterministic_specification,
 from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
+from .field_contract import canonical_translation_field_type
 
 
 DEFAULT_FIELD_MAP = {
@@ -53,10 +54,7 @@ def source_hash(text: str) -> str:
 
 def translation_memory_field_type(field: str) -> str:
     """Use one TM namespace for equivalent category labels across levels."""
-    if field in {"category_l1", "category_l2", "category_l3", "leaf_category",
-                 "category_l1_es", "category_l2_es", "category_l3_es", "leaf_category_es"}:
-        return "category"
-    return field
+    return canonical_translation_field_type(field)
 
 
 class TranslationService:
@@ -147,6 +145,58 @@ class TranslationService:
         return record.get(source_field)
 
     @classmethod
+    def _record_brand(cls, record: Dict[str, Any]) -> str:
+        value = cls._prepared_value(record, "brand")
+        if value is None:
+            value = record.get("brand") or record.get("brand_es") or ""
+        return str(value or "").strip()
+
+    def _resolve_scalar_before_provider(self, *, asin: str, source_field: str,
+                                        target: str, text: str) -> Optional[Dict[str, Any]]:
+        """Resolve a scalar through identity, dictionary and deterministic rules.
+
+        ``None`` means that natural-language text still needs TM/provider
+        handling.  The returned envelope is identical to a provider result so
+        downstream QA/export code does not need a special branch.
+        """
+        if not text.strip():
+            return {"asin": asin, "field": source_field, "target_field": target,
+                    "source_text": text, "source_hash": source_hash(text),
+                    "translated_text": "", "translation_status": "source_missing",
+                    "qa_status": "source_missing", "provider": "deterministic",
+                    "model": "rules-v1", "resolution_source": "source_missing",
+                    "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                    "attempt_count": 0, "last_error": None, "qa_issues": [],
+                    "translated_at": self._now()}
+        brand = source_field in {"brand", "brand_es"}
+        if brand:
+            resolution = (text, "source_preserved", "identity-v1")
+        elif source_field in {"category_l1", "category_l2", "category_l3", "leaf_category",
+                              "category_l1_es", "category_l2_es", "category_l3_es", "leaf_category_es"}:
+            row = resolve_exact(self.dictionary, text, kind="category")
+            resolution = ((row["resolved_text"], row["resolution_source"], "dictionary-v1")
+                          if row["status"] == "resolved" else None)
+        elif source_field in {"selected_variation_raw", "selected_variant_es", "variation_es"}:
+            row = resolve_exact(self.dictionary, text, kind="packaging", field="selected_variant_es")
+            resolution = ((row["resolved_text"], row["resolution_source"], "dictionary-v1")
+                          if row["status"] == "resolved" else None)
+        elif source_field == "specification_es" and specification_is_deterministic(text):
+            translated = deterministic_specification(text)
+            resolution = (translated, "rule", "rules-v1") if translated and translated != text else None
+        else:
+            resolution = None
+        if resolution is None:
+            return None
+        translated, origin, model = resolution
+        return {"asin": asin, "field": source_field, "target_field": target,
+                "source_text": text, "source_hash": source_hash(text),
+                "translated_text": translated, "translation_status": "success",
+                "qa_status": "pass", "provider": "deterministic", "model": model,
+                "resolution_source": origin, "schema_version": self.schema_version,
+                "prompt_version": self.prompt_version, "attempt_count": 0,
+                "last_error": None, "qa_issues": [], "translated_at": self._now()}
+
+    @classmethod
     def _structured_items(cls, source_field: str, raw_value: Any) -> Optional[List[tuple[Optional[str], str]]]:
         """Return lossless item boundaries used by both planning and execution."""
         is_bullet_field = source_field in {"feature_bullets", "feature_bullets_es", "feature_bullets_raw", "features_es"}
@@ -221,7 +271,8 @@ class TranslationService:
                     item_attempts = 0
                     item_resolution = deterministic["resolution_source"]
                 else:
-                    protected = protect(value, protected_values=[asin, str(record.get("brand") or "")])
+                    brand = self._record_brand(record)
+                    protected = protect(value, protected_values=[asin, brand])
                     response = self.provider.translate(
                         protected.text, asin=asin, field=source_field,
                         source_language=self.source_language, target_language=self.target_language,
@@ -237,8 +288,9 @@ class TranslationService:
                     item_resolution = "provider"
                     if response.status == "success" and response.text:
                         qa = qa_field(protected, response.text, value, field=source_field,
-                                      brand=record.get("brand", ""))
-                        restored, restore_issues = restore(protected, response.text)
+                                      brand=brand)
+                        normalized = postprocess(source_field, response.text, value)
+                        restored, restore_issues = restore(protected, normalized)
                         item_issues = list(qa["issues"]) + list(restore_issues)
                         item_status = "qa_failed" if item_issues else "success"
                         statuses.append(item_status)
@@ -423,6 +475,10 @@ class TranslationService:
                 digest = source_hash(text)
                 key = self.cache.key(asin, source, digest, self.provider.name,
                                      self.provider.model, self.schema_version, self.prompt_version)
+                deterministic = self._resolve_scalar_before_provider(
+                    asin=asin, source_field=source, target=target, text=text)
+                if deterministic is not None:
+                    continue
                 cached = self.cache.get(key)
                 memory = None
                 bypass_memory = False
@@ -456,6 +512,7 @@ class TranslationService:
                             translation_memory_hits += 1
                         else:
                             unique_requests.add((translation_memory_field_type(source), source_hash(item_text),
+                                                 self.source_language, self.target_language,
                                                  self.provider.name, self.provider.model))
                 else:
                     memory = self.cache.get_memory(self._memory_key(text, source))
@@ -466,6 +523,7 @@ class TranslationService:
                         translation_memory_hits += 1
                     else:
                         unique_requests.add((translation_memory_field_type(source), digest,
+                                             self.source_language, self.target_language,
                                              self.provider.name, self.provider.model))
                 rows.append({"asin": asin, "source_field": source, "target_field": target,
                              "source_hash": digest, "source_chars": len(text)})
@@ -488,6 +546,12 @@ class TranslationService:
             digest = source_hash(text)
             key = self.cache.key(asin, source_field, digest, self.provider.name,
                                  self.provider.model, self.schema_version, self.prompt_version)
+            deterministic_result = self._resolve_scalar_before_provider(
+                asin=asin, source_field=source_field, target=target, text=text)
+            if deterministic_result is not None:
+                self.cache.put(key, deterministic_result)
+                output_fields[target] = deterministic_result
+                continue
             cached = self.cache.get(key)
             if cached and cached.get("translation_status") == "partial" and not repair_partial:
                 output_fields[target] = cached
@@ -512,24 +576,6 @@ class TranslationService:
                     self.cache.put(key, structured_result)
                     output_fields[target] = structured_result
                     continue
-            if source_field in {"brand", "brand_es"}:
-                result = self._deterministic_brand_result(
-                    asin=asin, source_field=source_field, target=target, text=text)
-                self.cache.put(key, result)
-                output_fields[target] = result
-                continue
-            deterministic_result = self._deterministic_spec_result(
-                asin=asin, source_field=source_field, target=target, text=text)
-            if deterministic_result:
-                self.cache.put(key, deterministic_result)
-                self.cache.put_memory(self._memory_key(text, source_field), {
-                    "translated_text": deterministic_result["translated_text"],
-                    "translation_status": deterministic_result["translation_status"],
-                    "qa_status": deterministic_result["qa_status"],
-                    "qa_issues": list(deterministic_result["qa_issues"]),
-                })
-                output_fields[target] = deterministic_result
-                continue
             memory_key = self._memory_key(text, source_field)
             memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
             if memory and memory.get("translation_status") == "pending":
@@ -553,7 +599,8 @@ class TranslationService:
             else:
                 # Protect numbers and explicit identity tokens.  Brand and ASIN
                 # are always protected even when translating another field.
-                protected = protect(text, protected_values=[asin, str(record.get("brand") or "")])
+                brand = self._record_brand(record)
+                protected = protect(text, protected_values=[asin, brand])
                 response = self.provider.translate(protected.text, asin=asin, field=source_field,
                                                    source_language=self.source_language,
                                                    target_language=self.target_language,
@@ -571,15 +618,23 @@ class TranslationService:
                           "qa_issues": [], "translated_at": self._now()}
                 if response.status == "success" and response.text:
                     qa = qa_field(protected, response.text, text, field=source_field,
-                                  brand=record.get("brand", ""),
-                                  allowed_residual=[record.get("brand", "")])
+                                  brand=brand, allowed_residual=[brand])
+                    # Always restore protected identity/number tokens before
+                    # exposing the result, including when QA flags an issue.
+                    # Keeping placeholders in translated_text makes review
+                    # output unusable and can poison translation memory.
+                    # Keep protected identity values as placeholders while the
+                    # terminology normalizer runs; otherwise a brand such as
+                    # ``Metal`` would be translated as a material term.
+                    normalized = postprocess(source_field, response.text, text)
+                    restored, restore_issues = restore(protected, normalized)
+                    result["translated_text"] = restored
                     result["qa_status"] = qa["qa_status"]
-                    result["qa_issues"] = qa["issues"]
-                    if qa["issues"]:
+                    result["qa_issues"] = list(qa["issues"])
+                    if restore_issues:
+                        result["qa_issues"].extend(restore_issues)
+                    if result["qa_issues"]:
                         result["translation_status"] = "qa_failed"
-                    else:
-                        restored, _ = restore(protected, response.text)
-                        result["translated_text"] = postprocess(source_field, restored, text)
                     # Translation memory deduplicates provider calls even when
                     # the identical source later needs the same QA review.
                     memory_payload = {
@@ -710,6 +765,13 @@ class TranslationService:
             self.provider = original_provider
             self.cache.save()
         outputs = {result["asin"]: result for result in results if result and result.get("asin")}
+        # Keep the same flat display overlay as the serial path for fields
+        # that passed QA. The auditable envelopes remain authoritative for
+        # partial/failed fields.
+        for result in outputs.values():
+            for target, value in (result.get("fields") or {}).items():
+                if value.get("translated_text") and value.get("translation_status") in {"success", "cached"}:
+                    result[target] = value["translated_text"]
         summary = {"total": len(outputs)}
         for result in outputs.values():
             status = result.get("translation_status", "pending")

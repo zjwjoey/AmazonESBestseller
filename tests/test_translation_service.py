@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 from amazon_es_bestseller.translation.cache import TranslationCache
@@ -35,6 +36,13 @@ class EmptyProvider(FakeProvider):
     def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         self.calls.append((asin, field, text))
         return ProviderResponse(provider=self.name, model=self.model, status="success", text="")
+
+
+class SlowProvider(FakeProvider):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((asin, field, text))
+        time.sleep(0.05)
+        return ProviderResponse(text="中文 " + text, provider=self.name, model=self.model)
 
 
 def records(n=100):
@@ -133,6 +141,47 @@ def test_brand_is_identity_data_and_never_calls_provider(tmp_path):
     assert field["provider"] == "deterministic"
 
 
+def test_preclean_brand_is_used_for_protection_across_scalar_translation(tmp_path):
+    for brand in ("Metal", "Bosch", "Rain-X", "CeraVe"):
+        prepared = audit_records([{
+            "asin": "B00000001", "brand": brand,
+            "title_es_raw": "Producto %s profesional" % brand,
+        }])["translation_input_records"]
+        provider = FakeProvider()
+        result = TranslationService(provider, TranslationCache(tmp_path / (brand.replace("-", "") + ".json"))).translate_records(prepared)
+        field = result["records"]["B00000001"]["fields"]["title_zh"]
+        assert brand in provider.calls[0][2] or brand in field["translated_text"]
+        assert brand in field["translated_text"]
+
+
+def test_parallel_unknown_category_deduplicates_across_levels(tmp_path):
+    a, b = SlowProvider(), SlowProvider()
+    a.name, b.name = "qwen-a", "qwen-b"
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records_parallel([
+        {"asin": "B00000001", "category_l1": "Categoria futura XYZ"},
+        {"asin": "B00000002", "category_l2": "Categoria futura XYZ"},
+    ], pool)
+    assert len(a.calls) + len(b.calls) == 1
+    assert result["records"]["B00000001"]["category_l1_zh"]
+    assert result["records"]["B00000002"]["category_l2_zh"]
+
+
+def test_parallel_same_title_deduplicates_across_asins_but_not_other_fields(tmp_path):
+    a, b = SlowProvider(), SlowProvider()
+    a.name, b.name = "qwen-a", "qwen-b"
+    pool = ProviderPool({"qwen-a": a, "qwen-b": b})
+    service = TranslationService(FakeProvider(), TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records_parallel([
+        {"asin": "B00000001", "title_es_raw": "Producto especial XYZ"},
+        {"asin": "B00000002", "title_es_raw": "Producto especial XYZ"},
+        {"asin": "B00000003", "description_es": "Producto especial XYZ"},
+    ], pool)
+    assert len(a.calls) + len(b.calls) == 2
+    assert result["records"]["B00000001"]["fields"]["title_zh"]["translated_text"]
+
+
 def test_category_translation_memory_is_shared_across_levels(tmp_path):
     provider = FakeProvider()
     service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
@@ -141,7 +190,21 @@ def test_category_translation_memory_is_shared_across_levels(tmp_path):
     result = service.translate_records([row])
     assert result["records"]["B00000001"]["fields"]["category_l1_zh"]["translated_text"] == \
            result["records"]["B00000001"]["fields"]["category_l2_zh"]["translated_text"]
-    assert len(provider.calls) == 1
+    assert len(provider.calls) == 0
+
+
+def test_scalar_dictionary_resolution_precedes_provider(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([{
+        "asin": "B00000001", "category_l1": "Hogar y cocina",
+        "category_l2": "Hogar y cocina", "selected_variant_es": "Unidad",
+    }])
+    row = result["records"]["B00000001"]
+    assert not provider.calls
+    assert row["category_l1_zh"] == "家居与厨房"
+    assert row["category_l2_zh"] == "家居与厨房"
+    assert row["selected_variation_zh"] == "单件"
+    assert row["fields"]["selected_variation_zh"]["resolution_source"] == "dictionary"
 
 
 def test_canonical_field_wins_over_raw_fallback(tmp_path):
@@ -170,10 +233,10 @@ def test_persistent_translation_memory_reuses_same_text_for_new_asin(tmp_path):
     cache_path = tmp_path / "cache.json"
     provider1 = FakeProvider()
     TranslationService(provider1, TranslationCache(cache_path)).translate_records(
-        [{"asin": "B00000001", "category_l1": "Hogar y cocina"}])
+        [{"asin": "B00000001", "category_l1": "Categoria futura XYZ"}])
     provider2 = FakeProvider()
     result = TranslationService(provider2, TranslationCache(cache_path)).translate_records(
-        [{"asin": "B00000002", "category_l1": "Hogar y cocina"}])
+        [{"asin": "B00000002", "category_l1": "Categoria futura XYZ"}])
     assert len(provider1.calls) == 1
     assert not provider2.calls
     assert result["records"]["B00000002"]["category_l1_zh"]

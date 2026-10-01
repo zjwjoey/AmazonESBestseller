@@ -14,7 +14,8 @@ def test_preclean_preserves_raw_and_removes_only_deterministic_noise(tmp_path):
     row = result["translation_input_records"][0]
     assert row["raw_fields"]["product_details"]["source_hash"]
     assert row["fields"]["product_details"]["clean_text"] != raw
-    assert "DUPLICATE_LABEL" in result["summary"]["issue_counts"]
+    assert "SAFE_DUPLICATE" in result["summary"]["issue_counts"]
+    assert "DUPLICATE_LABEL" not in result["summary"]["issue_counts"]
     assert result["summary"]["identity_count"] == 2
     assert all(record.get("product_details_es") != row["fields"]["product_details"]["clean_text"]
                for record in [{"product_details_es": raw}])
@@ -27,7 +28,7 @@ def test_preclean_statuses_and_reports_are_reproducible(tmp_path):
     assert json.dumps(first["translation_input_records"], ensure_ascii=False, sort_keys=True) == \
            json.dumps(second["translation_input_records"], ensure_ascii=False, sort_keys=True)
     assert first["translation_input_records"][0]["fields"]["title_es_raw"]["clean_status"] == "SOURCE_MISSING"
-    assert first["summary"]["final_state"] == "READY_FOR_PRECLEAN_REVIEW"
+    assert first["summary"]["final_state"] == "READY_FOR_TRANSLATION_V2_REMOTE_REVIEW"
     paths = write_reports(first, tmp_path)
     for name in ("preclean_audit.json", "preclean_audit.md", "field_quality.csv",
                  "sku_quality.csv", "cross_field_issues.csv", "structure_issues.csv",
@@ -77,6 +78,20 @@ def test_exact_detail_duplicates_are_removed_only_from_derived_rows():
     assert result["summary"]["identity_count"] == 2
     assert row["raw_fields"]["product_details"]["source_present"] is True
     assert row["fields"]["product_details"]["protected_tokens"] == []
+
+
+def test_safe_duplicate_is_normalized_but_conflicting_duplicate_is_blocked():
+    safe = audit_records([{"asin": "B00000008", "product_details_es": "Modelo: X1\nModelo: X1"}])
+    safe_row = safe["translation_input_records"][0]
+    assert safe_row["fields"]["product_details"]["clean_status"] == "NORMALIZED"
+    assert safe_row["fields"]["product_details"]["translate_allowed"] is True
+    assert not safe["review_queue"]
+    conflict = audit_records([{"asin": "B00000009", "product_details_es": "Modelo: X1\nModelo: X2"}])
+    conflict_row = conflict["translation_input_records"][0]
+    assert conflict_row["fields"]["product_details"]["clean_status"] == "NEEDS_REVIEW"
+    assert conflict_row["fields"]["product_details"]["translate_allowed"] is False
+    assert "CONFLICTING_DUPLICATE" in conflict["summary"]["issue_counts"]
+    assert conflict["review_queue"]
 
 
 def test_numeric_profile_recognizes_spanish_unit_names():

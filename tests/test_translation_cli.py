@@ -27,8 +27,10 @@ def test_translate_cli_accepts_internal_research_csv(tmp_path, capsys):
                  "--out", str(out), "--dry-run"]) == 0
     plan = json.loads(out.read_text(encoding="utf-8"))
     assert plan["total_records"] == 1
-    assert plan["total_fields"] == 2
-    assert plan["estimated_api_requests"] == 2
+    # Known category/packaging values are resolved offline before Qwen; the
+    # dry-run reports only the remaining provider unit.
+    assert plan["total_fields"] == 1
+    assert plan["estimated_api_requests"] == 1
     assert "dry-run" in capsys.readouterr().out
 
 
