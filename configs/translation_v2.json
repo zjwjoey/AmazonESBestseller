@@ -1,0 +1,17 @@
+{
+  "provider": "qwen-mt",
+  "model": "qwen-mt-flash",
+  "protocol": "openai_compatible",
+  "timeout": 60,
+  "max_retries": 2,
+  "fields": [
+    "title_es_raw",
+    "brand",
+    "feature_bullets_es",
+    "description_es",
+    "product_details_es",
+    "selected_variant_es",
+    "specification_es"
+  ],
+  "note": "API key is read only from QWEN_API_KEY or DASHSCOPE_API_KEY; endpoint may be supplied explicitly."
+}

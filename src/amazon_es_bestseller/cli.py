@@ -6,7 +6,7 @@
     ``outputs/rankings.json`` + ``outputs/details.json``。
   - enrich / qa / export：全离线（不联网）。
   - translate-ds：联网且在首个请求前要求人工确认。
-  - ``--offline``：全局标记；collect/translate-ds 拒绝离线。
+  - ``--offline``：全局标记；联网采集/真实翻译拒绝离线，Translation V2 dry-run 可用。
 
 示例：
   amazon-es collect --urls "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbs/1293659031"
@@ -628,6 +628,76 @@ def cmd_translate_ds(args) -> None:
           % (success, partial, failed, len(output), args.out))
 
 
+# ---------- translate（Translation V2） ----------
+
+def cmd_translate(args) -> None:
+    """Field-level Translation V2; dry-run is always offline and side-effect free."""
+    products = _load_json(args.products)
+    if not isinstance(products, list):
+        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
+    from .translation.cache import TranslationCache
+    from .translation.providers.qwen_mt import QwenMTProvider
+    from .translation.service import TranslationService
+
+    config = {}
+    if args.config:
+        config = _load_json(args.config)
+        if not isinstance(config, dict):
+            raise SystemExit("translation config 顶层必须是对象: %s" % args.config)
+    provider_name = args.provider or config.get("provider", "qwen-mt")
+    if provider_name not in {"qwen-mt", "qwen_mt"}:
+        raise SystemExit("Translation V2 当前只允许 provider=qwen-mt；旧 DeepSeek 请继续使用 translate-ds")
+    model = args.model or config.get("model") or "qwen-mt-flash"
+    provider = QwenMTProvider(model=model,
+                              endpoint=config.get("endpoint"),
+                              protocol=config.get("protocol"),
+                              timeout=float(config.get("timeout", 60)),
+                              max_retries=int(config.get("max_retries", 2)))
+    cache = TranslationCache(args.cache)
+    fields = args.field or ([args.fields] if args.fields else None) or config.get("fields") or None
+    if fields:
+        fields = [item.strip() for value in fields for item in str(value).split(",") if item.strip()]
+    service = TranslationService(provider, cache)
+    if args.dry_run:
+        result = service.translate_records(products, fields=fields, offset=args.offset,
+                                           limit=args.limit, dry_run=True)
+        _save_json(result["summary"], args.out)
+        print("translate dry-run：%d 条商品、%d 个字段（未调用 API）→ %s" %
+              (result["summary"]["total_records"], result["summary"]["total_fields"], args.out))
+        return
+    if args.offline:
+        raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
+    subset_count = len(products[max(0, args.offset):]) if args.limit is None else min(args.limit, len(products[max(0, args.offset):]))
+    print("translate V2 即将调用 %s：%d 个 ASIN，model=%s" %
+          (provider.name, subset_count, model))
+    if not args.yes:
+        try:
+            confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
+        except (EOFError, KeyboardInterrupt):
+            raise SystemExit("未确认，已取消 Translation V2 API 调用")
+        if confirmation.strip().upper() != "YES":
+            raise SystemExit("未确认，已取消 Translation V2 API 调用")
+    result = service.translate_records(products, fields=fields, offset=args.offset,
+                                       limit=args.limit, repair_partial=args.repair_partial,
+                                       repair_failed=args.repair_failed)
+    _save_json(result["records"], args.out)
+    qa_out = args.qa_out or str(Path(args.out).with_name("translation_qa.json"))
+    _save_json(result["qa_report"], qa_out)
+    if args.audit_out:
+        audit = []
+        for record in result["records"].values():
+            for field, value in (record.get("fields") or {}).items():
+                audit.append({"asin": record.get("asin"), "field": field,
+                              "translation_status": value.get("translation_status"),
+                              "qa_status": value.get("qa_status"), "source_hash": value.get("source_hash"),
+                              "last_error": value.get("last_error")})
+        Path(args.audit_out).parent.mkdir(parents=True, exist_ok=True)
+        with Path(args.audit_out).open("w", encoding="utf-8") as handle:
+            for row in audit:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print("translate V2 完成：%s → %s；QA → %s" % (result["summary"], args.out, qa_out))
+
+
 # ---------- enrich（离线） ----------
 
 def cmd_enrich(args) -> None:
@@ -820,7 +890,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="amazon-es",
         description="Amazon.es bestseller research pipeline")
     parser.add_argument("--offline", action="store_true",
-                        help="离线标记：collect/translate-ds 拒绝；其余处理命令不联网")
+                        help="离线标记：collect/translate-ds/真实 translate 拒绝；Translation V2 dry-run 可用")
     sub = parser.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("collect", help="联网采集榜单+详情（串行）")
@@ -930,6 +1000,25 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--repair-partial", action="store_true",
                    help="已确认调用 API 时，绕过同源 partial 缓存并补翻缺失字段")
     t.set_defaults(func=cmd_translate_ds)
+
+    tv2 = sub.add_parser("translate", help="Translation V2：字段级 Qwen-MT 翻译（默认先 dry-run）")
+    tv2.add_argument("--products", required=True, help="规范化商品 JSON 数组")
+    tv2.add_argument("--provider", default="qwen-mt", choices=("qwen-mt",), help="翻译提供商")
+    tv2.add_argument("--model", default="", help="模型名（默认 qwen-mt-flash）")
+    tv2.add_argument("--cache", default=str(OUTPUTS / "translation_v2_cache.json"), help="字段级翻译缓存")
+    tv2.add_argument("--out", required=True, help="ASIN → Translation V2 结果 JSON")
+    tv2.add_argument("--qa-out", default="", help="translation_qa.json 输出路径")
+    tv2.add_argument("--audit-out", default="", help="可选字段审计 JSONL")
+    tv2.add_argument("--config", default="", help="configs/translation_v2.json")
+    tv2.add_argument("--field", action="append", default=[], help="只翻译指定 source/target 字段，可重复")
+    tv2.add_argument("--fields", default="", help="逗号分隔的字段名（--field 的简写）")
+    tv2.add_argument("--repair-partial", action="store_true", help="重试 partial 字段")
+    tv2.add_argument("--repair-failed", action="store_true", help="重试 failed 字段")
+    tv2.add_argument("--limit", type=int, default=None)
+    tv2.add_argument("--offset", type=int, default=0)
+    tv2.add_argument("--dry-run", action="store_true", help="仅生成字段计划，不调用 API")
+    tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
+    tv2.set_defaults(func=cmd_translate)
 
     q = sub.add_parser("qa", help="离线：商品表 → QA 结果")
     q.add_argument("--products", default=str(OUTPUTS / "products.json"))
