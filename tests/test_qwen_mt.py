@@ -1,4 +1,5 @@
 from amazon_es_bestseller.translation.providers.qwen_mt import QwenMTProvider
+from amazon_es_bestseller.translation.providers import qwen_mt
 
 
 def test_qwen_openai_compatible_request_and_response():
@@ -9,7 +10,7 @@ def test_qwen_openai_compatible_request_and_response():
         return {"status_code": 200, "body": {"choices": [{"message": {"content": "中文"}}]}}
 
     provider = QwenMTProvider(api_key="test-key", endpoint="https://example.invalid",
-                              transport=transport, max_retries=0)
+                              transport=transport, max_retries=0, rate=0)
     result = provider.translate("Bolsa", asin="B000000001", field="title_es_raw")
     assert result.text == "中文"
     assert seen["payload"]["model"] == "qwen-mt-flash"
@@ -18,6 +19,17 @@ def test_qwen_openai_compatible_request_and_response():
         "source_lang": "Spanish", "target_lang": "Chinese"
     }
     assert seen["headers"]["Authorization"] == "Bearer test-key"
+
+
+def test_qwen_rate_limiter_defaults_to_half_call_per_second(monkeypatch):
+    provider = QwenMTProvider(api_key="k", rate=0.5)
+    clock = iter((0.0, 0.0, 0.5, 2.0))
+    sleeps = []
+    monkeypatch.setattr(qwen_mt.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(qwen_mt.time, "sleep", sleeps.append)
+    provider._wait_for_rate_limit()
+    provider._wait_for_rate_limit()
+    assert sleeps == [1.5]
 
 
 def test_qwen_dashscope_protocol_uses_native_message_shape():
@@ -30,7 +42,7 @@ def test_qwen_dashscope_protocol_uses_native_message_shape():
 
     result = QwenMTProvider(api_key="test-key", protocol="dashscope",
                             endpoint="https://example.invalid", transport=transport,
-                            max_retries=0).translate("Bolsa", asin="A", field="title")
+                            max_retries=0, rate=0).translate("Bolsa", asin="A", field="title")
     assert result.text == "中文"
     assert seen["payload"]["input"]["messages"] == [{"role": "user", "content": "Bolsa"}]
     assert seen["payload"]["parameters"]["translation_options"]["target_lang"] == "Chinese"
@@ -58,7 +70,7 @@ def test_qwen_500_and_timeout_are_bounded_failures():
                 raise response
             return response
         result = QwenMTProvider(api_key="k", transport=transport, max_retries=1,
-                                backoff_seconds=0).translate("x", asin="A", field="f")
+                                backoff_seconds=0, rate=0).translate("x", asin="A", field="f")
         assert result.status == "failed" and result.attempts == 2
 
 
@@ -74,6 +86,6 @@ def test_qwen_401_malformed_and_empty_do_not_retry_forever():
             calls.append(1)
             return response
         result = QwenMTProvider(api_key="k", transport=transport, max_retries=3,
-                                backoff_seconds=0).translate("x", asin="A", field="f")
+                                backoff_seconds=0, rate=0).translate("x", asin="A", field="f")
         assert result.status == "failed"
         assert len(calls) == 1

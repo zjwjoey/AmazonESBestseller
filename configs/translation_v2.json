@@ -6,6 +6,8 @@
   "protocol": "openai_compatible",
   "timeout": 60,
   "max_retries": 2,
+  "backoff_seconds": 5,
+  "rate": 0.5,
   "fields": [
     "title_es_raw",
     "brand",

@@ -240,6 +240,17 @@ class TranslationService:
                 "attempt_count": 0, "last_error": None, "qa_issues": issues,
                 "translated_at": self._now()}
 
+    def _deterministic_brand_result(self, *, asin: str, source_field: str,
+                                    target: str, text: str) -> Dict[str, Any]:
+        """Brands are identity evidence, not machine-translation content."""
+        return {"asin": asin, "field": source_field, "target_field": target,
+                "source_text": text, "source_hash": source_hash(text),
+                "translated_text": text, "translation_status": "success",
+                "qa_status": "pass", "provider": "deterministic",
+                "model": "identity-v1", "schema_version": self.schema_version,
+                "prompt_version": self.prompt_version, "attempt_count": 0,
+                "last_error": None, "qa_issues": [], "translated_at": self._now()}
+
     def selected_fields(self, record: Dict[str, Any], fields: Optional[Sequence[str]] = None) -> List[tuple[str, str, str]]:
         requested = set(fields or ())
         selected: List[tuple[str, str, str]] = []
@@ -295,6 +306,8 @@ class TranslationService:
                         and not ((cached.get("translation_status") == "partial" and repair_partial)
                                  or (cached.get("translation_status") in {"failed", "qa_failed"}
                                      and repair_failed)):
+                    continue
+                if source in {"brand", "brand_es"}:
                     continue
                 if source == "specification_es" and specification_is_deterministic(text):
                     continue
@@ -365,6 +378,12 @@ class TranslationService:
                     self.cache.put(key, structured_result)
                     output_fields[target] = structured_result
                     continue
+            if source_field in {"brand", "brand_es"}:
+                result = self._deterministic_brand_result(
+                    asin=asin, source_field=source_field, target=target, text=text)
+                self.cache.put(key, result)
+                output_fields[target] = result
+                continue
             deterministic_result = self._deterministic_spec_result(
                 asin=asin, source_field=source_field, target=target, text=text)
             if deterministic_result:

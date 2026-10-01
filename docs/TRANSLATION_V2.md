@@ -22,7 +22,9 @@ config or cache. The request protocol is explicit (`openai_compatible` or
 The endpoint can be configured in `configs/translation_v2.json` or with
 `QWEN_API_ENDPOINT` / `DASHSCOPE_API_ENDPOINT`. When running from the isolated
 worktree, set `PYTHONPATH=<worktree>\\src` so the CLI does not accidentally load
-an older editable install from another checkout.
+an older editable install from another checkout. The default serial limiter is
+`rate=0.5` calls/second; `--rate` or config can override it. Retry backoff is
+5 seconds, then 10 seconds by default.
 
 ## CLI
 

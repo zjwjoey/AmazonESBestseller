@@ -32,7 +32,8 @@ class QwenMTProvider(TranslationProvider):
                  model: str = "qwen-mt-flash",
                  protocol: Optional[str] = None,
                  timeout: float = 60.0, max_retries: int = 2,
-                 backoff_seconds: float = 1.0,
+                 backoff_seconds: float = 5.0,
+                 rate: float = 0.5,
                  transport: Optional[Transport] = None):
         self.api_key = api_key or os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
         self.endpoint = endpoint or os.getenv("QWEN_API_ENDPOINT") or os.getenv(
@@ -42,6 +43,11 @@ class QwenMTProvider(TranslationProvider):
         self.timeout = timeout
         self.max_retries = max(0, int(max_retries))
         self.backoff_seconds = max(0.0, float(backoff_seconds))
+        self.rate = float(rate)
+        if self.rate < 0:
+            raise ValueError("rate must be >= 0 calls per second")
+        self._min_interval = 1.0 / self.rate if self.rate else 0.0
+        self._last_request_at: Optional[float] = None
         self.transport = transport or self._http_transport
 
     @property
@@ -65,6 +71,17 @@ class QwenMTProvider(TranslationProvider):
             return {"status_code": exc.code, "body": parsed}
         except (URLError, TimeoutError, OSError) as exc:
             return {"status_code": 599, "error": str(exc)}
+
+    def _wait_for_rate_limit(self) -> None:
+        """Keep serial attempts at or below the configured calls/second rate."""
+        if not self._min_interval:
+            return
+        now = time.monotonic()
+        if self._last_request_at is not None:
+            remaining = self._min_interval - (now - self._last_request_at)
+            if remaining > 0:
+                time.sleep(remaining)
+        self._last_request_at = time.monotonic()
 
     @classmethod
     def _language_name(cls, value: str, fallback: str) -> str:
@@ -126,6 +143,7 @@ class QwenMTProvider(TranslationProvider):
                    "Content-Type": "application/json"}
         last_error = "provider request failed"
         for attempt in range(1, self.max_retries + 2):
+            self._wait_for_rate_limit()
             try:
                 response = self.transport(self.endpoint, headers, payload, self.timeout)
             except Exception as exc:  # injectable transports may surface timeout/HTTP errors
