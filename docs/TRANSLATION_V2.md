@@ -68,3 +68,12 @@ The confirmation line reports SKU count, field count, cache hits, source-missing
 records and the estimated provider request count. Category text shares one TM
 namespace across category levels, so identical Spanish labels are translated
 once per run.
+
+## Migration and compatibility
+
+`translate-ds` and its ASIN-level DeepSeek cache remain unchanged. Translation V2
+does not silently import or rewrite that cache: start with a separate
+`translation_v2_cache.json`, and let source hashes populate field entries and
+the persistent TM incrementally. Existing `products.json`, Spanish evidence,
+and Excel export inputs remain valid; V2 emits a flat Chinese overlay plus an
+auditable `fields` envelope for downstream integration.
