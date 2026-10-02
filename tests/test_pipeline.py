@@ -55,6 +55,11 @@ def test_enrich_normalizes_fields():
     assert p["采集类目中文"] == "收纳盒套装"
 
 
+def test_enrich_rejects_rating_above_five():
+    d = dict(DETAIL[0], rating_raw="5.05 de 5 estrellas")
+    assert normalize_product(dict(RANKING[0], **d))["rating"] is None
+
+
 def test_enrich_derives_chinese_category_levels_for_display():
     p = enrich_products(RANKING, DETAIL)[0]
     assert p["category_l1_zh"] == "家居与厨房"

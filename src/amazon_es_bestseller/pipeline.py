@@ -60,7 +60,8 @@ def _to_rating_num(s) -> Optional[str]:
     if not m:
         return None
     try:
-        return str(float(m.group(1).replace(",", ".")))
+        value = float(m.group(1).replace(",", "."))
+        return str(value) if 0 <= value <= 5 else None
     except ValueError:
         return None
 
