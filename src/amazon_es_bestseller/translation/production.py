@@ -75,6 +75,8 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
                 if not isinstance(value, Mapping):
                     continue
                 candidate = deepcopy(dict(value))
+                if isinstance(shard, Mapping) and shard.get("batch_id"):
+                    candidate.setdefault("batch_id", shard.get("batch_id"))
                 old = current_fields.get(field)
                 if old and old.get("source_hash") and candidate.get("source_hash") \
                         and old.get("source_hash") != candidate.get("source_hash"):
@@ -248,6 +250,7 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
     base.update({key: result.get(key) for key in (
         "translated_text", "candidate_text", "qa_status", "qa_issues", "last_error",
         "resolution_source", "provider", "provider_alias", "model", "attempt_count",
+        "batch_id", "schema_version", "prompt_version",
     ) if key in result})
     base["candidate_text"] = base.get("candidate_text") or base.get("translated_text") or ""
     base["resolution_method"] = result.get("resolution_source") or result.get("provider")
@@ -354,6 +357,7 @@ def build_production_state(production_input: Mapping[str, Any],
         item["qa_issues"] = field.get("qa_issues", [])
         item["resolution_method"] = field.get("resolution_method")
         item["provider"] = field.get("provider")
+        item["batch_id"] = field.get("batch_id")
     return {
         "state_version": PRODUCTION_STATE_VERSION,
         "created_at": _now(),

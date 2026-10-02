@@ -277,3 +277,23 @@ def test_cli_translation_batches_accumulate_and_repeat_idempotently(tmp_path):
     shards = list((run_dir / "translations" / "shards").glob("batch_*.json"))
     assert set(aggregate) == {"B000000001", "B000000002"}
     assert len(shards) == 2
+
+
+def test_regression_namespace_cannot_become_production_state(tmp_path):
+    master = tmp_path / "master.json"
+    master.write_text(json.dumps([{"asin": "B000000001", "brand": "Marca"}], ensure_ascii=False), encoding="utf-8")
+    production_dir = tmp_path / "runtime" / "translation_v2" / "production" / "run-a"
+    regression_dir = tmp_path / "runtime" / "translation_v2" / "regression" / "run-700"
+    regression_dir.mkdir(parents=True)
+    (regression_dir / "translation_results.json").write_text(json.dumps({
+        "B000000001": {"asin": "B000000001", "fields": {
+            "brand": {"translated_text": "回归结果", "translation_status": "success", "qa_status": "pass"}
+        }}}, ensure_ascii=False), encoding="utf-8")
+    assert main(["translation-production", "--stage", "build-input", "--master", str(master),
+                 "--run-dir", str(production_dir), "--run-id", "run-a"]) == 0
+    assert main(["translation-production", "--stage", "preclean", "--run-dir", str(production_dir),
+                 "--run-id", "run-a"]) == 0
+    with pytest.raises(SystemExit, match="production-translate"):
+        main(["translation-production", "--stage", "promote", "--run-dir", str(production_dir),
+              "--run-id", "run-a"])
+    assert not (production_dir / "state" / "translation_state.json").exists()
