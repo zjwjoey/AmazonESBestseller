@@ -219,7 +219,8 @@ class ProviderPool:
                     pending.append(task)
                     entries.append((task.key, None))
 
-            active: dict[Future[PoolResult], str] = {}
+            active: dict[Future[PoolResult], tuple[str, str]] = {}
+            active_aliases: set[str] = set()
             resolved: dict[str, PoolResult] = {}
             external: dict[str, Future[PoolResult]] = {}
 
@@ -241,13 +242,20 @@ class ProviderPool:
                             pending.popleft()
                             continue
                         try:
-                            alias = self._choose_alias()
+                            # Do not queue another task for a provider that
+                            # already has an admitted request.  The provider
+                            # lock serializes execution, but admission itself
+                            # must stop at the health boundary; otherwise a
+                            # fast first failure can admit a third request
+                            # while the other initial probe is still running.
+                            alias = self._choose_alias(active_aliases)
                         except RuntimeError:
                             break
                         future = executor.submit(self._execute_task, task, alias)
                         self._inflight[task.key] = future
                     pending.popleft()
-                    active[future] = task.key
+                    active[future] = (task.key, alias)
+                    active_aliases.add(alias)
                     admitted = True
                 return admitted
 
@@ -255,7 +263,8 @@ class ProviderPool:
             while active:
                 done, _ = wait(tuple(active), return_when=FIRST_COMPLETED)
                 for future in done:
-                    key = active.pop(future)
+                    key, alias = active.pop(future)
+                    active_aliases.discard(alias)
                     result = future.result()
                     resolved[key] = result
                     with self._lock:
