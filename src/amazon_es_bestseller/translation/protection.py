@@ -6,12 +6,25 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List
 
 TOKEN_RE = re.compile(
-    r"(?<!\w)(?:\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)+\b"
-    r"|\d+(?:[.,]\d+)?\s*(?i:ml|cl|dl|l|g|kg|mg|mm|cm|m|w|kw|v|a|hz|ghz|mah|bar|psi|°c|%)"
+    # Numeric value+unit must win before the generic hyphenated model branch.
+    # Otherwise ``400ml-Lubrica`` is captured as one protected token and the
+    # Spanish verb cannot be normalized after provider restoration.
+    r"(?<!\w)(?:\d+(?:[.,]\d+)?\s*(?i:millilitros?|mililitros?|centilitros?|decilitros?|litros?|"
+    r"miligramos?|gramos?|kilogramos?|centímetros?|centimetros?|milímetros?|milimetros?|"
+    r"metros?|kilómetros?|kilometros?|kilovatios?|vatios?|voltios?|amperios?|hercios?|"
+    r"hertzios?|megahercios?|gigahercios?|grados?\s+celsius|grados?\s+cent[ií]grados?|"
+    r"pulgadas?|inches?|inch|"
+    r"mAh|Ah|ml|cl|dl|l(?!\.)|grs?|gm|g|kg|mg|mm|cm|km|m|w|kw|v|(?-i:A)|hz|"
+    r"ghz|mah|bar|psi|°c|(?i:db|decibelios?|lm|lumens?|lúmenes?|lumenes?|pcs|piezas?|unidades?|conteo|grosor|f\.)|%)(?!-\d)"
+    r"|\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)+\b"
     r"|\d+(?:[.,]\d+)?(?:[×x*]\d+(?:[.,]\d+)?)+(?:\s*(?i:mm|cm|m))?"
-    r"|\b\d+(?:[.,]\d+)?\b(?!\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])"
+    r"|\b\d+(?:[.,]\d+)?\b(?!(?:[.,]\d))(?!\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])"
     r"|(?i:usb[- ]?c|usb[- ]?a|pd\s*\d+(?:\.\d+)?|ip\w+|e\d{2}|a\d|m\d+|[a-z]{1,8}-\d{1,4})"
-    r"|\b[A-Z]{2,}[A-Z0-9]*(?:[-/]?[A-Z0-9]+)*\b|\b[A-Z0-9]{8,10}\b)(?!\w)")
+    r"|(?<!\w)[A-Z][A-Z0-9&-]{1,}\s+\d+(?:\.\d+)?(?!\w)"
+    r"|(?i:\b(?:LED|LCD|OLED|IPS|USB|GPS|DECT|FSC|BPA|PVC|PET|RFID|NFC|UVA|UVB|UV)\b)"
+    r"|\b[A-Z][A-Z0-9]*(?:[-/][A-Z0-9]+)+\b|"
+    r"\b[A-Z]{2,}\d+[A-Z0-9+.-]*(?=\s|[^\w]|$)|"
+    r"\b(?=[A-Z0-9]{8,10}\b)(?=[A-Z0-9]*\d)[A-Z0-9]{8,10}\b)(?!\w)")
 PLACEHOLDER_RE = re.compile(r"__T(\d{4})__")
 # Values under these labels are identity evidence, not prose.  Protecting the
 # value (rather than only an uppercase token such as ``OEM``) keeps model

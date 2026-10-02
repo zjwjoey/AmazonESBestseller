@@ -15,11 +15,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from .cache import TranslationCache
-from .protection import protect, restore
+from .protection import ProtectedText, protect, restore
 from .providers.base import TranslationProvider
 from .qa import build_qa_report, qa_field
 from .schemas import TRANSLATION_SCHEMA_VERSION
-from .terminology import (postprocess, deterministic_specification,
+from .terminology import (postprocess, contextual_postprocess, strip_display_brand,
+                          normalize_unit_display, deterministic_specification,
                           specification_is_deterministic)
 from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
@@ -182,9 +183,12 @@ class TranslationService:
             row = resolve_exact(self.dictionary, text, kind="packaging", field="selected_variant_es")
             resolution = ((row["resolved_text"], row["resolution_source"], "dictionary-v1")
                           if row["status"] == "resolved" else None)
-        elif source_field == "specification_es" and specification_is_deterministic(text):
-            translated = deterministic_specification(text)
-            resolution = (translated, "rule", "rules-v1") if translated and translated != text else None
+        elif source_field == "specification_es":
+            # Use one deterministic path so specification fields receive the
+            # same hard QA as provider results; do not mark a lossy rule output
+            # as a successful translation merely because it is non-empty.
+            return self._deterministic_spec_result(
+                asin=asin, source_field=source_field, target=target, text=text)
         else:
             resolution = None
         if resolution is None:
@@ -240,12 +244,14 @@ class TranslationService:
                                and repair_failed)):
                 memory = None
             item_issues = []
+            item_candidate_text = ""
             if memory:
                 item_status = memory.get("translation_status", "success")
                 statuses.append(item_status)
                 item_issues = list(memory.get("qa_issues") or [])
                 issues.extend({"item_index": index, **issue} for issue in item_issues)
                 rendered_value = str(memory.get("translated_text") or "")
+                item_candidate_text = str(memory.get("candidate_text") or rendered_value)
                 item_provider = memory.get("provider", "cached")
                 item_alias = memory.get("provider_alias")
                 item_model = memory.get("model", self.provider.model)
@@ -255,6 +261,7 @@ class TranslationService:
                 # Identity values (models, OEM/part numbers, company names,
                 # UPC/EAN/ASIN/ISBN) never need machine translation.
                 rendered_value = value
+                item_candidate_text = rendered_value
                 item_status = "success"
                 statuses.append(item_status)
                 item_provider = "deterministic"
@@ -268,6 +275,7 @@ class TranslationService:
                     if label is not None else None)
                 if deterministic and deterministic["status"] == "resolved":
                     rendered_value = deterministic["resolved_text"]
+                    item_candidate_text = rendered_value
                     item_status = "success"
                     statuses.append(item_status)
                     item_provider = "deterministic"
@@ -290,19 +298,57 @@ class TranslationService:
                     item_provider = response.provider or self.provider.name
                     item_alias = (response.raw or {}).get("provider_alias")
                     item_model = response.model or self.provider.model
+                    item_candidate_text = response.text or ""
                     item_attempts = response.attempts
                     item_resolution = "provider"
                     if response.status == "success" and response.text:
-                        qa = qa_field(protected, response.text, value, field=source_field,
-                                      brand=brand)
                         normalized = postprocess(source_field, response.text, value)
-                        restored, restore_issues = restore(protected, normalized)
-                        item_issues = list(qa["issues"]) + list(restore_issues)
+                        restored, _ = restore(protected, normalized)
+                        restored = normalize_unit_display(restored)
+                        restored = contextual_postprocess(source_field, restored, value)
+                        qa = qa_field(protected, restored, value, field=source_field,
+                                      brand=brand,
+                                      # ``para`` is a frequent legitimate
+                                      # connector in short bullet fragments;
+                                      # retain the high-signal residual checks
+                                      # without failing the whole item on it.
+                                      allowed_residual=["para"])
+                        item_issues = list(qa["issues"])
+                        rendered_value = restored
+                        if (not hasattr(self.provider, "pool")
+                                and any(issue.get("code") == "PROTECTED_TOKEN_MISSING"
+                                        for issue in item_issues)):
+                            retry = self.provider.translate(
+                                value, asin=asin, field=source_field,
+                                source_language=self.source_language,
+                                target_language=self.target_language,
+                                context={"target_field": target, "item_index": index,
+                                         "label": label,
+                                         "translation_unit_field": unit_field,
+                                         "protected_tokens": [],
+                                         "retry_reason": "protected_token_missing",
+                                         "schema_version": self.schema_version,
+                                         "prompt_version": self.prompt_version})
+                            attempts += retry.attempts
+                            item_attempts += retry.attempts
+                            if retry.status == "success" and retry.text:
+                                retry_normalized = postprocess(source_field, retry.text, value)
+                                retry_restored = normalize_unit_display(retry_normalized)
+                                retry_restored = contextual_postprocess(source_field, retry_restored, value)
+                                retry_qa = qa_field(
+                                    protected, retry_restored, value, field=source_field,
+                                    brand=brand, allowed_residual=["para"])
+                                item_candidate_text = retry.text
+                                rendered_value = retry_restored
+                                item_issues = list(retry_qa["issues"])
+                                item_provider = retry.provider or item_provider
+                                item_alias = (retry.raw or {}).get("provider_alias")
+                                item_model = retry.model or item_model
                         item_status = "qa_failed" if item_issues else "success"
                         statuses.append(item_status)
                         issues.extend({"item_index": index, **issue} for issue in item_issues)
-                        rendered_value = postprocess(source_field, restored, value)
                         memory_payload = {
+                            "candidate_text": item_candidate_text,
                             "translated_text": rendered_value,
                             "translation_status": item_status,
                             "qa_status": "qa_failed" if item_issues else "pass",
@@ -349,7 +395,8 @@ class TranslationService:
                                    "provider": item_provider, "model": item_model,
                                    "provider_alias": item_alias,
                                    "attempt_count": item_attempts,
-                                   "resolution_source": item_resolution})
+                                   "resolution_source": item_resolution,
+                                   "candidate_text": item_candidate_text})
             if label is not None:
                 label_zh = (self.dictionary.lookup_attribute_label(label.strip())
                             or LABEL_ES_ZH.get(label.strip().casefold(), label.strip()))
@@ -392,21 +439,12 @@ class TranslationService:
         translated = deterministic_specification(text)
         if not translated or translated == text:
             return None
-        source_numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
-        result_numbers = re.findall(r"\d+(?:[.,]\d+)?", translated)
-        issues = []
-        if sorted(source_numbers) != sorted(result_numbers):
-            issues.append({"code": "NUMERIC_MISMATCH", "source": source_numbers,
-                           "result": result_numbers})
-        protected = protect(text)
-        for value in protected.tokens.values():
-            # Deterministic rules are allowed to convert units (cm→厘米,
-            # ml→毫升); numeric equality above covers the invariant here.
-            if re.search(r"(?:ml|cl|dl|kg|mg|mm|cm|kw|hz|ghz|mah|bar|psi|°c|%)$",
-                         value.strip().lower()):
-                continue
-            if value not in translated:
-                issues.append({"code": "PROTECTED_TOKEN_MISSING", "token": value})
+        # Deterministic output is already rendered from the immutable source;
+        # use the source as the QA envelope instead of requiring provider-style
+        # placeholders for every numeric token.
+        protected = ProtectedText(text)
+        qa = qa_field(protected, translated, text, field=source_field)
+        issues = list(qa["issues"])
         status = "qa_failed" if issues else "success"
         return {"asin": asin, "field": source_field, "target_field": target,
                 "source_text": text, "source_hash": source_hash(text),
@@ -415,6 +453,7 @@ class TranslationService:
                 "provider": "deterministic", "model": "rules-v1",
                 "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                 "attempt_count": 0, "last_error": None, "qa_issues": issues,
+                "candidate_text": translated,
                 "translated_at": self._now()}
 
     def _deterministic_brand_result(self, *, asin: str, source_field: str,
@@ -468,15 +507,30 @@ class TranslationService:
         for record in subset:
             asin = str(record.get("asin") or "").strip().upper()
             selected = self.selected_fields(record, fields)
-            if not selected:
-                envelopes = record.get("fields") if isinstance(record.get("fields"), dict) else {}
-                blocked = sum(1 for envelope in envelopes.values()
-                              if isinstance(envelope, dict) and envelope.get("source_text")
-                              and not envelope.get("translate_allowed"))
-                if blocked:
-                    review_blocked += blocked
-                else:
-                    source_missing += 1
+            envelopes = record.get("fields") if isinstance(record.get("fields"), dict) else None
+            if envelopes is not None:
+                # Prepared records carry one admission envelope per canonical
+                # source field.  Count the gate at field level even when the
+                # same SKU has other fields eligible for translation; the old
+                # record-level fallback silently hid blocked detail/bullet
+                # fields whenever ``selected`` was non-empty.
+                requested = set(fields or ())
+                for source_field, envelope in envelopes.items():
+                    if not isinstance(envelope, dict):
+                        continue
+                    target = self.field_map.get(source_field)
+                    if requested and source_field not in requested and target not in requested:
+                        continue
+                    has_source = bool(envelope.get("source_text") or envelope.get("clean_text"))
+                    if not has_source:
+                        source_missing += 1
+                    elif not envelope.get("translate_allowed"):
+                        review_blocked += 1
+            elif not selected:
+                # Raw/non-preclean inputs retain the historical record-level
+                # fallback; raw rows are normally admitted through Pre-Clean
+                # before this method is called by the CLI.
+                source_missing += 1
             for source, target, text in selected:
                 digest = source_hash(text)
                 key = self.cache.key(asin, source, digest, self.provider.name,
@@ -595,6 +649,7 @@ class TranslationService:
                 result = {"asin": asin, "field": source_field, "target_field": target,
                           "source_text": text, "source_hash": digest,
                           "translated_text": memory["translated_text"],
+                          "candidate_text": memory.get("candidate_text", memory["translated_text"]),
                           "translation_status": "cached" if memory["translation_status"] == "success" else memory["translation_status"],
                           "qa_status": memory["qa_status"],
                           "provider": memory.get("provider", self.provider.name),
@@ -602,7 +657,8 @@ class TranslationService:
                           "model": memory.get("model", self.provider.model),
                           "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                           "attempt_count": 0, "last_error": None,
-                          "qa_issues": list(memory["qa_issues"]), "translated_at": self._now()}
+                          "qa_issues": list(memory["qa_issues"]),
+                          "translated_at": self._now()}
             else:
                 # Protect numbers and explicit identity tokens.  Brand and ASIN
                 # are always protected even when translating another field.
@@ -617,6 +673,7 @@ class TranslationService:
                 result = {"asin": asin, "field": source_field, "target_field": target,
                           "source_text": text, "source_hash": digest,
                           "translated_text": response.text or "", "translation_status": response.status,
+                          "candidate_text": response.text or "",
                           "qa_status": "pending", "provider": response.provider or self.provider.name,
                           "provider_alias": (response.raw or {}).get("provider_alias"),
                           "model": response.model or self.provider.model,
@@ -624,28 +681,66 @@ class TranslationService:
                           "attempt_count": response.attempts, "last_error": response.error,
                           "qa_issues": [], "translated_at": self._now()}
                 if response.status == "success" and response.text:
-                    qa = qa_field(protected, response.text, text, field=source_field,
-                                  brand=brand, allowed_residual=[brand])
-                    # Always restore protected identity/number tokens before
-                    # exposing the result, including when QA flags an issue.
-                    # Keeping placeholders in translated_text makes review
-                    # output unusable and can poison translation memory.
                     # Keep protected identity values as placeholders while the
                     # terminology normalizer runs; otherwise a brand such as
-                    # ``Metal`` would be translated as a material term.
+                    # ``Metal`` would be translated as a material term. QA is
+                    # deliberately flag-only: the raw provider candidate is
+                    # preserved and no facts are appended or deleted here.
                     normalized = postprocess(source_field, response.text, text)
-                    restored, restore_issues = restore(protected, normalized)
+                    restored, _ = restore(protected, normalized)
+                    restored = normalize_unit_display(restored)
+                    restored = contextual_postprocess(source_field, restored, text)
+                    if source_field in {"title_es_raw", "title_es", "title"}:
+                        restored = strip_display_brand(restored, brand)
+                    qa = qa_field(protected, restored, text, field=source_field,
+                                  brand=brand, allowed_residual=[brand])
                     result["translated_text"] = restored
                     result["qa_status"] = qa["qa_status"]
                     result["qa_issues"] = list(qa["issues"])
-                    if restore_issues:
-                        result["qa_issues"].extend(restore_issues)
+                    # Qwen-MT can occasionally drop one opaque placeholder
+                    # while preserving the same technical token when the
+                    # source is sent literally.  Retry this narrow condition
+                    # once with the immutable source text; never synthesize a
+                    # missing fact from the source in the QA result.
+                    if (not hasattr(self.provider, "pool")
+                            and any(issue.get("code") == "PROTECTED_TOKEN_MISSING"
+                                    for issue in result["qa_issues"])):
+                        retry = self.provider.translate(
+                            text, asin=asin, field=source_field,
+                            source_language=self.source_language,
+                            target_language=self.target_language,
+                            context={"target_field": target,
+                                     "protected_tokens": [],
+                                     "retry_reason": "protected_token_missing",
+                                     "schema_version": self.schema_version,
+                                     "prompt_version": self.prompt_version})
+                        result["attempt_count"] += retry.attempts
+                        if retry.status == "success" and retry.text:
+                            retry_normalized = postprocess(source_field, retry.text, text)
+                            retry_restored = contextual_postprocess(
+                                source_field,
+                                normalize_unit_display(retry_normalized),
+                                text,
+                            )
+                            if source_field in {"title_es_raw", "title_es", "title"}:
+                                retry_restored = strip_display_brand(retry_restored, brand)
+                            retry_qa = qa_field(
+                                protected, retry_restored, text, field=source_field,
+                                brand=brand, allowed_residual=[brand])
+                            result["candidate_text"] = retry.text
+                            result["translated_text"] = retry_restored
+                            result["qa_status"] = retry_qa["qa_status"]
+                            result["qa_issues"] = list(retry_qa["issues"])
+                            result["provider"] = retry.provider or result["provider"]
+                            result["provider_alias"] = (retry.raw or {}).get("provider_alias")
+                            result["model"] = retry.model or result["model"]
                     if result["qa_issues"]:
                         result["translation_status"] = "qa_failed"
                     # Translation memory deduplicates provider calls even when
                     # the identical source later needs the same QA review.
                     memory_payload = {
                         "translated_text": result["translated_text"],
+                        "candidate_text": result.get("candidate_text", result["translated_text"]),
                         "translation_status": result["translation_status"],
                         "qa_status": result["qa_status"],
                         "qa_issues": list(result["qa_issues"]),
@@ -676,27 +771,58 @@ class TranslationService:
                     continue
                 if target in present_targets:
                     continue
-                output_fields[target] = {
-                    "asin": asin, "field": source_field, "target_field": target,
-                    "source_text": "", "source_hash": "", "translated_text": "",
-                    "translation_status": "source_missing", "qa_status": "source_missing",
-                    "provider": self.provider.name, "model": self.provider.model,
-                    "schema_version": self.schema_version, "prompt_version": self.prompt_version,
-                    "attempt_count": 0, "last_error": None, "qa_issues": [],
-                    "translated_at": self._now(),
-                }
+                envelope = ((record.get("fields") or {}).get(source_field)
+                            if isinstance(record.get("fields"), dict) else None)
+                if isinstance(envelope, dict):
+                    source_value = str(envelope.get("source_text") or
+                                       envelope.get("clean_text") or "")
+                else:
+                    source_value = ""
+                if source_value and isinstance(envelope, dict) and not envelope.get("translate_allowed"):
+                    preclean_issues = [
+                        {"code": "PRECLEAN_REVIEW_REQUIRED", "issue": issue,
+                         "severity": envelope.get("severity", "P2")}
+                        for issue in (envelope.get("issues") or ["NEEDS_REVIEW"])
+                    ]
+                    output_fields[target] = {
+                        "asin": asin, "field": source_field, "target_field": target,
+                        "source_text": source_value, "source_hash": source_hash(source_value),
+                        "translated_text": "", "candidate_text": "",
+                        "translation_status": "preclean_blocked", "qa_status": "review_required",
+                        "provider": "preclean", "model": "preclean-v1",
+                        "resolution_source": "preclean_review",
+                        "preclean_status": envelope.get("clean_status"),
+                        "preclean_issues": list(envelope.get("issues") or []),
+                        "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                        "attempt_count": 0, "last_error": None, "qa_issues": preclean_issues,
+                        "translated_at": self._now(),
+                    }
+                else:
+                    output_fields[target] = {
+                        "asin": asin, "field": source_field, "target_field": target,
+                        "source_text": "", "source_hash": "", "translated_text": "",
+                        "translation_status": "source_missing", "qa_status": "source_missing",
+                        "provider": self.provider.name, "model": self.provider.model,
+                        "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                        "attempt_count": 0, "last_error": None, "qa_issues": [],
+                        "translated_at": self._now(),
+                    }
+                present_targets.add(target)
         statuses = [v.get("translation_status") for v in output_fields.values()]
-        if not statuses:
-            overall = "source_missing"
-        elif all(s == "source_missing" for s in statuses):
-            overall = "source_missing"
-        elif all(s in {"success", "cached"} for s in statuses):
-            overall = "success"
-        elif any(s in {"success", "cached"} for s in statuses):
+        blocked = "preclean_blocked" in statuses
+        actionable_statuses = [status for status in statuses
+                              if status not in {"source_missing", "preclean_blocked"}]
+        if not statuses or not actionable_statuses:
+            overall = "preclean_blocked" if blocked else "source_missing"
+        elif blocked and all(s in {"success", "cached"} for s in actionable_statuses):
             overall = "partial"
-        elif any(s == "qa_failed" for s in statuses):
+        elif all(s in {"success", "cached"} for s in actionable_statuses):
+            overall = "success"
+        elif any(s in {"success", "cached"} for s in actionable_statuses):
+            overall = "partial"
+        elif any(s == "qa_failed" for s in actionable_statuses):
             overall = "qa_failed"
-        elif any(s == "pending" for s in statuses):
+        elif any(s == "pending" for s in actionable_statuses):
             overall = "pending"
         else:
             overall = "failed"

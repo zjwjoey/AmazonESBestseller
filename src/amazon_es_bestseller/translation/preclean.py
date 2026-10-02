@@ -463,8 +463,14 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     cross_field_issues.append(row)
                     issue_counts["CROSS_FIELD_OVERLAP"] += 1
                     record_issues.append("CROSS_FIELD_OVERLAP")
-                    mark_field_review(left, "CROSS_FIELD_OVERLAP")
-                    mark_field_review(right, "CROSS_FIELD_OVERLAP")
+                    # Repeated facts across title/spec/details/bullets are
+                    # normal on Amazon. Keep the evidence flag for audit, but
+                    # do not block either field or enqueue it for review.
+                    for field in (left, right):
+                        clean_fields[field]["issues"] = sorted(
+                            set(clean_fields[field].get("issues", []))
+                            | {"CROSS_FIELD_OVERLAP"}
+                        )
         brand = clean_fields["brand"]["clean_text"]
         category_values = [clean_fields[field]["clean_text"] for field in ("category_l1", "category_l2", "category_l3", "leaf_category")]
         misplaced = False
@@ -488,7 +494,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 mark_field_review("title_es_raw", "POSSIBLE_FIELD_MISPLACEMENT", status="SUSPICIOUS")
             if len(clean_fields["specification_es"]["clean_text"]) > 8000:
                 mark_field_review("specification_es", "POSSIBLE_FIELD_MISPLACEMENT", status="SUSPICIOUS")
-        severe = {"CROSS_FIELD_OVERLAP", "DUPLICATE_UNIT", "MULTIPLE_UNITS", "GLUED_UNIT",
+        severe = {"DUPLICATE_UNIT", "MULTIPLE_UNITS", "GLUED_UNIT",
                   "CONTRADICTORY_CAPACITY"}
         status = "NEEDS_REVIEW" if any(issue in severe for issue in record_issues) else (
             "SUSPICIOUS" if "POSSIBLE_FIELD_MISPLACEMENT" in record_issues else (
@@ -505,7 +511,8 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         queued_before = len(review_queue)
         if status not in {"CLEAN", "NORMALIZED"}:
             for field, result in clean_fields.items():
-                blocking = [issue for issue in result.get("issues", []) if issue != "SAFE_DUPLICATE"]
+                blocking = [issue for issue in result.get("issues", [])
+                            if issue not in {"SAFE_DUPLICATE", "CROSS_FIELD_OVERLAP"}]
                 if result["clean_status"] not in {"CLEAN", "NORMALIZED", "SOURCE_MISSING"} or blocking:
                     review_queue.append({"asin": asin, "field": field, "source_text": result["source_text"],
                                          "clean_text": result["clean_text"], "clean_status": result["clean_status"],

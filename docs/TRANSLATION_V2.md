@@ -89,11 +89,18 @@ count and still require `YES` confirmation.
 
 ## Statuses and recovery
 
-Fields use `pending`, `success`, `cached`, `partial`, `failed`, `source_missing`
-and `qa_failed` semantics. A provider failure on one field does not discard
+Fields use `pending`, `success`, `cached`, `partial`, `failed`, `source_missing`,
+`preclean_blocked` and `qa_failed` semantics. A provider failure on one field does not discard
 other fields. Cache writes use a temporary file, fsync and atomic replace. A
 corrupt cache is preserved with a `.corrupt-*` suffix and the run starts with
 an empty cache rather than silently accepting malformed data.
+
+The current schema (`translation-v2.25`) treats repeated facts across fields as
+non-blocking audit warnings, permits the title display policy to omit the
+separately stored brand, and validates source/target negation parity. Detail
+labels are dictionary-backed with unknown Spanish labels retained verbatim;
+raw Spanish evidence is never overwritten. The schema bump invalidates older
+cache entries so these rules are applied on the next run.
 
 `product_details` structured attributes keep label order and translate values
 item-by-item; structured bullet arrays/newline bullets keep their boundaries

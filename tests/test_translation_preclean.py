@@ -55,17 +55,18 @@ def test_description_metadata_is_flagged_not_repaired():
     assert field["translate_allowed"] is False
 
 
-def test_cross_field_review_blocks_both_fields_and_enters_queue():
+def test_cross_field_overlap_is_a_non_blocking_audit_warning():
     result = audit_records([{
         "asin": "B00000004",
         "title_es_raw": "Taladro profesional 18V",
         "specification_es": "Taladro profesional 18V",
     }])
     row = result["translation_input_records"][0]
-    assert row["record_status"] == "NEEDS_REVIEW"
-    assert row["fields"]["title_es_raw"]["translate_allowed"] is False
-    assert row["fields"]["specification_es"]["translate_allowed"] is False
-    assert result["review_queue"]
+    assert row["record_status"] == "CLEAN"
+    assert row["fields"]["title_es_raw"]["translate_allowed"] is True
+    assert row["fields"]["specification_es"]["translate_allowed"] is True
+    assert "CROSS_FIELD_OVERLAP" in row["fields"]["title_es_raw"]["issues"]
+    assert not result["review_queue"]
 
 
 def test_exact_detail_duplicates_are_removed_only_from_derived_rows():

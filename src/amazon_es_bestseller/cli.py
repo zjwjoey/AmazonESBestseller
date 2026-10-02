@@ -817,21 +817,21 @@ def cmd_translate(args) -> None:
                 print("  Provider %s: model=%s rate=%s" %
                       (alias, spec.get("model", "qwen-mt-flash"), spec.get("rate", 0.5)))
         _save_json(plan, args.out)
-        print("translate dry-run%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、rate=%.3g/s（未调用 API）→ %s" %
+        print("translate dry-run%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、review_blocked %d、rate=%.3g/s（未调用 API）→ %s" %
               (" [parallel-providers]" if pool is not None else "",
                plan["total_records"], plan["total_fields"], plan["cache_hits"],
                plan["translation_memory_hits"], plan["estimated_api_requests"],
-               plan["source_missing"], provider.rate, args.out))
+               plan["source_missing"], plan["review_blocked"], provider.rate, args.out))
         return
     if args.offline:
         raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
     plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit,
                         repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    print("translate V2 即将调用 %s%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、model=%s、rate=%.3g/s" %
+    print("translate V2 即将调用 %s%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、review_blocked %d、model=%s、rate=%.3g/s" %
           (provider.name, " [parallel-providers]" if pool is not None else "",
            plan["total_records"], plan["total_fields"], plan["cache_hits"],
            plan["translation_memory_hits"], plan["estimated_api_requests"],
-           plan["source_missing"], model, provider.rate))
+           plan["source_missing"], plan["review_blocked"], model, provider.rate))
     if pool is not None:
         print("Parallel workers = %d" % pool.max_workers)
         for alias, spec in ((item.get("name") or item.get("alias"), item)

@@ -45,3 +45,36 @@ def test_bare_numeric_tokens_are_protected_without_swallowing_units():
     protected = protect("Pack de 6, 500 ml")
     assert "6" in protected.tokens.values()
     assert "500 ml" in protected.tokens.values()
+
+
+def test_composite_technical_version_is_protected_as_one_token():
+    protected = protect("Conectada DGT 3.0")
+    assert "DGT 3.0" in protected.tokens.values()
+    issues = validate_translation(protected, "Conectada DGT 3", "Conectada DGT 3.0")
+    assert any(item["code"] == "PROTECTED_TOKEN_MISSING" for item in issues)
+
+
+def test_decimal_inch_value_is_protected_atomically():
+    protected = protect("Pantalla 2.5 Inch LCD")
+    assert "2.5 Inch" in protected.tokens.values()
+    assert "2" not in protected.tokens.values()
+
+
+def test_numeric_unit_does_not_swallow_hyphenated_spanish_term():
+    protected = protect("Spray 400ml-Lubrica")
+    assert "400ml" in protected.tokens.values()
+    assert "400ml-Lubrica" not in protected.tokens.values()
+
+
+def test_decibel_unit_is_protected_and_counted_as_a_unit():
+    protected = protect("Alarma 110dB")
+    assert "110dB" in protected.tokens.values()
+    assert not validate_translation(protected, "报警 110dB", "Alarma 110dB")
+
+
+def test_uppercase_spanish_bullet_headings_are_not_protected_as_models():
+    protected = protect("PARA GUARDAR LOS CHUPETES. MATERIAL DE ALTA CALIDAD. LED H-GUARD")
+    assert "PARA" not in protected.tokens.values()
+    assert "MATERIAL" not in protected.tokens.values()
+    assert "LED" in protected.tokens.values()
+    assert "H-GUARD" in protected.tokens.values()

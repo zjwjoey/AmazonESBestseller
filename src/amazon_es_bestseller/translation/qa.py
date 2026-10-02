@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Dict, Iterable, List
 
-from .schemas import TranslationFieldResult
+from .schemas import TRANSLATION_SCHEMA_VERSION, TranslationFieldResult
 from .validators import validate_translation
 
 
@@ -38,14 +38,16 @@ def build_qa_report(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
         "empty_translation": "EMPTY_TRANSLATION",
         "spanish_residual": "SPANISH_RESIDUAL",
         "added_numbers": "ADDED_NUMBER",
+        "negation_errors": "NEGATION_MISMATCH",
     }
-    for key in ("pending", "success", "cached", "partial", "failed", "source_missing", "qa_failed",
+    for key in ("pending", "success", "cached", "partial", "failed", "source_missing",
+                "preclean_blocked", "qa_failed",
                 "numeric_errors", "unit_errors", "protected_token_missing",
                 "brand_abnormal", "empty_translation", "spanish_residual",
-                "added_numbers"):
+                "added_numbers", "negation_errors"):
         counts.setdefault(key, 0)
     for alias, code in aliases.items():
         # Keep the human-facing aggregate aligned with the canonical issue code.
         counts[alias] = counts.get(code, 0)
-    return {"schema_version": "translation-v2.1", "counts": dict(counts),
+    return {"schema_version": TRANSLATION_SCHEMA_VERSION, "counts": dict(counts),
             "issues": issues, "status": "pass" if not issues else "qa_failed"}

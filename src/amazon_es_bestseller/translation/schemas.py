@@ -7,7 +7,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
-TRANSLATION_SCHEMA_VERSION = "translation-v2.1"
+# v2.25 adds a conservative source/target negation guard on top of v2.24.
+# v2.24 separates non-blocking cross-field overlap warnings from hard
+# preclean blockers, aligns title no-brand QA with the display policy, and
+# narrows uppercase-token protection so ordinary Spanish bullet headings can
+# be translated. Old cache entries must not silently bypass these rules.
+# Old cache entries must not silently bypass the new dictionary/rule behavior.
+TRANSLATION_SCHEMA_VERSION = "translation-v2.25"
 
 
 @dataclass

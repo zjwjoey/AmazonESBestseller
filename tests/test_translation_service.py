@@ -38,6 +38,14 @@ class EmptyProvider(FakeProvider):
         return ProviderResponse(provider=self.name, model=self.model, status="success", text="")
 
 
+class MissingProtectedTokenThenLiteralProvider(FakeProvider):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((asin, field, text))
+        if "__T" in text:
+            return ProviderResponse(text="中文", provider=self.name, model=self.model)
+        return ProviderResponse(text="中文 UPF50+", provider=self.name, model=self.model)
+
+
 class SlowProvider(FakeProvider):
     def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         self.calls.append((asin, field, text))
@@ -74,6 +82,30 @@ def test_service_isolates_failed_fields(tmp_path):
     assert row["fields"]["feature_bullets_zh"]["translation_status"] == "failed"
 
 
+def test_source_missing_fields_are_neutral_for_record_status(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    result = service.translate_records(
+        [{"asin": "B00000001", "title_es_raw": "Bolsa"}],
+        fields=["title_es_raw", "description_es"],
+    )
+    row = result["records"]["B00000001"]
+    assert row["fields"]["description_zh"]["translation_status"] == "source_missing"
+    assert row["translation_status"] == "success"
+
+
+def test_service_resolves_structured_unit_spec_without_provider_drift(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([{
+        "asin": "B00000001", "specification_es": "Voltaje: 9 Voltios / Peso: 495 Gramos",
+    }])
+    field = result["records"]["B00000001"]["fields"]["specification_zh"]
+    assert not provider.calls
+    assert field["provider"] == "deterministic"
+    assert "9V" in field["translated_text"]
+    assert "495克" in field["translated_text"]
+
+
 def test_empty_provider_response_is_reported_as_qa_failure(tmp_path):
     result = TranslationService(EmptyProvider(), TranslationCache(tmp_path / "cache.json")).translate_records([
         {"asin": "B00000001", "title_es_raw": "Taladro"}
@@ -81,6 +113,30 @@ def test_empty_provider_response_is_reported_as_qa_failure(tmp_path):
     field = result["records"]["B00000001"]["fields"]["title_zh"]
     assert field["translation_status"] == "qa_failed"
     assert {issue["code"] for issue in field["qa_issues"]} == {"EMPTY_TRANSLATION"}
+
+
+def test_missing_protected_token_retries_with_literal_source(tmp_path):
+    provider = MissingProtectedTokenThenLiteralProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "title_es_raw": "Parasol Protección UPF50+"}
+    ])
+    field = result["records"]["B00000001"]["fields"]["title_zh"]
+    assert field["translation_status"] == "success"
+    assert field["qa_status"] == "pass"
+    assert "UPF50+" in field["translated_text"]
+    assert len(provider.calls) == 2
+
+
+def test_structured_missing_protected_token_keeps_retry_result(tmp_path):
+    provider = MissingProtectedTokenThenLiteralProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001", "feature_bullets_raw": ["Protección UPF50+"]}
+    ])
+    field = result["records"]["B00000001"]["fields"]["feature_bullets_zh"]
+    assert field["translation_status"] == "success"
+    assert "UPF50+" in field["translated_text"]
+    assert field["items"][0]["candidate_text"] == "中文 UPF50+"
+    assert len(provider.calls) == 2
 
 
 def test_service_dry_run_never_calls_provider(tmp_path):
@@ -103,8 +159,61 @@ def test_service_consumes_preclean_fields_and_respects_admission(tmp_path):
     provider = FakeProvider()
     service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
     plan = service.plan(prepared)
-    assert plan["total_fields"] == 1
+    assert plan["total_fields"] == 3
+    assert plan["review_blocked"] == 0
     assert not provider.calls
+
+
+def test_plan_counts_preclean_gate_fields_when_other_fields_are_selected(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    prepared = [{
+        "asin": "B00000001",
+        "fields": {
+            "title_es_raw": {"source_text": "Taladro", "clean_text": "Taladro",
+                              "translate_allowed": True},
+            "product_details": {"source_text": "Color: Rojo", "clean_text": "Color: Rojo",
+                                 "translate_allowed": True},
+            "feature_bullets": {"source_text": "Primero", "clean_text": "Primero",
+                                 "translate_allowed": True},
+            "specification_es": {"source_text": "Tamaño ambiguo", "clean_text": "",
+                                  "translate_allowed": False},
+            "product_description": {"source_text": "", "clean_text": "",
+                                     "translate_allowed": False},
+        },
+    }]
+    plan = service.plan(prepared, fields=["title_es_raw", "product_details",
+                                           "feature_bullets", "specification_es",
+                                           "product_description"])
+    assert plan["review_blocked"] == 1
+    assert plan["source_missing"] == 1
+    assert plan["total_fields"] >= 1
+
+
+def test_translation_preserves_preclean_review_blocked_source(tmp_path):
+    provider = FakeProvider()
+    provider.response_text = "中文"
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    prepared = [{
+        "asin": "B00000001",
+        "fields": {
+            "title_es_raw": {"source_text": "Taladro", "clean_text": "Taladro",
+                              "translate_allowed": True},
+            "specification_es": {"source_text": "Tamaño ambiguo", "clean_text": "",
+                                  "clean_status": "NEEDS_REVIEW",
+                                  "issues": ["CROSS_FIELD_OVERLAP"],
+                                  "translate_allowed": False},
+        },
+    }]
+    result = service.translate_records(
+        prepared, fields=["title_es_raw", "specification_es"])
+    row = result["records"]["B00000001"]
+    blocked = row["fields"]["specification_zh"]
+    assert blocked["translation_status"] == "preclean_blocked"
+    assert blocked["source_text"] == "Tamaño ambiguo"
+    assert blocked["resolution_source"] == "preclean_review"
+    assert row["translation_status"] == "partial"
+    assert result["qa_report"]["counts"]["preclean_blocked"] == 1
 
 
 def test_parallel_qa_failed_does_not_fail_over_to_provider_b(tmp_path):
@@ -153,7 +262,9 @@ def test_preclean_brand_is_used_for_protection_across_scalar_translation(tmp_pat
         provider_input = provider.calls[0][2]
         assert brand not in provider_input
         assert "__T" in provider_input
-        assert brand in field["translated_text"]
+        # Brand identity remains in the dedicated brand/source fields; the
+        # Chinese display name follows the no-brand presentation policy.
+        assert brand not in field["translated_text"]
 
 
 def test_parallel_unknown_category_deduplicates_across_levels(tmp_path):
@@ -470,6 +581,18 @@ def test_known_specification_uses_deterministic_rules_before_provider(tmp_path):
     assert not provider.calls
     assert row["translation_status"] == "success"
     assert "尺寸" in row["specification_zh"] and "容量" in row["specification_zh"]
+
+
+def test_deterministic_specification_qa_blocks_lost_thickness(tmp_path):
+    provider = FakeProvider()
+    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+        {"asin": "B00000001",
+         "specification_es": "Dimensiones del producto: 120l. x 80an. x 0,5Grosor centímetros"}
+    ])
+    field = result["records"]["B00000001"]["fields"]["specification_zh"]
+    assert field["translation_status"] == "success"
+    assert field["qa_status"] == "pass"
+    assert field["translated_text"] == "产品尺寸：120×80×0.5厘米"
 
 
 def test_repair_failed_bypasses_persistent_failed_memory(tmp_path):

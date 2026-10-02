@@ -1,6 +1,17 @@
 import json
+from pathlib import Path
 
 from amazon_es_bestseller.cli import main
+
+
+def test_translation_config_uses_preclean_canonical_field_names():
+    config = json.loads((Path(__file__).parents[1] / "configs" / "translation_v2.json").read_text(encoding="utf-8"))
+    assert set(config["fields"]) >= {
+        "feature_bullets", "product_description", "product_details",
+        "selected_variation_raw",
+    }
+    assert not {"feature_bullets_es", "description_es", "product_details_es",
+                "selected_variant_es"}.intersection(config["fields"])
 
 
 def test_translate_cli_dry_run_is_offline_and_reports_plan(tmp_path, capsys):
@@ -12,7 +23,9 @@ def test_translate_cli_dry_run_is_offline_and_reports_plan(tmp_path, capsys):
     plan = json.loads(out.read_text(encoding="utf-8"))
     assert plan["estimated_api_requests"] == 1
     assert plan["cache_hits"] == 0
-    assert "dry-run" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "dry-run" in output
+    assert "review_blocked" in output
 
 
 def test_translate_cli_accepts_internal_research_csv(tmp_path, capsys):
@@ -59,9 +72,21 @@ def test_translate_cli_consumes_preclean_wrapper(tmp_path):
     out = tmp_path / "plan.json"
     products.write_text(json.dumps({"clean_schema_version": "preclean-v1", "records": [{
         "asin": "B00000001", "clean_schema_version": "preclean-v1",
-        "fields": {"title_es_raw": {"source_text": "Taladro", "clean_text": "Taladro",
-                                       "translate_allowed": True}},
+        "fields": {
+            "title_es_raw": {"source_text": "Taladro", "clean_text": "Taladro",
+                              "translate_allowed": True},
+            "product_details": {"source_text": "Color: Rojo", "clean_text": "Color: Rojo",
+                                 "translate_allowed": True},
+            "feature_bullets": {"source_text": "Primero", "clean_text": "Primero",
+                                 "translate_allowed": True},
+            "selected_variation_raw": {"source_text": "Unidad", "clean_text": "Unidad",
+                                        "translate_allowed": True},
+        },
     }]}, ensure_ascii=False), encoding="utf-8")
     assert main(["--offline", "translate", "--products", str(products),
                  "--out", str(out), "--dry-run"]) == 0
-    assert json.loads(out.read_text(encoding="utf-8"))["total_fields"] == 1
+    plan = json.loads(out.read_text(encoding="utf-8"))
+    assert plan["total_fields"] == 3
+    assert {row["source_field"] for row in plan["fields"]} == {
+        "title_es_raw", "product_details", "feature_bullets"
+    }

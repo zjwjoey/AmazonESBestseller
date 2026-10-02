@@ -16,6 +16,20 @@ def test_dictionary_service_uses_one_field_aware_lookup_surface():
     assert resolve_exact(service, "Unidad", kind="packaging")["resolution_source"] == "dictionary"
 
 
+def test_automotive_polysemy_uses_approved_category_mappings():
+    service = DictionaryService()
+    expected = {
+        "Bombas": "泵",
+        "Matrículas": "车牌",
+        "Faros": "汽车大灯",
+        "Lunas delanteras": "前挡风玻璃",
+        "Hojas de repuesto": "替换雨刷片",
+        "Parasoles": "汽车遮阳挡",
+    }
+    for source, target in expected.items():
+        assert service.lookup_category(source) == target
+
+
 def test_identity_values_are_not_translated_as_materials():
     rendered = render_details_zh([
         {"label_raw": "Marca", "value_raw": "Metal"},
@@ -34,7 +48,7 @@ def test_unidad_and_technical_tokens_keep_source_facts():
 
 def test_split_dictionaries_are_present_in_source_package():
     expected = {"categories", "attribute_labels", "units", "materials", "colors",
-                "booleans", "packaging", "protected_terms"}
+                "booleans", "packaging", "protected_terms", "contextual_terms"}
     assert expected == {path.stem for path in PACKAGE_DICTIONARIES.glob("*.json")}
 
 
