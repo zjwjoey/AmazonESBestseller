@@ -18,6 +18,7 @@ def test_parse_three_rows(bestsellers_grid_html):
     assert records[0] == {
         "index": 0,
         "asin": "B078C6QR1C",
+        "ranking_asin": "B078C6QR1C",
         "category_l1": "Hogar y cocina",
         "category_l2": "Almacenamiento y organización",
         "category_l3": "Juegos de recipientes",
@@ -31,6 +32,12 @@ def test_parse_three_rows(bestsellers_grid_html):
         "ranking_source_category_path": "Hogar y cocina > Almacenamiento y organización > Juegos de recipientes",
         "ranking_page_number": 1,
         "collected_at": T,
+        "ranking_product_url_raw": "/dp/B078C6QR1C",
+        "ranking_product_url_normalized": "https://www.amazon.es/dp/B078C6QR1C",
+        "ranking_link_asin": "B078C6QR1C",
+        "ranking_link_identity_status": "MATCH",
+        "ranking_rank": 1,
+        "ranking_rank_raw": "#1",
     }
     assert records[1]["bestseller_rank"] == 2
     assert records[2]["asin"] == "B07RN64P2R"

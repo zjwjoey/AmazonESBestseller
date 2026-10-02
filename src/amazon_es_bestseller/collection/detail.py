@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import time
+from datetime import datetime
 from typing import Callable, List, Optional
 
 from bs4 import BeautifulSoup
@@ -693,7 +694,9 @@ def verify_asin_on_page(url: str, asin: str) -> bool:
 
 
 def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
-                    should_stop: Optional[Callable[[], bool]] = None) -> List[dict]:
+                    should_stop: Optional[Callable[[], bool]] = None,
+                    request_urls: Optional[dict] = None,
+                    execution_context: Optional[dict] = None) -> List[dict]:
     """串行采集详情页：原始 HTML 落盘 html/<asin>.html + 结果 details.json。
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
@@ -721,6 +724,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
 
     details: List[dict] = []
     failed: List[str] = []
+    request_urls = request_urls or {}
+    execution_context = execution_context or {}
     checkpoint_dir = os.path.join(str(out_dir), "checkpoints")
     quarantine_root = os.path.join(str(out_dir), "quarantine")
     total = len(asins)
@@ -736,6 +741,32 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
         for source in (path, meta_path):
             if os.path.exists(source):
                 shutil.move(source, os.path.join(target, os.path.basename(source)))
+
+    def checkpoint(asin, payload):
+        """Persist the legacy checkpoint plus optional planner evidence."""
+        enriched = dict(payload)
+        record = enriched.get("record") if isinstance(enriched.get("record"), dict) else {}
+        for key in ("final_url", "resolved_asin", "parent_asin", "identity_status",
+                    "detail_status", "detail_schema_version", "status_code",
+                    "initial_access_state", "access_state"):
+            if record.get(key) is not None:
+                enriched.setdefault(key, record[key])
+        context = execution_context.get(asin) or {}
+        for key in ("snapshot_id", "ranking_asin", "ranking_product_url_raw",
+                    "action", "attempt"):
+            if context.get(key) is not None:
+                enriched.setdefault(key, context[key])
+        enriched.setdefault("requested_asin", asin)
+        enriched.setdefault("timestamp", datetime.now().isoformat(timespec="seconds"))
+        if context.get("preferred_request_url"):
+            enriched.setdefault("requested_url", context["preferred_request_url"])
+        if enriched.get("final_url"):
+            match = re.search(r"/dp/([A-Z0-9]{10})(?:[/?#]|$)",
+                              str(enriched["final_url"]), re.I)
+            if match:
+                enriched.setdefault("resolved_asin", match.group(1).upper())
+        write_checkpoint(checkpoint_dir, asin, enriched)
+
     for asin in asins:
         if should_stop is not None and should_stop():
             raise AccessStopError("其他工作槽触发访问限制，停止新的详情请求")
@@ -755,7 +786,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             cached_url = meta.get("final_url") or ""
             if cached_url and not verify_asin_on_page(cached_url, asin):
                 quarantine_invalid(asin, path, meta_path)
-                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "asin_mismatch",
+                checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
                                  "error": "缓存详情页 ASIN 不一致", "final_url": cached_url,
                                  "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "asin_mismatch")
@@ -780,7 +811,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 # visible browser will then pause on a live challenge until a
                 # human clears it; no cached challenge is treated as success.
                 quarantine_invalid(asin, path, meta_path)
-                write_checkpoint(checkpoint_dir, asin, {
+                checkpoint(asin, {
                     "asin": asin, "status": "challenge_cached",
                     "access_state": parsed_state.value,
                     "source": "cache_quarantined_for_manual_assist",
@@ -789,7 +820,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             else:
                 if classification != "VALID_PRODUCT_PAGE":
                     quarantine_invalid(asin, path, meta_path)
-                    write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
+                    checkpoint(asin, {"asin": asin, "status": "invalid",
                                      "classification": classification, "source": "cache",
                                      "observed_page_asins": _page_asin_evidence(html)})
                     progress(asin, "invalid")
@@ -799,13 +830,21 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 rec["access_state"] = parsed_state.value
                 rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
                 rec["resumed_from_html"] = True
+                rec["requested_asin"] = asin
+                rec["resolved_asin"] = asin
+                rec["identity_status"] = "MATCH"
+                rec["detail_status"] = "SUCCESS"
+                rec["requested_url"] = (execution_context.get(asin, {}).get("preferred_request_url")
+                                         or cached_url or ("https://www.amazon.es/dp/" + asin))
                 details.append(rec)
-                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "success",
+                checkpoint(asin, {"asin": asin, "status": "success",
                                  "source": "cache", "record": rec})
                 progress(asin, "success")
                 continue
         try:
-            status = session.goto("https://www.amazon.es/dp/" + asin)
+            requested_url = str(request_urls.get(asin) or
+                                ("https://www.amazon.es/dp/" + asin))
+            status = session.goto(requested_url)
             session.wait_for_product_page()
             session.wait_for_price_text()
             time.sleep(1.5)
@@ -826,20 +865,27 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
                                       % (status, asin, len(details)))
             except AccessStopError as exc:
-                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "access_stop",
+                checkpoint(asin, {"asin": asin, "status": "access_stop",
+                                 "http_status": status,
+                                 "initial_access_state": initial_state.value,
+                                 "final_access_state": state.value,
                                  "access_state": state.value, "error": str(exc)})
                 progress(asin, "access_stop")
                 raise
             final_url = str(getattr(session.page, "url", "") or "")
             if final_url and not verify_asin_on_page(final_url, asin):
                 quarantine_invalid(asin, path, meta_path)
-                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "asin_mismatch",
+                checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
+                                 "http_status": status,
+                                 "initial_access_state": initial_state.value,
+                                 "final_access_state": state.value,
                                  "error": "详情页 ASIN 不一致", "final_url": final_url,
                                  "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "asin_mismatch")
                 continue
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"status_code": status, "final_url": final_url,
+                           "requested_url": requested_url, "requested_asin": asin,
                            "initial_access_state": initial_state.value,
                            "access_state": state.value,
                            "recovered_from_challenge": recovered}, f,
@@ -851,7 +897,10 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                              "recovered_from_challenge": recovered})
             if classification != "VALID_PRODUCT_PAGE":
                 quarantine_invalid(asin, path, meta_path)
-                write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "invalid",
+                checkpoint(asin, {"asin": asin, "status": "invalid",
+                                 "http_status": status,
+                                 "initial_access_state": initial_state.value,
+                                 "final_access_state": parsed_state.value,
                                  "classification": classification, "source": "network",
                                  "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "invalid")
@@ -861,7 +910,17 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             rec["access_state"] = parsed_state.value
             rec["recovered_from_challenge"] = recovered
             details.append(rec)
-            write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "success",
+            rec["requested_asin"] = asin
+            rec["requested_url"] = requested_url
+            rec["final_url"] = final_url
+            rec["resolved_asin"] = (re.search(r"/dp/([A-Z0-9]{10})(?:[/?#]|$)",
+                                               final_url, re.I).group(1).upper()
+                                    if re.search(r"/dp/([A-Z0-9]{10})(?:[/?#]|$)",
+                                                 final_url, re.I) else asin)
+            rec["identity_status"] = ("MATCH" if rec["resolved_asin"] == asin
+                                       else "IDENTITY_MISMATCH")
+            rec["detail_status"] = "SUCCESS"
+            checkpoint(asin, {"asin": asin, "status": "success",
                              "source": "network", "record": rec})
             progress(asin, "success")
             session.wait_between_requests()
@@ -869,7 +928,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             raise  # 访问受限：按策略停止，受限页证据已落盘
         except Exception as exc:
             failed.append(asin)  # 瞬时网络故障：失败隔离，不重试不绕过
-            write_checkpoint(checkpoint_dir, asin, {"asin": asin, "status": "failed",
+            checkpoint(asin, {"asin": asin, "status": "failed",
                              "error_type": type(exc).__name__, "error": str(exc)})
             progress(asin, "failed")
             print("详情采集失败 ASIN %s：%s（跳过，重跑将补齐）"

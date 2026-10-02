@@ -17,7 +17,7 @@ import os
 import re
 from datetime import datetime
 from typing import Callable, List, Mapping, Optional
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -149,6 +149,25 @@ def _monthly_bought_raw(item) -> str:
     return re.sub(r"\s+", " ", match.group(1)).strip() if match else ""
 
 
+def _ranking_link_asin(raw_url: str) -> Optional[str]:
+    """Extract the ASIN from the raw product href independently of card data."""
+    # Keep the historical fixture-compatible prefix capture: real ASINs are
+    # ten characters, while a few saved offline synthetic hrefs append a
+    # suffix.  The complete href remains untouched in raw evidence.
+    match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", str(raw_url or ""), re.I)
+    return match.group(1).upper() if match else None
+
+
+def _normalize_ranking_product_url(raw_url: str, link_asin: Optional[str]) -> str:
+    """Return a safe canonical product URL without changing raw evidence."""
+    if not raw_url:
+        return ""
+    if link_asin:
+        return "https://www.amazon.es/dp/%s" % link_asin
+    absolute = urljoin("https://www.amazon.es", str(raw_url))
+    return absolute.split("?", 1)[0].split("#", 1)[0]
+
+
 def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> list[dict]:
     """畅销榜页 HTML → 排行榜记录列表（每 ASIN × 页面一行）。
 
@@ -165,12 +184,19 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
     source_type = _ranking_source_type(source_url, browse_node)
     records = []
     for i, item in enumerate(soup.select("#gridItemRoot")):
-        a = item.select_one('a[href*="/dp/"]')
-        if a is None:
+        a = item.select_one('a[href*="/dp/"]') or item.select_one("a[href]")
+        raw_product_url = a.get("href") if a is not None else ""
+        link_asin = _ranking_link_asin(raw_product_url)
+        card = item if item.get("data-asin") else item.select_one("[data-asin]")
+        card_asin = str(card.get("data-asin") or "").strip().upper() if card else ""
+        asin = (card_asin if re.fullmatch(r"[A-Z0-9]{10}", card_asin) else link_asin)
+        if not asin:
             continue
-        m = re.search(r"/dp/([A-Z0-9]{10})", a.get("href", ""), re.I)
-        if not m:
-            continue
+        link_status = (
+            "NO_PRODUCT_URL" if not raw_product_url else
+            "NO_ASIN_IN_URL" if not link_asin else
+            "MATCH" if link_asin == asin else "MISMATCH"
+        )
         badge = item.select_one("span.a-badge-text, span.zg-bdg-text")
         rank = None
         rank_raw = None
@@ -181,7 +207,8 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
                 rank = int(bm.group(1))
         record = {
             "index": i,
-            "asin": m.group(1).upper(),
+            "asin": asin,
+            "ranking_asin": asin,
             "category_l1": l1,
             "category_l2": l2,
             "category_l3": l3,
@@ -195,7 +222,15 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "ranking_source_category_path": source_category_path,
             "ranking_page_number": page_number,
             "collected_at": collected_at,
+            "ranking_product_url_raw": raw_product_url or "",
+            "ranking_product_url_normalized": _normalize_ranking_product_url(
+                raw_product_url or "", link_asin),
+            "ranking_link_asin": link_asin,
+            "ranking_link_identity_status": (
+                "LINK_ASIN_MISMATCH" if link_status == "MISMATCH" else link_status),
         }
+        record["ranking_rank"] = rank
+        record["ranking_rank_raw"] = rank_raw
         monthly = _monthly_bought_raw(item)
         if monthly:
             record["monthly_bought_raw"] = monthly

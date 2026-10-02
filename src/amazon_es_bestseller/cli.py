@@ -257,6 +257,76 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
           % (len(rankings), len(details), len(reparsed), len(plan["collect"])))
 
 
+def _load_snapshot_records(path: str) -> list:
+    data = _load_json(path)
+    if isinstance(data, dict):
+        if isinstance(data.get("rankings"), list):
+            return data["rankings"]
+        if isinstance(data.get("records"), list):
+            return data["records"]
+    return data if isinstance(data, list) else []
+
+
+def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
+    """Freeze a latest ranking observation; ``--rankings-file`` is offline-only."""
+    from .monitoring.snapshot import build_ranking_snapshot, collect_ranking_snapshot
+    output_root = Path(args.out_dir)
+    if args.rankings_file:
+        records = _load_snapshot_records(args.rankings_file)
+        sources = sorted({str(row.get("ranking_source_url") or "") for row in records
+                          if isinstance(row, dict) and row.get("ranking_source_url")})
+        result = build_ranking_snapshot(records, output_root, planned_sources=sources,
+                                        source_statuses={url: "NORMAL" for url in sources})
+    else:
+        if not args.urls:
+            parser.error("ranking-snapshot 需要 --urls 或 --rankings-file")
+        if args.offline:
+            parser.error("ranking-snapshot --offline 需要 --rankings-file；不会访问 Amazon")
+        from .access.browser import BrowserSession
+        with BrowserSession(headless=not args.headful,
+                            profile_dir=args.profile_dir or None) as session:
+            result = collect_ranking_snapshot(args.urls, session, output_root,
+                                              pages_per_url=args.pages_per_url)
+    print("ranking snapshot %s：%s（%d 条记录）" %
+          (result["manifest"]["snapshot_status"], result["path"],
+           result["manifest"]["record_count"]))
+
+
+def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
+    """Build and write a completely offline incremental detail plan."""
+    from .monitoring.detail_planner import build_detail_plan, write_detail_plan
+    snapshot = _load_snapshot_records(args.snapshot)
+    details = _load_json(args.details) if args.details else []
+    state = _load_json(args.state) if args.state else []
+    plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None)
+    paths = write_detail_plan(plan, args.out_dir)
+    print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
+
+
+def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
+    """Execute only actions already present in a saved detail plan."""
+    from .collection.detail_executor import NETWORK_ACTIONS, execute_detail_plan
+    from .access.browser import BrowserSession
+    plan_records = _load_json(args.plan)
+    if isinstance(plan_records, list):
+        plan = {"records": plan_records}
+    else:
+        plan = plan_records
+    pending = [row for row in plan.get("records", [])
+               if row.get("detail_action") in NETWORK_ACTIONS]
+    if args.offline and pending:
+        parser.error("detail-run --offline 发现 %d 个网络动作；计划未执行且不会访问 Amazon" % len(pending))
+    if not pending:
+        result = execute_detail_plan(plan, None, args.out_dir)
+    else:
+        with BrowserSession(headless=not args.headful,
+                            profile_dir=args.profile_dir or None) as session:
+            result = execute_detail_plan(plan, session, args.out_dir)
+    print("detail run 完成：计划网络动作 %d，执行记录 %d → %s" %
+          (result["requested_count"], len(result["records"]),
+           Path(args.out_dir) / "detail_execution_manifest.json"))
+
+
 def _batch_countdown(seconds: int, category_name: str) -> None:
     """Keep the process alive during inter-category cooldown with a live timer."""
     remaining = max(0, int(seconds))
@@ -1147,6 +1217,30 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--manifest", default="", help="详情采集 ASIN manifest JSON（与 --rankings-file 配合）")
     c.add_argument("--progress", default="", help="可选：逐 ASIN 写入运行进度 JSON")
     c.set_defaults(func=lambda a, p=c: cmd_collect(a, p))
+
+    rs = sub.add_parser("ranking-snapshot", help="冻结最新榜单快照；--rankings-file 可离线运行")
+    rs.add_argument("--urls", nargs="*", default=[], help="已审核 Amazon Bestseller 来源 URL")
+    rs.add_argument("--rankings-file", default="", help="离线冻结已有榜单 JSON")
+    rs.add_argument("--out-dir", default="runtime/ranking_snapshots")
+    rs.add_argument("--pages-per-url", type=int, default=1)
+    rs.add_argument("--headful", action="store_true")
+    rs.add_argument("--profile-dir", default="")
+    rs.set_defaults(func=lambda a, p=rs: cmd_ranking_snapshot(a, p))
+
+    dp = sub.add_parser("detail-plan", help="离线：按榜单快照与详情缓存生成增量详情计划")
+    dp.add_argument("--snapshot", required=True, help="rankings.json 或快照 records JSON")
+    dp.add_argument("--details", default="", help="已有详情缓存 JSON")
+    dp.add_argument("--state", default="", help="详情状态 JSON")
+    dp.add_argument("--html-dir", default="", help="保存的详情 HTML 目录，用于 schema 离线重解析决策")
+    dp.add_argument("--out-dir", required=True, help="detail_plan.json/csv/summary 输出目录")
+    dp.set_defaults(func=lambda a, p=dp: cmd_detail_plan(a, p))
+
+    dr = sub.add_parser("detail-run", help="按已保存的 detail plan 执行明确网络动作")
+    dr.add_argument("--plan", required=True, help="detail_plan.json 或包含 records 的 JSON")
+    dr.add_argument("--out-dir", required=True)
+    dr.add_argument("--headful", action="store_true")
+    dr.add_argument("--profile-dir", default="")
+    dr.set_defaults(func=lambda a, p=dr: cmd_detail_run(a, p))
 
     bc = sub.add_parser("batch-collect", help="联网：按计划分批采集，类目间保持倒计时冷却并自动续跑")
     bc.add_argument("--plan", required=True, help="来源页提取计划 JSON")

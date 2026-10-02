@@ -38,6 +38,7 @@ QaIssue = namedtuple("QaIssue", ["code", "severity", "field", "message"])
 RANKING_KEYS = (
     "index",
     "asin",
+    "ranking_asin",
     "category_l1",
     "category_l2",
     "category_l3",
@@ -58,6 +59,14 @@ RANKING_KEYS = (
     "research_category",
     "collection_batch",
     "collection_time",
+    "ranking_product_url_raw",
+    "ranking_product_url_normalized",
+    "ranking_link_asin",
+    "ranking_link_identity_status",
+    "ranking_rank",
+    "ranking_rank_raw",
+    "observed_at",
+    "snapshot_id",
 )
 
 #: 商品表规范键（docs/ARCHITECTURE.md §23 / DATA_MODEL.md）
