@@ -23,6 +23,11 @@ from .schemas import TRANSLATION_SCHEMA_VERSION
 PRODUCTION_INPUT_VERSION = "production-translation-input-v1"
 PRODUCTION_STATE_VERSION = "production-translation-state-v1"
 PROMPT_VERSION = "amazon-es-retail-v2"
+RELEASE_STATUSES = {"READY", "PARTIAL", "REVIEW_REQUIRED", "BLOCKED"}
+NON_RELEASE_PROMOTION_STATUSES = {
+    "QA_BLOCKED", "PRECLEAN_BLOCKED", "PROVIDER_FAILED", "POLICY_BLOCKED",
+    "PENDING", "MANUAL_REVIEW", "SOURCE_CHANGED",
+}
 
 
 def _hash(value: Any) -> str:
@@ -35,6 +40,107 @@ def _hash(value: Any) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _as_record_map(translations: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None) -> dict[str, dict[str, Any]]:
+    if not translations:
+        return {}
+    values = translations.values() if isinstance(translations, Mapping) else translations
+    result: dict[str, dict[str, Any]] = {}
+    for item in values:
+        if not isinstance(item, Mapping):
+            continue
+        asin = str(item.get("asin") or "").strip().upper()
+        if asin:
+            result[asin] = deepcopy(dict(item))
+    return result
+
+
+def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
+                             legacy_results: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None = None) -> dict[str, dict[str, Any]]:
+    """Aggregate immutable shard records by ASIN and target field.
+
+    A field is only replaced when its source hash is unchanged.  A changed
+    source is retained as a non-publishable candidate with explicit evidence,
+    so an old translation can never silently become current.
+    """
+    aggregate = _as_record_map(legacy_results)
+    for shard in shards:
+        records = shard.get("records") if isinstance(shard, Mapping) else None
+        incoming = _as_record_map(records or {})
+        for asin, new_record in incoming.items():
+            current = aggregate.setdefault(asin, {"asin": asin, "fields": {}})
+            current_fields = current.setdefault("fields", {})
+            for field, value in (new_record.get("fields") or {}).items():
+                if not isinstance(value, Mapping):
+                    continue
+                candidate = deepcopy(dict(value))
+                old = current_fields.get(field)
+                if old and old.get("source_hash") and candidate.get("source_hash") \
+                        and old.get("source_hash") != candidate.get("source_hash"):
+                    history = list(old.get("history") or [])
+                    history.append({"source_hash": old.get("source_hash"),
+                                    "translation_status": old.get("translation_status"),
+                                    "candidate_text": old.get("candidate_text"),
+                                    "updated_at": old.get("updated_at")})
+                    candidate["history"] = history
+                    candidate["translation_status"] = "source_changed"
+                    candidate["qa_status"] = "review_required"
+                    candidate["promotion_status"] = "SOURCE_CHANGED"
+                    candidate["last_error"] = {
+                        "code": "SOURCE_CHANGED",
+                        "old_source_hash": old.get("source_hash"),
+                        "new_source_hash": candidate.get("source_hash"),
+                    }
+                elif old:
+                    merged = deepcopy(dict(old))
+                    merged.update(candidate)
+                    candidate = merged
+                current_fields[field] = candidate
+            for key in ("source_record_hash", "source_record"):
+                if key in new_record:
+                    current[key] = deepcopy(new_record[key])
+            current["asin"] = asin
+    return aggregate
+
+
+def shard_batch_id(*, dataset_hash: str, selection: Mapping[str, Any],
+                   prompt_version: str, schema_version: str) -> str:
+    payload = {"dataset_hash": dataset_hash, "selection": dict(selection),
+               "prompt_version": prompt_version, "schema_version": schema_version}
+    return "batch_" + _hash(payload)[:16]
+
+
+def shard_records_equal(left: Any, right: Any) -> bool:
+    """Compare retry output while ignoring timestamps that do not change facts."""
+    volatile = {"created_at", "updated_at", "translated_at"}
+
+    def scrub(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {key: scrub(item) for key, item in value.items() if key not in volatile}
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        return value
+
+    return scrub(left) == scrub(right)
+
+
+def compute_release_status(statuses: Iterable[str]) -> str:
+    """Derive the global release gate from every field promotion status."""
+    values = {str(status or "PENDING") for status in statuses}
+    values.discard("SOURCE_MISSING")
+    if not values:
+        return "READY"
+    if values & {"QA_BLOCKED", "MANUAL_REVIEW"}:
+        return "REVIEW_REQUIRED"
+    if values & NON_RELEASE_PROMOTION_STATUSES:
+        return "BLOCKED"
+    return "READY" if values <= {"PROMOTED"} else "BLOCKED"
+
+
+def release_gate(release_candidate: Mapping[str, Any]) -> tuple[bool, str]:
+    status = str(release_candidate.get("release_status") or "BLOCKED")
+    return status == "READY", status
 
 
 def build_production_input(records: Iterable[Mapping[str, Any]], *,
@@ -115,7 +221,7 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
         "translate_allowed": bool((preclean or {}).get("translate_allowed", False)),
         "resolution_method": None, "translated_text": "", "candidate_text": "",
         "qa_status": "pending", "qa_issues": [], "promotion_status": "PENDING",
-        "final_zh": None, "last_error": None,
+        "final_zh": None, "last_error": None, "updated_at": _now(),
     }
     if not source_value:
         base.update(translation_status="source_missing", qa_status="source_missing",
@@ -128,6 +234,16 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
         return base
     if not result:
         base.update(translation_status="pending", promotion_status="PENDING")
+        return base
+    result_source_hash = str(result.get("source_hash") or "")
+    if result_source_hash and result_source_hash != str(source.get("source_hash") or ""):
+        base.update(translation_status="source_changed", qa_status="review_required",
+                    promotion_status="SOURCE_CHANGED", candidate_text=result.get("candidate_text") or
+                    result.get("translated_text") or "", last_error={
+                        "code": "SOURCE_CHANGED",
+                        "expected_source_hash": source.get("source_hash"),
+                        "result_source_hash": result_source_hash,
+                    })
         return base
     base.update({key: result.get(key) for key in (
         "translated_text", "candidate_text", "qa_status", "qa_issues", "last_error",
@@ -218,8 +334,26 @@ def build_production_state(production_input: Mapping[str, Any],
          "status": field["promotion_status"], "source_hash": field["source_hash"],
          "candidate_text": field.get("candidate_text", ""), "last_error": field.get("last_error")}
         for row in states for field in row["fields"]
-        if field["promotion_status"] in {"QA_BLOCKED", "PROVIDER_FAILED", "POLICY_BLOCKED", "MANUAL_REVIEW"}
+        if field["promotion_status"] in NON_RELEASE_PROMOTION_STATUSES
     ]
+    all_statuses = [field["promotion_status"] for row in states for field in row["fields"]]
+    global_release_status = compute_release_status(all_statuses)
+    repair_kinds = {
+        "QA_BLOCKED": "QA_REPAIR", "MANUAL_REVIEW": "QA_REPAIR",
+        "PRECLEAN_BLOCKED": "PRE_CLEAN_REVIEW", "PROVIDER_FAILED": "PROVIDER_RETRY",
+        "POLICY_BLOCKED": "POLICY_MANUAL", "PENDING": "PENDING",
+        "SOURCE_CHANGED": "SOURCE_CHANGED",
+    }
+    field_lookup = {(row["asin"], field["field"]): field
+                    for row in states for field in row["fields"]}
+    for item in repair_queue:
+        item["repair_kind"] = repair_kinds.get(item["status"], "REVIEW")
+        field = field_lookup.get((item["asin"], item["field"]), {})
+        item["translation_status"] = field.get("translation_status", "pending")
+        item["qa_status"] = field.get("qa_status", "pending")
+        item["qa_issues"] = field.get("qa_issues", [])
+        item["resolution_method"] = field.get("resolution_method")
+        item["provider"] = field.get("provider")
     return {
         "state_version": PRODUCTION_STATE_VERSION,
         "created_at": _now(),
@@ -227,5 +361,7 @@ def build_production_state(production_input: Mapping[str, Any],
         "summary": summary,
         "records": states,
         "repair_queue": repair_queue,
-        "release_candidate": {"records": release_records, "release_status": "READY" if not repair_queue else "PARTIAL"},
+        "release_candidate": {"records": release_records, "release_status": global_release_status,
+                              "release_status_reason": sorted(set(all_statuses)),
+                              "repair_queue_count": len(repair_queue)},
     }

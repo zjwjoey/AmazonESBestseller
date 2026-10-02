@@ -13,9 +13,9 @@ preclean / dictionary / translation memory
     ↓
 plan (offline)
     ↓
-canary / translate (optional real API)
+canary / translation shards (optional real API)
     ↓
-QA + repair queue
+aggregate + QA + repair queue
     ↓
 promote (only QA-passed values become final_zh)
     ↓
@@ -54,6 +54,8 @@ Production artifacts are written below
 - `preclean/`
 - `plan/`
 - `translations/`
+- `translations/shards/batch_<id>.json` (immutable, auditable batch output)
+- `translations/translation_results.json` (field-level aggregate; never the only history)
 - `state/translation_state.json`
 - `repair/repair_queue.json`
 - `release/production_release_candidate.json`
@@ -71,3 +73,42 @@ source. The prompt version participates in cache and translation-memory keys.
 The promotion gate preserves candidates and QA evidence, but only a field with
 `translation_status=success` (or `cached`), `qa_status=pass`, and no QA issues
 gets `promotion_status=PROMOTED` and a non-null `final_zh`.
+
+## Source preservation and batch recovery
+
+CSV `build-input` keeps every original column in `source_record`; the
+canonical translation projection is added as aliases and never replaces the
+source row. `ASIN` is the identity and duplicate or missing values fail fast.
+Each input has a field-level `source_hash`, record-level
+`source_record_hash`, and manifest `dataset_hash`.
+
+Every real translation batch writes an immutable shard. Aggregation merges on
+`ASIN + target_field`, so a later repair field cannot erase earlier fields.
+An identical batch is idempotent. A changed source hash is retained as
+`SOURCE_CHANGED` with old evidence and cannot be promoted silently.
+
+`--asin-list` accepts a JSON string array, a JSON array of `{"asin": ...}`
+objects, a JSON file containing either form, or a comma-separated list. Values
+are trimmed, upper-cased and deduplicated. Invalid elements fail with an
+explicit error. `--category` checks all four levels: L1, L2, L3 and leaf.
+
+## Release gate and export
+
+The global release status is derived from every field promotion status, not
+from whether `repair_queue.json` happens to be empty:
+
+- `READY`: all non-empty source fields are `PROMOTED` (empty source is
+  `SOURCE_MISSING` and remains empty).
+- `REVIEW_REQUIRED`: QA or manual-review findings exist.
+- `BLOCKED`: pending, pre-clean, provider, policy or source-change findings
+  exist.
+
+Formal Production Excel export is allowed only when the release candidate is
+`READY` and the field-closure gate has no blocking findings. Production
+`--force` is rejected. For diagnosis only, `--debug-export` writes a
+`production_debug_unreleased.xlsx`-style artifact plus a
+`release_status.json` marker with `formal_release=false`; it is not a release.
+
+The 700-SKU corpus may provide regression coverage or a legitimate translation
+memory hit, but its run state, cache namespace and release candidate are never
+used as Production state.

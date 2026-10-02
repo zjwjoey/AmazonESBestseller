@@ -503,6 +503,8 @@ class TranslationService:
         translation_memory_hits = 0
         source_missing = 0
         review_blocked = 0
+        dictionary_hits = 0
+        identity_hits = 0
         unique_requests = set()
         for record in subset:
             asin = str(record.get("asin") or "").strip().upper()
@@ -538,6 +540,10 @@ class TranslationService:
                 deterministic = self._resolve_scalar_before_provider(
                     asin=asin, source_field=source, target=target, text=text)
                 if deterministic is not None:
+                    if deterministic.get("resolution_source") == "source_preserved":
+                        identity_hits += 1
+                    elif deterministic.get("resolution_source") not in {"source_missing", None}:
+                        dictionary_hits += 1
                     continue
                 cached = self.cache.get(key)
                 memory = None
@@ -594,6 +600,9 @@ class TranslationService:
                 "translation_memory_hits": translation_memory_hits,
                 "source_missing": source_missing,
                 "review_blocked": review_blocked,
+                "dictionary_hits": dictionary_hits,
+                "identity_hits": identity_hits,
+                "tm_hits": translation_memory_hits,
                 "estimated_api_requests": len(unique_requests), "fields": rows}
 
     def _translate_record(self, record: Dict[str, Any], *, fields: Optional[Sequence[str]] = None,

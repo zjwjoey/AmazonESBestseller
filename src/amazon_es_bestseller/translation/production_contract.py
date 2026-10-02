@@ -52,6 +52,53 @@ RESEARCH_CSV_FIELDS = {
 }
 
 
+def normalize_asin_filter(value: Any) -> list[str]:
+    """Normalize a CLI/file ASIN selection without silently accepting junk."""
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise ValueError("INVALID_ASIN_FILTER_JSON:%s" % exc.msg) from exc
+            if not isinstance(parsed, list):
+                raise ValueError("INVALID_ASIN_FILTER: JSON value must be an array")
+            values = parsed
+        else:
+            values = [item for item in text.split(",") if item.strip()]
+    elif isinstance(value, (list, tuple)):
+        values = list(value)
+    else:
+        raise ValueError("INVALID_ASIN_FILTER: expected JSON array or comma-separated string")
+    normalized: list[str] = []
+    invalid: list[Any] = []
+    for item in values:
+        if isinstance(item, str):
+            asin = item.strip().upper()
+        elif isinstance(item, Mapping):
+            raw = item.get("asin") or item.get("ASIN")
+            asin = str(raw).strip().upper() if isinstance(raw, str) else ""
+        else:
+            asin = ""
+        if not asin:
+            invalid.append(item)
+            continue
+        if asin not in normalized:
+            normalized.append(asin)
+    if invalid:
+        raise ValueError("INVALID_ASIN_FILTER_ELEMENT:%s" % json.dumps(invalid, ensure_ascii=False))
+    return normalized
+
+
+def matches_category_filter(record: Mapping[str, Any], query: str) -> bool:
+    """Match a query against every canonical category level."""
+    needle = str(query or "").strip().casefold()
+    if not needle:
+        return True
+    return any(needle in str(record.get(field) or "").casefold()
+               for field in ("category_l1", "category_l2", "category_l3", "leaf_category"))
+
+
 def canonical_value(record: Mapping[str, Any], field: str) -> Any:
     """Return the first present source value without guessing across fields."""
     for alias in PRODUCTION_FIELD_ALIASES[field]:

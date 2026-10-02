@@ -226,7 +226,7 @@ class ProviderPool:
                     pending.append(task)
                     entries.append((task.key, None))
 
-            active: dict[Future[PoolResult], str] = {}
+            active: dict[Future[PoolResult], tuple[str, str]] = {}
             resolved: dict[str, PoolResult] = {}
             external: dict[str, Future[PoolResult]] = {}
 
@@ -247,14 +247,21 @@ class ProviderPool:
                             external[task.key] = existing
                             pending.popleft()
                             continue
+                        # Do not queue a second request behind an endpoint
+                        # already in-flight.  Apart from preserving the
+                        # one-request-per-provider contract, this makes the
+                        # health boundary deterministic: if the other active
+                        # endpoint fails, no extra task sneaks in before its
+                        # state update is observed.
+                        active_aliases = {value[1] for value in active.values()}
                         try:
-                            alias = self._choose_alias()
+                            alias = self._choose_alias(active_aliases)
                         except RuntimeError:
                             break
                         future = executor.submit(self._execute_task, task, alias)
                         self._inflight[task.key] = future
                     pending.popleft()
-                    active[future] = task.key
+                    active[future] = (task.key, alias)
                     admitted = True
                 return admitted
 
@@ -262,7 +269,7 @@ class ProviderPool:
             while active:
                 done, _ = wait(tuple(active), return_when=FIRST_COMPLETED)
                 for future in done:
-                    key = active.pop(future)
+                    key, _alias = active.pop(future)
                     result = future.result()
                     resolved[key] = result
                     with self._lock:

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import datetime, timezone
 from io import BytesIO
 import json
 import os
@@ -60,7 +61,11 @@ def _load_json(path: Optional[str]) -> list:
         return json.load(f)
 
 
-from .translation.production_contract import RESEARCH_CSV_FIELDS as TRANSLATION_RESEARCH_CSV_FIELDS
+from .translation.production_contract import (
+    RESEARCH_CSV_FIELDS as TRANSLATION_RESEARCH_CSV_FIELDS,
+    matches_category_filter,
+    normalize_asin_filter,
+)
 
 
 def _load_translation_products(path: Optional[str]) -> list:
@@ -80,8 +85,14 @@ def _load_translation_products(path: Optional[str]) -> list:
             raise SystemExit("Translation V2 CSV 缺少 ASIN 列: %s" % path)
         records = []
         for row in reader:
-            record = {target: (row.get(source) or "").strip()
-                      for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items()}
+            # Preserve every original CSV column for source_record/export.  A
+            # separate canonical projection is added only as aliases consumed
+            # by Translation V2; no research fact is discarded here.
+            record = {str(key): (value or "").strip() for key, value in row.items()
+                      if key is not None}
+            for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items():
+                if target not in record or not record[target]:
+                    record[target] = record.get(source, "")
             records.append(record)
     return records
 
@@ -873,6 +884,7 @@ def cmd_translation_production(args) -> None:
     """Stage the formal Spanish Master → derived Chinese production flow."""
     from .translation.production import (
         build_production_input, build_production_state, records_for_preclean,
+        merge_translation_shards, shard_batch_id, shard_records_equal, release_gate,
     )
     from .translation.preclean import audit_records, write_reports
     from .translation.schemas import TRANSLATION_SCHEMA_VERSION
@@ -946,16 +958,21 @@ def cmd_translation_production(args) -> None:
         records = list(preclean_records)
         asin_filter = set()
         if args.asin_list:
-            if Path(args.asin_list).exists():
-                asin_filter = {str(row.get("asin") or row.get("ASIN") or "").strip().upper()
-                               for row in _load_json(args.asin_list)}
-            else:
-                asin_filter = {item.strip().upper() for item in args.asin_list.split(",") if item.strip()}
+            try:
+                if Path(args.asin_list).exists():
+                    asin_value = _load_json(args.asin_list)
+                else:
+                    try:
+                        asin_value = json.loads(args.asin_list)
+                    except json.JSONDecodeError:
+                        asin_value = args.asin_list
+                asin_filter = set(normalize_asin_filter(asin_value))
+            except (ValueError, TypeError) as exc:
+                raise SystemExit(str(exc))
         if asin_filter:
             records = [row for row in records if str(row.get("asin") or "").upper() in asin_filter]
         if args.category:
-            records = [row for row in records if args.category.casefold() in str(
-                row.get("category_l1") or row.get("category_l2") or row.get("leaf_category") or "").casefold()]
+            records = [row for row in records if matches_category_filter(row, args.category)]
         records = records[max(0, args.offset):]
         if args.limit is not None:
             records = records[:max(0, args.limit)]
@@ -971,6 +988,24 @@ def cmd_translation_production(args) -> None:
             result = (service.translate_records_parallel(records, pool, fields=fields, dry_run=True)
                       if pool else service.translate_records(records, fields=fields, dry_run=True))
             plan = dict(result["summary"])
+            input_manifest = production_input.get("manifest") or {}
+            plan.update({
+                "unique_asins": len({str(row.get("asin") or "").upper() for row in records
+                                     if row.get("asin")}),
+                "dataset_hash": input_manifest.get("dataset_hash"),
+                "prompt_version": config.get("prompt_version", PROMPT_VERSION),
+                "schema_version": config.get("schema_version", TRANSLATION_SCHEMA_VERSION),
+                "selection": {"offset": args.offset, "limit": args.limit,
+                               "asin_filter": sorted(asin_filter), "category": args.category},
+                "preclean_blocked": plan.get("review_blocked", 0),
+                "dictionary_hits": plan.get("dictionary_hits", 0),
+                "identity_hits": plan.get("identity_hits", 0),
+                "cache_hits": plan.get("cache_hits", 0),
+                "tm_hits": plan.get("translation_memory_hits", 0),
+                "provider_aliases": [str(item.get("name") or item.get("alias") or "")
+                                     for item in config.get("providers", [])],
+                "model": config.get("model", getattr(provider, "model", "qwen-mt-flash")),
+            })
             if result.get("pool"):
                 plan["pool"] = result["pool"]
                 aliases = [str(item.get("name") or item.get("alias"))
@@ -990,13 +1025,39 @@ def cmd_translation_production(args) -> None:
         if not args.yes:
             raise SystemExit("production-translate 是真实 API 调用，请显式指定 --yes")
         result = (service.translate_records_parallel(records, pool, fields=fields)
-                  if pool else service.translate_records(records, fields=fields))
-        _save_json(result["records"], str(run_dir / "translations" / "translation_results.json"))
+                   if pool else service.translate_records(records, fields=fields))
+        input_manifest = production_input.get("manifest") or {}
+        selection = {"offset": args.offset, "limit": args.limit,
+                     "asin_filter": sorted(asin_filter), "category": args.category,
+                     "record_count": len(records)}
+        batch_id = shard_batch_id(dataset_hash=str(input_manifest.get("dataset_hash") or ""),
+                                  selection=selection,
+                                  prompt_version=config.get("prompt_version", PROMPT_VERSION),
+                                  schema_version=config.get("schema_version", TRANSLATION_SCHEMA_VERSION))
+        shard = {
+            "run_id": args.run_id, "batch_id": batch_id, "created_at": datetime.now(timezone.utc).isoformat(),
+            "selection": selection, "input_dataset_hash": input_manifest.get("dataset_hash"),
+            "translation_schema_version": config.get("schema_version", TRANSLATION_SCHEMA_VERSION),
+            "prompt_version": config.get("prompt_version", PROMPT_VERSION),
+            "records": result["records"],
+        }
+        shard_dir = run_dir / "translations" / "shards"
+        shard_path = shard_dir / (batch_id + ".json")
+        existing_shard = _load_json(str(shard_path)) if shard_path.exists() else None
+        if existing_shard is None:
+            _save_json(shard, str(shard_path))
+        elif not shard_records_equal(existing_shard.get("records"), shard.get("records")):
+            raise SystemExit("BATCH_ID_CONFLICT：相同批次选择产生不同结果，拒绝覆盖不可变 shard：%s" % batch_id)
+        all_shards = [_load_json(str(path)) for path in sorted(shard_dir.glob("batch_*.json"))]
+        aggregate = merge_translation_shards(all_shards)
+        _save_json(aggregate, str(run_dir / "translations" / "translation_results.json"))
         _save_json(result["qa_report"], str(run_dir / "qa" / "translation_qa.json"))
         _save_json({"summary": result["summary"], "pool": result.get("pool"),
-                    "manifest": production_input.get("manifest")},
+                    "manifest": production_input.get("manifest"), "batch_id": batch_id,
+                    "aggregate_record_count": len(aggregate), "shards": [item.get("batch_id") for item in all_shards]},
                    str(run_dir / "translations" / "translation_run.json"))
-        print("production translate 完成：%s → %s" % (result["summary"], run_dir / "translations"))
+        print("production translate 完成：%s；shard=%s；累计 SKU=%d → %s" %
+              (result["summary"], batch_id, len(aggregate), run_dir / "translations"))
         return
 
     if stage == "promote":
@@ -1042,9 +1103,15 @@ def cmd_translation_production(args) -> None:
                     for row in closure.get("records", [])
                     if row.get("severity") == "P1" and row.get("classification") in
                     {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING", "TRANSLATION_INCOMPLETE"}]
-        if blocked and not args.force:
-            raise SystemExit("production-export 被 QA/字段闭环门禁阻止：%d 条问题；需要显式 --force" % len(blocked))
-        out_path = args.out or str(run_dir / "release" / "production_release.xlsx")
+        ready, release_status = release_gate(release)
+        if not ready and not args.debug_export:
+            raise SystemExit("production-export 被 Release Gate 阻止：release_status=%s；正式 Production 不支持 --force，请先 repair/promote" % release_status)
+        if args.force:
+            raise SystemExit("translation-production 不支持 --force 绕过 Release Gate；需要使用 --debug-export 生成非正式诊断文件")
+        if blocked and not args.debug_export:
+            raise SystemExit("production-export 被 QA/字段闭环门禁阻止：%d 条问题" % len(blocked))
+        out_path = args.out or str(run_dir / "release" /
+                                  ("production_debug_unreleased.xlsx" if args.debug_export else "production_release.xlsx"))
         images = _load_images_by_asin(args.images_dir, products)
         category_planning = _load_category_planning(args.category_planning)
         prev_workbook = None
@@ -1054,7 +1121,14 @@ def cmd_translation_production(args) -> None:
         wb = export_workbook(products, translations=translations, images_by_asin=images,
                              category_planning=category_planning, prev_workbook=prev_workbook,
                              out_path=out_path, profile=args.profile)
-        print("production export 完成：%s（%d 条商品，%d 张表）" % (out_path, len(products), len(wb.sheetnames)))
+        marker = {"release_status": "FORCED_DEBUG" if args.debug_export else "READY",
+                  "formal_release": not args.debug_export,
+                  "label": "NOT_FOR_RELEASE" if args.debug_export else "PRODUCTION_RELEASE",
+                  "blocked_count": len(blocked)}
+        _save_json(marker, str(Path(out_path).with_suffix(".release_status.json")))
+        print("production export %s：%s（%d 条商品，%d 张表，release_status=%s）" %
+              ("完成（NOT_FOR_RELEASE）" if args.debug_export else "完成",
+               out_path, len(products), len(wb.sheetnames), marker["release_status"]))
         return
     raise SystemExit("未知 production stage: %s" % stage)
 
@@ -1498,6 +1572,8 @@ def build_parser() -> argparse.ArgumentParser:
     prod.add_argument("--images-dir", default="")
     prod.add_argument("--category-planning", default="")
     prod.add_argument("--force", action="store_true")
+    prod.add_argument("--debug-export", action="store_true",
+                      help="仅允许非正式诊断导出，输出 NOT_FOR_RELEASE 标识")
     prod.add_argument("--profile", choices=("research", "business", "task"), default="research")
     prod.set_defaults(func=cmd_translation_production)
 
