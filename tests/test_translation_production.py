@@ -97,6 +97,8 @@ def test_production_cli_stages_are_checkpointed(tmp_path):
     plan = json.loads((run_dir / "plan" / "translation_plan.json").read_text(encoding="utf-8"))
     assert plan["total_records"] == 2
     assert plan["estimated_api_requests"] >= 0
+    assert plan["pool"]["max_workers"] == 3
+    assert set(plan["estimated_provider_requests"]) == {"qwen-a", "qwen-b", "qwen-c"}
     translation_dir = run_dir / "translations"
     translation_dir.mkdir(parents=True, exist_ok=True)
     (translation_dir / "translation_results.json").write_text(json.dumps({

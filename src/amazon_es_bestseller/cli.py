@@ -970,7 +970,19 @@ def cmd_translation_production(args) -> None:
         if stage == "plan":
             result = (service.translate_records_parallel(records, pool, fields=fields, dry_run=True)
                       if pool else service.translate_records(records, fields=fields, dry_run=True))
-            _save_json(result["summary"], str(run_dir / "plan" / "translation_plan.json"))
+            plan = dict(result["summary"])
+            if result.get("pool"):
+                plan["pool"] = result["pool"]
+                aliases = [str(item.get("name") or item.get("alias"))
+                           for item in config.get("providers", [])]
+                total_requests = int(plan.get("estimated_api_requests", 0))
+                if aliases:
+                    plan["estimated_provider_requests"] = {
+                        alias: total_requests // len(aliases) +
+                        (1 if index < total_requests % len(aliases) else 0)
+                        for index, alias in enumerate(aliases)
+                    }
+            _save_json(plan, str(run_dir / "plan" / "translation_plan.json"))
             print("production plan 完成：SKU %d、字段 %d、预计 API %d、并行=%s → %s" %
                   (result["summary"]["total_records"], result["summary"]["total_fields"],
                    result["summary"]["estimated_api_requests"], bool(pool), run_dir / "plan"))
