@@ -154,7 +154,8 @@ def _ranking_link_asin(raw_url: str) -> Optional[str]:
     # Keep the historical fixture-compatible prefix capture: real ASINs are
     # ten characters, while a few saved offline synthetic hrefs append a
     # suffix.  The complete href remains untouched in raw evidence.
-    match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", str(raw_url or ""), re.I)
+    match = re.search(r"/(?:dp|gp/product|gp/aw/d|product)/([A-Z0-9]{10})",
+                      str(raw_url or ""), re.I)
     return match.group(1).upper() if match else None
 
 
@@ -184,7 +185,11 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
     source_type = _ranking_source_type(source_url, browse_node)
     records = []
     for i, item in enumerate(soup.select("#gridItemRoot")):
-        a = item.select_one('a[href*="/dp/"]') or item.select_one("a[href]")
+        a = item.select_one(
+            'a[href*="/dp/"], a[href*="/gp/product/"], '
+            'a[href*="/gp/aw/d/"], a[href*="/product/"]')
+        if a is None:
+            a = item.select_one("a[href]")
         raw_product_url = a.get("href") if a is not None else ""
         link_asin = _ranking_link_asin(raw_product_url)
         card = item if item.get("data-asin") else item.select_one("[data-asin]")

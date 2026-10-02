@@ -104,9 +104,16 @@ def _identity_status(ranking_asin: str, record: Mapping | None) -> str:
     family = {normalize_asin(value) for value in family if normalize_asin(value)}
     if detail_asin == ranking_asin:
         return "MATCH"
-    if detail_asin and (detail_asin == parent_asin or parent_asin == ranking_asin):
+    # A parent/variation relationship is valid only when the ranking ASIN is
+    # explicitly connected to the resolved detail ASIN.  A self-parent value
+    # or a family containing only the resolved ASIN is not evidence that an
+    # unrelated ranking ASIN may reuse this cache.
+    if parent_asin == ranking_asin and detail_asin:
         return "PARENT_ASIN_MATCH"
-    if ranking_asin in family or detail_asin in family:
+    if (ranking_asin in family and detail_asin in family
+            and detail_asin == parent_asin):
+        return "PARENT_ASIN_MATCH"
+    if ranking_asin in family and detail_asin in family:
         return "VARIATION_RELATED"
     return "IDENTITY_MISMATCH" if detail_asin else "IDENTITY_REVIEW"
 
@@ -154,9 +161,9 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
                       refresh_policy: DetailRefreshPolicy | None = None,
                       checkpoints=None, checkpoint=None) -> dict:
     """Build a deterministic offline plan, deduplicated by canonical ranking ASIN."""
-    if (isinstance(ranking_snapshot, Mapping)
-            and ranking_snapshot.get("snapshot_status")
-            and ranking_snapshot.get("snapshot_status") != "AUTHORITATIVE"):
+    if not isinstance(ranking_snapshot, Mapping):
+        raise ValueError("详情 planner 需要带 manifest 的 AUTHORITATIVE ranking snapshot")
+    if ranking_snapshot.get("snapshot_status") != "AUTHORITATIVE":
         raise ValueError("详情 planner 只能使用 AUTHORITATIVE ranking snapshot")
     ranking_rows = _rows(ranking_snapshot)
     cache_by_asin = _state_rows(detail_cache)

@@ -45,3 +45,17 @@ def test_detail_plan_cli_rejects_incomplete_snapshot(tmp_path):
         assert "AUTHORITATIVE" in str(exc)
     else:
         raise AssertionError("INCOMPLETE snapshot must not reach detail planner")
+
+
+def test_detail_run_list_plan_preserves_snapshot_id(tmp_path):
+    plan = tmp_path / "detail_plan.json"
+    plan.write_text(json.dumps([{
+        "snapshot_id": "snapshot_test",
+        "ranking_asin": "B000000001",
+        "detail_action": "BLOCK_LINK_IDENTITY",
+    }]), encoding="utf-8")
+    out_dir = tmp_path / "run"
+    assert cli.main(["--offline", "detail-run", "--plan", str(plan),
+                     "--out-dir", str(out_dir)]) == 0
+    manifest = json.loads((out_dir / "detail_execution_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["snapshot_id"] == "snapshot_test"

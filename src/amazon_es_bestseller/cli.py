@@ -321,7 +321,9 @@ def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
     snapshot = _load_snapshot_input(args.snapshot)
     details = _load_json(args.details) if args.details else []
     state = _load_json(args.state) if args.state else []
-    plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None)
+    checkpoints = _load_json(args.checkpoints) if args.checkpoints else []
+    plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None,
+                             checkpoints=checkpoints)
     paths = write_detail_plan(plan, args.out_dir)
     print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
 
@@ -332,7 +334,13 @@ def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
     from .access.browser import BrowserSession
     plan_records = _load_json(args.plan)
     if isinstance(plan_records, list):
-        plan = {"records": plan_records}
+        snapshot_ids = {str(row.get("snapshot_id") or "")
+                        for row in plan_records if isinstance(row, dict)
+                        and row.get("snapshot_id")}
+        if len(snapshot_ids) > 1:
+            parser.error("detail-run 计划包含多个 snapshot_id，拒绝混合执行")
+        plan = {"records": plan_records,
+                "snapshot_id": next(iter(snapshot_ids), "")}
     else:
         plan = plan_records
     pending = [row for row in plan.get("records", [])
@@ -1254,6 +1262,7 @@ def build_parser() -> argparse.ArgumentParser:
     dp.add_argument("--snapshot", required=True, help="rankings.json 或快照 records JSON")
     dp.add_argument("--details", default="", help="已有详情缓存 JSON")
     dp.add_argument("--state", default="", help="详情状态 JSON")
+    dp.add_argument("--checkpoints", default="", help="详情 checkpoint JSON 或记录列表")
     dp.add_argument("--html-dir", default="", help="保存的详情 HTML 目录，用于 schema 离线重解析决策")
     dp.add_argument("--out-dir", required=True, help="detail_plan.json/csv/summary 输出目录")
     dp.set_defaults(func=lambda a, p=dp: cmd_detail_plan(a, p))

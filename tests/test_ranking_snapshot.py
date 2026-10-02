@@ -50,6 +50,29 @@ def test_parser_distinguishes_missing_and_unparseable_product_url():
     assert invalid["ranking_link_identity_status"] == "NO_ASIN_IN_URL"
 
 
+@pytest.mark.parametrize("href", [
+    "/gp/product/B078C6QR1C/ref=x",
+    "/gp/aw/d/B078C6QR1C?ref=x",
+])
+def test_parser_supports_additional_amazon_product_href_forms(href):
+    row = parse_bestsellers_page("<html><body>" + _card(href=href) +
+                                 "</body></html>", "https://www.amazon.es/zgbs/1", "now")[0]
+    assert row["ranking_product_url_raw"] == href
+    assert row["ranking_link_asin"] == "B078C6QR1C"
+    assert row["ranking_link_identity_status"] == "MATCH"
+
+
+def test_parser_prefers_product_href_over_an_earlier_non_product_anchor():
+    html = '''<div id="gridItemRoot" data-asin="B078C6QR1C">
+      <a href="/promo">promo</a>
+      <a href="/gp/product/B078C6QR1C/ref=x">product</a>
+      <span class="zg-bdg-text">#1</span>
+    </div>'''
+    row = parse_bestsellers_page(html, "https://www.amazon.es/zgbs/1", "now")[0]
+    assert row["ranking_product_url_raw"] == "/gp/product/B078C6QR1C/ref=x"
+    assert row["ranking_link_asin"] == "B078C6QR1C"
+
+
 def test_snapshot_is_authoritative_and_updates_pointer(tmp_path):
     raw = "/Producto/dp/B078C6QR1C/ref=tracking"
     result = build_ranking_snapshot([{

@@ -22,7 +22,7 @@ from ..collection.ranking import collect_rankings
 RANKING_SCHEMA_VERSION = 1
 SNAPSHOT_SCHEMA_VERSION = 1
 _SUCCESS_STATES = {"NORMAL", "SUCCESS", "200", "AUTHORITATIVE", "COMPLETE"}
-_ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})", re.I)
+_ASIN_RE = re.compile(r"/(?:dp|gp/product|gp/aw/d|product)/([A-Z0-9]{10})", re.I)
 
 
 def _utc_now() -> datetime:

@@ -53,6 +53,19 @@ def test_collect_details_rechecks_cached_blocked_page(tmp_path):
         collect_details(["B078C6QR1C"], FakeSession(), str(tmp_path))
 
 
+def test_collect_details_preserves_distinct_timeout_status(tmp_path):
+    class TimeoutSession(FakeSession):
+        def goto(self, url):
+            raise TimeoutError("navigation timeout")
+
+    assert collect_details(["B078C6QR1C"], TimeoutSession(), str(tmp_path)) == []
+    checkpoint = json.loads(
+        (tmp_path / "checkpoints" / "B078C6QR1C.json").read_text(encoding="utf-8"))
+    assert checkpoint["status"] == "failed"
+    assert checkpoint["detail_status"] == "TIMEOUT"
+    assert checkpoint["collected_at"]
+
+
 def test_repair_cached_products_merges_only_matching_page_evidence(tmp_path):
     from amazon_es_bestseller.collection.repair import repair_cached_products
 

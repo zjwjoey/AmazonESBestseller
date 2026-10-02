@@ -104,3 +104,6 @@ def test_existing_collector_checkpoint_carries_request_evidence(tmp_path, monkey
     assert checkpoint["snapshot_id"] == "snapshot_test"
     assert checkpoint["action"] == "FETCH_NEW"
     assert checkpoint["detail_status"] == "SUCCESS"
+    assert checkpoint["http_status"] == 200
+    assert checkpoint["final_access_state"] == "NORMAL"
+    assert checkpoint["collected_at"]

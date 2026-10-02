@@ -112,7 +112,9 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str,
             "error": checkpoint.get("error") or "",
         })
     outcomes.extend(skipped)
-    result = {"snapshot_id": plan.get("snapshot_id") or "",
+    plan_snapshot_id = plan.get("snapshot_id") or next(
+        (row.get("snapshot_id") for row in records if row.get("snapshot_id")), "")
+    result = {"snapshot_id": plan_snapshot_id,
               "records": outcomes, "details": details, "skipped": skipped,
               "requested_count": len(pending), "access_stop": access_stop}
     root.mkdir(parents=True, exist_ok=True)

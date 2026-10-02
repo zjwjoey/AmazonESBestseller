@@ -32,7 +32,8 @@ V1 不实现 daily-run，也不改变 Translation V2、历史生产数据或现�
 
 ## Detail Planner
 
-`monitoring.detail_planner.build_detail_plan` 是纯离线函数。它按 canonical ASIN 去重榜单记录，并输出：
+`monitoring.detail_planner.build_detail_plan` 是纯离线函数。它只接受带有
+`snapshot_status=AUTHORITATIVE` 的快照映射，按 canonical ASIN 去重榜单记录，并输出：
 
 ```text
 detail_plan.json
@@ -80,6 +81,7 @@ amazon-es --offline ranking-snapshot --rankings-file rankings.json --out-dir run
 # 纯离线生成详情计划
 amazon-es --offline detail-plan --snapshot <snapshot-directory> \
   --details outputs/details.json --state outputs/state/details_state.json \
+  --checkpoints outputs/checkpoints.json \
   --html-dir outputs/html --out-dir outputs/detail_plan
 
 # 按计划执行；只有三类 network action 会请求 Amazon

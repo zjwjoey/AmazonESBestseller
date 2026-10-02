@@ -748,7 +748,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
         record = enriched.get("record") if isinstance(enriched.get("record"), dict) else {}
         for key in ("final_url", "resolved_asin", "parent_asin", "identity_status",
                     "detail_status", "detail_schema_version", "status_code",
-                    "initial_access_state", "access_state"):
+                    "http_status", "initial_access_state", "final_access_state",
+                    "access_state", "collected_at"):
             if record.get(key) is not None:
                 enriched.setdefault(key, record[key])
         context = execution_context.get(asin) or {}
@@ -757,7 +758,13 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             if context.get(key) is not None:
                 enriched.setdefault(key, context[key])
         enriched.setdefault("requested_asin", asin)
-        enriched.setdefault("timestamp", datetime.now().isoformat(timespec="seconds"))
+        collected_at = datetime.now().isoformat(timespec="seconds")
+        enriched.setdefault("timestamp", collected_at)
+        enriched.setdefault("collected_at", collected_at)
+        if enriched.get("status_code") is not None:
+            enriched.setdefault("http_status", enriched["status_code"])
+        if enriched.get("access_state") is not None:
+            enriched.setdefault("final_access_state", enriched["access_state"])
         if context.get("preferred_request_url"):
             enriched.setdefault("requested_url", context["preferred_request_url"])
         if enriched.get("final_url"):
@@ -828,6 +835,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 rec["status_code"] = meta.get("status_code")
                 rec["initial_access_state"] = meta.get("initial_access_state")
                 rec["access_state"] = parsed_state.value
+                rec["final_access_state"] = parsed_state.value
+                rec["http_status"] = meta.get("status_code")
                 rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
                 rec["resumed_from_html"] = True
                 rec["requested_asin"] = asin
@@ -906,8 +915,10 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 progress(asin, "invalid")
                 continue
             rec["status_code"] = status
+            rec["http_status"] = status
             rec["initial_access_state"] = initial_state.value
             rec["access_state"] = parsed_state.value
+            rec["final_access_state"] = parsed_state.value
             rec["recovered_from_challenge"] = recovered
             details.append(rec)
             rec["requested_asin"] = asin
@@ -928,8 +939,18 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             raise  # 访问受限：按策略停止，受限页证据已落盘
         except Exception as exc:
             failed.append(asin)  # 瞬时网络故障：失败隔离，不重试不绕过
+            message = str(exc).lower()
+            error_type = type(exc).__name__.upper()
+            if isinstance(exc, TimeoutError) or "timeout" in message:
+                detail_status = "TIMEOUT"
+            elif (isinstance(exc, ConnectionError)
+                  or any(token in message for token in ("network", "connection", "navigation"))):
+                detail_status = "TRANSIENT_NETWORK_FAILURE"
+            else:
+                detail_status = "FAILED"
             checkpoint(asin, {"asin": asin, "status": "failed",
-                             "error_type": type(exc).__name__, "error": str(exc)})
+                             "detail_status": detail_status,
+                             "error_type": error_type, "error": str(exc)})
             progress(asin, "failed")
             print("详情采集失败 ASIN %s：%s（跳过，重跑将补齐）"
                   % (asin, type(exc).__name__))
