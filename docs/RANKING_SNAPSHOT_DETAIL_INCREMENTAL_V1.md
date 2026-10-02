@@ -78,7 +78,7 @@ RETRY_TRANSIENT_FAILURE
 amazon-es --offline ranking-snapshot --rankings-file rankings.json --out-dir runtime/ranking_snapshots
 
 # 纯离线生成详情计划
-amazon-es --offline detail-plan --snapshot <snapshot>/rankings.json \
+amazon-es --offline detail-plan --snapshot <snapshot-directory> \
   --details outputs/details.json --state outputs/state/details_state.json \
   --html-dir outputs/html --out-dir outputs/detail_plan
 

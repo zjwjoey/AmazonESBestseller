@@ -29,3 +29,19 @@ def test_offline_cli_chain_writes_snapshot_and_plan(tmp_path):
                      "--out-dir", str(plan_root)]) == 0
     plan = json.loads((plan_root / "detail_plan.json").read_text(encoding="utf-8"))
     assert plan[0]["detail_action"] == "FETCH_NEW"
+
+
+def test_detail_plan_cli_rejects_incomplete_snapshot(tmp_path):
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    (snapshot_dir / "rankings.json").write_text("[]", encoding="utf-8")
+    (snapshot_dir / "manifest.json").write_text(json.dumps({
+        "snapshot_id": "snapshot_bad", "snapshot_status": "INCOMPLETE",
+    }), encoding="utf-8")
+    try:
+        cli.main(["--offline", "detail-plan", "--snapshot", str(snapshot_dir),
+                  "--out-dir", str(tmp_path / "plan")])
+    except ValueError as exc:
+        assert "AUTHORITATIVE" in str(exc)
+    else:
+        raise AssertionError("INCOMPLETE snapshot must not reach detail planner")

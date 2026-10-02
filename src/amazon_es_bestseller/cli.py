@@ -267,6 +267,29 @@ def _load_snapshot_records(path: str) -> list:
     return data if isinstance(data, list) else []
 
 
+def _load_snapshot_input(path: str) -> dict:
+    """Load ranking rows together with a sibling snapshot manifest when present."""
+    target = Path(path)
+    if target.is_dir():
+        root = target
+        rankings_path = root / "rankings.json"
+        manifest_path = root / "manifest.json"
+    else:
+        rankings_path = target
+        root = target.parent
+        manifest_path = root / "manifest.json"
+    if not rankings_path.exists():
+        raise SystemExit("找不到快照 rankings.json: %s" % rankings_path)
+    rows = _load_snapshot_records(str(rankings_path))
+    result = {"records": rows}
+    if manifest_path.exists():
+        manifest = _load_json(str(manifest_path))
+        if isinstance(manifest, dict):
+            result["snapshot_status"] = manifest.get("snapshot_status")
+            result["snapshot_id"] = manifest.get("snapshot_id")
+    return result
+
+
 def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
     """Freeze a latest ranking observation; ``--rankings-file`` is offline-only."""
     from .monitoring.snapshot import build_ranking_snapshot, collect_ranking_snapshot
@@ -295,7 +318,7 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
 def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
     """Build and write a completely offline incremental detail plan."""
     from .monitoring.detail_planner import build_detail_plan, write_detail_plan
-    snapshot = _load_snapshot_records(args.snapshot)
+    snapshot = _load_snapshot_input(args.snapshot)
     details = _load_json(args.details) if args.details else []
     state = _load_json(args.state) if args.state else []
     plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None)
