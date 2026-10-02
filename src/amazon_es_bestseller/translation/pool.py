@@ -23,6 +23,7 @@ HEALTHY = "HEALTHY"
 RATE_LIMITED = "RATE_LIMITED"
 DEGRADED = "DEGRADED"
 DISABLED = "DISABLED"
+REQUEST_BLOCKED = "REQUEST_BLOCKED"
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,10 @@ class ProviderPool:
     @staticmethod
     def _retry_class(response: ProviderResponse) -> str:
         error = str(response.error or "").casefold()
+        # Content-safety/data-inspection 400s belong to the field, not the
+        # endpoint.  Do not disable a healthy provider for one product text.
+        if any(token in error for token in ("content_safety", "data_inspection", "content policy", "safety policy")):
+            return REQUEST_BLOCKED
         if "429" in error or "rate" in error:
             return RATE_LIMITED
         if any(token in error for token in ("500", "502", "503", "504", "5xx")):
@@ -154,9 +159,11 @@ class ProviderPool:
                 else:
                     stats.http_5xx += 1
                 stats.state = DEGRADED
+            elif classification == REQUEST_BLOCKED:
+                stats.state = HEALTHY
             if classification in {RATE_LIMITED, DEGRADED}:
                 self._transient_failures.setdefault(task.key, set()).add(alias)
-            else:
+            elif classification != REQUEST_BLOCKED:
                 stats.state = DISABLED
         return PoolResult(task.key, response, alias)
 

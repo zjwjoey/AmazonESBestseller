@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .base import ProviderResponse, TranslationProvider
+from ..prompting import translation_options
 
 
 Transport = Callable[[str, Dict[str, str], Dict[str, Any], float], Dict[str, Any]]
@@ -90,18 +91,20 @@ class QwenMTProvider(TranslationProvider):
 
     def _payload(self, text: str, *, asin: str, field: str,
                  context: Dict[str, Any]) -> Dict[str, Any]:
-        translation_options = {
-            "source_lang": self._language_name(context.get("source_language"), "Spanish"),
-            "target_lang": self._language_name(context.get("target_language"), "Chinese"),
-        }
+        options = translation_options(
+            text, field=field,
+            source_language=self._language_name(context.get("source_language"), "Spanish"),
+            target_language=self._language_name(context.get("target_language"), "Chinese"),
+            context=context,
+        )
         if self.protocol == "openai_compatible":
             return {"model": self._model, "messages": [
                 {"role": "user", "content": text}],
-                "translation_options": translation_options}
+                "translation_options": options}
         if self.protocol == "dashscope":
             return {"model": self._model,
                     "input": {"messages": [{"role": "user", "content": text}]},
-                    "parameters": {"translation_options": translation_options}}
+                    "parameters": {"translation_options": options}}
         raise ValueError("unsupported Qwen protocol: %s" % self.protocol)
 
     @staticmethod

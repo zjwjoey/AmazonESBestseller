@@ -162,6 +162,22 @@ def test_network_failure_fails_over_once_and_marks_provider_degraded():
     assert len(a.calls) == 1 and len(b.calls) == 1
 
 
+def test_content_safety_request_block_does_not_disable_provider():
+    class PolicyFake(PoolFake):
+        def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+            self.calls.append((text, asin, field))
+            if text == "blocked":
+                return ProviderResponse(provider=self.name, model=self.model, status="failed",
+                                        error="HTTP 400 data_inspection_failed")
+            return ProviderResponse(text="ok", provider=self.name, model=self.model)
+
+    provider = PolicyFake("qwen-mt")
+    pool = ProviderPool({"qwen-a": provider})
+    assert pool.submit([task("blocked", 1)])[0].response.status == "failed"
+    assert pool.stats()["qwen-a"]["state"] == "HEALTHY"
+    assert pool.submit([task("allowed", 2)])[0].response.status == "success"
+
+
 def test_two_provider_failure_returns_failed_without_exception():
     a, b = PoolFake("qwen-mt", fail=True), PoolFake("qwen-mt", fail=True)
     pool = ProviderPool({"qwen-a": a, "qwen-b": b})

@@ -15,9 +15,9 @@ def test_qwen_openai_compatible_request_and_response():
     assert result.text == "中文"
     assert seen["payload"]["model"] == "qwen-mt-flash"
     assert seen["payload"]["messages"] == [{"role": "user", "content": "Bolsa"}]
-    assert seen["payload"]["translation_options"] == {
-        "source_lang": "Spanish", "target_lang": "Chinese"
-    }
+    assert seen["payload"]["translation_options"]["source_lang"] == "Spanish"
+    assert seen["payload"]["translation_options"]["target_lang"] == "Chinese"
+    assert "Amazon.es product field" in seen["payload"]["translation_options"]["domains"]
     assert seen["headers"]["Authorization"] == "Bearer test-key"
 
 
@@ -46,6 +46,24 @@ def test_qwen_dashscope_protocol_uses_native_message_shape():
     assert result.text == "中文"
     assert seen["payload"]["input"]["messages"] == [{"role": "user", "content": "Bolsa"}]
     assert seen["payload"]["parameters"]["translation_options"]["target_lang"] == "Chinese"
+
+
+def test_qwen_uses_relevant_terms_without_changing_source_message():
+    seen = {}
+
+    def transport(url, headers, payload, timeout):
+        seen["payload"] = payload
+        return {"status_code": 200,
+                "body": {"choices": [{"message": {"content": "清洁片 12片"}}]}}
+
+    QwenMTProvider(api_key="test-key", endpoint="https://example.invalid",
+                   transport=transport, max_retries=0, rate=0).translate(
+        "Pastillas de limpieza, 12 unidades", asin="A", field="title_es_raw")
+    options = seen["payload"]["translation_options"]
+    assert options["terms"] == [{"source": "pastillas de limpieza", "target": "清洁片"}]
+    assert seen["payload"]["messages"] == [
+        {"role": "user", "content": "Pastillas de limpieza, 12 unidades"}
+    ]
 
 
 def test_qwen_retries_429_then_succeeds():

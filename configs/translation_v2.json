@@ -3,6 +3,7 @@
   "model": "qwen-mt-flash",
   "source_language": "es",
   "target_language": "zh-CN",
+  "prompt_version": "amazon-es-retail-v2",
   "protocol": "openai_compatible",
   "timeout": 60,
   "max_retries": 2,

@@ -20,22 +20,11 @@ from typing import Any, Iterable, Mapping
 from .dictionary_only import load_records
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
 from .terminology import specification_is_deterministic
+from .production_contract import PRODUCTION_FIELD_ALIASES
 
 
 CLEAN_SCHEMA_VERSION = "preclean-v1"
-FIELD_ALIASES = {
-    "title_es_raw": ("title_es_raw", "title_es", "title"),
-    "selected_variation_raw": ("selected_variation_raw", "selected_variant_es", "variation_es"),
-    "category_l1": ("category_l1", "category_l1_es"),
-    "category_l2": ("category_l2", "category_l2_es"),
-    "category_l3": ("category_l3", "category_l3_es"),
-    "leaf_category": ("leaf_category", "leaf_category_es"),
-    "specification_es": ("specification_es", "spec_v2"),
-    "product_details": ("product_details", "attributes", "product_details_es", "detail_attributes_raw"),
-    "feature_bullets": ("feature_bullets", "feature_bullets_raw", "feature_bullets_es", "features_es"),
-    "product_description": ("product_description_raw", "description_es", "product_description_es"),
-    "brand": ("brand", "brand_es"),
-}
+FIELD_ALIASES = dict(PRODUCTION_FIELD_ALIASES)
 AUDIT_FIELDS = tuple(FIELD_ALIASES)
 ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]")
 HTML_TAG_RE = re.compile(r"<[^>]+>")

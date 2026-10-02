@@ -60,19 +60,7 @@ def _load_json(path: Optional[str]) -> list:
         return json.load(f)
 
 
-TRANSLATION_RESEARCH_CSV_FIELDS = {
-    "ASIN": "asin",
-    "商品名称（西语）": "title_es_raw",
-    "品牌": "brand",
-    "一级类目": "category_l1",
-    "二级类目": "category_l2",
-    "三级类目": "category_l3",
-    "细分类目": "leaf_category",
-    "当前选中规格 / 变体（西语）": "selected_variant_es",
-    "核心规格（西语）": "specification_es",
-    "完整商品详情（西语原文）": "product_details_es",
-    "商品卖点（西语原文）": "feature_bullets_es",
-}
+from .translation.production_contract import RESEARCH_CSV_FIELDS as TRANSLATION_RESEARCH_CSV_FIELDS
 
 
 def _load_translation_products(path: Optional[str]) -> list:
@@ -757,6 +745,7 @@ def cmd_translate(args) -> None:
             prepared[index] = row
         products = prepared
     from .translation.cache import TranslationCache
+    from .translation.prompting import PROMPT_VERSION
     from .translation.providers.qwen_mt import QwenMTProvider
     from .translation.service import TranslationService
 
@@ -782,6 +771,7 @@ def cmd_translate(args) -> None:
     if fields:
         fields = [item.strip() for value in fields for item in str(value).split(",") if item.strip()]
     service = TranslationService(provider, cache,
+                                 prompt_version=config.get("prompt_version", PROMPT_VERSION),
                                  source_language=config.get("source_language", "es"),
                                  target_language=config.get("target_language", "zh-CN"))
     parallel_requested = bool(getattr(args, "parallel_providers", False) or
@@ -877,6 +867,184 @@ def cmd_translate(args) -> None:
             for row in audit:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     print("translate V2 完成：%s → %s；QA → %s；运行摘要 → %s" % (result["summary"], args.out, qa_out, summary_out))
+
+
+def cmd_translation_production(args) -> None:
+    """Stage the formal Spanish Master → derived Chinese production flow."""
+    from .translation.production import (
+        build_production_input, build_production_state, records_for_preclean,
+    )
+    from .translation.preclean import audit_records, write_reports
+    from .translation.schemas import TRANSLATION_SCHEMA_VERSION
+
+    run_dir = Path(args.run_dir or (Path("runtime") / "translation_v2" / "production" / args.run_id))
+    stage = args.stage
+    if stage == "build-input":
+        records = _load_translation_products(args.master)
+        if not isinstance(records, list):
+            raise SystemExit("正式 Master 必须是 JSON 数组或研究 CSV")
+        result = build_production_input(
+            records, source_run_id=args.source_run_id,
+            source_schema_version=args.source_schema_version,
+            translation_schema_version=TRANSLATION_SCHEMA_VERSION,
+            run_id=args.run_id,
+        )
+        _save_json(result["manifest"], str(run_dir / "input_manifest.json"))
+        _save_json(result, str(run_dir / "translation_input.json"))
+        print("production build-input 完成：SKU %d、唯一 ASIN %d、dataset_hash=%s → %s" %
+              (result["manifest"]["record_count"], result["manifest"]["unique_asin_count"],
+               result["manifest"]["dataset_hash"], run_dir))
+        return
+
+    input_path = run_dir / "translation_input.json"
+    if not input_path.exists():
+        raise SystemExit("缺少 production input：%s" % input_path)
+    production_input = _load_json(str(input_path))
+    if not isinstance(production_input, dict) or not isinstance(production_input.get("records"), list):
+        raise SystemExit("production translation_input.json 格式无效")
+
+    if stage == "preclean":
+        result = audit_records(records_for_preclean(production_input))
+        out_dir = run_dir / "preclean"
+        write_reports(result, out_dir)
+        _save_json({"manifest": production_input.get("manifest"), "summary": result["summary"]},
+                   str(out_dir / "production_preclean_manifest.json"))
+        print("production preclean 完成：字段 %d、可翻译 %d、source_missing %d、review %d → %s" %
+              (result["summary"]["total_fields"], result["summary"]["translation_readiness"]["translate_allowed_fields"],
+               result["summary"]["translation_readiness"]["source_missing_fields"],
+               result["summary"]["translation_readiness"]["review_fields"], out_dir))
+        return
+
+    preclean_path = run_dir / "preclean" / "translation_input_records.json"
+    if not preclean_path.exists():
+        raise SystemExit("请先运行 production-preclean：%s" % preclean_path)
+    preclean_wrapper = _load_json(str(preclean_path))
+    preclean_records = preclean_wrapper.get("records", []) if isinstance(preclean_wrapper, dict) else preclean_wrapper
+
+    if stage in {"plan", "translate"}:
+        config = _load_json(args.config) if args.config else {}
+        if not isinstance(config, dict):
+            raise SystemExit("production config 顶层必须是对象")
+        from .translation.cache import TranslationCache
+        from .translation.prompting import PROMPT_VERSION
+        from .translation.providers.qwen_mt import QwenMTProvider
+        from .translation.service import TranslationService
+        provider = QwenMTProvider(
+            model=args.model or config.get("model", "qwen-mt-flash"),
+            endpoint=config.get("endpoint"), protocol=config.get("protocol"),
+            timeout=float(config.get("timeout", 60)), max_retries=int(config.get("max_retries", 2)),
+            backoff_seconds=float(config.get("backoff_seconds", 5)),
+            rate=float(args.rate if args.rate is not None else config.get("rate", 0.5)),
+        )
+        cache = TranslationCache(run_dir / "translations" / "translation_cache.json")
+        service = TranslationService(
+            provider, cache, schema_version=config.get("schema_version", TRANSLATION_SCHEMA_VERSION),
+            prompt_version=config.get("prompt_version", PROMPT_VERSION),
+            source_language=config.get("source_language", "es"),
+            target_language=config.get("target_language", "zh-CN"),
+        )
+        records = list(preclean_records)
+        asin_filter = set()
+        if args.asin_list:
+            if Path(args.asin_list).exists():
+                asin_filter = {str(row.get("asin") or row.get("ASIN") or "").strip().upper()
+                               for row in _load_json(args.asin_list)}
+            else:
+                asin_filter = {item.strip().upper() for item in args.asin_list.split(",") if item.strip()}
+        if asin_filter:
+            records = [row for row in records if str(row.get("asin") or "").upper() in asin_filter]
+        if args.category:
+            records = [row for row in records if args.category.casefold() in str(
+                row.get("category_l1") or row.get("category_l2") or row.get("leaf_category") or "").casefold()]
+        records = records[max(0, args.offset):]
+        if args.limit is not None:
+            records = records[:max(0, args.limit)]
+        fields = config.get("fields") or None
+        parallel = isinstance(config.get("providers"), list) and len(config["providers"]) > 1
+        pool = None
+        if parallel:
+            from .translation.pool import build_qwen_provider_pool
+            pool_config = dict(config)
+            pool_config.setdefault("max_workers", min(3, len(config["providers"])))
+            pool = build_qwen_provider_pool(pool_config)
+        if stage == "plan":
+            result = (service.translate_records_parallel(records, pool, fields=fields, dry_run=True)
+                      if pool else service.translate_records(records, fields=fields, dry_run=True))
+            _save_json(result["summary"], str(run_dir / "plan" / "translation_plan.json"))
+            print("production plan 完成：SKU %d、字段 %d、预计 API %d、并行=%s → %s" %
+                  (result["summary"]["total_records"], result["summary"]["total_fields"],
+                   result["summary"]["estimated_api_requests"], bool(pool), run_dir / "plan"))
+            return
+        if not args.yes:
+            raise SystemExit("production-translate 是真实 API 调用，请显式指定 --yes")
+        result = (service.translate_records_parallel(records, pool, fields=fields)
+                  if pool else service.translate_records(records, fields=fields))
+        _save_json(result["records"], str(run_dir / "translations" / "translation_results.json"))
+        _save_json(result["qa_report"], str(run_dir / "qa" / "translation_qa.json"))
+        _save_json({"summary": result["summary"], "pool": result.get("pool"),
+                    "manifest": production_input.get("manifest")},
+                   str(run_dir / "translations" / "translation_run.json"))
+        print("production translate 完成：%s → %s" % (result["summary"], run_dir / "translations"))
+        return
+
+    if stage == "promote":
+        translations_path = run_dir / "translations" / "translation_results.json"
+        if not translations_path.exists():
+            raise SystemExit("请先运行 production-translate：%s" % translations_path)
+        config = _load_json(args.config) if args.config else {}
+        translations = _load_json(str(translations_path))
+        state = build_production_state(
+            production_input, preclean_records, translations,
+            qa_version=config.get("qa_version", "translation-qa-v1"),
+            prompt_version=config.get("prompt_version", "amazon-es-retail-v2"),
+        )
+        _save_json(state, str(run_dir / "state" / "translation_state.json"))
+        _save_json(state["release_candidate"], str(run_dir / "release" / "production_release_candidate.json"))
+        _save_json(state["repair_queue"], str(run_dir / "repair" / "repair_queue.json"))
+        _save_json(state["summary"], str(run_dir / "state" / "production_summary.json"))
+        print("production promote 完成：SKU %d、字段状态 %s、SKU 状态 %s → %s" %
+              (state["summary"]["record_count"], state["summary"]["field_counts"],
+              state["summary"]["sku_counts"], run_dir))
+        return
+    if stage == "export":
+        release_path = run_dir / "release" / "production_release_candidate.json"
+        if not release_path.exists():
+            raise SystemExit("请先运行 production-promote：%s" % release_path)
+        release = _load_json(str(release_path))
+        products = [item.get("source_record") or {} for item in production_input.get("records", [])]
+        translations = {str(item.get("asin") or "").upper(): item.get("fields") or {}
+                        for item in release.get("records", [])}
+        # Reuse the existing QA/Field Closure gate.  This stage is explicit,
+        # and it never writes the collection Master.
+        from .export.excel import export_workbook
+        from .qa.field_closure import audit_field_closure
+        from .qa.run import blocking_issues
+        blocked = blocking_issues(products)
+        details = _load_evidence_json(args.details, DEFAULT_DETAILS)
+        rankings = _load_evidence_json(args.rankings, DEFAULT_RANKINGS)
+        closure = audit_field_closure(products, details=details, rankings=rankings,
+                                      html_dir=args.html_dir or None,
+                                      run_dir=args.collection_run_dir or None,
+                                      translations=translations)
+        blocked += [(row.get("asin"), row.get("classification"), row.get("message"))
+                    for row in closure.get("records", [])
+                    if row.get("severity") == "P1" and row.get("classification") in
+                    {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING", "TRANSLATION_INCOMPLETE"}]
+        if blocked and not args.force:
+            raise SystemExit("production-export 被 QA/字段闭环门禁阻止：%d 条问题；需要显式 --force" % len(blocked))
+        out_path = args.out or str(run_dir / "release" / "production_release.xlsx")
+        images = _load_images_by_asin(args.images_dir, products)
+        category_planning = _load_category_planning(args.category_planning)
+        prev_workbook = None
+        if args.prev_workbook:
+            import openpyxl
+            prev_workbook = openpyxl.load_workbook(args.prev_workbook)
+        wb = export_workbook(products, translations=translations, images_by_asin=images,
+                             category_planning=category_planning, prev_workbook=prev_workbook,
+                             out_path=out_path, profile=args.profile)
+        print("production export 完成：%s（%d 条商品，%d 张表）" % (out_path, len(products), len(wb.sheetnames)))
+        return
+    raise SystemExit("未知 production stage: %s" % stage)
 
 
 # ---------- dictionary-only（全离线） ----------
@@ -1292,6 +1460,34 @@ def build_parser() -> argparse.ArgumentParser:
                      help="按配置启用双 Provider 并行池（真实调用仍需 YES）")
     tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
     tv2.set_defaults(func=cmd_translate)
+
+    prod = sub.add_parser("translation-production", help="Translation V2 正式生产阶段化流程")
+    prod.add_argument("--stage", required=True,
+                      choices=("build-input", "preclean", "plan", "translate", "promote", "export"))
+    prod.add_argument("--master", default="", help="build-input 的正式西语 Master JSON/CSV")
+    prod.add_argument("--run-dir", default="", help="生产 run 目录；默认 runtime/translation_v2/production/<run_id>")
+    prod.add_argument("--run-id", default="production-run", help="运行 ID")
+    prod.add_argument("--source-run-id", default="", help="采集源运行 ID")
+    prod.add_argument("--source-schema-version", default="master-v1")
+    prod.add_argument("--config", default="configs/translation_v2_production.example.json")
+    prod.add_argument("--model", default="")
+    prod.add_argument("--rate", type=float, default=None)
+    prod.add_argument("--limit", type=int, default=None)
+    prod.add_argument("--offset", type=int, default=0)
+    prod.add_argument("--asin-list", default="", help="ASIN JSON 数组或逗号分隔列表")
+    prod.add_argument("--category", default="")
+    prod.add_argument("--yes", action="store_true", help="允许 production-translate 调用真实 API")
+    prod.add_argument("--out", default="", help="production-export 输出 Excel")
+    prod.add_argument("--details", default="", help="production-export 详情证据")
+    prod.add_argument("--rankings", default="", help="production-export 榜单证据")
+    prod.add_argument("--html-dir", nargs="+", default=[])
+    prod.add_argument("--collection-run-dir", default="")
+    prod.add_argument("--prev-workbook", default="")
+    prod.add_argument("--images-dir", default="")
+    prod.add_argument("--category-planning", default="")
+    prod.add_argument("--force", action="store_true")
+    prod.add_argument("--profile", choices=("research", "business", "task"), default="research")
+    prod.set_defaults(func=cmd_translation_production)
 
     pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
     pc.add_argument("--products", required=True,
