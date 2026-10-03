@@ -18,9 +18,14 @@ from urllib.parse import urljoin
 
 from ..access.detector import AccessStopError
 from ..collection.ranking import collect_rankings
+from ..models import is_valid_asin
+
+
+class SnapshotIncompleteError(RuntimeError):
+    """A persisted snapshot is incomplete and cannot be production input."""
 
 RANKING_SCHEMA_VERSION = 1
-SNAPSHOT_SCHEMA_VERSION = 1
+SNAPSHOT_SCHEMA_VERSION = 2
 _SUCCESS_STATES = {"NORMAL", "SUCCESS", "200", "AUTHORITATIVE", "COMPLETE"}
 _ASIN_RE = re.compile(r"/(?:dp|gp/product|gp/aw/d|product)/([A-Z0-9]{10})", re.I)
 
@@ -67,20 +72,23 @@ def _status_value(value: object) -> str:
 
 
 def _source_statuses(planned_sources: Sequence[object] | None,
-                     source_statuses: Mapping | Sequence[Mapping] | None) -> list[dict]:
-    explicit: dict[tuple[str, int | None], str] = {}
+                     source_statuses: Mapping | Sequence[Mapping] | None,
+                     rows: Sequence[Mapping] = ()) -> list[dict]:
+    explicit: dict[tuple[str, int | None], dict] = {}
     if isinstance(source_statuses, Mapping):
         for key, value in source_statuses.items():
             if isinstance(value, Mapping):
-                explicit[(str(key), value.get("page_number"))] = _status_value(value)
+                item = dict(value)
+                item.setdefault("source_url", str(key))
+                explicit[(str(key), value.get("page_number"))] = item
             else:
-                explicit[(str(key), None)] = _status_value(value)
+                explicit[(str(key), None)] = {"source_url": str(key), "status": _status_value(value)}
     elif source_statuses:
         for row in source_statuses:
             if not isinstance(row, Mapping):
                 continue
             key = _source_url(row)
-            explicit[(key, row.get("page_number"))] = _status_value(row)
+            explicit[(key, row.get("page_number"))] = dict(row)
 
     planned = list(planned_sources or [])
     if not planned and explicit:
@@ -90,8 +98,20 @@ def _source_statuses(planned_sources: Sequence[object] | None,
     for source in planned:
         url = _source_url(source)
         page = source.get("page_number") if isinstance(source, Mapping) else None
-        status = explicit.get((url, page), explicit.get((url, None), "UNKNOWN"))
-        result.append({"source_url": url, "page_number": page, "status": status})
+        item = dict(explicit.get((url, page), explicit.get((url, None), {})))
+        item["source_url"] = url
+        item["page_number"] = page
+        item.setdefault("access_state", item.get("status") or "UNKNOWN")
+        item.setdefault("http_status", None)
+        matching = [row for row in rows
+                    if str(row.get("ranking_source_url") or "") == url
+                    and (page is None or row.get("ranking_page_number") == page)]
+        item.setdefault("parsed_record_count", len(matching))
+        item.setdefault("parse_status", "PARSE_OK" if item["parsed_record_count"] > 0
+                        and _status_value(item) in _SUCCESS_STATES else "UNKNOWN")
+        item.setdefault("error", "")
+        item["status"] = _status_value(item)
+        result.append(item)
     return result
 
 
@@ -147,7 +167,8 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                            completed_at: datetime | str | None = None,
                            access_state_summary: Mapping | None = None,
                            parser_version: str = "collection.ranking",
-                           html_files: Mapping[str, str] | None = None) -> dict:
+                           html_files: Mapping[str, str] | None = None,
+                           offline_frozen: bool = False) -> dict:
     """Freeze ranking records and return the manifest/result bundle.
 
     The target directory is append-only: an existing snapshot id is never
@@ -159,16 +180,33 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
     completed = _iso(completed_at)
     observed_at = started
     rows = [_record_with_snapshot(row, snapshot_id, observed_at) for row in records]
-    statuses = _source_statuses(planned_sources, source_statuses)
+    rows = [row for row in rows if is_valid_asin(row.get("ranking_asin"))]
+    statuses = _source_statuses(planned_sources, source_statuses, rows)
     if not statuses:
-        statuses = [{"source_url": str(row.get("ranking_source_url") or ""),
-                     "page_number": row.get("ranking_page_number"),
-                     "status": str(row.get("access_state") or "NORMAL").upper()}
-                    for row in rows]
-    authoritative = bool(statuses) and all(
-        _status_value(row) in _SUCCESS_STATES for row in statuses)
-    if not statuses and rows:
-        authoritative = True
+        statuses = []
+    expected_page_count = len(statuses)
+    completed_page_count = sum(1 for row in statuses
+                               if _status_value(row) in _SUCCESS_STATES)
+    parsed_page_count = sum(1 for row in statuses
+                            if str(row.get("parse_status") or "").upper() == "PARSE_OK")
+    failed_page_count = sum(1 for row in statuses
+                            if _status_value(row) not in _SUCCESS_STATES
+                            or str(row.get("parse_status") or "").upper()
+                            in {"ACCESS_BLOCKED", "NETWORK_ERROR", "PARSER_ERROR"})
+    def _record_count(row: Mapping) -> int:
+        try:
+            return int(row.get("parsed_record_count") or 0)
+        except (TypeError, ValueError):
+            return 0
+    empty_page_count = sum(1 for row in statuses
+                           if str(row.get("parse_status") or "").upper() == "PARSE_EMPTY"
+                           or _record_count(row) <= 0)
+    unique_asins = {row.get("ranking_asin") for row in rows if row.get("ranking_asin")}
+    authoritative = (not offline_frozen and expected_page_count > 0
+                     and completed_page_count == expected_page_count
+                     and parsed_page_count == expected_page_count
+                     and failed_page_count == 0 and empty_page_count == 0
+                     and bool(rows) and bool(unique_asins))
     snapshot_status = "AUTHORITATIVE" if authoritative else "INCOMPLETE"
     output_root = Path(output_root)
     day_dir = output_root / datetime.fromisoformat(started.replace("Z", "+00:00")).strftime("%Y-%m-%d")
@@ -195,13 +233,19 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
     manifest = {
         "snapshot_id": snapshot_id,
         "snapshot_status": snapshot_status,
+        "snapshot_mode": "OFFLINE_FROZEN" if offline_frozen else "LIVE",
         "latest_authoritative": authoritative,
         "started_at": started,
         "completed_at": completed,
         "source_count": len(statuses),
-        "page_count": len(pages),
+        "page_count": expected_page_count,
+        "expected_page_count": expected_page_count,
+        "completed_page_count": completed_page_count,
+        "parsed_page_count": parsed_page_count,
+        "failed_page_count": failed_page_count,
+        "empty_page_count": empty_page_count,
         "record_count": len(rows),
-        "unique_asin_count": len({row.get("ranking_asin") for row in rows if row.get("ranking_asin")}),
+        "unique_asin_count": len(unique_asins),
         "product_url_present_count": sum(bool(row.get("ranking_product_url_raw")) for row in rows),
         "product_url_missing_count": sum(not bool(row.get("ranking_product_url_raw")) for row in rows),
         "link_asin_match_count": link_statuses.count("MATCH"),
@@ -209,6 +253,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                                          for status in link_statuses),
         "access_state_summary": state_summary,
         "source_statuses": statuses,
+        "page_statuses": statuses,
         "parser_version": parser_version,
         "ranking_schema_version": RANKING_SCHEMA_VERSION,
         "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
@@ -231,32 +276,48 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
     """Collect through the existing serial collector and always persist a snapshot."""
     started = _utc_now()
     records = []
-    source_statuses = {str(url): "UNKNOWN" for url in urls}
+    source_statuses = []
     error = None
+    run_dir = Path(output_root) / "runs" / (started.strftime("%Y%m%d_%H%M%S_%f")
+                                            + "_" + new_snapshot_id(started).split("_", 1)[1])
+    planned_pages = [{"source_url": str(url), "page_number": page}
+                     for url in urls for page in range(1, int(pages_per_url) + 1)]
     try:
         records = collect_rankings(list(urls), session, str(output_root),
-                                   pages_per_url=pages_per_url)
-        source_statuses = {str(url): "NORMAL" for url in urls}
+                                   pages_per_url=pages_per_url, run_dir=str(run_dir))
     except Exception as exc:
         error = str(exc)
         if isinstance(exc, AccessStopError):
             message = error.upper()
             state = "RATE_LIMITED" if "429" in message else "BLOCKED" if "403" in message else "CHALLENGE"
-            source_statuses = {str(url): state for url in urls}
+            source_statuses = [{"source_url": str(url), "page_number": page,
+                                "access_state": state, "parse_status": "ACCESS_BLOCKED",
+                                "error": error}
+                               for url in urls for page in range(1, int(pages_per_url) + 1)]
+    status_file = run_dir / "page_statuses.json"
+    if status_file.exists():
+        try:
+            source_statuses = json.loads(status_file.read_text(encoding="utf-8"))
+            records = []
+            for page_file in sorted((run_dir / "pages").glob("*.json")):
+                page_data = json.loads(page_file.read_text(encoding="utf-8"))
+                records.extend(page_data.get("records") or [])
+        except (OSError, ValueError):
+            pass
+    if not source_statuses:
+        source_statuses = [{"source_url": row["source_url"], "page_number": row["page_number"],
+                            "access_state": "NORMAL", "parse_status": "PARSE_OK",
+                            "parsed_record_count": 0}
+                           for row in planned_pages]
     html_files = {}
-    run_root = Path(output_root) / "runs"
-    if run_root.is_dir():
-        run_dirs = sorted((path for path in run_root.iterdir() if path.is_dir()),
-                          key=lambda path: path.stat().st_mtime, reverse=True)
-        if run_dirs:
-            html_dir = run_dirs[0] / "html"
-            if html_dir.is_dir():
-                for path in sorted(html_dir.glob("ranking_*.html")):
-                    try:
-                        html_files[path.name] = path.read_text(encoding="utf-8")
-                    except OSError:
-                        continue
-    result = build_ranking_snapshot(records, output_root, planned_sources=list(urls),
+    html_dir = run_dir / "html"
+    if html_dir.is_dir():
+        for path in sorted(html_dir.glob("ranking_*.html")):
+            try:
+                html_files[path.name] = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    result = build_ranking_snapshot(records, output_root, planned_sources=planned_pages,
                                     source_statuses=source_statuses,
                                     started_at=started, html_files=html_files, **kwargs)
     if error:

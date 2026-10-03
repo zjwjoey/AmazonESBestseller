@@ -3,7 +3,7 @@ import json
 import pytest
 
 from amazon_es_bestseller.access.detector import AccessStopError
-from amazon_es_bestseller.collection.detail import collect_details
+from amazon_es_bestseller.collection.detail import audit_saved_detail_cache, collect_details
 
 
 class _Page:
@@ -51,6 +51,19 @@ def test_collect_details_rechecks_cached_blocked_page(tmp_path):
         encoding="utf-8")
     with pytest.raises(AccessStopError):
         collect_details(["B078C6QR1C"], FakeSession(), str(tmp_path))
+
+
+def test_audit_saved_cache_rejects_mislabeled_product_page(tmp_path):
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B078C6QR1C.html").write_text(
+        "<html><body><input id='ASIN' value='B075JJRFVV'>"
+        "<h1 id='productTitle'>Other product</h1></body></html>", encoding="utf-8")
+
+    result = audit_saved_detail_cache(html_dir)
+
+    assert result["summary"]["INVALID_OR_EMPTY"] == 1
+    assert result["records"][0]["identity_status"] == "IDENTITY_MISMATCH"
 
 
 def test_collect_details_preserves_distinct_timeout_status(tmp_path):

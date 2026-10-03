@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
+from ..identity import resolve_identity
 from ..models import AccessState
 from .checkpoints import write_checkpoint
 
@@ -543,15 +544,23 @@ def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessS
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
     soup = BeautifulSoup(html, "lxml")
     candidates = _page_asin_candidates(soup)
-    final_url = str(meta.get("final_url") or "")
-    if final_url and not verify_asin_on_page(final_url, asin):
-        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
-    if candidates and str(asin).upper() not in candidates:
-        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
     parsed = parse_detail_page(html, asin)
     if not parsed.get("title_es_raw") or parsed.get("is_captcha"):
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
     return "VALID_PRODUCT_PAGE", access_state, parsed
+
+
+def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | None) -> dict:
+    """Use the shared resolver for live and cached detail evidence."""
+    page_asins = _page_asin_evidence(html)
+    parsed = page_asins[0] if len(page_asins) == 1 else ""
+    record = record or {}
+    return resolve_identity(
+        ranking_asin=asin, requested_asin=asin, final_url_asin=final_url,
+        embedded_asins=page_asins, parsed_detail_asin=parsed,
+        parent_asin=record.get("parent_asin") or record.get("parent_asin_raw"),
+        variation_family_asins=record.get("variation_family_asins") or record.get("variation_asins") or [],
+    )
 
 
 def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
@@ -589,11 +598,23 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
                 continue
             if asin in seen_asins:
                 continue
+            identity = _resolve_page_identity(asin, html, meta.get("final_url") or "", rec)
+            if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
+                # The filename is only the requested identity, not proof of
+                # what the saved HTML contains. Do not let a stale or
+                # mislabelled page enter DetailState during offline reparse.
+                continue
             rec.update({"status_code": meta.get("status_code"),
                         "initial_access_state": meta.get("initial_access_state"),
                         "access_state": state_value.value,
                         "recovered_from_challenge": bool(meta.get("recovered_from_challenge")),
-                        "resumed_from_html": True})
+                        "resumed_from_html": True,
+                        "requested_asin": asin,
+                        "resolved_asin": identity.get("resolved_asin") or asin,
+                        "identity_status": ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
+                                             else identity["identity_status"]),
+                        "identity_status_code": identity["identity_status"],
+                        "identity_evidence": identity["identity_evidence"]})
             out.append(rec)
             seen_asins.add(asin)
     if out:
@@ -645,10 +666,18 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                 except (OSError, ValueError):
                     status_meta = {}
             classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
+            identity = _resolve_page_identity(
+                asin, html, status_meta.get("final_url") or "", parsed)
+            if (classification == "VALID_PRODUCT_PAGE"
+                    and identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}):
+                classification = "INVALID_OR_EMPTY"
+                parsed = None
             records.append({"asin": asin, "path": str(path), "classification": classification,
                             "initial_access_state": status_meta.get("initial_access_state"),
                             "access_state": access_state.value,
                             "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
+                            "identity_status": identity["identity_status"],
+                            "identity_evidence": identity["identity_evidence"],
                             "quarantined": bool(quarantine) and classification != "VALID_PRODUCT_PAGE",
                             "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
@@ -662,7 +691,10 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                                "initial_access_state": status_meta.get("initial_access_state"),
                                "access_state": access_state.value,
                                "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
-                               "cache_classification": classification})
+                               "cache_classification": classification,
+                               "identity_status": identity["identity_status"],
+                               "identity_status_code": identity["identity_status"],
+                               "identity_evidence": identity["identity_evidence"]})
                 state.update([update])
     summary = {k: sum(r["classification"] == k for r in records)
                for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
@@ -696,7 +728,9 @@ def verify_asin_on_page(url: str, asin: str) -> bool:
 def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     should_stop: Optional[Callable[[], bool]] = None,
                     request_urls: Optional[dict] = None,
-                    execution_context: Optional[dict] = None) -> List[dict]:
+                    execution_context: Optional[dict] = None,
+                    write_summary: bool = True,
+                    details_output_path: Optional[str] = None) -> List[dict]:
     """串行采集详情页：原始 HTML 落盘 html/<asin>.html + 结果 details.json。
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
@@ -758,9 +792,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             if context.get(key) is not None:
                 enriched.setdefault(key, context[key])
         enriched.setdefault("requested_asin", asin)
+        enriched.setdefault("attempt_count", int(context.get("attempt") or 1))
         collected_at = datetime.now().isoformat(timespec="seconds")
         enriched.setdefault("timestamp", collected_at)
         enriched.setdefault("collected_at", collected_at)
+        if str(enriched.get("status") or "").lower() == "failed":
+            enriched.setdefault("last_attempt_at", collected_at)
+            if str(enriched.get("detail_status") or "").upper() in {
+                    "TIMEOUT", "NETWORK_ERROR", "TRANSIENT_NETWORK_FAILURE"}:
+                enriched.setdefault("next_retry_at", collected_at)
         if enriched.get("status_code") is not None:
             enriched.setdefault("http_status", enriched["status_code"])
         if enriched.get("access_state") is not None:
@@ -791,13 +831,6 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     meta = {}
             cached_status = meta.get("status_code", 200)
             cached_url = meta.get("final_url") or ""
-            if cached_url and not verify_asin_on_page(cached_url, asin):
-                quarantine_invalid(asin, path, meta_path)
-                checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
-                                 "error": "缓存详情页 ASIN 不一致", "final_url": cached_url,
-                                 "observed_page_asins": _page_asin_evidence(html)})
-                progress(asin, "asin_mismatch")
-                continue
             cache_meta = {"status_code": cached_status, "final_url": cached_url,
                           "initial_access_state": meta.get("initial_access_state"),
                           "access_state": meta.get("access_state"),
@@ -832,6 +865,18 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                      "observed_page_asins": _page_asin_evidence(html)})
                     progress(asin, "invalid")
                     continue
+                cached_identity = _resolve_page_identity(asin, html, cached_url, rec)
+                if cached_identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
+                    quarantine_invalid(asin, path, meta_path)
+                    checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
+                                      "error": "缓存详情页身份证据不一致或不足",
+                                      "final_url": cached_url,
+                                      "resolved_asin": cached_identity.get("resolved_asin"),
+                                      "identity_status": cached_identity.get("identity_status"),
+                                      "identity_evidence": cached_identity.get("identity_evidence"),
+                                      "observed_page_asins": _page_asin_evidence(html)})
+                    progress(asin, "asin_mismatch")
+                    continue
                 rec["status_code"] = meta.get("status_code")
                 rec["initial_access_state"] = meta.get("initial_access_state")
                 rec["access_state"] = parsed_state.value
@@ -840,8 +885,11 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
                 rec["resumed_from_html"] = True
                 rec["requested_asin"] = asin
-                rec["resolved_asin"] = asin
-                rec["identity_status"] = "MATCH"
+                rec["resolved_asin"] = cached_identity.get("resolved_asin") or asin
+                rec["identity_status"] = ("MATCH" if cached_identity["identity_status"] == "IDENTITY_MATCH"
+                                           else cached_identity["identity_status"])
+                rec["identity_status_code"] = cached_identity["identity_status"]
+                rec["identity_evidence"] = cached_identity["identity_evidence"]
                 rec["detail_status"] = "SUCCESS"
                 rec["requested_url"] = (execution_context.get(asin, {}).get("preferred_request_url")
                                          or cached_url or ("https://www.amazon.es/dp/" + asin))
@@ -850,9 +898,11 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                  "source": "cache", "record": rec})
                 progress(asin, "success")
                 continue
+        request_started = False
         try:
             requested_url = str(request_urls.get(asin) or
                                 ("https://www.amazon.es/dp/" + asin))
+            request_started = True
             status = session.goto(requested_url)
             session.wait_for_product_page()
             session.wait_for_price_text()
@@ -882,16 +932,6 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 progress(asin, "access_stop")
                 raise
             final_url = str(getattr(session.page, "url", "") or "")
-            if final_url and not verify_asin_on_page(final_url, asin):
-                quarantine_invalid(asin, path, meta_path)
-                checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
-                                 "http_status": status,
-                                 "initial_access_state": initial_state.value,
-                                 "final_access_state": state.value,
-                                 "error": "详情页 ASIN 不一致", "final_url": final_url,
-                                 "observed_page_asins": _page_asin_evidence(html)})
-                progress(asin, "asin_mismatch")
-                continue
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"status_code": status, "final_url": final_url,
                            "requested_url": requested_url, "requested_asin": asin,
@@ -914,6 +954,20 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                  "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "invalid")
                 continue
+            identity = _resolve_page_identity(asin, html, final_url, rec)
+            if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
+                quarantine_invalid(asin, path, meta_path)
+                checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
+                                  "http_status": status,
+                                  "initial_access_state": initial_state.value,
+                                  "final_access_state": state.value,
+                                  "error": "详情页身份证据不一致或不足", "final_url": final_url,
+                                  "resolved_asin": identity.get("resolved_asin"),
+                                  "identity_status": identity.get("identity_status"),
+                                  "identity_evidence": identity.get("identity_evidence"),
+                                  "observed_page_asins": _page_asin_evidence(html)})
+                progress(asin, "asin_mismatch")
+                continue
             rec["status_code"] = status
             rec["http_status"] = status
             rec["initial_access_state"] = initial_state.value
@@ -924,12 +978,11 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             rec["requested_asin"] = asin
             rec["requested_url"] = requested_url
             rec["final_url"] = final_url
-            rec["resolved_asin"] = (re.search(r"/dp/([A-Z0-9]{10})(?:[/?#]|$)",
-                                               final_url, re.I).group(1).upper()
-                                    if re.search(r"/dp/([A-Z0-9]{10})(?:[/?#]|$)",
-                                                 final_url, re.I) else asin)
-            rec["identity_status"] = ("MATCH" if rec["resolved_asin"] == asin
-                                       else "IDENTITY_MISMATCH")
+            rec["resolved_asin"] = identity.get("resolved_asin") or asin
+            rec["identity_status"] = ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
+                                       else identity["identity_status"])
+            rec["identity_status_code"] = identity["identity_status"]
+            rec["identity_evidence"] = identity["identity_evidence"]
             rec["detail_status"] = "SUCCESS"
             checkpoint(asin, {"asin": asin, "status": "success",
                              "source": "network", "record": rec})
@@ -946,6 +999,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             elif (isinstance(exc, ConnectionError)
                   or any(token in message for token in ("network", "connection", "navigation"))):
                 detail_status = "TRANSIENT_NETWORK_FAILURE"
+            elif isinstance(exc, (ValueError, KeyError, TypeError)):
+                detail_status = "PARSER_ERROR"
             else:
                 detail_status = "FAILED"
             checkpoint(asin, {"asin": asin, "status": "failed",
@@ -954,9 +1009,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             progress(asin, "failed")
             print("详情采集失败 ASIN %s：%s（跳过，重跑将补齐）"
                   % (asin, type(exc).__name__))
+            if request_started:
+                session.wait_between_requests()
 
-    with open(os.path.join(str(out_dir), "details.json"), "w", encoding="utf-8") as f:
-        json.dump(details, f, ensure_ascii=False, indent=2)
+    if write_summary or details_output_path:
+        target = details_output_path or os.path.join(str(out_dir), "details.json")
+        temporary = target + ".tmp"
+        with open(temporary, "w", encoding="utf-8") as f:
+            json.dump(details, f, ensure_ascii=False, indent=2)
+        os.replace(temporary, target)
     if failed:
         print("详情采集完成：%d 成功 / %d 失败（重跑自动补齐缺失）"
               % (len(details), len(failed)))

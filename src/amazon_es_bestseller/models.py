@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import namedtuple
 from enum import Enum
 from typing import List, Mapping, Optional
+import re
 
 
 class QAStatus(str, Enum):
@@ -110,10 +111,15 @@ DETAIL_RAW_KEYS = (
 
 
 def normalize_asin(asin: Optional[str]) -> str:
-    """ASIN 统一为大写去空白；无效输入返回 ''。"""
+    """ASIN 只做格式化（大写、去空白）；验证由 :func:`is_valid_asin` 负责。"""
     if not asin:
         return ""
     return str(asin).strip().upper()
+
+
+def is_valid_asin(asin: Optional[str]) -> bool:
+    """Return whether a normalized value is a valid ten-character ASIN."""
+    return bool(re.fullmatch(r"[A-Z0-9]{10}", normalize_asin(asin)))
 
 
 def merge_ranking_and_detail(

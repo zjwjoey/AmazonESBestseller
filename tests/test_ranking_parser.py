@@ -17,8 +17,9 @@ def test_parse_three_rows(bestsellers_grid_html):
     assert len(records) == 3
     assert records[0] == {
         "index": 0,
-        "asin": "B078C6QR1C",
-        "ranking_asin": "B078C6QR1C",
+            "asin": "B078C6QR1C",
+            "ranking_asin": "B078C6QR1C",
+            "ranking_asin_source": "PRODUCT_URL_ASIN",
         "category_l1": "Hogar y cocina",
         "category_l2": "Almacenamiento y organización",
         "category_l3": "Juegos de recipientes",

@@ -129,6 +129,24 @@ def _load_category_planning(path: Optional[str]):
     return data
 
 
+def _load_checkpoint_input(path: Optional[str]):
+    """Read the canonical checkpoint directory, with legacy JSON support."""
+    if not path:
+        return []
+    target = Path(path)
+    if target.is_dir():
+        rows = []
+        for item in sorted(target.glob("*.json")):
+            try:
+                value = json.loads(item.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(value, dict):
+                rows.append(value)
+        return rows
+    return _load_json(path)
+
+
 def _load_images_by_asin(directory: Optional[str], records: list) -> dict:
     if not directory:
         return {}
@@ -229,13 +247,20 @@ def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
             state.save()
         plan = build_plan(planning_rankings, state)
         planned_asins = collect_asins(plan)
+        def _collect_delta(*collect_args, **collect_kwargs):
+            try:
+                return collect_details(*collect_args, **collect_kwargs, write_summary=False)
+            except TypeError as exc:
+                if "unexpected keyword argument" not in str(exc):
+                    raise
+                return collect_details(*collect_args, **collect_kwargs)
         if args.progress:
             def _write_progress(event):
                 _save_json({"planned": len(planned_asins), **event}, args.progress)
-            details = collect_details(planned_asins, session, out_dir,
-                                      on_progress=_write_progress)
+            details = _collect_delta(planned_asins, session, out_dir,
+                                     on_progress=_write_progress)
         else:
-            details = collect_details(planned_asins, session, out_dir)
+            details = _collect_delta(planned_asins, session, out_dir)
         state.update(details)
         state.save()
         # details.json 用 state 全量重建：resume 场景下 collect_details 只产出
@@ -296,10 +321,24 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
     output_root = Path(args.out_dir)
     if args.rankings_file:
         records = _load_snapshot_records(args.rankings_file)
-        sources = sorted({str(row.get("ranking_source_url") or "") for row in records
-                          if isinstance(row, dict) and row.get("ranking_source_url")})
-        result = build_ranking_snapshot(records, output_root, planned_sources=sources,
-                                        source_statuses={url: "NORMAL" for url in sources})
+        source_statuses = []
+        planned_sources = []
+        offline_frozen = True
+        if args.source_manifest:
+            manifest = _load_json(args.source_manifest)
+            if isinstance(manifest, dict):
+                source_statuses = (manifest.get("page_statuses")
+                                   or manifest.get("source_statuses") or [])
+                planned_sources = (manifest.get("planned_pages")
+                                   or manifest.get("pages") or source_statuses)
+            elif isinstance(manifest, list):
+                source_statuses = manifest
+                planned_sources = manifest
+            offline_frozen = False
+        result = build_ranking_snapshot(records, output_root,
+                                        planned_sources=planned_sources,
+                                        source_statuses=source_statuses,
+                                        offline_frozen=offline_frozen)
     else:
         if not args.urls:
             parser.error("ranking-snapshot 需要 --urls 或 --rankings-file")
@@ -313,6 +352,11 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
     print("ranking snapshot %s：%s（%d 条记录）" %
           (result["manifest"]["snapshot_status"], result["path"],
            result["manifest"]["record_count"]))
+    if result["manifest"]["snapshot_status"] != "AUTHORITATIVE" and not args.allow_incomplete_debug:
+        from .monitoring.snapshot import SnapshotIncompleteError
+        raise SnapshotIncompleteError(
+            "快照已保存为 INCOMPLETE；未更新 latest_authoritative pointer。"
+            "生产模式拒绝以 0 退出，请检查 manifest/page_statuses。")
 
 
 def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
@@ -321,9 +365,10 @@ def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
     snapshot = _load_snapshot_input(args.snapshot)
     details = _load_json(args.details) if args.details else []
     state = _load_json(args.state) if args.state else []
-    checkpoints = _load_json(args.checkpoints) if args.checkpoints else []
+    checkpoints = _load_checkpoint_input(args.checkpoints)
     plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None,
-                             checkpoints=checkpoints)
+                             checkpoints=checkpoints,
+                             current_access_state=args.current_access_state)
     paths = write_detail_plan(plan, args.out_dir)
     print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
 
@@ -348,11 +393,13 @@ def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
     if args.offline and pending:
         parser.error("detail-run --offline 发现 %d 个网络动作；计划未执行且不会访问 Amazon" % len(pending))
     if not pending:
-        result = execute_detail_plan(plan, None, args.out_dir)
+        result = execute_detail_plan(plan, None, args.out_dir, offline=True,
+                                     saved_html=args.html_dir or None)
     else:
         with BrowserSession(headless=not args.headful,
                             profile_dir=args.profile_dir or None) as session:
-            result = execute_detail_plan(plan, session, args.out_dir)
+            result = execute_detail_plan(plan, session, args.out_dir, offline=bool(args.offline),
+                                         saved_html=args.html_dir or None)
     print("detail run 完成：计划网络动作 %d，执行记录 %d → %s" %
           (result["requested_count"], len(result["records"]),
            Path(args.out_dir) / "detail_execution_manifest.json"))
@@ -555,7 +602,8 @@ def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
         if pending_detail_asins and not args.rankings_only:
             retry = sorted(pending_detail_asins - detail_asins)
             if retry:
-                retry_details = collect_details(retry, session, str(out_dir / "detail_cache"))
+                retry_details = collect_details(retry, session, str(out_dir / "detail_cache"),
+                                                write_summary=False)
                 success = {str(r.get("asin") or "").upper() for r in retry_details if r.get("asin")}
                 for record in retry_details:
                     asin = str(record.get("asin") or "").upper()
@@ -622,7 +670,8 @@ def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
                 json.dumps(all_rankings, ensure_ascii=False, indent=2), encoding="utf-8")
             save_state(group)
             details = [] if args.rankings_only else (
-                collect_details(new_asins, session, str(out_dir / "detail_cache"))
+                collect_details(new_asins, session, str(out_dir / "detail_cache"),
+                                write_summary=False)
                 if new_asins else [])
             for record in details:
                 asin = str(record.get("asin") or "").upper()
@@ -1256,14 +1305,20 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--pages-per-url", type=int, default=1)
     rs.add_argument("--headful", action="store_true")
     rs.add_argument("--profile-dir", default="")
+    rs.add_argument("--source-manifest", default="",
+                    help="离线正式快照的原始计划/page-level evidence manifest")
+    rs.add_argument("--allow-incomplete-debug", action="store_true",
+                    help="允许保存 INCOMPLETE 快照并以 0 退出，仅供人工调试")
     rs.set_defaults(func=lambda a, p=rs: cmd_ranking_snapshot(a, p))
 
     dp = sub.add_parser("detail-plan", help="离线：按榜单快照与详情缓存生成增量详情计划")
     dp.add_argument("--snapshot", required=True, help="rankings.json 或快照 records JSON")
     dp.add_argument("--details", default="", help="已有详情缓存 JSON")
     dp.add_argument("--state", default="", help="详情状态 JSON")
-    dp.add_argument("--checkpoints", default="", help="详情 checkpoint JSON 或记录列表")
+    dp.add_argument("--checkpoints", default="", help="详情 checkpoint 目录，兼容 JSON 文件或记录列表")
     dp.add_argument("--html-dir", default="", help="保存的详情 HTML 目录，用于 schema 离线重解析决策")
+    dp.add_argument("--current-access-state", default="UNKNOWN",
+                    help="当前 Access Gate 状态；恢复为 NORMAL 时允许历史受限记录重试")
     dp.add_argument("--out-dir", required=True, help="detail_plan.json/csv/summary 输出目录")
     dp.set_defaults(func=lambda a, p=dp: cmd_detail_plan(a, p))
 
@@ -1272,6 +1327,9 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--out-dir", required=True)
     dr.add_argument("--headful", action="store_true")
     dr.add_argument("--profile-dir", default="")
+    dr.add_argument("--html-dir", default="", help="REPARSE_SAVED_HTML 使用的详情 HTML 目录")
+    dr.add_argument("--offline", action="store_true",
+                    help="禁止网络动作；REPARSE/VERIFY/BLOCK/REUSE 仍可离线执行")
     dr.set_defaults(func=lambda a, p=dr: cmd_detail_run(a, p))
 
     bc = sub.add_parser("batch-collect", help="联网：按计划分批采集，类目间保持倒计时冷却并自动续跑")
@@ -1477,11 +1535,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     from .access.detector import AccessStopError
     from .access.location import DeliveryLocationError
+    from .monitoring.snapshot import SnapshotIncompleteError
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
         args.func(args)
-    except (AccessStopError, DeliveryLocationError) as e:
+    except (AccessStopError, DeliveryLocationError, SnapshotIncompleteError) as e:
         # 访问门禁或配送地点无法确认：停止采集，退出码 2
         parser.exit(2, "!! %s\n" % e)
     return 0
