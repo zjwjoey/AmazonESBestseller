@@ -163,6 +163,24 @@ def test_reparse_is_executed_offline_and_updates_state(tmp_path):
     assert json.loads((tmp_path / "checkpoints" / "B000000104.json").read_text())["action"] == "REPARSE_SAVED_HTML"
 
 
+def test_reparse_rejects_mislabeled_saved_html(tmp_path):
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B000000107.html").write_text(
+        "<html><body><input id='ASIN' value='B000000108'>"
+        "<h1 id='productTitle'>Producto equivocado</h1></body></html>", encoding="utf-8")
+    plan = {"snapshot_id": "snapshot_reparse_mismatch", "records": [{
+        "snapshot_id": "snapshot_reparse_mismatch", "ranking_asin": "B000000107",
+        "detail_action": "REPARSE_SAVED_HTML", "saved_html_dir": str(html_dir)}]}
+
+    result = execute_detail_plan(plan, None, str(tmp_path), offline=True, saved_html=html_dir)
+
+    assert result["requested_count"] == 0
+    assert result["records"][0]["status"] == "PENDING"
+    assert json.loads((tmp_path / "details.json").read_text(encoding="utf-8")) == []
+    assert not (tmp_path / "checkpoints" / "B000000107.json").exists()
+
+
 def test_verify_identity_writes_review_queue_without_network(tmp_path):
     plan = {"snapshot_id": "snapshot_review", "records": [{
         "snapshot_id": "snapshot_review", "ranking_asin": "B000000105",

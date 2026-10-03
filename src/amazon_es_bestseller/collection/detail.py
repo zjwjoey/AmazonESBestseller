@@ -598,11 +598,23 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
                 continue
             if asin in seen_asins:
                 continue
+            identity = _resolve_page_identity(asin, html, meta.get("final_url") or "", rec)
+            if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
+                # The filename is only the requested identity, not proof of
+                # what the saved HTML contains. Do not let a stale or
+                # mislabelled page enter DetailState during offline reparse.
+                continue
             rec.update({"status_code": meta.get("status_code"),
                         "initial_access_state": meta.get("initial_access_state"),
                         "access_state": state_value.value,
                         "recovered_from_challenge": bool(meta.get("recovered_from_challenge")),
-                        "resumed_from_html": True})
+                        "resumed_from_html": True,
+                        "requested_asin": asin,
+                        "resolved_asin": identity.get("resolved_asin") or asin,
+                        "identity_status": ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
+                                             else identity["identity_status"]),
+                        "identity_status_code": identity["identity_status"],
+                        "identity_evidence": identity["identity_evidence"]})
             out.append(rec)
             seen_asins.add(asin)
     if out:
@@ -654,10 +666,18 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                 except (OSError, ValueError):
                     status_meta = {}
             classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
+            identity = _resolve_page_identity(
+                asin, html, status_meta.get("final_url") or "", parsed)
+            if (classification == "VALID_PRODUCT_PAGE"
+                    and identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}):
+                classification = "INVALID_OR_EMPTY"
+                parsed = None
             records.append({"asin": asin, "path": str(path), "classification": classification,
                             "initial_access_state": status_meta.get("initial_access_state"),
                             "access_state": access_state.value,
                             "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
+                            "identity_status": identity["identity_status"],
+                            "identity_evidence": identity["identity_evidence"],
                             "quarantined": bool(quarantine) and classification != "VALID_PRODUCT_PAGE",
                             "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
@@ -671,7 +691,10 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                                "initial_access_state": status_meta.get("initial_access_state"),
                                "access_state": access_state.value,
                                "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
-                               "cache_classification": classification})
+                               "cache_classification": classification,
+                               "identity_status": identity["identity_status"],
+                               "identity_status_code": identity["identity_status"],
+                               "identity_evidence": identity["identity_evidence"]})
                 state.update([update])
     summary = {k: sum(r["classification"] == k for r in records)
                for k in ("VALID_PRODUCT_PAGE", "CHALLENGE", "INVALID_OR_EMPTY")}
