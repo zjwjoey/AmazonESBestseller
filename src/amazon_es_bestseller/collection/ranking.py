@@ -15,13 +15,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import uuid
 from datetime import datetime
 from typing import Callable, List, Mapping, Optional
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
-from ..access.detector import detect_access_status, require_normal_access
+from ..access.detector import AccessStopError, detect_access_status, require_normal_access
 from ..normalization.category import category_levels
 
 #: 榜单 URL 节点号：旧式 /zgbs/<NODE> 或现代 /gp/bestsellers/<slug>/<NODE>/
@@ -169,6 +170,19 @@ def _normalize_ranking_product_url(raw_url: str, link_asin: Optional[str]) -> st
     return absolute.split("?", 1)[0].split("#", 1)[0]
 
 
+class RankingCollectionResult(list):
+    """Backward-compatible list carrying explicit run/page evidence."""
+
+    def __init__(self, records, run_dir, page_statuses):
+        super().__init__(records)
+        self.run_dir = str(run_dir)
+        self.page_statuses = list(page_statuses)
+
+    @property
+    def records(self):
+        return list(self)
+
+
 def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> list[dict]:
     """畅销榜页 HTML → 排行榜记录列表（每 ASIN × 页面一行）。
 
@@ -201,7 +215,9 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "NO_PRODUCT_URL" if not raw_product_url else
             "NO_ASIN_IN_URL" if not link_asin else
             "MATCH" if link_asin == asin else "MISMATCH"
-        )
+)
+
+
         badge = item.select_one("span.a-badge-text, span.zg-bdg-text")
         rank = None
         rank_raw = None
@@ -214,6 +230,7 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "index": i,
             "asin": asin,
             "ranking_asin": asin,
+            "ranking_asin_source": "CARD_DATA_ASIN" if card_asin else "PRODUCT_URL_ASIN",
             "category_l1": l1,
             "category_l2": l2,
             "category_l3": l3,
@@ -244,7 +261,8 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
 
 
 def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int = 1,
-                    should_stop: Optional[Callable[[], bool]] = None) -> List[dict]:
+                    should_stop: Optional[Callable[[], bool]] = None,
+                    run_dir: Optional[str] = None) -> List[dict]:
     """串行采集榜单页：原始 HTML 落盘 runs/YYYYMMDD_HHMMSS/html/ + rankings.json。
 
     需要 BrowserSession（playwright 仅在 __enter__ 时导入）；联网仅发生在
@@ -257,61 +275,99 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
     # offline fake sessions intentionally omit this method.
     from ..access.location import ensure_spain_delivery
     ensure_spain_delivery(session)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = os.path.join(str(out_dir), "runs", stamp)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    run_dir = run_dir or os.path.join(str(out_dir), "runs", stamp + "_" + uuid.uuid4().hex[:8])
     html_dir = os.path.join(run_dir, "html")
+    pages_dir = os.path.join(run_dir, "pages")
     os.makedirs(html_dir, exist_ok=True)
+    os.makedirs(pages_dir, exist_ok=True)
 
     if int(pages_per_url) < 1:
         raise ValueError("pages_per_url must be >= 1")
     records: List[dict] = []
     collected_at = datetime.now().isoformat(timespec="seconds")
     page_index = 0
+    page_statuses: List[dict] = []
+
+    def persist_page(status_row: dict, page_records: list[dict]) -> None:
+        page_statuses.append(status_row)
+        with open(os.path.join(pages_dir, "page_%03d.json" % (len(page_statuses) - 1),),
+                  "w", encoding="utf-8") as handle:
+            json.dump({"status": status_row, "records": page_records},
+                      handle, ensure_ascii=False, indent=2)
+        temporary = os.path.join(run_dir, "page_statuses.json.tmp")
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(page_statuses, handle, ensure_ascii=False, indent=2)
+        os.replace(temporary, os.path.join(run_dir, "page_statuses.json"))
+
     for url in urls:
         for page_no in range(1, int(pages_per_url) + 1):
-            if should_stop is not None and should_stop():
-                from ..access.detector import AccessStopError
-                raise AccessStopError("其他工作槽触发访问限制，停止新的榜单请求")
             page_url = url if page_no == 1 else (url + ("&" if "?" in url else "?") + "pg=%d" % page_no)
-            status = session.goto(page_url)
-            session.wait_between_requests()
-            # Capture the initial shell first.  Root bestseller pages may only
-            # contain ranks 1--30 until the browser scrolls; trigger lazy
-            # loading on a normal page before taking the authoritative HTML
-            # snapshot.  Fake/offline sessions do not implement the helper.
-            initial_html = session.page.content()
-            initial_state = detect_access_status(status, initial_html)
-            html = initial_html
-            if initial_state.value == "NORMAL":
-                load_lazy = getattr(session, "load_lazy_ranking_content", None)
-                if callable(load_lazy):
-                    load_lazy()
-                    html = session.page.content()
-            with open(os.path.join(html_dir, "ranking_%03d.html" % page_index), "w", encoding="utf-8") as f:
-                f.write(html)  # 先保留证据，再判定访问状态
-            page_index += 1
-            # Reclassify the rendered snapshot as lazy loading can expose a
-            # challenge/error shell after navigation.  Keep ``initial_state``
-            # separately for audit and recovery metadata.
-            state = detect_access_status(status, html)
-            from ..access.challenge import maybe_wait_for_challenge
-            original_html = html
-            state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
-            if original_html != html and state.value == "NORMAL":
-                with open(os.path.join(html_dir, "ranking_%03d.html.challenge" % (page_index - 1)),
-                          "w", encoding="utf-8") as f:
-                    f.write(original_html)
-                with open(os.path.join(html_dir, "ranking_%03d.html" % (page_index - 1)),
-                          "w", encoding="utf-8") as f:
-                    f.write(html)
-            require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
-                                  % (status, page_url, page_index - 1))
-            for r in parse_bestsellers_page(html, page_url, collected_at):
-                r["status_code"] = status
-                r["initial_access_state"] = initial_state.value
-                r["access_state"] = state.value
-                r["recovered_from_challenge"] = recovered
-                records.append(r)
+            status_row = {"source_url": str(url), "page_number": page_no,
+                          "page_url": page_url, "access_state": "UNKNOWN",
+                          "http_status": None, "parse_status": "NOT_STARTED",
+                          "parsed_record_count": 0, "error": ""}
+            page_records: list[dict] = []
+            if should_stop is not None and should_stop():
+                status_row.update(access_state="BLOCKED", parse_status="ACCESS_BLOCKED",
+                                  error="其他工作槽触发访问限制")
+                persist_page(status_row, page_records)
+                raise AccessStopError("其他工作槽触发访问限制，停止新的榜单请求")
+            try:
+                status = session.goto(page_url)
+                status_row["http_status"] = status
+                session.wait_between_requests()
+                # Capture the initial shell first.  Root bestseller pages may only
+                # contain ranks 1--30 until the browser scrolls; trigger lazy
+                # loading on a normal page before taking the authoritative HTML
+                # snapshot.  Fake/offline sessions do not implement the helper.
+                initial_html = session.page.content()
+                initial_state = detect_access_status(status, initial_html)
+                html = initial_html
+                if initial_state.value == "NORMAL":
+                    load_lazy = getattr(session, "load_lazy_ranking_content", None)
+                    if callable(load_lazy):
+                        load_lazy()
+                        html = session.page.content()
+                html_path = os.path.join(html_dir, "ranking_%03d.html" % page_index)
+                with open(html_path, "w", encoding="utf-8") as f:
+                    f.write(html)  # 先保留证据，再判定访问状态
+                page_index += 1
+                state = detect_access_status(status, html)
+                from ..access.challenge import maybe_wait_for_challenge
+                original_html = html
+                state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
+                if original_html != html and state.value == "NORMAL":
+                    with open(html_path + ".challenge", "w", encoding="utf-8") as f:
+                        f.write(original_html)
+                    with open(html_path, "w", encoding="utf-8") as f:
+                        f.write(html)
+                status_row.update(access_state=state.value,
+                                  initial_access_state=initial_state.value,
+                                  recovered_from_challenge=bool(recovered))
+                require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
+                                      % (status, page_url, page_index - 1))
+                page_records = parse_bestsellers_page(html, page_url, collected_at)
+                for r in page_records:
+                    r["status_code"] = status
+                    r["initial_access_state"] = initial_state.value
+                    r["access_state"] = state.value
+                    r["recovered_from_challenge"] = recovered
+                    records.append(r)
+                status_row.update(parse_status="PARSE_OK" if page_records else "PARSE_EMPTY",
+                                  parsed_record_count=len(page_records))
+            except AccessStopError as exc:
+                status_row.setdefault("access_state", "UNKNOWN")
+                status_row["parse_status"] = "ACCESS_BLOCKED"
+                status_row["error"] = str(exc)
+                persist_page(status_row, page_records)
+                raise
+            except Exception as exc:
+                status_row["parse_status"] = "PARSER_ERROR" if "parse" in str(exc).lower() else "NETWORK_ERROR"
+                status_row["error"] = str(exc)
+                persist_page(status_row, page_records)
+                raise
+            persist_page(status_row, page_records)
     with open(os.path.join(run_dir, "rankings.json"), "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
-    return records
+    return RankingCollectionResult(records, run_dir, page_statuses)

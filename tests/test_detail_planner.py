@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
+import json
 import socket
 
 import pytest
 
 from amazon_es_bestseller.monitoring.detail_planner import (
-    DetailAction, build_detail_plan, write_detail_plan,
+    DetailAction, build_detail_plan, validate_detail_plan, write_detail_plan,
 )
 
 
@@ -132,3 +133,43 @@ def test_checkpoint_failure_is_planned_as_retry_and_history_url_is_safe():
     retry = build_detail_plan(_snapshot([_ranking("B000000009")]), checkpoints=[{
         "asin": "B000000009", "status": "failed", "access_state": "NETWORK_ERROR"}])
     assert retry["records"][0]["detail_action"] == "RETRY_TRANSIENT_FAILURE"
+
+
+def test_missing_product_link_uses_canonical_fallback_instead_of_blocking():
+    row = _ranking("B000000015", ranking_product_url_raw="", ranking_product_url_normalized="",
+                   ranking_link_asin=None, ranking_link_identity_status="NO_PRODUCT_URL",
+                   ranking_asin_source="CARD_DATA_ASIN")
+    item = build_detail_plan(_snapshot([row]))["records"][0]
+    assert item["detail_action"] == "FETCH_NEW"
+    assert item["preferred_request_url"] == "https://www.amazon.es/dp/B000000015"
+    assert item["preferred_request_url_source"] == "asin_canonical_fallback"
+
+
+def test_best_request_context_is_not_selected_by_rank_alone():
+    rows = [
+        _ranking("B000000016", rank=1, ranking_product_url_raw="",
+                 ranking_product_url_normalized="", ranking_link_asin=None,
+                 ranking_link_identity_status="NO_PRODUCT_URL", ranking_asin_source="CARD_DATA_ASIN"),
+        _ranking("B000000016", rank=8, ranking_product_url_raw="/dp/B000000016/ref=x",
+                 ranking_product_url_normalized="https://www.amazon.es/dp/B000000016",
+                 ranking_link_asin="B000000016", ranking_link_identity_status="MATCH"),
+    ]
+    item = build_detail_plan(_snapshot(rows))["records"][0]
+    assert item["preferred_request_url_source"] == "latest_ranking_product_url"
+    assert item["best_ranking_rank"] == 1
+    assert item["ranking_rank"] == 8
+
+
+def test_plan_artifact_hash_and_mixed_snapshot_validation(tmp_path):
+    plan = build_detail_plan(_snapshot([_ranking()]))
+    path = write_detail_plan(plan, tmp_path)["json"]
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    assert artifact["plan_id"]
+    assert len(artifact["plan_hash"]) == 64
+    validate_detail_plan(artifact)
+    artifact["records"][0]["detail_action"] = "BLOCK_CODE_FIX"
+    with pytest.raises(ValueError, match="hash"):
+        validate_detail_plan(artifact)
+    with pytest.raises(ValueError, match="snapshot_id"):
+        write_detail_plan({"snapshot_id": "s1", "records": [
+            {"snapshot_id": "s1"}, {"snapshot_id": "s2"}]}, tmp_path / "mixed")

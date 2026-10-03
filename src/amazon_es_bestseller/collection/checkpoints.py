@@ -6,9 +6,12 @@ import json
 import os
 from pathlib import Path
 
+from ..models import is_valid_asin, normalize_asin
+
 
 def _safe_asin(asin: str) -> str:
-    return str(asin or "").strip().upper()
+    value = normalize_asin(asin)
+    return value if is_valid_asin(value) else ""
 
 
 def write_checkpoint(root, asin: str, payload: dict) -> Path:

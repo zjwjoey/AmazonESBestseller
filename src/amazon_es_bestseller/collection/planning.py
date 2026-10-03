@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from ..models import normalize_asin
+from ..models import is_valid_asin, normalize_asin
 from .detail import CURRENT_DETAIL_SCHEMA_VERSION
 
 #: 关键字段（缺失任一即视为"不完整"）与中文说明（QA_RULES §29 填充率字段）
@@ -74,7 +74,7 @@ class DetailState:
         now = datetime.now()
         for r in detail_records:
             a = normalize_asin(r.get("asin"))
-            if not a:
+            if not a or not is_valid_asin(a):
                 continue
             rec = dict(r)
             rec.setdefault("collected_at", now.isoformat(timespec="seconds"))

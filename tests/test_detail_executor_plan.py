@@ -35,7 +35,7 @@ def test_executor_only_passes_network_actions_and_records_checkpoint(tmp_path):
     result = execute_detail_plan(_plan(), object(), str(tmp_path), collector=fake_collector)
     assert calls == [(["B000000003"], {"B000000003": "https://www.amazon.es/dp/B000000003"})]
     assert {row["status"] for row in result["records"] if row["ranking_asin"] in {
-        "B000000001", "B000000002"}} == {"PLAN_SKIPPED"}
+        "B000000001", "B000000002"}} == {"REUSED", "BLOCKED"}
     assert json.loads((tmp_path / "detail_execution_manifest.json").read_text())["requested_count"] == 1
 
 
@@ -107,3 +107,67 @@ def test_existing_collector_checkpoint_carries_request_evidence(tmp_path, monkey
     assert checkpoint["http_status"] == 200
     assert checkpoint["final_access_state"] == "NORMAL"
     assert checkpoint["collected_at"]
+
+
+def test_incremental_executor_merges_delta_without_overwriting_existing_state(tmp_path):
+    existing = [{"asin": "B%09d" % i, "title_es_raw": "old-%d" % i}
+                for i in range(1, 101)]
+    (tmp_path / "details.json").write_text(json.dumps(existing), encoding="utf-8")
+    plan = {"snapshot_id": "snapshot_delta", "records": [
+        {"snapshot_id": "snapshot_delta", "ranking_asin": "B000000101", "detail_action": "FETCH_NEW"},
+        {"snapshot_id": "snapshot_delta", "ranking_asin": "B000000102", "detail_action": "FETCH_NEW"},
+        {"snapshot_id": "snapshot_delta", "ranking_asin": "B000000103", "detail_action": "FETCH_NEW"},
+    ]}
+
+    def fake_collector(asins, _session, _out_dir, **_kwargs):
+        return [{"asin": asin, "title_es_raw": "new"} for asin in asins]
+
+    execute_detail_plan(plan, object(), str(tmp_path), collector=fake_collector)
+    merged = json.loads((tmp_path / "details.json").read_text(encoding="utf-8"))
+    assert len(merged) == 103
+    assert {row["asin"] for row in merged[:3]} == {"B000000001", "B000000002", "B000000003"}
+
+
+def test_incremental_executor_failed_delta_preserves_old_and_successful_records(tmp_path):
+    existing = [{"asin": "B%09d" % i, "title_es_raw": "old"} for i in range(1, 101)]
+    (tmp_path / "details.json").write_text(json.dumps(existing), encoding="utf-8")
+    plan = {"snapshot_id": "snapshot_delta", "records": [
+        {"snapshot_id": "snapshot_delta", "ranking_asin": "B000000101", "detail_action": "FETCH_NEW"},
+        {"snapshot_id": "snapshot_delta", "ranking_asin": "B000000102", "detail_action": "FETCH_NEW"},
+        {"snapshot_id": "snapshot_delta", "ranking_asin": "B000000103", "detail_action": "FETCH_NEW"},
+    ]}
+
+    def fake_collector(asins, _session, _out_dir, **_kwargs):
+        write_checkpoint(tmp_path / "checkpoints", asins[-1], {
+            "asin": asins[-1], "status": "failed", "detail_status": "TIMEOUT"})
+        return [{"asin": asin, "title_es_raw": "new"} for asin in asins[:2]]
+
+    execute_detail_plan(plan, object(), str(tmp_path), collector=fake_collector)
+    merged = json.loads((tmp_path / "details.json").read_text(encoding="utf-8"))
+    assert len(merged) == 102
+    assert {row["asin"] for row in merged[-2:]} == {"B000000101", "B000000102"}
+
+
+def test_reparse_is_executed_offline_and_updates_state(tmp_path):
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "B000000104.html").write_text(
+        "<html><body><input id='ASIN' value='B000000104'>"
+        "<h1 id='productTitle'>Producto reparseado</h1></body></html>", encoding="utf-8")
+    plan = {"snapshot_id": "snapshot_reparse", "records": [{
+        "snapshot_id": "snapshot_reparse", "ranking_asin": "B000000104",
+        "detail_action": "REPARSE_SAVED_HTML", "saved_html_dir": str(html_dir)}]}
+    result = execute_detail_plan(plan, None, str(tmp_path), offline=True, saved_html=html_dir)
+    assert result["requested_count"] == 0
+    assert json.loads((tmp_path / "details.json").read_text(encoding="utf-8"))[0]["asin"] == "B000000104"
+    assert json.loads((tmp_path / "checkpoints" / "B000000104.json").read_text())["action"] == "REPARSE_SAVED_HTML"
+
+
+def test_verify_identity_writes_review_queue_without_network(tmp_path):
+    plan = {"snapshot_id": "snapshot_review", "records": [{
+        "snapshot_id": "snapshot_review", "ranking_asin": "B000000105",
+        "detail_action": "VERIFY_IDENTITY", "resolved_asin": "B000000106",
+        "identity_status": "IDENTITY_MISMATCH", "action_reason": "unrelated"}]}
+    execute_detail_plan(plan, None, str(tmp_path), offline=True)
+    queue = json.loads((tmp_path / "identity_review_queue.json").read_text(encoding="utf-8"))
+    assert queue[0]["ranking_asin"] == "B000000105"

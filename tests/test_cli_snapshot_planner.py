@@ -21,14 +21,20 @@ def test_offline_cli_chain_writes_snapshot_and_plan(tmp_path):
         "ranking_link_asin": "B000000001", "ranking_link_identity_status": "MATCH",
     }]), encoding="utf-8")
     snapshot_root = tmp_path / "snapshots"
+    source_manifest = tmp_path / "source_manifest.json"
+    source_manifest.write_text(json.dumps({"planned_pages": [{
+        "source_url": "https://www.amazon.es/zgbs/1", "page_number": 1}],
+        "page_statuses": [{"source_url": "https://www.amazon.es/zgbs/1", "page_number": 1,
+                            "access_state": "NORMAL", "parse_status": "PARSE_OK",
+                            "parsed_record_count": 1}]}), encoding="utf-8")
     assert cli.main(["--offline", "ranking-snapshot", "--rankings-file", str(rankings),
-                     "--out-dir", str(snapshot_root)]) == 0
+                     "--source-manifest", str(source_manifest), "--out-dir", str(snapshot_root)]) == 0
     snapshot = next(snapshot_root.glob("**/rankings.json"))
     plan_root = tmp_path / "plan"
     assert cli.main(["--offline", "detail-plan", "--snapshot", str(snapshot),
                      "--out-dir", str(plan_root)]) == 0
     plan = json.loads((plan_root / "detail_plan.json").read_text(encoding="utf-8"))
-    assert plan[0]["detail_action"] == "FETCH_NEW"
+    assert plan["records"][0]["detail_action"] == "FETCH_NEW"
 
 
 def test_detail_plan_cli_rejects_incomplete_snapshot(tmp_path):

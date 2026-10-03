@@ -4,7 +4,7 @@ import json
 import pytest
 
 from amazon_es_bestseller.collection.ranking import parse_bestsellers_page
-from amazon_es_bestseller.monitoring.snapshot import build_ranking_snapshot
+from amazon_es_bestseller.monitoring.snapshot import build_ranking_snapshot, collect_ranking_snapshot
 
 
 def _card(asin="B078C6QR1C", href="/Producto/dp/B078C6QR1C/ref=zg_bs_x?x=1"):
@@ -96,7 +96,8 @@ def test_snapshot_is_authoritative_and_updates_pointer(tmp_path):
 
 
 def test_incomplete_snapshot_does_not_replace_authoritative_pointer(tmp_path):
-    first = build_ranking_snapshot([], tmp_path, planned_sources=["u1"],
+    first = build_ranking_snapshot([{"asin": "B000000001", "ranking_source_url": "u1",
+                                    "ranking_page_number": 1}], tmp_path, planned_sources=["u1"],
                                    source_statuses={"u1": "NORMAL"},
                                    snapshot_id="snapshot_good", started_at="2026-10-03T00:00:00Z")
     pointer = json.loads((tmp_path / "latest_authoritative_snapshot.json").read_text())
@@ -107,3 +108,60 @@ def test_incomplete_snapshot_does_not_replace_authoritative_pointer(tmp_path):
     assert bad["manifest"]["snapshot_status"] == "INCOMPLETE"
     assert json.loads((tmp_path / "latest_authoritative_snapshot.json").read_text())[
         "snapshot_id"] == "snapshot_good"
+
+
+def test_zero_record_normal_page_is_incomplete(tmp_path):
+    result = build_ranking_snapshot([], tmp_path, planned_sources=["u1"],
+                                    source_statuses={"u1": "NORMAL"},
+                                    snapshot_id="snapshot_empty", started_at="2026-10-03T00:00:00Z")
+    assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
+    assert not (tmp_path / "latest_authoritative_snapshot.json").exists()
+
+
+def test_page_level_completeness_requires_all_pages_and_nonempty_parse(tmp_path):
+    rows = [{"asin": "B000000001", "ranking_source_url": "u1", "ranking_page_number": 1}]
+    statuses = [
+        {"source_url": "u1", "page_number": 1, "access_state": "NORMAL",
+         "parse_status": "PARSE_OK", "parsed_record_count": 1},
+        {"source_url": "u1", "page_number": 2, "access_state": "NORMAL",
+         "parse_status": "PARSE_EMPTY", "parsed_record_count": 0},
+    ]
+    result = build_ranking_snapshot(rows, tmp_path, planned_sources=statuses,
+                                    source_statuses=statuses,
+                                    snapshot_id="snapshot_partial", started_at="2026-10-03T00:00:00Z")
+    manifest = result["manifest"]
+    assert manifest["expected_page_count"] == 2
+    assert manifest["completed_page_count"] == 2
+    assert manifest["empty_page_count"] == 1
+    assert manifest["snapshot_status"] == "INCOMPLETE"
+
+
+def test_failed_snapshot_preserves_partial_page_records_and_evidence(tmp_path):
+    class Page:
+        def __init__(self):
+            self.html = ""
+
+        def content(self):
+            return self.html
+
+    class Session:
+        def __init__(self):
+            self.page = Page()
+
+        def goto(self, url):
+            if "pg=2" in url:
+                self.page.html = "<html><body><div>empty</div></body></html>"
+            else:
+                self.page.html = "<html><body>" + _card() + "</body></html>"
+            return 200
+
+        def wait_between_requests(self):
+            pass
+
+    result = collect_ranking_snapshot(["https://www.amazon.es/zgbs/1"], Session(),
+                                      tmp_path, pages_per_url=2)
+    assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
+    assert result["manifest"]["record_count"] == 1
+    assert result["manifest"]["expected_page_count"] == 2
+    assert result["manifest"]["empty_page_count"] == 1
+    assert len(list((result["path"] / "html").glob("ranking_*.html"))) == 2
