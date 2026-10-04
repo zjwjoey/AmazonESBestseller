@@ -113,6 +113,8 @@ def parse_detail_evidence_v2(html: str, requested_asin: str, *, requested_url: s
     result = dict(base)
     result.update({
         "parser_version": "collection.detail_v2",
+        "detail_parser_version": "collection.detail_v2",
+        "detail_parser_contract_version": 2,
         "variation_evidence": variation,
         "variation_family_asins": variation["family_asins"],
         "requested_asin": identity["requested_asin"],

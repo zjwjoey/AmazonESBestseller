@@ -11,6 +11,7 @@ import csv
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -169,6 +170,8 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                            parser_version: str = "collection.ranking",
                            html_files: Mapping[str, str] | None = None,
                            ranking_audit: Mapping | None = None,
+                           identity_audit: Mapping | None = None,
+                           publish_authoritative_pointer: bool = True,
                            offline_frozen: bool = False) -> dict:
     """Freeze ranking records and return the manifest/result bundle.
 
@@ -208,12 +211,30 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                      and parsed_page_count == expected_page_count
                      and failed_page_count == 0 and empty_page_count == 0
                      and bool(rows) and bool(unique_asins))
+    base_snapshot_authoritative = authoritative
     # A V2 parser audit is a stronger page-level authority gate than the
     # legacy source-status summary.  An incomplete ACP/rank audit may still be
     # persisted as evidence, but it must never advance the authoritative
     # pointer.
     if ranking_audit is not None and not bool(ranking_audit.get("page_authoritative")):
         authoritative = False
+    authority = None
+    if identity_audit is not None:
+        from .ranking_identity.completeness import evaluate_authority
+        identity_audit = dict(identity_audit)
+        authority = evaluate_authority(
+            ranking_complete=bool(ranking_audit and ranking_audit.get("page_authoritative")),
+            slots_complete=bool(identity_audit.get("ranking_slot_complete")),
+            identity_ready=bool(identity_audit.get("identity_ready")),
+            identity_complete=bool(identity_audit.get("product_identity_complete",
+                                                         identity_audit.get("identity_complete"))),
+            access_normal=all(_status_value(item) in _SUCCESS_STATES for item in statuses),
+            no_conflicts=not bool(identity_audit.get("identity_conflict_count"))
+            and not bool(identity_audit.get("ranking_slot_conflict_count")),
+            no_rank_gap=not bool((ranking_audit or {}).get("rank_gap_count")),
+            no_duplicate_rank_slot=not bool((ranking_audit or {}).get("rank_duplicate_count")),
+        )
+        authoritative = authoritative and authority["authoritative"]
     snapshot_status = "AUTHORITATIVE" if authoritative else "INCOMPLETE"
     output_root = Path(output_root)
     day_dir = output_root / datetime.fromisoformat(started.replace("Z", "+00:00")).strftime("%Y-%m-%d")
@@ -267,13 +288,29 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
     }
     if ranking_audit is not None:
         manifest["ranking_v2_audit"] = dict(ranking_audit)
+    if authority is not None:
+        final_authority_reasons = list(authority["authority_block_reasons"])
+        if not base_snapshot_authoritative:
+            final_authority_reasons.append("BASE_SNAPSHOT_GATE")
+        final_authority_gates = dict(authority["authority_gates"])
+        final_authority_gates["base_snapshot_complete"] = bool(base_snapshot_authoritative)
+        manifest.update({"authority_status": "AUTHORITATIVE" if authoritative else "BLOCKED",
+                         "authority_gates": final_authority_gates,
+                         "authority_block_reasons": final_authority_reasons,
+                         "ranking_complete": authority["authority_gates"]["ranking_complete"],
+                         "ranking_identity_ready": authority["authority_gates"]["identity_ready"],
+                         "ranking_identity_complete": authority["authority_gates"]["identity_complete"],
+                         "ranking_slot_complete": authority["authority_gates"]["ranking_slots_complete"],
+                         "identity_conflict_count": int(identity_audit.get("identity_conflict_count") or 0),
+                         "final_authoritative": authoritative,
+                         "authority_reasons": final_authority_reasons})
     (target / "audit.json").write_text(json.dumps({"records": len(rows),
         "link_identity_statuses": {state: link_statuses.count(state)
                                     for state in sorted(set(link_statuses))}},
         ensure_ascii=False, indent=2), encoding="utf-8")
     (target / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
                                            encoding="utf-8")
-    if authoritative:
+    if authoritative and publish_authoritative_pointer:
         relative = target.relative_to(output_root).as_posix()
         _atomic_json(output_root / "latest_authoritative_snapshot.json",
                      {"snapshot_id": snapshot_id, "path": relative})
@@ -342,7 +379,7 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
         from ..collection.ranking_v2 import make_acp_hydrator, parse_ranking_snapshot_v2
 
         if acp_hydrator is None and transport is not None:
-            acp_hydrator = make_acp_hydrator(transport)
+            acp_hydrator = make_acp_hydrator(transport, evidence_dir=run_dir / "acp")
 
         v2_records = []
         page_audits = []
@@ -354,14 +391,28 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                 status_row = dict(planned_pages[index])
             else:
                 status_row = {}
-            source_url = str(status_row.get("source_url") or "")
+            source_url = str(status_row.get("page_url") or status_row.get("source_url") or "")
+            ranking_source_url = str(status_row.get("source_url") or source_url)
             collected_at = str(status_row.get("collected_at") or started.isoformat())
             access_stopped = False
             try:
+                page_number = status_row.get("page_number")
+                try:
+                    page_number = int(page_number)
+                except (TypeError, ValueError):
+                    page_number = None
+                page_instance_id = str(
+                    status_row.get("page_instance_id")
+                    or "page:%s|url:%s" % (page_number or index + 1, ranking_source_url))
                 page_result = parse_ranking_snapshot_v2(
                     path.read_text(encoding="utf-8"), source_url, collected_at,
                     acp_hydrator=acp_hydrator,
-                    status_code=int(status_row.get("http_status") or 200))
+                    status_code=int(status_row.get("http_status") or 200),
+                    expected_count=status_row.get("expected_count"),
+                    expected_count_source=status_row.get("expected_count_source"),
+                    ranking_source_url=ranking_source_url,
+                    page_instance_id=page_instance_id,
+                    page_number=page_number)
             except AccessStopError as exc:
                 error = str(exc)
                 access_stopped = True
@@ -376,9 +427,16 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                     "completion_reason": "PARSER_ERROR",
                     "parser_error": str(exc)}}
             audit = dict(page_result.get("audit") or {})
+            audit["access_state"] = page_result.get("access_state", "UNKNOWN")
             audit["page_index"] = index
             audit["source_url"] = source_url
             audit["page_number"] = status_row.get("page_number")
+            audit["ranking_source_url"] = ranking_source_url
+            audit["ranking_page_url"] = source_url
+            audit["page_instance_id"] = str(
+                status_row.get("page_instance_id")
+                or "page:%s|url:%s" % (status_row.get("page_number") or index + 1,
+                                         ranking_source_url))
             page_audits.append(audit)
             v2_records.extend(page_result.get("records") or [])
             status_row["parsed_record_count"] = len(page_result.get("records") or [])
@@ -386,6 +444,10 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                                             "PARSE_OK" if audit.get("page_authoritative")
                                             else "PARSE_INCOMPLETE")
             status_row["v2_completion_reason"] = audit.get("completion_reason", "")
+            status_row["html_file"] = path.name
+            status_row["page_instance_id"] = audit["page_instance_id"]
+            status_row["expected_count"] = audit.get("expected_count")
+            status_row["expected_count_source"] = audit.get("expected_count_source", "UNKNOWN")
             if access_stopped:
                 status_row["access_state"] = "BLOCKED"
                 status_row["error"] = error
@@ -402,14 +464,62 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
             "page_count": len(page_audits),
             "pages": page_audits,
             "parser_version": "collection.ranking_v2",
+            "ranking_complete": bool(page_audits) and all(
+                bool(item.get("page_complete")) for item in page_audits),
+            "rank_gap_count": sum(int(item.get("rank_gap_count") or 0)
+                                   for item in page_audits),
+            "rank_duplicate_count": sum(int(item.get("rank_duplicate_count") or 0)
+                                         for item in page_audits),
+            "access_state": ("NORMAL" if page_audits and all(
+                str(item.get("access_state") or "UNKNOWN").upper() == "NORMAL"
+                for item in page_audits) else "BLOCKED"),
         }
+        (run_dir / "page_statuses.json").write_text(
+            json.dumps(source_statuses, ensure_ascii=False, indent=2), encoding="utf-8")
+    final_identity_audit = None
+    if effective_parser_version in {"v2", "collection.ranking_v2"}:
+        from ..monitoring.ranking_identity.extract import extract_identity_from_evidence
+        try:
+            final_identity = extract_identity_from_evidence(run_dir)
+            final_identity_audit = dict(final_identity.get("audit") or {})
+            final_identity_audit["evidence_files"] = list(
+                final_identity.get("evidence_files") or final_identity_audit.get("evidence_files") or [])
+        except (OSError, ValueError, TypeError) as exc:
+            final_identity_audit = {
+                "identity_ready": False,
+                "identity_complete": False,
+                "product_identity_complete": False,
+                "ranking_slot_complete": False,
+                "identity_conflict_count": 0,
+                "ranking_slot_conflict_count": 0,
+                "attribution_unknown_count": 1,
+                "status": "IDENTITY_FAILED",
+                "error": str(exc),
+            }
     result = build_ranking_snapshot(records, output_root, planned_sources=planned_pages,
                                     source_statuses=source_statuses,
                                     started_at=started, html_files=html_files,
                                     parser_version=("collection.ranking_v2"
                                                      if effective_parser_version in {"v2", "collection.ranking_v2"}
                                                      else "collection.ranking"),
-                                    ranking_audit=ranking_audit, **kwargs)
+                                   ranking_audit=ranking_audit,
+                                   identity_audit=final_identity_audit,
+                                    publish_authoritative_pointer=False,
+                                    **kwargs)
+    acp_evidence = run_dir / "acp"
+    if acp_evidence.is_dir() and any(acp_evidence.iterdir()):
+        target_evidence = result["path"] / "evidence" / "acp"
+        shutil.copytree(acp_evidence, target_evidence, dirs_exist_ok=True)
+        result["manifest"]["acp_evidence_files"] = [
+            str(path.relative_to(result["path"]).as_posix())
+            for path in sorted(target_evidence.glob("*.json"))]
+        (result["path"] / "manifest.json").write_text(
+            json.dumps(result["manifest"], ensure_ascii=False, indent=2), encoding="utf-8")
+    if result["manifest"].get("final_authoritative", result["manifest"].get("latest_authoritative")):
+        relative = result["path"].relative_to(Path(output_root)).as_posix()
+        _atomic_json(Path(output_root) / "latest_authoritative_snapshot.json",
+                     {"snapshot_id": result["manifest"]["snapshot_id"],
+                      "path": relative})
     if error:
         result["error"] = error
     return result

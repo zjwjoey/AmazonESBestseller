@@ -21,6 +21,48 @@ class TransportResponse:
     fingerprint: str | None = None
     observed_language: str | None = None
     language_mismatch: bool | None = None
+    request_method: str = "GET"
+    request_url: str | None = None
+    request_headers: Mapping[str, str] = field(default_factory=dict)
+    request_payload: object = None
+
+
+_SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization", "set-cookie"}
+
+
+def raw_response_evidence(response: TransportResponse, *, request_method: str | None = None,
+                         request_url: str | None = None,
+                         request_headers: Mapping[str, str] | None = None,
+                         request_payload: object = None) -> dict:
+    """Build a JSON-safe immutable-evidence envelope without credentials."""
+    def safe_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
+        return {str(key): str(value) for key, value in (headers or {}).items()
+                if str(key).casefold() not in _SENSITIVE_HEADERS}
+
+    return {
+        "request": {
+            "method": str(request_method or response.request_method or "GET").upper(),
+            "url": str(request_url or response.request_url or response.url),
+            "headers": safe_headers(request_headers or response.request_headers),
+            "payload": request_payload if request_payload is not None else response.request_payload,
+        },
+        "response": {
+            "status_code": response.status_code,
+            "url": response.url,
+            "headers": safe_headers(response.headers),
+            "body": response.text,
+            "access_state": response.access_state,
+            "failure": dict(response.failure or {}),
+        },
+        "marketplace": response.marketplace,
+        "requested_locale": response.requested_locale,
+        "currency": response.currency,
+        "postal_code": response.postal_code,
+        "marketplace_id": response.marketplace_id,
+        "fingerprint": response.fingerprint,
+        "observed_language": response.observed_language,
+        "language_mismatch": response.language_mismatch,
+    }
 
 
 def locale_observation(html: str, *, requested_locale: str = "es_ES") -> dict:

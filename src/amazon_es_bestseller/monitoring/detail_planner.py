@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from ..collection.detail import CURRENT_DETAIL_SCHEMA_VERSION
+from ..collection.detail import CURRENT_DETAIL_PARSER_VERSION
 from ..identity import resolve_identity
 from ..models import is_valid_asin, normalize_asin
 
@@ -97,6 +98,15 @@ def _schema(record: Mapping) -> int:
         return int(record.get("detail_schema_version", 0) or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _parser_version(record: Mapping) -> str:
+    return str(record.get("detail_parser_version") or record.get("parser_version") or "").casefold()
+
+
+def _canonical_parser_version(value: str | None) -> str:
+    value = str(value or "").casefold()
+    return "collection.detail_v2" if value in {"v2", "collection.detail_v2"} else value
 
 
 def _identity_status(ranking_asin: str, record: Mapping | None) -> str:
@@ -186,6 +196,7 @@ def _safe_request_url(row: Mapping, asin: str, cache: Mapping | None = None) -> 
 
 def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
                       saved_html=None, current_schema_version: int = CURRENT_DETAIL_SCHEMA_VERSION,
+                      target_parser_version: str | None = None,
                       refresh_policy: DetailRefreshPolicy | None = None,
                       checkpoints=None, checkpoint=None,
                       current_access_state: str = "UNKNOWN") -> dict:
@@ -242,6 +253,7 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
             chosen[asin] = {**row, "_context_key": context_key(row)}
 
     policy = refresh_policy or DetailRefreshPolicy()
+    target_parser = _canonical_parser_version(target_parser_version)
     items = []
     for asin in sorted(chosen, key=lambda key: (chosen[key].get("_context_key", (10**9, 10**9, "")), key)):
         row = chosen[asin]
@@ -282,6 +294,7 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
         link_status = str(row.get("ranking_link_identity_status") or "").upper()
         request_url, request_source, fallback = _safe_request_url(row, asin, cache)
         schema = _schema(cache)
+        parser_version = _parser_version(cache)
         html_exists = _html_available(saved_html, asin)
         if link_status in {"LINK_ASIN_MISMATCH", "MISMATCH"}:
             action = DetailAction.BLOCK_LINK_IDENTITY.value
@@ -301,6 +314,13 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
         elif cache_state == "TRANSIENT_FAILED":
             action = DetailAction.RETRY_TRANSIENT_FAILURE.value
             reason = "上次为瞬时网络失败，允许下一轮重试"
+        elif (cache and target_parser and parser_version != target_parser
+              and html_exists):
+            action = DetailAction.REPARSE_SAVED_HTML.value
+            reason = "详情 parser contract 过期，已有保存 HTML，必须离线重解析"
+        elif cache and target_parser and parser_version != target_parser:
+            action = DetailAction.REFETCH_INVALID_CACHE.value
+            reason = "详情 parser contract 过期且无保存 HTML，必须显式重新抓取升级"
         elif cache and schema < int(current_schema_version) and html_exists:
             action = DetailAction.REPARSE_SAVED_HTML.value
             reason = "详情 schema 过期，但已有保存 HTML，可离线重解析"
@@ -333,6 +353,8 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
             "action_reason": reason,
             "existing_cache_state": cache_state,
             "existing_detail_schema_version": schema,
+            "existing_detail_parser_version": parser_version,
+            "target_detail_parser_version": target_parser,
             "identity_status": identity,
             "requested_asin": asin,
             "resolved_asin": cache.get("resolved_asin") or "",

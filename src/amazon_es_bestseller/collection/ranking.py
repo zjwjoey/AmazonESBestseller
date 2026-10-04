@@ -184,7 +184,9 @@ class RankingCollectionResult(list):
         return list(self)
 
 
-def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> list[dict]:
+def parse_bestsellers_page(html: str, source_url: str, collected_at: str, *,
+                           ranking_source_url: str | None = None,
+                           ranking_page_url: str | None = None) -> list[dict]:
     """畅销榜页 HTML → 排行榜记录列表（每 ASIN × 页面一行）。
 
     页面级榜单上下文（browse_node_id / category_l1..l3 / leaf_category）
@@ -239,7 +241,7 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "browse_node_id": browse_node,
             "bestseller_rank": rank,
             "bestseller_rank_raw": rank_raw,
-            "ranking_source_url": source_url,
+            "ranking_source_url": ranking_source_url or source_url,
             "ranking_source_type": source_type,
             "ranking_source_category": source_category,
             "ranking_source_category_path": source_category_path,
@@ -252,6 +254,8 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
             "ranking_link_identity_status": (
                 "LINK_ASIN_MISMATCH" if link_status == "MISMATCH" else link_status),
         }
+        if ranking_page_url is not None:
+            record["ranking_page_url"] = ranking_page_url
         record["ranking_rank"] = rank
         record["ranking_rank_raw"] = rank_raw
         if isinstance(i, int) and 0 <= i < len(cards):
@@ -354,7 +358,9 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
                                   recovered_from_challenge=bool(recovered))
                 require_normal_access(state, "HTTP %s，榜单页 %s，已采 %d 页"
                                       % (status, page_url, page_index - 1))
-                page_records = parse_bestsellers_page(html, page_url, collected_at)
+                page_records = parse_bestsellers_page(
+                    html, page_url, collected_at,
+                    ranking_source_url=str(url), ranking_page_url=page_url)
                 for r in page_records:
                     r["status_code"] = status
                     r["initial_access_state"] = initial_state.value

@@ -45,7 +45,8 @@ class PlaywrightTransport:
                                  failure=failure.to_dict() if failure else None,
                                  marketplace=self.marketplace,
                                  currency=self.currency, postal_code=self.postal_code,
-                                 marketplace_id=self.marketplace_id, **locale)
+                                 marketplace_id=self.marketplace_id, request_method="GET",
+                                 request_url=url, request_headers={"referer": referer or ""}, **locale)
 
     def fetch_ajax(self, url: str, *, method: str = "GET", referer: str | None = None,
                    payload=None, headers=None) -> TransportResponse:
@@ -92,6 +93,8 @@ class PlaywrightTransport:
             failure=failure.to_dict() if failure else None,
             marketplace=self.marketplace, currency=self.currency,
             postal_code=self.postal_code, marketplace_id=self.marketplace_id,
+            request_method=str(method or "GET").upper(), request_url=url,
+            request_headers=request_headers, request_payload=payload,
             **locale)
 
     def close(self) -> None:

@@ -23,6 +23,7 @@ from ..models import AccessState
 from .checkpoints import write_checkpoint
 
 CURRENT_DETAIL_SCHEMA_VERSION = 2
+CURRENT_DETAIL_PARSER_VERSION = "collection.detail_v2"
 
 
 def _clean(t) -> str:
@@ -466,6 +467,8 @@ def parse_detail_page(html: str, asin: str) -> dict:
     return {
         "asin": asin,
         "detail_schema_version": CURRENT_DETAIL_SCHEMA_VERSION,
+        "detail_parser_version": "collection.detail_v1",
+        "detail_parser_contract_version": 1,
         "is_captcha": is_captcha,
         "title_es_raw": _text(soup, "#productTitle"),
         "current_price_raw": current_price_raw,

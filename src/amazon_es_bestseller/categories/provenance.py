@@ -17,6 +17,7 @@ class CategoryEvidence:
     ranking_category_path: tuple[str, ...] = ()
     bsr_category_id: str | None = None
     bsr_category_path: tuple[str, ...] = ()
+    search_category_path: tuple[str, ...] = ()
     category_evidence_source: str = SOURCE_MISSING
 
     def to_dict(self) -> dict:
@@ -26,6 +27,7 @@ class CategoryEvidence:
             "ranking_category_path": list(self.ranking_category_path),
             "bsr_category_id": self.bsr_category_id,
             "bsr_category_path": list(self.bsr_category_path),
+            "search_category_path": list(self.search_category_path),
             "category_evidence_source": self.category_evidence_source,
         }
 
@@ -50,5 +52,6 @@ def category_evidence_from_detail(detail: dict, ranking_context: dict | None = N
         ranking_category_path=ranking_path,
         bsr_category_id=detail.get("bsr_category_id") or ranking_context.get("bsr_category_id"),
         bsr_category_path=bsr_path,
+        search_category_path=search_path,
         category_evidence_source=source,
     )

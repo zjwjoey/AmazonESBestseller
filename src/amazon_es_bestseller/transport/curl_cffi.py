@@ -62,7 +62,9 @@ class CurlCffiTransport:
                                  marketplace="ES",
                                  currency=self.session.cookies.get("i18n-prefs") or "EUR",
                                  postal_code=self.postal_code, marketplace_id=self.marketplace_id,
-                                 fingerprint=self.fingerprint,
+                                 fingerprint=self.fingerprint, request_method=method,
+                                 request_url=url, request_headers=request_headers,
+                                 request_payload=payload,
                                  **locale)
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:

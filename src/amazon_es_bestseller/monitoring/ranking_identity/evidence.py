@@ -10,6 +10,8 @@ def save_evidence_snapshot(
     output_dir: str | Path, *, initial_html: str | None = None,
     rendered_html: str | None = None, client_recs: Any = None,
     acp_response: Any = None, metadata: dict[str, Any] | None = None,
+    acp_response_evidence: Any = None,
+    acp_response_evidence_name: str = "acp_response_evidence.json",
 ) -> Path:
     """Persist raw evidence without parsing or replacing existing files."""
     root = Path(output_dir)
@@ -24,7 +26,8 @@ def save_evidence_snapshot(
             if target.exists():
                 raise FileExistsError(f"evidence 已存在，不允许覆盖: {target}")
             target.write_text(str(value), encoding="utf-8")
-    for name, value in (("client_recs.json", client_recs), ("acp_response.json", acp_response)):
+    for name, value in (("client_recs.json", client_recs), ("acp_response.json", acp_response),
+                        (acp_response_evidence_name, acp_response_evidence)):
         if value is not None:
             target = root / name
             if target.exists():

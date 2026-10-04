@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8.0"]
+transport = ["curl-cffi>=0.7"]
 
 [project.scripts]
 amazon-es = "amazon_es_bestseller.cli:main"
