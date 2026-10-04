@@ -298,7 +298,10 @@ def _load_snapshot_input(path: str) -> dict:
     if target.is_dir():
         root = target
         rankings_path = root / "rankings.json"
+        identity_path = root / "identity.json"
         manifest_path = root / "manifest.json"
+        if not rankings_path.exists() and identity_path.exists():
+            rankings_path = identity_path
     else:
         rankings_path = target
         root = target.parent
@@ -307,10 +310,17 @@ def _load_snapshot_input(path: str) -> dict:
         raise SystemExit("找不到快照 rankings.json: %s" % rankings_path)
     rows = _load_snapshot_records(str(rankings_path))
     result = {"records": rows}
+    if rankings_path.name == "identity.json":
+        result["snapshot_kind"] = "RANKING_IDENTITY"
     if manifest_path.exists():
         manifest = _load_json(str(manifest_path))
         if isinstance(manifest, dict):
-            result["snapshot_status"] = manifest.get("snapshot_status")
+            if manifest.get("parser_version") == "ranking_identity_v1":
+                result["snapshot_kind"] = "RANKING_IDENTITY"
+                result["snapshot_status"] = manifest.get("status")
+                result["identity_complete"] = bool(manifest.get("identity_complete"))
+            else:
+                result["snapshot_status"] = manifest.get("snapshot_status")
             result["snapshot_id"] = manifest.get("snapshot_id")
     return result
 
@@ -362,6 +372,54 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
         raise SnapshotIncompleteError(
             "快照已保存为 INCOMPLETE；未更新 latest_authoritative pointer。"
             "生产模式拒绝以 0 退出，请检查 manifest/page_statuses。")
+
+
+def _identity_extraction(args) -> dict:
+    from .monitoring.ranking_identity.extract import extract_identity_from_evidence
+    return extract_identity_from_evidence(args.evidence_dir,
+                                          expected_count=args.expected_count)
+
+
+def cmd_ranking_identity_extract(args, parser: argparse.ArgumentParser) -> None:
+    """离线：从保存的榜单证据提取 ASIN + canonical product URL。"""
+    result = _identity_extraction(args)
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "identity.json").write_text(
+        json.dumps(result["records"], ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "raw_candidates.json").write_text(
+        json.dumps(result["raw_candidates"], ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "audit.json").write_text(
+        json.dumps(result["audit"], ensure_ascii=False, indent=2), encoding="utf-8")
+    print("ranking identity extract：%s（%d 个唯一 ASIN，状态 %s）" %
+          (out, result["audit"]["unique_asin_count"], result["audit"]["status"]))
+
+
+def cmd_ranking_identity_snapshot(args, parser: argparse.ArgumentParser) -> None:
+    """离线：提取并写入 append-only Ranking Identity Snapshot。"""
+    from .monitoring.ranking_identity.snapshot import write_identity_snapshot
+    from .monitoring.snapshot import SnapshotIncompleteError
+    result = _identity_extraction(args)
+    saved = write_identity_snapshot(result, args.out_dir, snapshot_id=args.snapshot_id or None,
+                                    evidence_dir=args.evidence_dir)
+    print("ranking identity snapshot %s：%s（%d 个唯一 ASIN）" %
+          (saved["manifest"]["status"], saved["path"],
+           saved["audit"]["unique_asin_count"]))
+    if saved["manifest"]["status"] != "IDENTITY_COMPLETE" and not args.allow_incomplete_debug:
+        raise SnapshotIncompleteError(
+            "identity snapshot 未达到 IDENTITY_COMPLETE；已保存不可变诊断快照，"
+            "如需人工检查请使用 --allow-incomplete-debug。")
+
+
+def cmd_ranking_identity_audit(args, parser: argparse.ArgumentParser) -> None:
+    """离线：只输出身份提取审计，不写 snapshot。"""
+    result = _identity_extraction(args)
+    payload = json.dumps(result["audit"], ensure_ascii=False, indent=2)
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(payload, encoding="utf-8")
+    else:
+        print(payload)
 
 
 def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
@@ -1357,6 +1415,26 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--allow-incomplete-debug", action="store_true",
                     help="允许保存 INCOMPLETE 快照并以 0 退出，仅供人工调试")
     rs.set_defaults(func=lambda a, p=rs: cmd_ranking_snapshot(a, p))
+
+    rie = sub.add_parser("ranking-identity-extract", help="离线：从保存榜单证据提取 ASIN 与商品链接")
+    rie.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
+    rie.add_argument("--out-dir", required=True, help="identity.json/raw_candidates.json/audit.json 输出目录")
+    rie.add_argument("--expected-count", type=int, default=None)
+    rie.set_defaults(func=lambda a, p=rie: cmd_ranking_identity_extract(a, p))
+
+    ris = sub.add_parser("ranking-identity-snapshot", help="离线：创建不可变 Ranking Identity Snapshot")
+    ris.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
+    ris.add_argument("--out-dir", required=True, help="snapshot 根目录")
+    ris.add_argument("--expected-count", type=int, default=None)
+    ris.add_argument("--snapshot-id", default="")
+    ris.add_argument("--allow-incomplete-debug", action="store_true")
+    ris.set_defaults(func=lambda a, p=ris: cmd_ranking_identity_snapshot(a, p))
+
+    ria = sub.add_parser("ranking-identity-audit", help="离线：审计保存证据中的身份完整性")
+    ria.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
+    ria.add_argument("--expected-count", type=int, default=None)
+    ria.add_argument("--out", default="")
+    ria.set_defaults(func=lambda a, p=ria: cmd_ranking_identity_audit(a, p))
 
     dp = sub.add_parser("detail-plan", help="离线：按榜单快照与详情缓存生成增量详情计划")
     dp.add_argument("--snapshot", required=True, help="rankings.json 或快照 records JSON")

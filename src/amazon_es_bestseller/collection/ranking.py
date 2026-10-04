@@ -24,6 +24,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import AccessStopError, detect_access_status, require_normal_access
 from ..normalization.category import category_levels
+from ..monitoring.ranking_identity.adapters import extract_server_candidates, select_ranking_cards
 
 #: 榜单 URL 节点号：旧式 /zgbs/<NODE> 或现代 /gp/bestsellers/<slug>/<NODE>/
 _ZGBS_NODE_RE = re.compile(r"/zgbs/(\d+)")
@@ -198,39 +199,39 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
     page_number = _ranking_page_number(source_url)
     source_type = _ranking_source_type(source_url, browse_node)
     records = []
-    for i, item in enumerate(soup.select("#gridItemRoot")):
-        a = item.select_one(
-            'a[href*="/dp/"], a[href*="/gp/product/"], '
-            'a[href*="/gp/aw/d/"], a[href*="/product/"]')
-        if a is None:
-            a = item.select_one("a[href]")
-        raw_product_url = a.get("href") if a is not None else ""
-        link_asin = _ranking_link_asin(raw_product_url)
-        card = item if item.get("data-asin") else item.select_one("[data-asin]")
-        card_asin = str(card.get("data-asin") or "").strip().upper() if card else ""
-        asin = (card_asin if re.fullmatch(r"[A-Z0-9]{10}", card_asin) else link_asin)
+    cards = select_ranking_cards(soup, source_url)
+    candidates = extract_server_candidates(html, source_url=source_url,
+                                           page_number=page_number)
+    for candidate in candidates:
+        i = candidate.get("card_index", len(records))
+        raw_product_url = str(candidate.get("raw_href") or "")
+        link_asin = candidate.get("href_asin") or None
+        card_asin = str(candidate.get("card_asin") or "")
+        asin = str(candidate.get("asin") or "")
+        # Preserve the historical ranking-parser compatibility for synthetic
+        # saved hrefs that append a suffix after the ten-character ASIN.  The
+        # new identity snapshot remains strict and will not treat such a URL
+        # as a confirmed product href.
+        if not link_asin and raw_product_url:
+            link_asin = _ranking_link_asin(raw_product_url)
+        if not asin and link_asin:
+            asin = link_asin
         if not asin:
             continue
         link_status = (
             "NO_PRODUCT_URL" if not raw_product_url else
             "NO_ASIN_IN_URL" if not link_asin else
-            "MATCH" if link_asin == asin else "MISMATCH"
-)
-
-
-        badge = item.select_one("span.a-badge-text, span.zg-bdg-text")
-        rank = None
-        rank_raw = None
-        if badge is not None:
-            rank_raw = badge.get_text(" ", strip=True) or None
-            bm = re.match(r"#\s*(\d+)", rank_raw or "")
-            if bm:
-                rank = int(bm.group(1))
+            "MATCH" if link_asin == asin else "MISMATCH")
+        rank = candidate.get("rank")
+        rank_raw = candidate.get("rank_raw")
         record = {
             "index": i,
             "asin": asin,
             "ranking_asin": asin,
-            "ranking_asin_source": "CARD_DATA_ASIN" if card_asin else "PRODUCT_URL_ASIN",
+            "ranking_asin_source": (
+                "CARD_DATA_ASIN" if card_asin else "PRODUCT_URL_ASIN"
+                if candidate.get("asin_source") == "PRODUCT_HREF_ASIN"
+                else candidate.get("asin_source") or "PRODUCT_URL_ASIN"),
             "category_l1": l1,
             "category_l2": l2,
             "category_l3": l3,
@@ -253,9 +254,10 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
         }
         record["ranking_rank"] = rank
         record["ranking_rank_raw"] = rank_raw
-        monthly = _monthly_bought_raw(item)
-        if monthly:
-            record["monthly_bought_raw"] = monthly
+        if isinstance(i, int) and 0 <= i < len(cards):
+            monthly = _monthly_bought_raw(cards[i])
+            if monthly:
+                record["monthly_bought_raw"] = monthly
         records.append(record)
     return records
 
@@ -375,4 +377,40 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
             persist_page(status_row, page_records)
     with open(os.path.join(run_dir, "rankings.json"), "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
+    # Identity extraction is deliberately performed in the same offline step
+    # after HTML evidence is persisted.  The collector remains backward
+    # compatible: legacy rankings.json is unchanged, while downstream detail
+    # planning can consume this immutable identity artifact directly.
+    try:
+        from ..monitoring.ranking_identity.extract import extract_identity_from_evidence
+        # Use the complete run directory, not only ``html/``: page_statuses.json
+        # holds the source URL and page number needed by the identity contract.
+        identity_result = extract_identity_from_evidence(run_dir)
+        with open(os.path.join(run_dir, "identity.json"), "w", encoding="utf-8") as f:
+            json.dump(identity_result["records"], f, ensure_ascii=False, indent=2)
+        with open(os.path.join(run_dir, "identity_audit.json"), "w", encoding="utf-8") as f:
+            json.dump(identity_result["audit"], f, ensure_ascii=False, indent=2)
+        with open(os.path.join(run_dir, "identity_status.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "identity_status": identity_result["audit"].get("status"),
+                "identity_parser_version": "ranking_identity_v1",
+                "identity_ready": bool(identity_result["audit"].get("identity_ready")),
+                "identity_complete": bool(identity_result["audit"].get("identity_complete")),
+                "identity_audit_file": "identity_audit.json",
+            }, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        with open(os.path.join(run_dir, "identity_extraction_error.json"), "w", encoding="utf-8") as f:
+            json.dump({"error": str(exc), "identity_parser_version": "ranking_identity_v1"},
+                      f, ensure_ascii=False, indent=2)
+        # Ranking evidence remains intact, but the run must never look
+        # successful to a downstream identity-aware consumer.
+        with open(os.path.join(run_dir, "identity_status.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "identity_status": "IDENTITY_FAILED",
+                "identity_parser_version": "ranking_identity_v1",
+                "identity_ready": False,
+                "identity_complete": False,
+                "identity_error": str(exc),
+                "identity_error_file": "identity_extraction_error.json",
+            }, f, ensure_ascii=False, indent=2)
     return RankingCollectionResult(records, run_dir, page_statuses)
