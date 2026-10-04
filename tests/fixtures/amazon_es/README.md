@@ -9,6 +9,5 @@ It contains 30 server-rendered ranking cards and a `data-client-recs-list`
 with 50 expected entries. The fixture is committed here so ACP completeness
 tests stay offline; the source audit file and formal 5,000-SKU output are not
 modified. SHA-256:
-
 `7F1C312DD274D0BE3B55316405B41AE333F0C4A3787171B26352FFDAFE1371B9`
-
+The committed file is kept byte-for-byte identical to that saved source.

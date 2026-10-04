@@ -1,0 +1,3 @@
+# Saved HTML is evidence; preserve source whitespace instead of treating it as
+# a code-format defect in diff checks.
+/tests/fixtures/amazon_es/*.html whitespace=-trailing-space
