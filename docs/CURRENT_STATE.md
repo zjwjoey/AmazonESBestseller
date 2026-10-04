@@ -240,9 +240,14 @@ opt-in only.
 
 The repository still contains a mixture of working scripts, experiments, audit scripts, workbook builders, translation scripts, historical data and reports. The actual working runtime path should continue to be documented and gradually clarified.
 
-The active CLI entry is `src/amazon_es_bestseller/cli.py`: online commands are
-`collect` and `translate-ds`; offline commands are `select-quota`, `enrich`,
-`repair-cache`, `reparse-details`, `audit-detail-cache`, `qa`, `audit-fields` and `export`.
+The active CLI entry is `src/amazon_es_bestseller/cli.py`. Online commands are
+`collect`, `ranking-snapshot` and `translate-ds`; offline commands are
+`select-quota`, `enrich`, `repair-cache`, `reparse-details`,
+`audit-detail-cache`, `qa`, `audit-fields`, `export`,
+`ranking-identity-extract`, `ranking-identity-snapshot`,
+`ranking-identity-audit`, `detail-plan`, `detail-run` and
+`category-graph-validate`. Crawler V2 is opt-in with
+`ranking-snapshot --parser-version v2` and `detail-plan --target-parser-version v2`.
 
 ### 2026-08-27 1000-SKU blocker repair
 

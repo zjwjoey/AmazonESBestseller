@@ -2,9 +2,9 @@
 
 ## Review status
 
-This is an isolated review branch based on the cached `origin/main` commit.
-It is intended to finish as `READY_FOR_EXTERNAL_REVIEW`; it is not a claim
-that the branch is ready to merge into `main`.
+This document describes the post-merge Crawler V2 integration hardening on
+top of the reviewed `origin/main` baseline. Crawler V2 remains opt-in; the
+default production path is unchanged until a canary is explicitly approved.
 
 ## What was added
 
@@ -48,6 +48,18 @@ that the branch is ready to merge into `main`.
 - The curl-cffi adapter and browser fallback are deliberately opt-in
   boundaries.  They do not silently replace the primary Playwright path or
   recover from access restrictions automatically.
+
+## Offline and opt-in commands
+
+- `amazon-es ranking-snapshot --rankings-file <file> --parser-version v2`
+- `amazon-es detail-plan --snapshot <snapshot> --out-dir <dir> --target-parser-version v2`
+- `amazon-es detail-run --plan <plan> --parser-version v2`
+- `amazon-es category-graph-validate --state <state.json>`
+
+The V2 ranking/detail paths are opt-in and require saved evidence for offline
+replay. The optional transport adapter is installed with
+`pip install .[transport]`; it never enables proxy, cookie, account or CAPTCHA
+workarounds.
 
 ## Reference mapping
 

@@ -431,7 +431,8 @@ def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
     checkpoints = _load_checkpoint_input(args.checkpoints)
     plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None,
                              checkpoints=checkpoints,
-                             current_access_state=args.current_access_state)
+                             current_access_state=args.current_access_state,
+                             target_parser_version=args.target_parser_version or None)
     paths = write_detail_plan(plan, args.out_dir)
     print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
 
@@ -1444,6 +1445,8 @@ def build_parser() -> argparse.ArgumentParser:
     dp.add_argument("--html-dir", default="", help="保存的详情 HTML 目录，用于 schema 离线重解析决策")
     dp.add_argument("--current-access-state", default="UNKNOWN",
                     help="当前 Access Gate 状态；恢复为 NORMAL 时允许历史受限记录重试")
+    dp.add_argument("--target-parser-version", choices=("v1", "v2"), default="",
+                    help="可选：要求详情缓存达到指定 parser contract；v2 缺失时必须重解析或重新抓取")
     dp.add_argument("--out-dir", required=True, help="detail_plan.json/csv/summary 输出目录")
     dp.set_defaults(func=lambda a, p=dp: cmd_detail_plan(a, p))
 

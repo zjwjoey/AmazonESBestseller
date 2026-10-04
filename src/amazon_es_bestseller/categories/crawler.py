@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -66,10 +66,21 @@ class CategoryCrawler:
 
     def __init__(self, state: CategoryCrawlerState,
                  fetch_children: Callable[[AmazonCategoryPlacement], Mapping], *,
-                 max_attempts: int = 3):
+                 max_attempts: int = 3, retry_delay_seconds: int = 60):
         self.state = state
         self.fetch_children = fetch_children
         self.max_attempts = max_attempts
+        self.retry_delay_seconds = max(1, int(retry_delay_seconds))
+
+    @staticmethod
+    def _retry_due(value: str | None) -> bool:
+        if not value:
+            return True
+        try:
+            deadline = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return deadline <= datetime.now(timezone.utc)
+        except (TypeError, ValueError):
+            return True
 
     def seed(self, *, marketplace: str, category_id: str, category_name: str,
              canonical_url: str, observed_at: str | None = None) -> AmazonCategoryPlacement:
@@ -111,7 +122,9 @@ class CategoryCrawler:
         processed = 0
         while True:
             pending = [p for p in self.state.graph.placements.values()
-                       if p.status in {PlacementStatus.PENDING, PlacementStatus.RETRY_WAIT}]
+                       if p.status is PlacementStatus.PENDING
+                       or (p.status is PlacementStatus.RETRY_WAIT and
+                           self._retry_due(p.next_retry_at))]
             if not pending or (max_placements is not None and processed >= max_placements):
                 break
             row = sorted(pending, key=lambda p: (p.depth, p.category_path))[0]
@@ -141,7 +154,10 @@ class CategoryCrawler:
                     row.status = PlacementStatus.FAILED_FINAL
                 else:
                     row.status = PlacementStatus.RETRY_WAIT
-                    row.next_retry_at = _now()
+                    row.next_retry_at = (
+                        datetime.now(timezone.utc).replace(microsecond=0)
+                        + timedelta(seconds=self.retry_delay_seconds)
+                    ).isoformat()
             row.last_seen_at = _now()
             self.state.save()
             processed += 1
