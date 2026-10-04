@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from amazon_es_bestseller.access.detector import AccessStopError
 from amazon_es_bestseller.collection.ranking_v2 import (
     RankingSnapshotIncompleteError, build_ranking_snapshot_v2,
     make_acp_hydrator, parse_ranking_snapshot_v2, require_authoritative_page,
@@ -84,6 +85,40 @@ def test_collect_ranking_snapshot_v2_persists_incomplete_page_audit(tmp_path, mo
     assert result["manifest"]["ranking_v2_audit"]["page_authoritative"] is False
 
 
+def test_collect_ranking_snapshot_v2_persists_acp_access_stop(tmp_path, monkeypatch):
+    source = "https://www.amazon.es/test"
+    html = ('<div data-client-recs-list="[{&quot;id&quot;:&quot;B000000001&quot;},'
+            '{&quot;id&quot;:&quot;B000000002&quot;}]" data-acp-path="/acp/"></div>'
+            + _card("B000000001", 1))
+
+    def fake_collect(_urls, _session, _out_dir, *, run_dir, **_kwargs):
+        root = Path(run_dir)
+        (root / "html").mkdir(parents=True)
+        (root / "pages").mkdir()
+        (root / "html" / "ranking_000.html").write_text(html, encoding="utf-8")
+        status = {"source_url": source, "page_number": 1, "http_status": 200,
+                  "access_state": "NORMAL", "parse_status": "PARSE_OK",
+                  "parsed_record_count": 1}
+        (root / "page_statuses.json").write_text(json.dumps([status]), encoding="utf-8")
+        (root / "pages" / "page_000.json").write_text(
+            json.dumps({"status": status, "records": []}), encoding="utf-8")
+        return []
+
+    class RestrictedTransport:
+        def fetch_ajax(self, _url, **_kwargs):
+            return TransportResponse(429, _url, "Robot Check",
+                                     access_state="RATE_LIMITED",
+                                     failure={"kind": "RATE_LIMIT"})
+
+    monkeypatch.setattr(snapshot_module, "collect_rankings", fake_collect)
+    result = snapshot_module.collect_ranking_snapshot(
+        [source], object(), tmp_path, parser_version="v2",
+        transport=RestrictedTransport())
+    assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
+    assert result["manifest"]["page_statuses"][0]["parse_status"] == "ACCESS_BLOCKED"
+    assert result["manifest"]["page_statuses"][0]["access_state"] == "BLOCKED"
+
+
 def test_acp_hydrator_uses_transport_form_request():
     calls = []
 
@@ -105,3 +140,17 @@ def test_acp_hydrator_uses_transport_form_request():
     assert kwargs["method"] == "POST"
     assert kwargs["headers"]["x-amz-acp-params"] == "token=x"
     assert "faceoutkataname=GeneralFaceout" in kwargs["payload"]
+
+
+def test_acp_hydrator_promotes_access_restriction_to_stop():
+    class RestrictedTransport:
+        def fetch_ajax(self, _url, **_kwargs):
+            return TransportResponse(
+                429, "https://www.amazon.es/acp/nextPage", "Robot Check",
+                access_state="RATE_LIMITED",
+                failure={"kind": "RATE_LIMIT"})
+
+    hydrate = make_acp_hydrator(RestrictedTransport())
+    with pytest.raises(AccessStopError):
+        hydrate({"path": "/acp/", "source_url": "https://www.amazon.es/test",
+                 "entries": [{"id": "B000000001"}]}, 1, 1)

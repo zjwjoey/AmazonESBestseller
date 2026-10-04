@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urljoin
 
 from bs4 import BeautifulSoup
 
-from ..access.detector import detect_access_status
+from ..access.detector import AccessStopError, detect_access_status
 from ..collection.ranking import parse_bestsellers_page
 from ..monitoring.snapshot import build_ranking_snapshot
 
@@ -166,6 +166,25 @@ def make_acp_hydrator(transport, *, max_records: int | None = None):
     evidence, and returns only parser records; authority is still decided by
     :func:`ranking_completeness`.
     """
+    restricted_states = {
+        "BLOCKED", "CHALLENGE", "RATE_LIMITED", "CAPTCHA", "BOT_BLOCK",
+        "INTERSTITIAL", "ACCESS_DENIED",
+    }
+
+    def raise_if_restricted(response) -> None:
+        try:
+            status_code = int(response.status_code) if response.status_code is not None else None
+        except (TypeError, ValueError):
+            status_code = None
+        failure = response.failure or {}
+        failure_kind = str(failure.get("kind") or "").upper()
+        access_state = str(response.access_state or "").upper()
+        if status_code in {403, 429} or failure_kind in restricted_states \
+                or access_state in restricted_states:
+            raise AccessStopError(
+                "ACP 续页访问受限（HTTP %s，状态 %s），按策略停止采集"
+                % (status_code, access_state or failure_kind or "UNKNOWN"))
+
     def hydrate(metadata: Mapping, offset: int, count: int) -> list[dict]:
         path = str(metadata.get("path") or "")
         source_url = str(metadata.get("source_url") or "")
@@ -193,11 +212,19 @@ def make_acp_hydrator(transport, *, max_records: int | None = None):
                     "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
                     "x-amz-acp-params": str(metadata.get("params") or ""),
                 })
-        except Exception:
+        except AccessStopError:
+            raise
+        except Exception as exc:
+            error_kind = str(getattr(exc, "kind", "") or "").upper()
+            error_text = str(exc).upper()
+            if error_kind in restricted_states or any(marker in error_text for marker in (
+                    "CAPTCHA", "ROBOT CHECK", "ACCESS DENIED", "HTTP 403", "HTTP 429")):
+                raise AccessStopError("ACP 续页访问受限：%s" % exc) from exc
             # The page remains saved evidence; failure to continue ACP must
             # leave the completeness audit incomplete rather than fabricate
             # the missing cards or abort before persisting the snapshot.
             return []
+        raise_if_restricted(response)
         if response.failure or str(response.access_state or "").upper() != "NORMAL":
             return []
         records = parse_bestsellers_page(response.text, source_url, "")

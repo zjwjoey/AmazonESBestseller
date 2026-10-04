@@ -356,11 +356,20 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                 status_row = {}
             source_url = str(status_row.get("source_url") or "")
             collected_at = str(status_row.get("collected_at") or started.isoformat())
+            access_stopped = False
             try:
                 page_result = parse_ranking_snapshot_v2(
                     path.read_text(encoding="utf-8"), source_url, collected_at,
                     acp_hydrator=acp_hydrator,
                     status_code=int(status_row.get("http_status") or 200))
+            except AccessStopError as exc:
+                error = str(exc)
+                access_stopped = True
+                page_result = {"records": [], "audit": {
+                    "page_authoritative": False,
+                    "completion_reason": "ACCESS_BLOCKED",
+                    "access_state": "BLOCKED",
+                    "error": error}}
             except (OSError, ValueError, TypeError) as exc:
                 page_result = {"records": [], "audit": {
                     "page_authoritative": False,
@@ -373,13 +382,19 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
             page_audits.append(audit)
             v2_records.extend(page_result.get("records") or [])
             status_row["parsed_record_count"] = len(page_result.get("records") or [])
-            status_row["parse_status"] = (
-                "PARSE_OK" if audit.get("page_authoritative") else "PARSE_INCOMPLETE")
+            status_row["parse_status"] = ("ACCESS_BLOCKED" if access_stopped else
+                                            "PARSE_OK" if audit.get("page_authoritative")
+                                            else "PARSE_INCOMPLETE")
             status_row["v2_completion_reason"] = audit.get("completion_reason", "")
+            if access_stopped:
+                status_row["access_state"] = "BLOCKED"
+                status_row["error"] = error
             if index < len(source_statuses):
                 source_statuses[index] = status_row
             else:
                 source_statuses.append(status_row)
+            if access_stopped:
+                break
         records = v2_records
         ranking_audit = {
             "page_authoritative": bool(page_audits) and all(
