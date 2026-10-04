@@ -1,0 +1,14 @@
+{
+  "profile_version": "amazon_es_v2_canary_v1",
+  "marketplace": "ES",
+  "ranking_parser": "v2",
+  "detail_parser": "v2",
+  "transport": "PLAYWRIGHT",
+  "max_sources": 1,
+  "max_pages_per_source": 2,
+  "max_detail_asins": 5,
+  "allow_production_write": false,
+  "allow_excel_write": false,
+  "allow_translation": false,
+  "allow_image_download": false
+}

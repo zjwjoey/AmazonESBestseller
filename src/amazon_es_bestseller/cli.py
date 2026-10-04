@@ -374,6 +374,31 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
             "生产模式拒绝以 0 退出，请检查 manifest/page_statuses。")
 
 
+def cmd_canary(args, parser: argparse.ArgumentParser) -> None:
+    """Run or preview the bounded V2 Canary; live mode is explicit by design."""
+    from .canary import (CanaryScopeExceeded, CanaryProfile, dry_run, load_profile,
+                         run_live)
+    import subprocess
+    try:
+        profile = load_profile(args.config) if args.config else CanaryProfile()
+        detail_asins = list(args.detail_asin or [])
+        if args.dry_run:
+            report = dry_run(profile, args.source_url, args.pages_per_source,
+                             detail_asins, args.out_dir)
+        else:
+            if not args.execute_real_amazon:
+                parser.error("Canary 实际联网必须显式提供 --execute-real-amazon；默认只允许 --dry-run")
+            report = run_live(profile, args.source_url, args.pages_per_source,
+                              args.out_dir, headful=args.headful,
+                              profile_dir=args.profile_dir,
+                              git_sha=subprocess.run(
+                                  ["git", "rev-parse", "HEAD"], capture_output=True,
+                                  text=True, check=False).stdout.strip())
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    except CanaryScopeExceeded as exc:
+        parser.exit(2, f"!! {exc}\n")
+
+
 def _identity_extraction(args) -> dict:
     from .monitoring.ranking_identity.extract import extract_identity_from_evidence
     return extract_identity_from_evidence(args.evidence_dir,
@@ -1416,6 +1441,23 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--allow-incomplete-debug", action="store_true",
                     help="允许保存 INCOMPLETE 快照并以 0 退出，仅供人工调试")
     rs.set_defaults(func=lambda a, p=rs: cmd_ranking_snapshot(a, p))
+
+    cy = sub.add_parser("canary", help="V2 Canary：受限 dry-run 或显式授权的真实采集")
+    cy.add_argument("--config", default="configs/canary/amazon_es_v2_canary.json",
+                    help="Canary profile JSON")
+    cy.add_argument("--source-url", action="append", required=True,
+                    help="已审核的 Amazon.es Bestseller 来源 URL；最多 1 个")
+    cy.add_argument("--pages-per-source", type=int, default=1,
+                    help="每个来源页数；最多 2 页")
+    cy.add_argument("--detail-asin", action="append", default=[],
+                    help="仅用于 dry-run 预算展示；真实 Stage C 必须从 Stage B 权威快照采样")
+    cy.add_argument("--out-dir", default="runtime/canary")
+    cy.add_argument("--dry-run", action="store_true", help="零网络，只校验范围并输出计划")
+    cy.add_argument("--execute-real-amazon", action="store_true",
+                    help="危险开关：显式允许执行 bounded real Amazon Canary")
+    cy.add_argument("--headful", action="store_true")
+    cy.add_argument("--profile-dir", default="")
+    cy.set_defaults(func=lambda a, p=cy: cmd_canary(a, p))
 
     rie = sub.add_parser("ranking-identity-extract", help="离线：从保存榜单证据提取 ASIN 与商品链接")
     rie.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
