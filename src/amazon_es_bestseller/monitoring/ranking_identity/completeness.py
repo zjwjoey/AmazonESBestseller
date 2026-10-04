@@ -38,7 +38,8 @@ def audit_identity_records(records: Iterable[dict[str, Any]], raw_candidates: It
                            evidence_files: Iterable[str] = (),
                            supplemental_parse_statuses: Iterable[dict[str, Any]] = (),
                            ranking_audit: dict[str, Any] | None = None,
-                           access_normal: bool = True) -> dict[str, Any]:
+                           access_normal: bool = True,
+                           attribution_unknown_count: int = 0) -> dict[str, Any]:
     records = [dict(row) for row in records]
     raw_candidates = [dict(row) for row in raw_candidates]
     valid_asins = {normalize_asin(row.get("asin")) for row in records
@@ -81,7 +82,8 @@ def audit_identity_records(records: Iterable[dict[str, Any]], raw_candidates: It
     )
     unique_count = len(valid_asins)
     product_identity_ready = (unique_count > 0 and product_urls == unique_count
-                               and conflicts == 0 and invalid_count == 0)
+                               and conflicts == 0 and invalid_count == 0
+                               and int(attribution_unknown_count or 0) == 0)
     if expected_count is not None:
         product_identity_complete = bool(product_identity_ready
                                          and unique_count == int(expected_count))
@@ -139,6 +141,7 @@ def audit_identity_records(records: Iterable[dict[str, Any]], raw_candidates: It
         "url_derived_count": int(derived),
         "url_raw_confirmed_count": int(raw_confirmed),
         "identity_conflict_count": int(conflicts),
+        "attribution_unknown_count": int(attribution_unknown_count or 0),
         "expected_count": expected_count,
         "expected_slot_count": expected_slot_count,
         "expected_count_source": expected_count_source if expected_count is not None else "UNKNOWN",

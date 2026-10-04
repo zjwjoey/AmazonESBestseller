@@ -293,6 +293,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                          "ranking_complete": authority["authority_gates"]["ranking_complete"],
                          "ranking_identity_ready": authority["authority_gates"]["identity_ready"],
                          "ranking_identity_complete": authority["authority_gates"]["identity_complete"],
+                         "ranking_slot_complete": authority["authority_gates"]["ranking_slots_complete"],
                          "identity_conflict_count": int(identity_audit.get("identity_conflict_count") or 0),
                          "final_authoritative": authority["authoritative"],
                          "authority_reasons": authority["authority_block_reasons"]})
@@ -388,11 +389,23 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
             collected_at = str(status_row.get("collected_at") or started.isoformat())
             access_stopped = False
             try:
+                page_number = status_row.get("page_number")
+                try:
+                    page_number = int(page_number)
+                except (TypeError, ValueError):
+                    page_number = None
+                page_instance_id = str(
+                    status_row.get("page_instance_id")
+                    or "page:%s|url:%s" % (page_number or index + 1, ranking_source_url))
                 page_result = parse_ranking_snapshot_v2(
                     path.read_text(encoding="utf-8"), source_url, collected_at,
                     acp_hydrator=acp_hydrator,
                     status_code=int(status_row.get("http_status") or 200),
-                    ranking_source_url=ranking_source_url)
+                    expected_count=status_row.get("expected_count"),
+                    expected_count_source=status_row.get("expected_count_source"),
+                    ranking_source_url=ranking_source_url,
+                    page_instance_id=page_instance_id,
+                    page_number=page_number)
             except AccessStopError as exc:
                 error = str(exc)
                 access_stopped = True
@@ -410,6 +423,12 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
             audit["page_index"] = index
             audit["source_url"] = source_url
             audit["page_number"] = status_row.get("page_number")
+            audit["ranking_source_url"] = ranking_source_url
+            audit["ranking_page_url"] = source_url
+            audit["page_instance_id"] = str(
+                status_row.get("page_instance_id")
+                or "page:%s|url:%s" % (status_row.get("page_number") or index + 1,
+                                         ranking_source_url))
             page_audits.append(audit)
             v2_records.extend(page_result.get("records") or [])
             status_row["parsed_record_count"] = len(page_result.get("records") or [])
@@ -417,6 +436,10 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                                             "PARSE_OK" if audit.get("page_authoritative")
                                             else "PARSE_INCOMPLETE")
             status_row["v2_completion_reason"] = audit.get("completion_reason", "")
+            status_row["html_file"] = path.name
+            status_row["page_instance_id"] = audit["page_instance_id"]
+            status_row["expected_count"] = audit.get("expected_count")
+            status_row["expected_count_source"] = audit.get("expected_count_source", "UNKNOWN")
             if access_stopped:
                 status_row["access_state"] = "BLOCKED"
                 status_row["error"] = error
@@ -433,14 +456,47 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
             "page_count": len(page_audits),
             "pages": page_audits,
             "parser_version": "collection.ranking_v2",
+            "ranking_complete": bool(page_audits) and all(
+                bool(item.get("page_complete")) for item in page_audits),
+            "rank_gap_count": sum(int(item.get("rank_gap_count") or 0)
+                                   for item in page_audits),
+            "rank_duplicate_count": sum(int(item.get("rank_duplicate_count") or 0)
+                                         for item in page_audits),
+            "access_state": ("NORMAL" if page_audits and all(
+                str(item.get("access_state") or "UNKNOWN").upper() == "NORMAL"
+                for item in page_audits) else "BLOCKED"),
         }
+        (run_dir / "page_statuses.json").write_text(
+            json.dumps(source_statuses, ensure_ascii=False, indent=2), encoding="utf-8")
+    final_identity_audit = None
+    if effective_parser_version in {"v2", "collection.ranking_v2"}:
+        from ..monitoring.ranking_identity.extract import extract_identity_from_evidence
+        try:
+            final_identity = extract_identity_from_evidence(run_dir)
+            final_identity_audit = dict(final_identity.get("audit") or {})
+            final_identity_audit["evidence_files"] = list(
+                final_identity.get("evidence_files") or final_identity_audit.get("evidence_files") or [])
+        except (OSError, ValueError, TypeError) as exc:
+            final_identity_audit = {
+                "identity_ready": False,
+                "identity_complete": False,
+                "product_identity_complete": False,
+                "ranking_slot_complete": False,
+                "identity_conflict_count": 0,
+                "ranking_slot_conflict_count": 0,
+                "attribution_unknown_count": 1,
+                "status": "IDENTITY_FAILED",
+                "error": str(exc),
+            }
     result = build_ranking_snapshot(records, output_root, planned_sources=planned_pages,
                                     source_statuses=source_statuses,
                                     started_at=started, html_files=html_files,
                                     parser_version=("collection.ranking_v2"
                                                      if effective_parser_version in {"v2", "collection.ranking_v2"}
                                                      else "collection.ranking"),
-                                   ranking_audit=ranking_audit, **kwargs)
+                                   ranking_audit=ranking_audit,
+                                   identity_audit=final_identity_audit,
+                                   **kwargs)
     acp_evidence = run_dir / "acp"
     if acp_evidence.is_dir() and any(acp_evidence.iterdir()):
         target_evidence = result["path"] / "evidence" / "acp"

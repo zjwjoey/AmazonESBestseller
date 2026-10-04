@@ -171,7 +171,7 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
         "manifest.json", "audit.json", "identity.json"
     }] if root.is_dir() else []
     client_payloads = [_read_json(p) for p in json_paths if "client" in p.stem.lower() or "recs" in p.stem.lower()]
-    acp_payloads = [_read_json(p) for p in json_paths if "acp" in p.stem.lower()]
+    acp_paths = [p for p in json_paths if "acp" in p.stem.lower()]
     all_server: list[dict[str, Any]] = []
     all_client: list[dict[str, Any]] = []
     all_acp: list[dict[str, Any]] = []
@@ -179,6 +179,7 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
     expected_by_page: dict[str, int] = {}
     expected_sources: dict[str, str] = {}
     all_parse_statuses: list[dict[str, Any]] = []
+    page_contexts: dict[str, dict[str, Any]] = {}
     for index, path in enumerate(html_paths, start=1):
         html = path.read_text(encoding="utf-8", errors="replace")
         meta = metadata.get(path.name, metadata.get("__default__", {}))
@@ -190,6 +191,12 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
             page_number = index
         page_instance_id = _page_instance(meta, path, index,
                                            root if root.is_dir() else root.parent)
+        page_contexts.setdefault(page_instance_id, {
+            "page_instance_id": page_instance_id,
+            "ranking_source_url": source_url,
+            "ranking_page_url": str(meta.get("page_url") or source_url),
+            "ranking_page_number": page_number,
+        })
         representation_type = _representation(path, meta)
         result = extract_identity_from_html(
             html, source_url=source_url, page_number=page_number,
@@ -217,18 +224,63 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
                 str(meta.get("expected_count_source") or result["audit"].get(
                     "expected_count_source") or "HTML_METADATA"))
         evidence_files.append(str(path.relative_to(root)) if root.is_dir() else path.name)
-    # Standalone supplemental files are intentionally consumed only once and
-    # remain offline evidence; embedded payloads are already present above.
-    for payload, source, target in ((client_payloads, "CLIENT_RECS", all_client),
-                                    (acp_payloads, "ACP", all_acp)):
-        for value in payload:
+    # Standalone supplemental files are consumed only once. ACP response
+    # envelopes carry page context; legacy single-page ACP payloads retain a
+    # deterministic one-page fallback, while ambiguous multi-page payloads
+    # fail closed instead of being assigned by file order.
+    for value in client_payloads:
+        rows, status = extract_structured_candidates_with_status(
+            value, evidence_source="CLIENT_RECS", evidence_file="CLIENT_RECS",
+            page_instance_id="supplemental:CLIENT_RECS",
+            representation_type="CLIENT_RECS")
+        all_client.extend(rows)
+        all_parse_statuses.append({"evidence_source": "CLIENT_RECS", "status": status,
+                                   "evidence_file": "CLIENT_RECS"})
+    attribution_unknown_count = 0
+    for path in acp_paths:
+        payload = _read_json(path)
+        context = payload.get("context") if isinstance(payload, Mapping) else None
+        context = dict(context) if isinstance(context, Mapping) else {}
+        page_instance_id = str(context.get("page_instance_id") or "")
+        if not page_instance_id and len(page_contexts) == 1:
+            page_instance_id = next(iter(page_contexts))
+            context = {**page_contexts[page_instance_id], **context}
+        if not page_instance_id or page_instance_id not in page_contexts:
+            attribution_unknown_count += 1
+            all_parse_statuses.append({"evidence_source": "ACP",
+                                       "status": "ACP_PAGE_ATTRIBUTION_UNKNOWN",
+                                       "evidence_file": str(path.relative_to(root))})
+            continue
+        page_context = {**page_contexts[page_instance_id], **context}
+        response = payload.get("response") if isinstance(payload, Mapping) else None
+        body = response.get("body") if isinstance(response, Mapping) else None
+        if not isinstance(body, str):
+            all_parse_statuses.append({"evidence_source": "ACP", "status": "UNSUPPORTED_SCHEMA",
+                                       "evidence_file": str(path.relative_to(root))})
+            continue
+        page_url = str(page_context.get("ranking_page_url")
+                       or page_context.get("ranking_source_url") or "")
+        rows = extract_server_candidates(
+            body, source_url=page_url,
+            page_number=page_context.get("ranking_page_number"),
+            evidence_file=str(path.relative_to(root)),
+            page_instance_id=page_instance_id, representation_type="ACP")
+        for row in rows:
+            row["evidence_source"] = "ACP"
+            row["representation_type"] = "ACP"
+        if not rows:
             rows, status = extract_structured_candidates_with_status(
-                value, evidence_source=source, evidence_file=str(source),
-                page_instance_id="supplemental:%s" % source,
-                representation_type=source)
-            target.extend(rows)
-            all_parse_statuses.append({"evidence_source": source, "status": status,
-                                       "evidence_file": str(source)})
+                body, evidence_source="ACP",
+                page_number=page_context.get("ranking_page_number"),
+                source_url=page_url, evidence_file=str(path.relative_to(root)),
+                page_instance_id=page_instance_id, representation_type="ACP")
+        else:
+            status = "OK"
+        all_acp.extend(rows)
+        evidence_files.append(str(path.relative_to(root)))
+        all_parse_statuses.append({"evidence_source": "ACP", "status": status,
+                                   "evidence_file": str(path.relative_to(root)),
+                                   "page_instance_id": page_instance_id})
     records, raw = resolve_candidates(all_server + all_client + all_acp)
     if expected_count is not None:
         final_expected = expected_count
@@ -254,6 +306,7 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
         expected_count=final_expected, expected_count_source=final_source,
         expected_slot_count=(sum(expected_by_page.values()) if expected_by_page else None),
         evidence_files=evidence_files, supplemental_parse_statuses=all_parse_statuses,
+        attribution_unknown_count=attribution_unknown_count,
     )
     return {"records": records, "raw_candidates": raw, "audit": audit,
             "evidence_files": evidence_files,
