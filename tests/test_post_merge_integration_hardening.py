@@ -99,6 +99,30 @@ def test_persisted_snapshot_replays_same_server_plus_acp_records(tmp_path):
         (f"B{index:09d}", index) for index in range(1, 51)}
 
 
+def test_final_authority_respects_offline_frozen_base_gate(tmp_path):
+    source = "https://www.amazon.es/gp/bestsellers/test"
+    status = {"source_url": source, "page_number": 1,
+              "access_state": "NORMAL", "parse_status": "PARSE_OK",
+              "parsed_record_count": 1}
+    result = snapshot_module.build_ranking_snapshot(
+        [{"asin": "B000000001", "bestseller_rank": 1,
+          "ranking_source_url": source, "ranking_page_number": 1,
+          "ranking_product_url_raw": source + "/dp/B000000001"}],
+        tmp_path,
+        planned_sources=[status], source_statuses=[status],
+        ranking_audit={"page_authoritative": True, "rank_gap_count": 0,
+                       "rank_duplicate_count": 0},
+        identity_audit={"ranking_slot_complete": True, "identity_ready": True,
+                        "product_identity_complete": True,
+                        "identity_conflict_count": 0,
+                        "ranking_slot_conflict_count": 0},
+        offline_frozen=True)
+    assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
+    assert result["manifest"]["latest_authoritative"] is False
+    assert result["manifest"]["final_authoritative"] is False
+    assert not (tmp_path / "latest_authoritative_snapshot.json").exists()
+
+
 def _run_fake_live_v2(tmp_path, monkeypatch, *, acp_html, include_client_recs=True,
                       conflict=False):
     source = "https://www.amazon.es/gp/bestsellers/test"

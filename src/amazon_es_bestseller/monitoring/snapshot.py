@@ -296,7 +296,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                          "ranking_identity_complete": authority["authority_gates"]["identity_complete"],
                          "ranking_slot_complete": authority["authority_gates"]["ranking_slots_complete"],
                          "identity_conflict_count": int(identity_audit.get("identity_conflict_count") or 0),
-                         "final_authoritative": authority["authoritative"],
+                         "final_authoritative": authoritative,
                          "authority_reasons": authority["authority_block_reasons"]})
     (target / "audit.json").write_text(json.dumps({"records": len(rows),
         "link_identity_statuses": {state: link_statuses.count(state)
