@@ -1311,6 +1311,130 @@ def cmd_audit_fields(args) -> None:
     print("审计 Markdown → %s" % (args.md_out or str(Path(args.out).with_suffix(".md"))))
 
 
+# ---------- stable research quality gate（离线审查） ----------
+
+def _load_quality_records(path: str, kind: str, *, required: bool = False) -> list:
+    """Load a JSON array or a named record wrapper for the Quality Gate."""
+    if not path:
+        if required:
+            raise SystemExit("quality-audit 需要 --%s" % kind)
+        return []
+    data = _load_json(path)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in (kind, "records", "items"):
+            if isinstance(data.get(key), list):
+                return data[key]
+    raise SystemExit("输入文件不是 %s 记录数组：%s" % (kind, path))
+
+
+def _quality_audit_from_args(args, *, network_mode: str = "OFFLINE_QUALITY_AUDIT") -> dict:
+    from .quality.audit import run_quality_audit
+    from .quality.report import write_quality_report
+
+    rankings = _load_quality_records(args.rankings, "rankings", required=True)
+    details = _load_quality_records(getattr(args, "details", ""), "details")
+    products = _load_quality_records(getattr(args, "products", ""), "products")
+    source_manifest = (_load_json(args.source_manifest)
+                       if getattr(args, "source_manifest", "") else None)
+    if source_manifest is None and getattr(args, "run_dir", ""):
+        status_path = Path(args.run_dir) / "page_statuses.json"
+        if status_path.exists():
+            source_manifest = _load_json(str(status_path))
+    translations = (_load_json(args.translations)
+                    if getattr(args, "translations", "") else None)
+    report = run_quality_audit(
+        rankings,
+        details,
+        products=products or None,
+        ranking_html_dirs=getattr(args, "ranking_html", None) or None,
+        detail_html_dirs=getattr(args, "detail_html", None) or None,
+        run_dir=getattr(args, "run_dir", "") or None,
+        source_manifest=source_manifest,
+        translations=translations,
+        workbook_path=getattr(args, "workbook", "") or None,
+        asins=getattr(args, "asin", None) or None,
+        checks=getattr(args, "check", None) or None,
+        profile="stable-research",
+        network_mode=network_mode,
+        run_id=getattr(args, "run_id", "") or "",
+    )
+    saved = write_quality_report(report, args.out_dir)
+    report["report"] = saved
+    return report
+
+
+def _print_quality_result(report: Mapping) -> None:
+    summary = report.get("summary") or {}
+    saved = report.get("report") or {}
+    print("Quality Gate：%s；研究状态：%s；SKU %d；BLOCK %d / REVIEW %d / WARN %d" % (
+        report.get("final_quality_status", "BLOCKED"),
+        (report.get("gate") or {}).get("research_status", "BLOCKED"),
+        summary.get("total_skus", 0), summary.get("block", 0),
+        summary.get("review", 0), summary.get("warn", 0)))
+    print("网络请求：%d；报告 → %s" %
+          (summary.get("network_requests", 0), saved.get("path", "")))
+
+
+def cmd_quality_audit(args) -> None:
+    """Offline-only audit of saved V1 records and HTML evidence."""
+    report = _quality_audit_from_args(args)
+    _print_quality_result(report)
+    if ((report.get("gate") or {}).get("research_status") != "RESEARCH_READY"
+            and not args.allow_non_ready):
+        raise SystemExit(2)
+
+
+def _latest_run_dir(root: str) -> str:
+    runs = sorted(Path(root).glob("runs/*"), reverse=True)
+    return str(runs[0]) if runs else ""
+
+
+def cmd_stable_research(args) -> None:
+    """Run unchanged V1 collection, then the offline stable-research gate."""
+    from .quality.profile import execution_plan_text
+
+    print(execution_plan_text())
+    collect_root = Path(args.collect_out_dir or (Path(args.out_dir) / "collection"))
+    quality_root = Path(args.quality_out_dir or (Path(args.out_dir) / "quality"))
+    if args.offline:
+        if not args.rankings:
+            raise SystemExit("stable-research --offline 需要 --rankings")
+        audit_args = argparse.Namespace(**vars(args))
+        audit_args.out_dir = str(quality_root)
+        report = _quality_audit_from_args(audit_args)
+    else:
+        if not args.urls:
+            raise SystemExit("stable-research 联网模式需要 --urls；离线模式请使用 --offline --rankings")
+        collect_args = argparse.Namespace(
+            offline=False, urls=args.urls, out_dir=str(collect_root),
+            headful=args.headful, profile_dir=args.profile_dir,
+            postal_code=args.postal_code,
+            challenge_wait_seconds=args.challenge_wait_seconds,
+            manual_assist=args.manual_assist, pages_per_url=args.pages_per_url,
+            rankings_only=False, rankings_file="", manifest="", progress="",
+        )
+        cmd_collect(collect_args, build_parser())
+        audit_args = argparse.Namespace(**vars(args))
+        audit_args.rankings = str(collect_root / "rankings.json")
+        audit_args.details = str(collect_root / "details.json")
+        audit_args.products = args.products or ""
+        audit_args.out_dir = str(quality_root)
+        audit_args.run_dir = args.run_dir or _latest_run_dir(str(collect_root))
+        audit_args.ranking_html = args.ranking_html or (
+            [str(Path(audit_args.run_dir) / "html")
+             if (Path(audit_args.run_dir) / "html").is_dir() else audit_args.run_dir]
+            if audit_args.run_dir else [])
+        audit_args.detail_html = args.detail_html or [str(collect_root / "html")]
+        report = _quality_audit_from_args(
+            audit_args, network_mode="V1_COLLECTION_THEN_OFFLINE_AUDIT")
+    _print_quality_result(report)
+    if ((report.get("gate") or {}).get("research_status") != "RESEARCH_READY"
+            and not args.allow_non_ready):
+        raise SystemExit(2)
+
+
 # ---------- export（离线） ----------
 
 def cmd_export(args) -> None:
@@ -1646,6 +1770,58 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--out", default=str(OUTPUTS / "field_closure.json"))
     a.add_argument("--md-out", default="", help="Markdown 输出路径（默认与 JSON 同名 .md）")
     a.set_defaults(func=cmd_audit_fields)
+
+    qa = sub.add_parser("quality-audit", help="离线：对已有 V1 数据和 HTML 运行统一 Quality Gate")
+    qa.add_argument("--rankings", required=True, help="榜单记录 JSON")
+    qa.add_argument("--details", default="", help="详情记录 JSON")
+    qa.add_argument("--products", default="", help="规范化商品 JSON（可选）")
+    qa.add_argument("--ranking-html", nargs="*", default=[],
+                    help="保存的榜单 HTML 目录（可传多个，离线重放）")
+    qa.add_argument("--detail-html", nargs="*", default=[],
+                    help="保存的详情 HTML 目录（可传多个，离线重放）")
+    qa.add_argument("--run-dir", default="", help="采集 run 目录（可选）")
+    qa.add_argument("--source-manifest", default="", help="来源页状态/计划 manifest JSON")
+    qa.add_argument("--translations", default="", help="翻译映射 JSON（可选）")
+    qa.add_argument("--workbook", default="", help="Excel 工作簿（可选）")
+    qa.add_argument("--asin", action="append", default=[], help="只审查指定 ASIN，可重复")
+    from .quality.audit import DEFAULT_CHECKS
+    qa.add_argument("--check", action="append", choices=DEFAULT_CHECKS, default=[],
+                    help="只运行指定检查，可重复；默认运行全部检查")
+    qa.add_argument("--run-id", default="", help="报告运行 ID（可选）")
+    qa.add_argument("--out-dir", required=True, help="质量报告根目录")
+    qa.add_argument("--allow-non-ready", action="store_true",
+                    help="允许 REVIEW/BLOCK 状态以退出码0结束（仅诊断）")
+    qa.set_defaults(func=cmd_quality_audit)
+
+    sr = sub.add_parser("stable-research", help="V1稳定采集 + 离线 Quality Gate")
+    sr.add_argument("--offline", action="store_true", default=argparse.SUPPRESS,
+                    help="仅使用已保存 JSON/HTML，不执行任何网络请求")
+    sr.add_argument("--urls", nargs="*", default=[], help="V1 榜单来源 URL（联网模式）")
+    sr.add_argument("--rankings", default="", help="离线榜单记录 JSON")
+    sr.add_argument("--details", default="", help="离线详情记录 JSON")
+    sr.add_argument("--products", default="", help="规范化商品 JSON（可选）")
+    sr.add_argument("--out-dir", default="runtime/stable_research",
+                    help="稳定研究输出根目录")
+    sr.add_argument("--collect-out-dir", default="", help="V1 采集输出目录")
+    sr.add_argument("--quality-out-dir", default="", help="Quality Gate 报告根目录")
+    sr.add_argument("--ranking-html", nargs="*", default=[])
+    sr.add_argument("--detail-html", nargs="*", default=[])
+    sr.add_argument("--run-dir", default="")
+    sr.add_argument("--source-manifest", default="")
+    sr.add_argument("--translations", default="")
+    sr.add_argument("--workbook", default="")
+    sr.add_argument("--asin", action="append", default=[])
+    sr.add_argument("--check", action="append", choices=DEFAULT_CHECKS, default=[])
+    sr.add_argument("--run-id", default="")
+    sr.add_argument("--allow-non-ready", action="store_true",
+                    help="允许 REVIEW/BLOCK 状态以退出码0结束（仅诊断）")
+    sr.add_argument("--headful", action="store_true")
+    sr.add_argument("--profile-dir", default="")
+    sr.add_argument("--postal-code", default="28001")
+    sr.add_argument("--challenge-wait-seconds", type=float, default=180.0)
+    sr.add_argument("--manual-assist", action="store_true")
+    sr.add_argument("--pages-per-url", type=int, default=1)
+    sr.set_defaults(func=cmd_stable_research)
 
     x = sub.add_parser("export", help="离线：商品表 → Excel")
     x.add_argument("--products", default=str(OUTPUTS / "products.json"))

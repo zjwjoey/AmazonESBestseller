@@ -1,0 +1,26 @@
+{
+  "profile": "stable-research",
+  "description": "V1 stable collector plus offline V1 quality gate",
+  "ranking_collector": "V1",
+  "ranking_parser": "V1",
+  "detail_collector": "V1",
+  "detail_parser": "V1",
+  "quality_gate": "ENABLED",
+  "quality_contract_version": "1",
+  "quality_checks_enabled": [
+    "ranking_identity",
+    "ranking_integrity",
+    "access_evidence",
+    "detail_identity",
+    "offline_replay",
+    "detail_structure",
+    "category_provenance",
+    "field_closure"
+  ],
+  "acp": "DISABLED",
+  "ranking_v2_collector": "DISABLED",
+  "detail_v2_collector": "DISABLED",
+  "translation": "DISABLED",
+  "excel_export": "DISABLED",
+  "network_mode": "V1 collection may be live; quality audit is offline-only"
+}
