@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -12,11 +13,12 @@ from .models import IDENTITY_PARSER_VERSION, IDENTITY_SCHEMA_VERSION
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc).replace(microsecond=0)
+    return datetime.now(timezone.utc)
 
 
 def _snapshot_id(now: datetime | None = None) -> str:
-    return "identity_snapshot_%sZ" % (now or _now()).strftime("%Y%m%dT%H%M%S%f")
+    stamp = (now or _now()).strftime("%Y%m%dT%H%M%S%f")
+    return "identity_snapshot_%s_%sZ" % (stamp, uuid.uuid4().hex[:8])
 
 
 def write_identity_snapshot(
@@ -42,6 +44,23 @@ def write_identity_snapshot(
     audit = dict(result.get("audit") or {})
     audit.update({"snapshot_id": snapshot_id, "parser_version": IDENTITY_PARSER_VERSION})
     status = str(audit.get("status") or "IDENTITY_BLOCKED")
+    ranking_audit = dict(result.get("ranking_audit") or audit.get("ranking_audit") or {})
+    from .completeness import evaluate_authority
+    authority = evaluate_authority(
+        ranking_complete=bool(ranking_audit.get("page_complete",
+                                               ranking_audit.get("ranking_complete", False))),
+        slots_complete=bool(audit.get("ranking_slot_complete")),
+        identity_ready=bool(audit.get("identity_ready")),
+        identity_complete=bool(audit.get("product_identity_complete",
+                                         audit.get("identity_complete"))),
+        access_normal=str(ranking_audit.get("access_state", "NORMAL")).upper()
+        in {"NORMAL", "SUCCESS", "AUTHORITATIVE", "COMPLETE"},
+        no_conflicts=not bool(audit.get("identity_conflict_count"))
+        and not bool(audit.get("ranking_slot_conflict_count")),
+        no_rank_gap=not bool(ranking_audit.get("rank_gap_count")),
+        no_duplicate_rank_slot=not bool(ranking_audit.get("rank_duplicate_count")),
+    )
+    audit.update(authority)
     manifest = {
         "snapshot_id": snapshot_id,
         "created_at": created_text,
@@ -52,6 +71,17 @@ def write_identity_snapshot(
         "status": status,
         "identity_ready": bool(audit.get("identity_ready")),
         "identity_complete": bool(audit.get("identity_complete")),
+        "product_identity_complete": bool(audit.get("product_identity_complete",
+                                                       audit.get("identity_complete"))),
+        "ranking_slot_complete": bool(audit.get("ranking_slot_complete")),
+        "authority_status": authority["authority_status"],
+        "latest_authoritative": authority["authoritative"],
+        "final_authoritative": authority["authoritative"],
+        "ranking_complete": authority["authority_gates"]["ranking_complete"],
+        "ranking_identity_ready": authority["authority_gates"]["identity_ready"],
+        "ranking_identity_complete": authority["authority_gates"]["identity_complete"],
+        "identity_conflict_count": int(audit.get("identity_conflict_count") or 0),
+        "authority_reasons": authority["authority_block_reasons"],
         "expected_count": audit.get("expected_count"),
         "expected_count_source": audit.get("expected_count_source", "UNKNOWN"),
         "evidence_files": list(result.get("evidence_files") or audit.get("evidence_files") or []),

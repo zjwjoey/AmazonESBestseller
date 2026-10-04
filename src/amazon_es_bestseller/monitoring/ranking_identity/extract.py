@@ -234,9 +234,17 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
         final_expected = expected_count
         final_source = "CLI_ARGUMENT"
     elif expected_by_page:
-        final_expected = sum(expected_by_page.values())
-        sources = set(expected_sources.values())
-        final_source = next(iter(sources)) if len(sources) == 1 else "RUN_MANIFEST"
+        expected_slots = sum(expected_by_page.values())
+        # A product identity is global by ASIN, while ranking slots are
+        # page/context scoped. Never turn two contexts containing the same
+        # ASIN into two required products.
+        if len(expected_by_page) == 1:
+            final_expected = expected_slots
+            sources = set(expected_sources.values())
+            final_source = next(iter(sources)) if len(sources) == 1 else "RUN_MANIFEST"
+        else:
+            final_expected = None
+            final_source = "MULTI_PAGE_SLOT_COUNT_ONLY"
     else:
         final_expected = None
         final_source = "UNKNOWN"
@@ -244,6 +252,7 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
         records, raw, server_rendered_count=len(all_server),
         client_recs_count=len(all_client), acp_identity_count=len(all_acp),
         expected_count=final_expected, expected_count_source=final_source,
+        expected_slot_count=(sum(expected_by_page.values()) if expected_by_page else None),
         evidence_files=evidence_files, supplemental_parse_statuses=all_parse_statuses,
     )
     return {"records": records, "raw_candidates": raw, "audit": audit,
