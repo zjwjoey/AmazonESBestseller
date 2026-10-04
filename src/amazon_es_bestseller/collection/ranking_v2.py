@@ -307,13 +307,28 @@ def replay_ranking_snapshot_v2(snapshot_dir) -> dict:
         page = pages[index] if index < len(pages) else {}
         page_url = str(page.get("source_url") or "")
         expected = page.get("expected_count")
-        result = parse_ranking_snapshot_v2(
-            path.read_text(encoding="utf-8"), page_url, str(page.get("collected_at") or ""),
-            expected_count=expected,
-            expected_count_source=page.get("expected_count_source"),
-            acp_hydrator=(lambda _metadata, _offset, count: acp_records[:count]) if acp_records else None)
-        records.extend(result.get("records") or [])
-        audits.append(result.get("audit") or {})
+        collected_at = str(page.get("collected_at") or "")
+        server_records = parse_bestsellers_page(path.read_text(encoding="utf-8"),
+                                                 page_url, collected_at)
+        hydrated = acp_records[:max(0, int(expected or 0) - len(server_records))]
+        all_records = server_records + hydrated
+        for row in all_records:
+            row["ranking_source_url"] = page_url
+            row["ranking_page_url"] = page_url
+        audit = ranking_completeness(
+            all_records, expected_count=expected,
+            server_rendered_count=len(server_records),
+            acp_available=bool(acp_records), acp_hydrated_count=len(hydrated),
+            expected_count_source=str(page.get("expected_count_source") or "UNKNOWN"))
+        seen = set()
+        unique = []
+        for row in all_records:
+            asin = str(row.get("asin") or "").upper()
+            if asin and asin not in seen:
+                seen.add(asin)
+                unique.append(row)
+        records.extend(unique)
+        audits.append(audit)
     return {"records": records, "audits": audits,
             "record_count": len(records),
             "unique_asin_count": len({str(row.get("asin") or "").upper() for row in records})}

@@ -7,7 +7,8 @@ from amazon_es_bestseller.categories.models import PlacementStatus
 from amazon_es_bestseller.categories.provenance import category_evidence_from_detail
 from amazon_es_bestseller.collection.ranking import parse_bestsellers_page
 from amazon_es_bestseller.collection.ranking_v2 import (
-    make_acp_hydrator, parse_ranking_snapshot_v2, replay_acp_response_evidence,
+    build_ranking_snapshot_v2, make_acp_hydrator, parse_ranking_snapshot_v2,
+    replay_acp_response_evidence, replay_ranking_snapshot_v2,
 )
 from amazon_es_bestseller.monitoring.detail_planner import build_detail_plan
 from amazon_es_bestseller.monitoring.ranking_identity.completeness import (
@@ -15,7 +16,8 @@ from amazon_es_bestseller.monitoring.ranking_identity.completeness import (
 )
 from amazon_es_bestseller.monitoring.ranking_identity.snapshot import _snapshot_id
 from amazon_es_bestseller.monitoring.ranking_identity.extract import extract_identity_from_evidence
-from amazon_es_bestseller.transport.base import TransportResponse
+from amazon_es_bestseller.transport.base import TransportResponse, raw_response_evidence
+from amazon_es_bestseller.monitoring.ranking_identity.evidence import save_evidence_snapshot
 
 
 def _card(asin, rank):
@@ -55,6 +57,42 @@ def test_acp_raw_response_is_saved_and_replayable_without_credentials(tmp_path):
     assert saved["response"]["status_code"] == 200
     assert "cookie" not in {key.casefold() for key in saved["request"]["headers"]}
     assert replay_acp_response_evidence(evidence, source_url="https://www.amazon.es/test")[0]["asin"] == "B000000002"
+
+
+def test_persisted_snapshot_replays_same_server_plus_acp_records(tmp_path):
+    source = "https://www.amazon.es/gp/bestsellers/test"
+    server_html = "".join(_card(f"B{index:09d}", index) for index in range(1, 31))
+    acp_html = "".join(_card(f"B{index:09d}", index) for index in range(31, 51))
+    rows = [{"asin": f"B{index:09d}", "bestseller_rank": index,
+             "ranking_source_url": source, "ranking_page_url": source,
+             "ranking_page_number": 1} for index in range(1, 51)]
+    result = build_ranking_snapshot_v2(
+        {"records": rows, "audit": {"page_authoritative": True,
+                                      "expected_count": 50,
+                                      "expected_count_source": "ACP_RECS_LIST",
+                                      "page_complete": True,
+                                      "pages": [{"source_url": source,
+                                                 "expected_count": 50,
+                                                 "expected_count_source": "ACP_RECS_LIST",
+                                                 "page_authoritative": True}]}},
+        tmp_path, planned_sources=[{"source_url": source, "page_number": 1}],
+        source_statuses=[{"source_url": source, "page_number": 1,
+                          "status": "NORMAL", "parse_status": "PARSE_OK",
+                          "parsed_record_count": 50}],
+        snapshot_id="snapshot_replay_test", started_at=datetime(2026, 10, 4, tzinfo=timezone.utc),
+        html_files={"ranking_000.html": server_html}, offline_frozen=False)
+    evidence_root = result["path"] / "evidence" / "acp"
+    save_evidence_snapshot(
+        evidence_root,
+        acp_response_evidence=raw_response_evidence(
+            TransportResponse(200, source + "/acp/nextPage", acp_html,
+                              access_state="NORMAL"),
+            request_method="POST", request_url=source + "/acp/nextPage"),
+        acp_response_evidence_name="acp_response_evidence_000.json")
+    replay = replay_ranking_snapshot_v2(result["path"])
+    assert replay["record_count"] == 50
+    assert {(row["asin"], row["bestseller_rank"]) for row in replay["records"]} == {
+        (f"B{index:09d}", index) for index in range(1, 51)}
 
 
 def test_authority_gate_requires_ranking_and_identity_slot_closure():
