@@ -29,7 +29,6 @@ CANARY_EXIT_ACCESS = 3
 CANARY_EXIT_FAILED = 4
 CANARY_EXIT_RUNTIME_BUDGET = 5
 
-_BESTSELLER_PATH_PREFIXES = ("/zgbs/", "/gp/bestsellers/")
 _IDENTITY_ALIASES = {
     "MATCH": "IDENTITY_MATCH",
     "IDENTITY_MATCH": "IDENTITY_MATCH",
@@ -157,7 +156,10 @@ def validate_canary_url(url: str) -> str:
     if parsed.scheme.lower() != "https" or host not in {"amazon.es", "www.amazon.es"}:
         raise CanaryScopeExceeded(
             "source URL 必须是 https://amazon.es 或 https://www.amazon.es")
-    if not any(parsed.path.startswith(prefix) for prefix in _BESTSELLER_PATH_PREFIXES):
+    path_parts = [part.lower() for part in parsed.path.split("/") if part]
+    has_zgbs_path = "zgbs" in path_parts
+    has_gp_bestsellers_path = len(path_parts) >= 2 and path_parts[:2] == ["gp", "bestsellers"]
+    if not (has_zgbs_path or has_gp_bestsellers_path):
         raise CanaryScopeExceeded("source URL 必须是 /zgbs/ 或 /gp/bestsellers/ Bestseller 路径")
     return value
 

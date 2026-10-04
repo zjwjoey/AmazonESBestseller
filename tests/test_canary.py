@@ -59,11 +59,14 @@ def test_profile_detail_limit_is_execution_limit_not_display_only():
 
 
 def test_url_validation_accepts_only_amazon_es_bestseller_paths():
+    documented_url = "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbs/1293659031"
+    assert validate_canary_url(documented_url) == documented_url
     assert validate_canary_url("https://www.amazon.es/zgbs/123")
     assert validate_canary_url("https://amazon.es/gp/bestsellers/xxx/123")
     for url in ("http://www.amazon.es/zgbs/123", "https://amazon.com/zgbs/123",
                 "https://example.com/zgbs/123", "file:///tmp/x",
-                "javascript:alert(1)"):
+                "javascript:alert(1)",
+                "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbsx/1293659031"):
         with pytest.raises(CanaryScopeExceeded, match=CANARY_SCOPE_EXCEEDED):
             validate_canary_url(url)
 
