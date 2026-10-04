@@ -44,6 +44,7 @@ def test_dry_run_has_zero_network_and_does_not_create_production_state(tmp_path)
 
 def _page(page_number=1, **extra):
     row = {"page_number": page_number, "page_instance_id": f"p{page_number}",
+           "ranking_source_url": "source", "ranking_page_url": f"page-{page_number}",
            "expected_count": 2, "server_rendered_count": 2,
            "acp_hydrated_count": 0, "page_authoritative": True,
            "page_complete": True}
@@ -83,9 +84,11 @@ def test_stage_c_samples_from_snapshot_and_reports_unobserved_variation():
                 "parser_version": "collection.detail_v2",
                 "detail_parser_version": "collection.detail_v2",
                 "detail_parser_contract_version": 2,
-                "identity_status": "MATCH", "access_state": "NORMAL"}
+                "identity_status": "MATCH", "access_state": "NORMAL",
+                "ordered_detail_evidence": [], "category_evidence": {}}
                for asin in sampled]
-    assert gate_stage_c(details, sampled, sampling)["status"] == "PASS"
+    from amazon_es_bestseller.canary import gate_stage_c_with_replay
+    assert gate_stage_c_with_replay(details, sampled, sampling, {"equal": True})["status"] == "PASS"
 
 
 def test_access_stop_marker_and_request_accounting():
@@ -122,7 +125,7 @@ def test_live_access_stop_blocks_later_stages_and_writes_blocked_manifest(tmp_pa
                       git_sha="test-sha")
     assert report["final_status"] == "CANARY_BLOCKED_BY_ACCESS"
     assert report["stop_code"] == "CANARY_STOPPED_BY_ACCESS_GATE"
-    assert report["stage_status"] == {"A": "NOT_RUN", "B": "NOT_RUN", "C": "NOT_RUN"}
+    assert report["stage_status"] == {"A": "BLOCKED_BY_ACCESS", "B": "NOT_RUN", "C": "NOT_RUN"}
     assert report["actual_requests"]["total_requests"] == 0
 
 
@@ -135,4 +138,19 @@ def test_manifest_isolated_and_records_budget(tmp_path):
     saved = json.loads((run / "canary_manifest.json").read_text(encoding="utf-8"))
     assert saved["request_budget"]["max_detail_asins"] == 5
     assert saved["actual_requests"]["total_requests"] == 0
+    assert saved["ranking_parser_version"] == "v2"
+    assert saved["detail_parser_version"] == "v2"
+    assert saved["detail_v2_pass"] is False
     assert saved == manifest
+
+
+def test_detail_replay_comparator_is_strict_on_identity_and_evidence():
+    from amazon_es_bestseller.canary import compare_detail_replay
+
+    online = [{"requested_asin": "B000000001", "resolved_asin": "B000000001",
+               "identity_status": "MATCH", "ordered_detail_evidence": [],
+               "category_evidence": {}}]
+    offline = [dict(online[0])]
+    assert compare_detail_replay(online, offline)["equal"] is True
+    offline[0]["identity_status"] = "IDENTITY_REVIEW"
+    assert compare_detail_replay(online, offline)["equal"] is False
