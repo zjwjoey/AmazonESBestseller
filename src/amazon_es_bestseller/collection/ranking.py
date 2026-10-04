@@ -385,8 +385,27 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
             json.dump(identity_result["records"], f, ensure_ascii=False, indent=2)
         with open(os.path.join(run_dir, "identity_audit.json"), "w", encoding="utf-8") as f:
             json.dump(identity_result["audit"], f, ensure_ascii=False, indent=2)
+        with open(os.path.join(run_dir, "identity_status.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "identity_status": identity_result["audit"].get("status"),
+                "identity_parser_version": "ranking_identity_v1",
+                "identity_ready": bool(identity_result["audit"].get("identity_ready")),
+                "identity_complete": bool(identity_result["audit"].get("identity_complete")),
+                "identity_audit_file": "identity_audit.json",
+            }, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         with open(os.path.join(run_dir, "identity_extraction_error.json"), "w", encoding="utf-8") as f:
             json.dump({"error": str(exc), "identity_parser_version": "ranking_identity_v1"},
                       f, ensure_ascii=False, indent=2)
+        # Ranking evidence remains intact, but the run must never look
+        # successful to a downstream identity-aware consumer.
+        with open(os.path.join(run_dir, "identity_status.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "identity_status": "IDENTITY_FAILED",
+                "identity_parser_version": "ranking_identity_v1",
+                "identity_ready": False,
+                "identity_complete": False,
+                "identity_error": str(exc),
+                "identity_error_file": "identity_extraction_error.json",
+            }, f, ensure_ascii=False, indent=2)
     return RankingCollectionResult(records, run_dir, page_statuses)

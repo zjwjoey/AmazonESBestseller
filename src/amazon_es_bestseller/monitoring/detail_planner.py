@@ -192,7 +192,14 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
     """Build a deterministic offline plan, deduplicated by canonical ranking ASIN."""
     if not isinstance(ranking_snapshot, Mapping):
         raise ValueError("详情 planner 需要带 manifest 的 AUTHORITATIVE ranking snapshot")
-    if ranking_snapshot.get("snapshot_status") not in {"AUTHORITATIVE", "IDENTITY_COMPLETE"}:
+    snapshot_status = str(ranking_snapshot.get("snapshot_status") or "")
+    snapshot_kind = str(ranking_snapshot.get("snapshot_kind") or "")
+    if snapshot_kind == "RANKING_IDENTITY":
+        if snapshot_status != "IDENTITY_COMPLETE" or ranking_snapshot.get("identity_complete") is False:
+            raise ValueError(
+                "详情 planner 拒绝非完整 Ranking Identity Snapshot：%s"
+                % (snapshot_status or "UNKNOWN"))
+    elif snapshot_status not in {"AUTHORITATIVE", "IDENTITY_COMPLETE"}:
         raise ValueError("详情 planner 只能使用 AUTHORITATIVE ranking snapshot")
     ranking_rows = _rows(ranking_snapshot)
     snapshot_id = str(ranking_snapshot.get("snapshot_id") or "")

@@ -310,12 +310,17 @@ def _load_snapshot_input(path: str) -> dict:
         raise SystemExit("找不到快照 rankings.json: %s" % rankings_path)
     rows = _load_snapshot_records(str(rankings_path))
     result = {"records": rows}
+    if rankings_path.name == "identity.json":
+        result["snapshot_kind"] = "RANKING_IDENTITY"
     if manifest_path.exists():
         manifest = _load_json(str(manifest_path))
         if isinstance(manifest, dict):
-            result["snapshot_status"] = ("IDENTITY_COMPLETE"
-                                          if manifest.get("status") == "IDENTITY_COMPLETE"
-                                          else manifest.get("snapshot_status"))
+            if manifest.get("parser_version") == "ranking_identity_v1":
+                result["snapshot_kind"] = "RANKING_IDENTITY"
+                result["snapshot_status"] = manifest.get("status")
+                result["identity_complete"] = bool(manifest.get("identity_complete"))
+            else:
+                result["snapshot_status"] = manifest.get("snapshot_status")
             result["snapshot_id"] = manifest.get("snapshot_id")
     return result
 
@@ -388,6 +393,7 @@ def cmd_ranking_identity_extract(args, parser: argparse.ArgumentParser) -> None:
 def cmd_ranking_identity_snapshot(args, parser: argparse.ArgumentParser) -> None:
     """离线：提取并写入 append-only Ranking Identity Snapshot。"""
     from .monitoring.ranking_identity.snapshot import write_identity_snapshot
+    from .monitoring.snapshot import SnapshotIncompleteError
     result = _identity_extraction(args)
     saved = write_identity_snapshot(result, args.out_dir, snapshot_id=args.snapshot_id or None,
                                     evidence_dir=args.evidence_dir)
