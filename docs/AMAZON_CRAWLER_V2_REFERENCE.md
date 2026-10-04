@@ -20,7 +20,8 @@ that the branch is ready to merge into `main`.
 - Transport Adapter V1: a small protocol plus Playwright adapter over the
   existing browser session, optional curl-cffi experiment, shared failure
   taxonomy, Amazon.es locale evidence (`requested_locale`,
-  `observed_language`, `language_mismatch`), and a browser/manual fallback
+  `observed_language`, `language_mismatch`, `currency`, `postal_code`, and
+  optional `marketplace_id`/`fingerprint`), and a browser/manual fallback
   contract. No automatic fallback or bypass is introduced.
 - Product Parser V2: preserves ordered duplicate detail labels, variation and
   parent evidence, page identity evidence, and category provenance while

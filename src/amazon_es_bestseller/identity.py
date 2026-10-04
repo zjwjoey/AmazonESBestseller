@@ -22,6 +22,11 @@ EXTERNAL_EVIDENCE_MATCH = MATCH_BY_EXTERNAL_EVIDENCE
 IDENTITY_UNCONFIRMED = "IDENTITY_UNCONFIRMED"
 IDENTITY_MISMATCH = "IDENTITY_MISMATCH"
 
+_V2_STATUS_CODES = {
+    IDENTITY_MATCH: "EXACT_ASIN",
+    MATCH_BY_EXTERNAL_EVIDENCE: "EXTERNAL_EVIDENCE_MATCH",
+}
+
 _URL_ASIN_RE = re.compile(r"/(?:dp|gp/product|gp/aw/d|product)/([A-Z0-9]{10})(?:[/?#]|$)", re.I)
 
 
@@ -95,5 +100,6 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
         "parent_asin": parent,
         "variation_family_asins": sorted(family),
         "identity_status": status,
+        "identity_status_code": _V2_STATUS_CODES.get(status, status),
         "identity_evidence": evidence,
     }

@@ -28,6 +28,8 @@ def test_detail_v2_preserves_duplicate_labels_and_variation_evidence():
     assert [row["label_raw"] for row in attrs] == ["Color", "Color"]
     assert [row["position"] for row in attrs] == [0, 1]
     assert result["identity_status"] == "IDENTITY_MATCH"
+    assert result["identity_status_code"] == "EXACT_ASIN"
+    assert {row["source"] for row in result["identity_evidence"]} >= {"canonical_asin", "parsed_detail_asin"}
     assert result["variation_evidence"]["parent_asin"] == "B000000009"
     assert set(result["variation_family_asins"]) == {"B000000001", "B000000002", "B000000009"}
     assert result["category_evidence"]["category_evidence_source"] == "PRODUCT_BREADCRUMB"

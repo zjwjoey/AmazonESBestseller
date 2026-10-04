@@ -8,7 +8,7 @@ from html import unescape
 from bs4 import BeautifulSoup
 
 from ..categories.provenance import category_evidence_from_detail
-from ..identity import resolve_identity
+from ..identity import asin_from_url, resolve_identity
 from .detail import parse_detail_page
 
 
@@ -89,14 +89,22 @@ def _page_asins(html: str) -> set[str]:
     return values
 
 
+def _canonical_asin(html: str) -> str:
+    soup = BeautifulSoup(html or "", "lxml")
+    link = soup.select_one('link[rel="canonical"]')
+    return asin_from_url(link.get("href") if link else "")
+
+
 def parse_detail_evidence_v2(html: str, requested_asin: str, *, requested_url: str = "",
                              final_url: str = "", ranking_context: dict | None = None) -> dict:
     base = parse_detail_page(html, requested_asin)
     variation = _variation_evidence(html)
     page_asins = _page_asins(html)
+    canonical_asin = _canonical_asin(html)
     identity = resolve_identity(
         ranking_asin=requested_asin, requested_asin=requested_asin,
         requested_url=requested_url, final_url_asin=final_url,
+        canonical_asin=canonical_asin,
         embedded_asins=page_asins, parsed_detail_asin=variation.get("current_asin") or "",
         parent_asin=variation.get("parent_asin") or base.get("parent_asin") or "",
         variation_family_asins=variation.get("family_asins") or [],
@@ -110,7 +118,7 @@ def parse_detail_evidence_v2(html: str, requested_asin: str, *, requested_url: s
         "requested_asin": identity["requested_asin"],
         "resolved_asin": identity["resolved_asin"],
         "identity_status": identity["identity_status"],
-        "identity_status_code": identity["identity_status"],
+        "identity_status_code": identity["identity_status_code"],
         "identity_evidence": identity["identity_evidence"],
         "category_evidence": evidence.to_dict(),
         # Explicitly preserve ordered duplicate labels; this is the raw

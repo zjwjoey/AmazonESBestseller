@@ -208,6 +208,12 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                      and parsed_page_count == expected_page_count
                      and failed_page_count == 0 and empty_page_count == 0
                      and bool(rows) and bool(unique_asins))
+    # A V2 parser audit is a stronger page-level authority gate than the
+    # legacy source-status summary.  An incomplete ACP/rank audit may still be
+    # persisted as evidence, but it must never advance the authoritative
+    # pointer.
+    if ranking_audit is not None and not bool(ranking_audit.get("page_authoritative")):
+        authoritative = False
     snapshot_status = "AUTHORITATIVE" if authoritative else "INCOMPLETE"
     output_root = Path(output_root)
     day_dir = output_root / datetime.fromisoformat(started.replace("Z", "+00:00")).strftime("%Y-%m-%d")

@@ -20,7 +20,8 @@ class CurlCffiTransport:
     experimental = True
 
     def __init__(self, *, domain: str = "www.amazon.es", language: str = "es-ES",
-                 currency: str = "EUR", fingerprint: str = "safari17_0"):
+                 currency: str = "EUR", fingerprint: str = "safari17_0",
+                 postal_code: str | None = None, marketplace_id: str | None = None):
         try:
             from curl_cffi import requests
         except ImportError as exc:  # pragma: no cover - depends on optional extra
@@ -29,6 +30,9 @@ class CurlCffiTransport:
         self.domain = domain
         self.base = f"https://{domain}"
         self.language = language
+        self.postal_code = postal_code
+        self.marketplace_id = marketplace_id
+        self.fingerprint = fingerprint
         self.session = requests.Session(impersonate=fingerprint, timeout=45)
         self.session.cookies.set("i18n-prefs", currency, domain=f".{domain}")
         self.session.cookies.set("lc-main", language.replace("-", "_"), domain=f".{domain}")
@@ -50,6 +54,8 @@ class CurlCffiTransport:
                                  failure=failure.to_dict() if failure else None,
                                  marketplace="ES",
                                  currency=self.session.cookies.get("i18n-prefs") or "EUR",
+                                 postal_code=self.postal_code, marketplace_id=self.marketplace_id,
+                                 fingerprint=self.fingerprint,
                                  **locale)
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:

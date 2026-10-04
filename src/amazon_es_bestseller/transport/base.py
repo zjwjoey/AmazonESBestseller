@@ -16,6 +16,9 @@ class TransportResponse:
     marketplace: str = "ES"
     requested_locale: str = "es_ES"
     currency: str = "EUR"
+    postal_code: str | None = None
+    marketplace_id: str | None = None
+    fingerprint: str | None = None
     observed_language: str | None = None
     language_mismatch: bool | None = None
 

@@ -10,4 +10,5 @@ def test_parent_child_variation_is_related_not_mismatched():
     </body></html>'''
     result = parse_detail_evidence_v2(html, "B000000001")
     assert result["identity_status"] == "VARIATION_RELATED"
+    assert result["identity_status_code"] == "VARIATION_RELATED"
     assert result["resolved_asin"] == "B000000002"

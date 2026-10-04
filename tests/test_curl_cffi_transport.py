@@ -40,10 +40,14 @@ def test_curl_cffi_adapter_is_optional_and_locale_aware(monkeypatch):
     fake_module = ModuleType("curl_cffi")
     fake_module.requests = fake_requests
     monkeypatch.setitem(sys.modules, "curl_cffi", fake_module)
-    transport = CurlCffiTransport()
+    transport = CurlCffiTransport(postal_code="28001", marketplace_id="ES-MARKET",
+                                  fingerprint="safari17_0")
     response = transport.fetch_page("https://www.amazon.es/test")
     assert transport.experimental is True
     assert response.requested_locale == "es_ES"
     assert response.currency == "EUR"
+    assert response.postal_code == "28001"
+    assert response.marketplace_id == "ES-MARKET"
+    assert response.fingerprint == "safari17_0"
     assert response.language_mismatch is False
     transport.close()

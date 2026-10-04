@@ -15,11 +15,14 @@ class PlaywrightTransport:
     primary = True
 
     def __init__(self, session, *, marketplace: str = "ES",
-                 requested_locale: str = "es_ES", currency: str = "EUR"):
+                 requested_locale: str = "es_ES", currency: str = "EUR",
+                 postal_code: str | None = None, marketplace_id: str | None = None):
         self.session = session
         self.marketplace = marketplace
         self.requested_locale = requested_locale
         self.currency = currency
+        self.postal_code = postal_code
+        self.marketplace_id = marketplace_id
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
         status = self.session.goto(url)
@@ -32,7 +35,8 @@ class PlaywrightTransport:
         return TransportResponse(status, final_url, text, access_state=state,
                                  failure=failure.to_dict() if failure else None,
                                  marketplace=self.marketplace,
-                                 currency=self.currency, **locale)
+                                 currency=self.currency, postal_code=self.postal_code,
+                                 marketplace_id=self.marketplace_id, **locale)
 
     def fetch_ajax(self, url: str, *, method: str = "GET", referer: str | None = None,
                    payload=None) -> TransportResponse:
