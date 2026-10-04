@@ -38,7 +38,12 @@ class CategoryCrawlerState:
     def write_authoritative_graph(self) -> Path | None:
         """Publish the latest graph only after the complete tree validates."""
         errors = self.graph.validate()
-        if errors:
+        incomplete = [
+            f"{placement_id} status is {placement.status.value}"
+            for placement_id, placement in self.graph.placements.items()
+            if placement.status is not PlacementStatus.DONE
+        ]
+        if errors or incomplete:
             return None
         target = self.path.parent / "latest_authoritative_category_graph.json"
         payload = {
@@ -138,7 +143,13 @@ class CategoryCrawler:
             self.state.save()
             processed += 1
         errors = self.state.graph.validate()
-        authoritative_path = self.state.write_authoritative_graph() if not errors else None
+        completion_errors = [
+            f"{placement_id} status is {placement.status.value}"
+            for placement_id, placement in self.state.graph.placements.items()
+            if placement.status is not PlacementStatus.DONE
+        ]
+        authoritative_path = self.state.write_authoritative_graph()
         return {"processed": processed, "placements": len(self.state.graph.placements),
-                "tree_valid": not errors, "tree_errors": errors,
+                "tree_valid": not errors, "crawl_complete": not completion_errors,
+                "tree_errors": errors, "completion_errors": completion_errors,
                 "latest_authoritative_category_graph": authoritative_path}

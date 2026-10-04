@@ -38,13 +38,20 @@ class CurlCffiTransport:
         self.session.cookies.set("lc-main", language.replace("-", "_"), domain=f".{domain}")
         self.warmed = False
 
-    def _request(self, method: str, url: str, *, referer: str | None = None, payload=None):
-        headers = {
+    def _request(self, method: str, url: str, *, referer: str | None = None,
+                 payload=None, headers=None):
+        request_headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "accept-language": f"{self.language},{self.language.split('-')[0]};q=0.9",
             "referer": referer or f"{self.base}/",
         }
-        response = self.session.request(method, url, headers=headers, json=payload)
+        request_headers.update(headers or {})
+        request_kwargs = {"headers": request_headers}
+        if isinstance(payload, str):
+            request_kwargs["data"] = payload
+        elif payload is not None:
+            request_kwargs["json"] = payload
+        response = self.session.request(method, url, **request_kwargs)
         failure = classify_failure(status_code=response.status_code, body=response.text,
                                    url=str(response.url))
         locale = locale_observation(response.text or "", requested_locale=self.language.replace("-", "_"))
@@ -68,9 +75,9 @@ class CurlCffiTransport:
                              referer=referer)
 
     def fetch_ajax(self, url: str, *, method: str = "GET", referer: str | None = None,
-                   payload=None) -> TransportResponse:
+                   payload=None, headers=None) -> TransportResponse:
         return self._request(method, url if url.startswith("http") else self.base + url,
-                             referer=referer, payload=payload)
+                             referer=referer, payload=payload, headers=headers)
 
     def close(self) -> None:
         self.session.close()

@@ -26,11 +26,17 @@ class PlaywrightTransport:
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
         status = self.session.goto(url)
-        load_lazy = getattr(self.session, "load_lazy_ranking_content", None)
-        if callable(load_lazy):
-            load_lazy()
         page = getattr(self.session, "page", None)
         text = page.content() if page is not None else ""
+        # Access Gate must see the initial response before any scroll/lazy
+        # loading is attempted.  A challenge/403/429 page must stop promptly;
+        # it is never treated as a normal page that may be interacted with.
+        initial_state = detect_access_status(status, text)
+        if initial_state.value == "NORMAL":
+            load_lazy = getattr(self.session, "load_lazy_ranking_content", None)
+            if callable(load_lazy):
+                load_lazy()
+                text = page.content() if page is not None else text
         final_url = str(getattr(page, "url", "") or url)
         state = detect_access_status(status, text).value
         failure = classify_failure(status_code=status, body=text, url=final_url)
@@ -42,8 +48,51 @@ class PlaywrightTransport:
                                  marketplace_id=self.marketplace_id, **locale)
 
     def fetch_ajax(self, url: str, *, method: str = "GET", referer: str | None = None,
-                   payload=None) -> TransportResponse:
-        raise NotImplementedError("Playwright AJAX uses the existing page/session flow")
+                   payload=None, headers=None) -> TransportResponse:
+        page = getattr(self.session, "page", None)
+        if page is None:
+            raise RuntimeError("Playwright AJAX requires an active page")
+        request_headers = dict(headers or {})
+        if referer:
+            request_headers.setdefault("referer", referer)
+        body = payload if isinstance(payload, str) else None
+        if body is None and payload is not None:
+            import json
+            body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            request_headers.setdefault("content-type", "application/json")
+        result = page.evaluate(
+            """
+            async ({url, method, headers, body}) => {
+              const response = await fetch(url, {
+                method,
+                headers,
+                body: method === "GET" || method === "HEAD" ? undefined : body,
+                credentials: "include"
+              });
+              return {
+                status: response.status,
+                url: response.url,
+                text: await response.text(),
+                headers: Object.fromEntries(response.headers.entries())
+              };
+            }
+            """,
+            {"url": url, "method": str(method or "GET").upper(),
+             "headers": request_headers, "body": body},
+        )
+        status = result.get("status")
+        text = result.get("text") or ""
+        final_url = str(result.get("url") or url)
+        state = detect_access_status(status, text).value
+        failure = classify_failure(status_code=status, body=text, url=final_url)
+        locale = locale_observation(text, requested_locale=self.requested_locale)
+        return TransportResponse(
+            status, final_url, text, headers=result.get("headers") or {},
+            access_state=state,
+            failure=failure.to_dict() if failure else None,
+            marketplace=self.marketplace, currency=self.currency,
+            postal_code=self.postal_code, marketplace_id=self.marketplace_id,
+            **locale)
 
     def close(self) -> None:
         close = getattr(self.session, "close", None)

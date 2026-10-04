@@ -339,7 +339,10 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
     ranking_audit = None
     effective_parser_version = str(parser_version or "v1").casefold()
     if effective_parser_version in {"v2", "collection.ranking_v2"}:
-        from ..collection.ranking_v2 import parse_ranking_snapshot_v2
+        from ..collection.ranking_v2 import make_acp_hydrator, parse_ranking_snapshot_v2
+
+        if acp_hydrator is None and transport is not None:
+            acp_hydrator = make_acp_hydrator(transport)
 
         v2_records = []
         page_audits = []

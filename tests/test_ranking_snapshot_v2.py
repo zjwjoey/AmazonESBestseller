@@ -6,9 +6,10 @@ import pytest
 
 from amazon_es_bestseller.collection.ranking_v2 import (
     RankingSnapshotIncompleteError, build_ranking_snapshot_v2,
-    parse_ranking_snapshot_v2, require_authoritative_page,
+    make_acp_hydrator, parse_ranking_snapshot_v2, require_authoritative_page,
 )
 from amazon_es_bestseller.monitoring import snapshot as snapshot_module
+from amazon_es_bestseller.transport.base import TransportResponse
 
 
 def _card(asin, rank):
@@ -81,3 +82,26 @@ def test_collect_ranking_snapshot_v2_persists_incomplete_page_audit(tmp_path, mo
     assert result["manifest"]["parser_version"] == "collection.ranking_v2"
     assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
     assert result["manifest"]["ranking_v2_audit"]["page_authoritative"] is False
+
+
+def test_acp_hydrator_uses_transport_form_request():
+    calls = []
+
+    class Transport:
+        def fetch_ajax(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return TransportResponse(
+                200, url, _card("B000000002", 2), access_state="NORMAL")
+
+    hydrate = make_acp_hydrator(Transport())
+    records = hydrate({
+        "path": "/acp/", "params": "token=x", "faceout": "GeneralFaceout",
+        "reftag": "zg_bs", "source_url": "https://www.amazon.es/zgbs/test",
+        "entries": [{"id": "B000000001"}, {"id": "B000000002"}],
+    }, 1, 1)
+    assert [row["asin"] for row in records] == ["B000000002"]
+    url, kwargs = calls[0]
+    assert url == "https://www.amazon.es/acp/nextPage"
+    assert kwargs["method"] == "POST"
+    assert kwargs["headers"]["x-amz-acp-params"] == "token=x"
+    assert "faceoutkataname=GeneralFaceout" in kwargs["payload"]

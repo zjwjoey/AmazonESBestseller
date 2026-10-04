@@ -48,7 +48,8 @@ class AmazonTransport(Protocol):
         ...
 
     def fetch_ajax(self, url: str, *, method: str = "GET", referer: str | None = None,
-                   payload: Mapping[str, object] | None = None) -> TransportResponse:
+                   payload: Mapping[str, object] | str | None = None,
+                   headers: Mapping[str, str] | None = None) -> TransportResponse:
         ...
 
     def close(self) -> None:

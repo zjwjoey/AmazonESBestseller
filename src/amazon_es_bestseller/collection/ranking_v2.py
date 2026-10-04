@@ -11,6 +11,7 @@ import re
 from collections import Counter
 from html import unescape
 from typing import Callable, Mapping
+from urllib.parse import urlencode, urljoin
 
 from bs4 import BeautifulSoup
 
@@ -133,7 +134,8 @@ def parse_ranking_snapshot_v2(html: str, source_url: str, collected_at: str,
     expected_count = len(recs) or len(server_records)
     hydrated: list[dict] = []
     if access.value == "NORMAL" and acp and acp_hydrator and expected_count > len(server_records):
-        hydrated = list(acp_hydrator(acp | {"entries": recs}, len(server_records),
+        hydrated = list(acp_hydrator(acp | {"entries": recs, "source_url": source_url},
+                                     len(server_records),
                                      expected_count - len(server_records)) or [])
     all_records = list(server_records) + hydrated
     for row in all_records:
@@ -154,6 +156,55 @@ def parse_ranking_snapshot_v2(html: str, source_url: str, collected_at: str,
     return {"records": unique, "raw_records": all_records, "audit": audit,
             "access_state": access.value, "acp": acp or None,
             "expected_count_source": "ACP_RECS_LIST" if recs else "SERVER_RENDERED_FALLBACK"}
+
+
+def make_acp_hydrator(transport, *, max_records: int | None = None):
+    """Create the explicit ACP continuation callback for a transport.
+
+    The callback is deliberately injected by the caller.  It performs one
+    bounded continuation request, preserves the response as transport
+    evidence, and returns only parser records; authority is still decided by
+    :func:`ranking_completeness`.
+    """
+    def hydrate(metadata: Mapping, offset: int, count: int) -> list[dict]:
+        path = str(metadata.get("path") or "")
+        source_url = str(metadata.get("source_url") or "")
+        if not path or not source_url or count <= 0:
+            return []
+        entries = [entry for entry in (metadata.get("entries") or [])
+                   if isinstance(entry, Mapping)]
+        ids = [str(entry.get("id") or entry.get("asin") or "").strip()
+               for entry in entries]
+        ids = [value for value in ids if value]
+        indexes = list(range(max(0, int(offset)), max(0, int(offset)) + int(count)))
+        body = urlencode({
+            "faceoutkataname": str(metadata.get("faceout") or "GeneralFaceout"),
+            "ids": json.dumps(ids, ensure_ascii=False, separators=(",", ":")),
+            "indexes": json.dumps(indexes, separators=(",", ":")),
+            "offset": str(max(0, int(offset))),
+            "reftagprefix": str(metadata.get("reftag") or ""),
+        })
+        endpoint = urljoin(source_url, path.rstrip("/") + "/nextPage")
+        try:
+            response = transport.fetch_ajax(
+                endpoint, method="POST", referer=source_url, payload=body,
+                headers={
+                    "accept": "text/html,application/xhtml+xml",
+                    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "x-amz-acp-params": str(metadata.get("params") or ""),
+                })
+        except Exception:
+            # The page remains saved evidence; failure to continue ACP must
+            # leave the completeness audit incomplete rather than fabricate
+            # the missing cards or abort before persisting the snapshot.
+            return []
+        if response.failure or str(response.access_state or "").upper() != "NORMAL":
+            return []
+        records = parse_bestsellers_page(response.text, source_url, "")
+        limit = int(max_records) if max_records is not None else int(count)
+        return records[:max(0, min(int(count), limit))]
+
+    return hydrate
 
 
 def require_authoritative_page(result: Mapping) -> list[dict]:

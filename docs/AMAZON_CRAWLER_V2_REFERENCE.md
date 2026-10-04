@@ -34,14 +34,17 @@ that the branch is ready to merge into `main`.
 - `ranking-snapshot --parser-version v2` reparses the saved `ranking_*.html`
   evidence through Ranking Snapshot V2.  The normal Playwright transport
   adapter is selected by default; `--transport legacy` is retained for
-  compatibility.  ACP hydration remains an explicit callback, so a missing
-  31--50 response is recorded as incomplete instead of being guessed.
+  compatibility.  When the Playwright transport is active, the ACP
+  continuation callback uses the page session and form request headers; a
+  missing 31--50 response is still recorded as incomplete instead of being
+  guessed.
 - `detail-run --parser-version v2` uses Product Parser V2 for cache reuse,
   saved-HTML reparsing, and new detail pages.  The selected parser version is
   written into the execution manifest; V1 remains the default.
 - `category-graph-validate --state <state.json>` validates the resumable
   placement graph offline and reports whether an authoritative graph may be
-  published.  It never contacts Amazon.
+  published.  Structural validity alone is insufficient: every placement
+  must be `DONE`.  It never contacts Amazon.
 - The curl-cffi adapter and browser fallback are deliberately opt-in
   boundaries.  They do not silently replace the primary Playwright path or
   recover from access restrictions automatically.

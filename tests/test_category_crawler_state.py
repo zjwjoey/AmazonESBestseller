@@ -11,9 +11,11 @@ def test_access_block_is_persisted_as_blocked(tmp_path):
     crawler = CategoryCrawler(state, lambda _row: (_ for _ in ()).throw(AccessBlocked("captcha")))
     crawler.seed(marketplace="ES", category_id="root", category_name="Root",
                  canonical_url="https://www.amazon.es/root")
-    crawler.run()
+    result = crawler.run()
     row = next(iter(state.graph.placements.values()))
     assert row.status is PlacementStatus.BLOCKED
+    assert result["crawl_complete"] is False
+    assert result["latest_authoritative_category_graph"] is None
     resumed = CategoryCrawlerState(tmp_path / "state.json")
     assert next(iter(resumed.graph.placements.values())).status is PlacementStatus.BLOCKED
 
@@ -27,3 +29,15 @@ def test_valid_tree_publishes_authoritative_graph(tmp_path):
     path = result["latest_authoritative_category_graph"]
     assert result["tree_valid"] is True
     assert path is not None and path.exists()
+
+
+def test_incomplete_tree_never_publishes_authoritative_graph(tmp_path):
+    state = CategoryCrawlerState(tmp_path / "state.json")
+    crawler = CategoryCrawler(state, lambda _row: {"children": []})
+    crawler.seed(marketplace="ES", category_id="root", category_name="Root",
+                 canonical_url="https://www.amazon.es/root")
+    result = crawler.run(max_placements=0)
+    assert result["tree_valid"] is True
+    assert result["crawl_complete"] is False
+    assert result["latest_authoritative_category_graph"] is None
+    assert not (tmp_path / "latest_authoritative_category_graph.json").exists()

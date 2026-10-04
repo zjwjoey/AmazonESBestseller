@@ -741,26 +741,37 @@ def cmd_discover_tree(args, parser: argparse.ArgumentParser) -> None:
 def cmd_validate_category_graph(args, parser: argparse.ArgumentParser) -> None:
     """Validate a persisted placement graph without network access."""
     from .categories.crawler import CategoryCrawlerState
+    from .categories.models import PlacementStatus
 
     state = CategoryCrawlerState(args.state)
     errors = state.graph.validate()
+    completion_errors = [
+        f"{placement_id} status is {placement.status.value}"
+        for placement_id, placement in state.graph.placements.items()
+        if placement.status is not PlacementStatus.DONE
+    ]
     report = {
         "state": str(Path(args.state)),
         "placement_count": len(state.graph.placements),
         "tree_valid": not errors,
+        "crawl_complete": not completion_errors,
         "tree_errors": errors,
+        "completion_errors": completion_errors,
         "authoritative_graph": str(state.path.parent / "latest_authoritative_category_graph.json")
-        if not errors else None,
+        if not errors and not completion_errors else None,
     }
     if args.out:
         target = Path(args.out)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    label = "VALID" if not errors and not completion_errors else ("INVALID" if errors else "INCOMPLETE")
     _safe_print("category-graph-validate：%s，placement %d%s" %
-                ("VALID" if not errors else "INVALID", len(state.graph.placements),
+                (label, len(state.graph.placements),
                  (" → " + str(args.out)) if args.out else ""))
     if errors:
         parser.error("类目 placement graph 校验失败：%s" % "; ".join(errors))
+    if completion_errors:
+        parser.error("类目 placement graph 尚未完成：%s" % "; ".join(completion_errors))
 
 
 def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
