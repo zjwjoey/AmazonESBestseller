@@ -1,0 +1,86 @@
+"""Deterministic resolution of raw identity candidates."""
+from __future__ import annotations
+
+from collections import OrderedDict
+from typing import Any, Iterable
+
+from .urls import canonical_product_url, is_valid_asin, normalize_asin
+
+
+def resolve_candidates(candidates: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return deduplicated identity records and all raw candidate evidence."""
+    records: OrderedDict[str, dict[str, Any]] = OrderedDict()
+    raw_candidates = [dict(candidate) for candidate in candidates]
+    for candidate in raw_candidates:
+        card_asin = normalize_asin(candidate.get("card_asin"))
+        href_asin = normalize_asin(candidate.get("href_asin"))
+        if not card_asin and candidate.get("asin_source", "").endswith("_ASIN"):
+            card_asin = normalize_asin(candidate.get("asin"))
+        valid_card = is_valid_asin(card_asin)
+        valid_href = is_valid_asin(href_asin)
+        if valid_card and valid_href and card_asin != href_asin:
+            asin = card_asin
+            status = "IDENTITY_CONFLICT"
+            product_url = None
+            product_url_source = None
+        else:
+            asin = card_asin if valid_card else href_asin
+            if not asin:
+                asin = normalize_asin(candidate.get("asin"))
+            if not is_valid_asin(asin):
+                candidate["identity_status"] = "INVALID_ASIN"
+                continue
+            if candidate.get("raw_href") and valid_href:
+                status = "CONFIRMED"
+                product_url = canonical_product_url(asin)
+                product_url_source = "RAW_HREF_CONFIRMED"
+            else:
+                status = ("CLIENT_RECS_ONLY" if candidate.get("evidence_source") == "CLIENT_RECS"
+                          else "ACP_CONFIRMED" if candidate.get("evidence_source") == "ACP"
+                          else "ASIN_CONFIRMED_URL_DERIVED")
+                product_url = canonical_product_url(asin)
+                product_url_source = (
+                    "ACP_HREF" if valid_href and candidate.get("evidence_source") == "ACP"
+                    else "CLIENT_RECS_CANONICAL" if candidate.get("evidence_source") == "CLIENT_RECS"
+                    else "CANONICAL_FROM_ASIN"
+                )
+        record = {
+            "asin": asin,
+            "product_url": product_url,
+            "product_url_raw": candidate.get("raw_href"),
+            "product_url_source": product_url_source,
+            "asin_source": candidate.get("asin_source") or "UNKNOWN",
+            "identity_status": status,
+            "rank": candidate.get("rank"),
+            "rank_raw": candidate.get("rank_raw"),
+            "page_number": candidate.get("page_number"),
+            "card_index": candidate.get("card_index"),
+            "source_url": candidate.get("source_url") or "",
+            "evidence_type": candidate.get("evidence_source") or "",
+            "evidence_file": candidate.get("evidence_file"),
+            "identity_evidence": [{
+                "card_asin": card_asin or None,
+                "href_asin": href_asin or None,
+                "raw_href": candidate.get("raw_href"),
+                "asin_source": candidate.get("asin_source"),
+                "evidence_source": candidate.get("evidence_source"),
+            }],
+            "ranking_contexts": [{
+                "rank": candidate.get("rank"),
+                "rank_raw": candidate.get("rank_raw"),
+                "page_number": candidate.get("page_number"),
+                "source_url": candidate.get("source_url") or "",
+                "evidence_file": candidate.get("evidence_file"),
+            }],
+        }
+        if valid_card and valid_href and card_asin != href_asin:
+            record["conflict_asins"] = {"card_asin": card_asin, "href_asin": href_asin}
+        existing = records.get(asin)
+        if existing is None:
+            records[asin] = record
+        else:
+            existing["identity_evidence"].extend(record["identity_evidence"])
+            existing["ranking_contexts"].extend(record["ranking_contexts"])
+            if existing.get("identity_status") != "IDENTITY_CONFLICT" and status == "IDENTITY_CONFLICT":
+                existing.update(record)
+    return list(records.values()), raw_candidates
