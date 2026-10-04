@@ -6,7 +6,7 @@ Amazon access-restriction signals; it does not rotate proxies or cookies.
 """
 from __future__ import annotations
 
-from .base import TransportResponse
+from .base import TransportResponse, locale_observation
 from .failures import classify_failure
 
 
@@ -43,10 +43,14 @@ class CurlCffiTransport:
         response = self.session.request(method, url, headers=headers, json=payload)
         failure = classify_failure(status_code=response.status_code, body=response.text,
                                    url=str(response.url))
+        locale = locale_observation(response.text or "", requested_locale=self.language.replace("-", "_"))
         return TransportResponse(response.status_code, str(response.url), response.text or "",
                                  headers=dict(response.headers),
                                  access_state=("NORMAL" if failure is None else failure.kind.value),
-                                 failure=failure.to_dict() if failure else None)
+                                 failure=failure.to_dict() if failure else None,
+                                 marketplace="ES",
+                                 currency=self.session.cookies.get("i18n-prefs") or "EUR",
+                                 **locale)
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
         if not self.warmed:

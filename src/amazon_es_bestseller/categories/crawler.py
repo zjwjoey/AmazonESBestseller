@@ -35,6 +35,25 @@ class CategoryCrawlerState:
             os.fsync(handle.fileno())
         os.replace(tmp, self.path)
 
+    def write_authoritative_graph(self) -> Path | None:
+        """Publish the latest graph only after the complete tree validates."""
+        errors = self.graph.validate()
+        if errors:
+            return None
+        target = self.path.parent / "latest_authoritative_category_graph.json"
+        payload = {
+            "schema_version": 1,
+            "tree_valid": True,
+            "placements": self.graph.to_records(),
+        }
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        with tmp.open("r+b") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, target)
+        return target
+
 
 class CategoryCrawler:
     """Serial category crawler using the project's transport boundary."""
@@ -55,7 +74,8 @@ class CategoryCrawler:
             category_name=category_name, canonical_url=canonical_url,
             parent_placement_id=None, parent_category_id=None, depth=0,
             category_path=(category_id,), category_name_path=(category_name,),
-            first_seen_at=observed_at, last_seen_at=observed_at)
+            first_seen_at=observed_at, last_seen_at=observed_at,
+            source_url=canonical_url)
         self.state.graph.add(placement)
         self.state.save()
         return placement
@@ -75,7 +95,9 @@ class CategoryCrawler:
                 parent_category_id=parent.category_id, depth=parent.depth + 1,
                 category_path=path,
                 category_name_path=parent.category_name_path + (str(child.get("category_name") or category_id),),
-                first_seen_at=now, last_seen_at=now)
+                first_seen_at=now, last_seen_at=now,
+                source_url=str(child.get("source_url") or child.get("canonical_url")
+                               or child.get("url") or ""))
             if placement.placement_id not in self.state.graph.placements:
                 self.state.graph.add(placement)
 
@@ -99,7 +121,15 @@ class CategoryCrawler:
             except Exception as exc:
                 row.last_error_type = type(exc).__name__
                 row.last_error_message = str(exc)
-                if row.attempt_count >= self.max_attempts:
+                error_kind = str(getattr(exc, "kind", "") or "").upper()
+                error_text = str(exc).upper()
+                blocked = error_kind in {"BOT_BLOCK", "CAPTCHA", "INTERSTITIAL", "RATE_LIMIT"}
+                blocked = blocked or any(marker in error_text for marker in
+                                         ("CAPTCHA", "ROBOT CHECK", "ACCESS DENIED", "HTTP 403", "HTTP 429"))
+                if blocked:
+                    row.status = PlacementStatus.BLOCKED
+                    row.next_retry_at = None
+                elif row.attempt_count >= self.max_attempts:
                     row.status = PlacementStatus.FAILED_FINAL
                 else:
                     row.status = PlacementStatus.RETRY_WAIT
@@ -108,5 +138,7 @@ class CategoryCrawler:
             self.state.save()
             processed += 1
         errors = self.state.graph.validate()
+        authoritative_path = self.state.write_authoritative_graph() if not errors else None
         return {"processed": processed, "placements": len(self.state.graph.placements),
-                "tree_valid": not errors, "tree_errors": errors}
+                "tree_valid": not errors, "tree_errors": errors,
+                "latest_authoritative_category_graph": authoritative_path}

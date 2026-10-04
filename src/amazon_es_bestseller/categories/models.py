@@ -41,6 +41,7 @@ class AmazonCategoryPlacement:
     category_name_path: tuple[str, ...]
     first_seen_at: str
     last_seen_at: str
+    source_url: str = ""
     status: PlacementStatus = PlacementStatus.PENDING
     attempt_count: int = 0
     last_attempt_at: str | None = None

@@ -34,10 +34,21 @@ def category_evidence_from_detail(detail: dict, ranking_context: dict | None = N
     breadcrumb = tuple(str(x).strip() for x in (detail.get("detail_category_trail") or []) if str(x).strip())
     ranking_context = ranking_context or {}
     ranking_path = tuple(str(x).strip() for x in (ranking_context.get("ranking_category_path") or []) if str(x).strip())
+    bsr_path = tuple(str(x).strip() for x in (
+        detail.get("bsr_category_path") or ranking_context.get("bsr_category_path") or []
+    ) if str(x).strip())
+    search_path = tuple(str(x).strip() for x in (
+        detail.get("search_category_path") or ranking_context.get("search_category_path") or []
+    ) if str(x).strip())
+    source = (PRODUCT_BREADCRUMB if breadcrumb else
+              BESTSELLER_PLACEMENT if ranking_path or ranking_context.get("ranking_category_placement_id") else
+              BSR_NODE if bsr_path or detail.get("bsr_category_id") else
+              SEARCH_NODE if search_path else SOURCE_MISSING)
     return CategoryEvidence(
         product_breadcrumb_category_path=breadcrumb,
         ranking_category_placement_id=ranking_context.get("ranking_category_placement_id"),
         ranking_category_path=ranking_path,
-        category_evidence_source=PRODUCT_BREADCRUMB if breadcrumb else (
-            BESTSELLER_PLACEMENT if ranking_path else SOURCE_MISSING),
+        bsr_category_id=detail.get("bsr_category_id") or ranking_context.get("bsr_category_id"),
+        bsr_category_path=bsr_path,
+        category_evidence_source=source,
     )

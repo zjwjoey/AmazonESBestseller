@@ -11,15 +11,17 @@ that the branch is ready to merge into `main`.
 - Category Graph V1: marketplace-aware placement IDs include the full category
   path, so the same Amazon category ID can safely have multiple parents.
   Traversal state is atomic, resumable, serial, and validates parent/path
-  consistency.
+  consistency. A latest-authoritative graph is written only after validation
+  passes.
 - Ranking Snapshot V2: audits server-rendered count, ACP metadata, hydration
   count, duplicate ASINs, duplicate/gapped ranks, access state, and authority.
   Duplicate ranking rows are counted before ASIN deduplication; the product
   identity remains the ASIN.
 - Transport Adapter V1: a small protocol plus Playwright adapter over the
   existing browser session, optional curl-cffi experiment, shared failure
-  taxonomy, and a browser/manual fallback contract. No automatic fallback or
-  bypass is introduced.
+  taxonomy, Amazon.es locale evidence (`requested_locale`,
+  `observed_language`, `language_mismatch`), and a browser/manual fallback
+  contract. No automatic fallback or bypass is introduced.
 - Product Parser V2: preserves ordered duplicate detail labels, variation and
   parent evidence, page identity evidence, and category provenance while
   reusing the existing detail parser.
