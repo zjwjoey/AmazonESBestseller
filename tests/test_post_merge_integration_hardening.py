@@ -120,6 +120,9 @@ def test_final_authority_respects_offline_frozen_base_gate(tmp_path):
     assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
     assert result["manifest"]["latest_authoritative"] is False
     assert result["manifest"]["final_authoritative"] is False
+    assert result["manifest"]["authority_status"] == "BLOCKED"
+    assert result["manifest"]["authority_gates"]["base_snapshot_complete"] is False
+    assert "BASE_SNAPSHOT_GATE" in result["manifest"]["authority_block_reasons"]
     assert not (tmp_path / "latest_authoritative_snapshot.json").exists()
 
 

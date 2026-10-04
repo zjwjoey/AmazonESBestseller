@@ -211,6 +211,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                      and parsed_page_count == expected_page_count
                      and failed_page_count == 0 and empty_page_count == 0
                      and bool(rows) and bool(unique_asins))
+    base_snapshot_authoritative = authoritative
     # A V2 parser audit is a stronger page-level authority gate than the
     # legacy source-status summary.  An incomplete ACP/rank audit may still be
     # persisted as evidence, but it must never advance the authoritative
@@ -288,16 +289,21 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
     if ranking_audit is not None:
         manifest["ranking_v2_audit"] = dict(ranking_audit)
     if authority is not None:
-        manifest.update({"authority_status": authority["authority_status"],
-                         "authority_gates": authority["authority_gates"],
-                         "authority_block_reasons": authority["authority_block_reasons"],
+        final_authority_reasons = list(authority["authority_block_reasons"])
+        if not base_snapshot_authoritative:
+            final_authority_reasons.append("BASE_SNAPSHOT_GATE")
+        final_authority_gates = dict(authority["authority_gates"])
+        final_authority_gates["base_snapshot_complete"] = bool(base_snapshot_authoritative)
+        manifest.update({"authority_status": "AUTHORITATIVE" if authoritative else "BLOCKED",
+                         "authority_gates": final_authority_gates,
+                         "authority_block_reasons": final_authority_reasons,
                          "ranking_complete": authority["authority_gates"]["ranking_complete"],
                          "ranking_identity_ready": authority["authority_gates"]["identity_ready"],
                          "ranking_identity_complete": authority["authority_gates"]["identity_complete"],
                          "ranking_slot_complete": authority["authority_gates"]["ranking_slots_complete"],
                          "identity_conflict_count": int(identity_audit.get("identity_conflict_count") or 0),
                          "final_authoritative": authoritative,
-                         "authority_reasons": authority["authority_block_reasons"]})
+                         "authority_reasons": final_authority_reasons})
     (target / "audit.json").write_text(json.dumps({"records": len(rows),
         "link_identity_statuses": {state: link_statuses.count(state)
                                     for state in sorted(set(link_statuses))}},
