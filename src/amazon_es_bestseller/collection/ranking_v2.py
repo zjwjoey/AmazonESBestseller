@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from html import unescape
 from typing import Callable, Mapping
-from urllib.parse import urlencode, urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -22,6 +22,14 @@ from ..monitoring.snapshot import build_ranking_snapshot
 
 class RankingSnapshotIncompleteError(RuntimeError):
     pass
+
+
+def _page_number(source_url: str) -> int:
+    try:
+        value = int(parse_qs(urlsplit(str(source_url or "")).query).get("pg", ["1"])[0])
+        return value if value >= 1 else 1
+    except (TypeError, ValueError):
+        return 1
 
 
 def _recs_metadata(html: str) -> tuple[list[dict], dict]:
@@ -129,7 +137,9 @@ def parse_ranking_snapshot_v2(html: str, source_url: str, collected_at: str,
                               *, acp_hydrator: Callable[[Mapping, int, int], list[dict]] | None = None,
                               status_code: int = 200, expected_count: int | None = None,
                               expected_count_source: str | None = None,
-                              ranking_source_url: str | None = None) -> dict:
+                              ranking_source_url: str | None = None,
+                              page_instance_id: str | None = None,
+                              page_number: int | None = None) -> dict:
     """Parse one saved page and optionally hydrate missing ACP cards.
 
     The returned ``records`` are deduplicated by ASIN only after the audit
@@ -149,7 +159,18 @@ def parse_ranking_snapshot_v2(html: str, source_url: str, collected_at: str,
     hydrated: list[dict] = []
     if (access.value == "NORMAL" and acp and acp_hydrator
             and expected_count is not None and expected_count > len(server_records)):
-        hydrated = list(acp_hydrator(acp | {"entries": recs, "source_url": source_url},
+        context = {
+            "page_instance_id": page_instance_id or
+            "page:%s|url:%s" % (page_number or 1, ranking_source_url or source_url),
+            "ranking_source_url": ranking_source_url or source_url,
+            "ranking_page_url": source_url,
+            "ranking_page_number": page_number or _page_number(source_url),
+            "expected_count": expected_count,
+            "offset": len(server_records),
+            "count": expected_count - len(server_records),
+        }
+        hydrated = list(acp_hydrator(acp | {"entries": recs, "source_url": source_url,
+                                            "context": context},
                                      len(server_records),
                                      expected_count - len(server_records)) or [])
     all_records = list(server_records) + hydrated
@@ -202,6 +223,8 @@ def make_acp_hydrator(transport, *, max_records: int | None = None,
             raise AccessStopError(
                 "ACP 续页访问受限（HTTP %s，状态 %s），按策略停止采集"
                 % (status_code, access_state or failure_kind or "UNKNOWN"))
+
+    evidence_counts: dict[str, int] = {}
 
     def hydrate(metadata: Mapping, offset: int, count: int) -> list[dict]:
         path = str(metadata.get("path") or "")
@@ -256,9 +279,22 @@ def make_acp_hydrator(transport, *, max_records: int | None = None,
                     "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
                     "x-amz-acp-params": str(metadata.get("params") or ""),
                 }, request_payload=body)
+            context = dict(metadata.get("context") or {})
+            if context:
+                payload["context"] = context
+            page_instance_id = str(context.get("page_instance_id")
+                                    or metadata.get("page_instance_id") or "")
+            if page_instance_id:
+                safe_page = re.sub(r"[^A-Za-z0-9_.-]+", "_", page_instance_id).strip("_")
+                evidence_index = evidence_counts.get(page_instance_id, 0)
+                evidence_counts[page_instance_id] = evidence_index + 1
+                evidence_name = "%s_acp_%03d.json" % (safe_page or "page", evidence_index)
+            else:
+                index = len(list(root.glob("acp_response_evidence_*.json")))
+                evidence_name = "acp_response_evidence_%03d.json" % index
             save_evidence_snapshot(
                 root, acp_response_evidence=payload,
-                acp_response_evidence_name="acp_response_evidence_%03d.json" % index)
+                acp_response_evidence_name=evidence_name)
         raise_if_restricted(response)
         if response.failure or str(response.access_state or "").upper() != "NORMAL":
             return []
@@ -297,28 +333,45 @@ def replay_ranking_snapshot_v2(snapshot_dir) -> dict:
     pages = list((manifest.get("ranking_v2_audit") or {}).get("pages") or [])
     html_paths = sorted((root / "html").glob("ranking_*.html"))
     acp_paths = sorted((root / "evidence" / "acp").glob("*.json"))
-    acp_records = []
+    acp_by_page: dict[str, list[dict]] = {}
+    legacy_acp_records: list[dict] = []
     for path in acp_paths:
-        page_url = str((json.loads(path.read_text(encoding="utf-8")).get("request") or {}).get("url") or "")
-        acp_records.extend(replay_acp_response_evidence(path, source_url=page_url))
+        envelope = json.loads(path.read_text(encoding="utf-8"))
+        context = envelope.get("context") if isinstance(envelope, Mapping) else {}
+        context = context if isinstance(context, Mapping) else {}
+        page_key = str(context.get("page_instance_id") or "")
+        page_url = str(context.get("ranking_page_url") or
+                       (envelope.get("request") or {}).get("url") or "")
+        parsed = replay_acp_response_evidence(path, source_url=page_url)
+        if page_key:
+            acp_by_page.setdefault(page_key, []).extend(parsed)
+        else:
+            legacy_acp_records.extend(parsed)
     records = []
     audits = []
     for index, path in enumerate(html_paths):
         page = pages[index] if index < len(pages) else {}
-        page_url = str(page.get("source_url") or "")
+        page_url = str(page.get("ranking_page_url") or page.get("source_url") or "")
+        ranking_source_url = str(page.get("ranking_source_url") or page_url)
+        page_key = str(page.get("page_instance_id") or
+                       "page:%s|url:%s" % (page.get("page_number", index + 1), ranking_source_url))
         expected = page.get("expected_count")
         collected_at = str(page.get("collected_at") or "")
         server_records = parse_bestsellers_page(path.read_text(encoding="utf-8"),
                                                  page_url, collected_at)
-        hydrated = acp_records[:max(0, int(expected or 0) - len(server_records))]
+        page_acp = acp_by_page.get(page_key)
+        if page_acp is None and len(pages) == 1:
+            page_acp = legacy_acp_records
+        page_acp = page_acp or []
+        hydrated = page_acp[:max(0, int(expected or 0) - len(server_records))]
         all_records = server_records + hydrated
         for row in all_records:
-            row["ranking_source_url"] = page_url
+            row["ranking_source_url"] = ranking_source_url
             row["ranking_page_url"] = page_url
         audit = ranking_completeness(
             all_records, expected_count=expected,
             server_rendered_count=len(server_records),
-            acp_available=bool(acp_records), acp_hydrated_count=len(hydrated),
+            acp_available=bool(page_acp), acp_hydrated_count=len(hydrated),
             expected_count_source=str(page.get("expected_count_source") or "UNKNOWN"))
         seen = set()
         unique = []
