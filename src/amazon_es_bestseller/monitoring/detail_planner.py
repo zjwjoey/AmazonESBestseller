@@ -168,13 +168,16 @@ def _cache_classification(record: Mapping | None) -> str:
 
 
 def _safe_request_url(row: Mapping, asin: str, cache: Mapping | None = None) -> tuple[str, str, str]:
+    identity_url = str(row.get("product_url") or row.get("identity_product_url") or "")
+    if identity_url and re.search(r"/dp/%s(?:[/?#]|$)" % re.escape(asin), identity_url, re.I):
+        return identity_url, "ranking_identity_snapshot_product_url", "https://www.amazon.es/dp/%s" % asin
     raw = str(row.get("ranking_product_url_raw") or "")
     normalized = str(row.get("ranking_product_url_normalized") or "")
     link_status = str(row.get("ranking_link_identity_status") or "").upper()
     if link_status in {"MATCH", ""} and normalized:
         return normalized, "latest_ranking_product_url", "https://www.amazon.es/dp/%s" % asin
     cache = cache or {}
-    historical = str(cache.get("ranking_product_url_normalized") or "")
+    historical = str(cache.get("product_url") or cache.get("ranking_product_url_normalized") or "")
     if (historical and re.search(r"/dp/%s(?:[/?#]|$)" % re.escape(asin),
                                 historical, re.I)):
         return historical, "historical_valid_ranking_product_url", "https://www.amazon.es/dp/%s" % asin
@@ -189,7 +192,7 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
     """Build a deterministic offline plan, deduplicated by canonical ranking ASIN."""
     if not isinstance(ranking_snapshot, Mapping):
         raise ValueError("详情 planner 需要带 manifest 的 AUTHORITATIVE ranking snapshot")
-    if ranking_snapshot.get("snapshot_status") != "AUTHORITATIVE":
+    if ranking_snapshot.get("snapshot_status") not in {"AUTHORITATIVE", "IDENTITY_COMPLETE"}:
         raise ValueError("详情 planner 只能使用 AUTHORITATIVE ranking snapshot")
     ranking_rows = _rows(ranking_snapshot)
     snapshot_id = str(ranking_snapshot.get("snapshot_id") or "")
@@ -317,6 +320,8 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
             "research_category": row.get("research_category"),
             "ranking_product_url_raw": row.get("ranking_product_url_raw") or "",
             "ranking_product_url_normalized": row.get("ranking_product_url_normalized") or "",
+            "product_url": row.get("product_url") or row.get("identity_product_url") or request_url,
+            "identity_product_url_source": row.get("product_url_source") or "",
             "detail_action": action,
             "action_reason": reason,
             "existing_cache_state": cache_state,
