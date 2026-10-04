@@ -376,8 +376,11 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
 
 def cmd_canary(args, parser: argparse.ArgumentParser) -> None:
     """Run or preview the bounded V2 Canary; live mode is explicit by design."""
-    from .canary import (CanaryScopeExceeded, CanaryProfile, dry_run, load_profile,
-                         run_live)
+    if args.offline and args.execute_real_amazon:
+        parser.exit(2, "!! --offline 禁止 Canary 真实网络执行；请移除 --execute-real-amazon 或改用 --dry-run\n")
+    from .canary import (CANARY_EXIT_ACCESS, CANARY_EXIT_FAILED,
+                         CANARY_EXIT_RUNTIME_BUDGET, CanaryProfile,
+                         CanaryScopeExceeded, dry_run, load_profile, run_live)
     import subprocess
     try:
         profile = load_profile(args.config) if args.config else CanaryProfile()
@@ -395,6 +398,15 @@ def cmd_canary(args, parser: argparse.ArgumentParser) -> None:
                                   ["git", "rev-parse", "HEAD"], capture_output=True,
                                   text=True, check=False).stdout.strip())
         print(json.dumps(report, ensure_ascii=False, indent=2))
+        if not args.dry_run:
+            status = str(report.get("final_status") or "CANARY_FAILED")
+            exit_code = {
+                "CANARY_BLOCKED_BY_ACCESS": CANARY_EXIT_ACCESS,
+                "CANARY_RUNTIME_BUDGET_EXCEEDED": CANARY_EXIT_RUNTIME_BUDGET,
+                "CANARY_PASS": 0,
+            }.get(status, CANARY_EXIT_FAILED)
+            if exit_code:
+                parser.exit(exit_code)
     except CanaryScopeExceeded as exc:
         parser.exit(2, f"!! {exc}\n")
 

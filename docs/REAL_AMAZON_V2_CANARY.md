@@ -16,7 +16,9 @@ py -3.12 -m amazon_es_bestseller.cli canary `
   --dry-run
 ```
 
-dry-run 必须显示 `actual_requests.total_requests=0`；超过 1 个来源、2 页或 5 个详情 ASIN，即使 dry-run 也必须输出 `CANARY_SCOPE_EXCEEDED` 并非零退出。
+dry-run 必须显示 `actual_requests.total_requests=0`；超过 1 个来源、2 页或 profile 允许的详情 ASIN 数（全局上限 5），即使 dry-run 也必须输出 `CANARY_SCOPE_EXCEEDED` 并非零退出。`pages_per_source=1` 的计划只有 Stage A；`pages_per_source=2` 的计划是 A/B/C。A 与 B 是独立端到端验证，因此两页模式计划 3 次 ranking page request（A 的 page 1，加上 B 的 page 1、2）。
+
+计划同时输出 `planned_location_requests`、`planned_ranking_page_requests`、`planned_acp_requests_max`、`planned_detail_page_requests` 和 `planned_total_upper_bound`；实际计数必须逐类不超过计划。
 
 ## Stage A
 
@@ -45,9 +47,13 @@ py -3.12 -m amazon_es_bestseller.cli canary `
 
 本任务不执行该命令；它只是明确的人工授权入口。
 
+全局 `--offline` 语义优先于 Canary：`--offline canary --dry-run` 合法；`--offline canary --execute-real-amazon` 在构造 BrowserSession 前以非零退出。真实执行只有最终状态 `CANARY_PASS` 才退出 0；`CANARY_STAGE_A_PASS`、`CANARY_FAILED`、`CANARY_BLOCKED_BY_ACCESS`、`CANARY_RUNTIME_BUDGET_EXCEEDED` 和 scope/config 错误均非零。
+
 ## Stop Conditions
 
-403、429、CAPTCHA、Robot Check、Access Denied、Challenge、BOT_BLOCK、INTERSTITIAL 或同类访问限制立即停止，manifest 使用 `CANARY_BLOCKED_BY_ACCESS_GATE`。不得代理、IP/账号/cookie 轮换或验证码/隐身绕过。失败时只保留独立 evidence，重新从 Stage A 开始；不提升 V2 默认路径。
+403、429、CAPTCHA、Robot Check、Access Denied、Challenge、BOT_BLOCK、INTERSTITIAL 或同类访问限制立即停止，manifest 使用 `final_status=CANARY_BLOCKED_BY_ACCESS` 和 `stop_code=CANARY_STOPPED_BY_ACCESS_GATE`。不得代理、IP/账号/cookie 轮换或验证码/隐身绕过。失败时只保留独立 evidence，重新从 Stage A 开始；不提升 V2 默认路径。
+
+普通网络错误、UNKNOWN 访问状态和 runtime budget 超限也会停止后续阶段并以失败状态落盘；不会自动重试、切浏览器或切换会话。
 
 ## Artifacts
 
@@ -56,6 +62,8 @@ py -3.12 -m amazon_es_bestseller.cli canary `
 ## Interpretation
 
 阶段状态为 A=`PASS/FAIL/BLOCKED_BY_ACCESS`，B/C=`PASS/FAIL/NOT_RUN`；总状态只有全部计划阶段通过才是 `CANARY_PASS`，访问限制是 `CANARY_BLOCKED_BY_ACCESS`，其他情况是 `CANARY_FAILED`。这不等于生产就绪，不提升 V2 默认 parser。
+
+manifest 保留 `RUNNING` 仅作为内存中的生命周期状态；返回前任何遗留 `RUNNING` 都会转换为 `FAIL`。详情 replay 会把 `MATCH`、`IDENTITY_MATCH` 和 `EXACT_ASIN` canonicalize 为同一身份事实，但仍严格比较 parent/variation、parser contract、ordered evidence 与 category provenance。
 
 ## Rollback / No-Promotion
 
