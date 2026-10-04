@@ -172,8 +172,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         except TypeError as exc:
             if "unexpected keyword argument" not in str(exc):
                 raise
-                details = collector([_asin(row) for row in pending], session, str(root),
-                                    request_urls=request_urls, execution_context=context)
+            details = collector([_asin(row) for row in pending], session, str(root),
+                                request_urls=request_urls, execution_context=context)
         except AccessStopError as exc:
             access_stop = str(exc)
 

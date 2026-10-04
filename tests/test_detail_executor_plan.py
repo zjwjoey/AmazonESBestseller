@@ -58,6 +58,24 @@ def test_executor_forwards_detail_parser_version_and_records_it(tmp_path):
     assert manifest["parser_version"] == "v2"
 
 
+def test_executor_falls_back_for_legacy_collector_signature(tmp_path):
+    calls = []
+
+    def legacy_collector(asins, _session, _out_dir, *, request_urls, execution_context):
+        calls.append(list(asins))
+        return [{"asin": asins[0], "title_es_raw": "Producto legado"}]
+
+    plan = {"snapshot_id": "snapshot_legacy", "records": [
+        {"snapshot_id": "snapshot_legacy", "ranking_asin": "B000000001",
+         "detail_action": "FETCH_NEW"},
+    ]}
+    result = execute_detail_plan(plan, object(), str(tmp_path), collector=legacy_collector,
+                                 parser_version="v2")
+
+    assert calls == [["B000000001"]]
+    assert result["details_delta"][0]["title_es_raw"] == "Producto legado"
+
+
 def test_executor_resume_does_not_duplicate_successful_request(tmp_path):
     calls = []
 

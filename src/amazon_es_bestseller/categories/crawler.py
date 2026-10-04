@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping
 
+from ..access.detector import AccessStopError
 from .graph import CategoryPlacementGraph, placement_id_for
 from .models import AmazonCategoryPlacement, PlacementStatus
 
@@ -118,6 +119,7 @@ class CategoryCrawler:
             row.attempt_count += 1
             row.last_attempt_at = _now()
             self.state.save()
+            blocked = False
             try:
                 result = dict(self.fetch_children(row) or {})
                 self._enqueue_children(row, list(result.get("children") or []), _now())
@@ -128,7 +130,8 @@ class CategoryCrawler:
                 row.last_error_message = str(exc)
                 error_kind = str(getattr(exc, "kind", "") or "").upper()
                 error_text = str(exc).upper()
-                blocked = error_kind in {"BOT_BLOCK", "CAPTCHA", "INTERSTITIAL", "RATE_LIMIT"}
+                blocked = isinstance(exc, AccessStopError)
+                blocked = blocked or error_kind in {"BOT_BLOCK", "CAPTCHA", "INTERSTITIAL", "RATE_LIMIT"}
                 blocked = blocked or any(marker in error_text for marker in
                                          ("CAPTCHA", "ROBOT CHECK", "ACCESS DENIED", "HTTP 403", "HTTP 429"))
                 if blocked:
@@ -142,6 +145,8 @@ class CategoryCrawler:
             row.last_seen_at = _now()
             self.state.save()
             processed += 1
+            if blocked:
+                break
         errors = self.state.graph.validate()
         completion_errors = [
             f"{placement_id} status is {placement.status.value}"
