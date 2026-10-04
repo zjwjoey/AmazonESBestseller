@@ -13,5 +13,17 @@ def test_multi_layout_selectors_and_href_fallbacks():
 
 
 def test_data_asin_fallback_is_limited_to_ranking_context():
-    html = "<main><div class='card' data-asin='B078C6QR1C'>card</div></main>"
+    html = "<main><div class='bestsellers'><div class='card' data-asin='B078C6QR1C'><span class='zg-bdg-text'>#1</span></div></div></main>"
     assert extract_server_candidates(html, source_url="https://www.amazon.es/gp/bestsellers/kitchen")[0]["asin"] == "B078C6QR1C"
+
+
+def test_generic_main_data_asin_recommendation_is_not_a_ranking_identity():
+    html = """
+    <main>
+      <div class='bestsellers'><div class='card' data-asin='B078C6QR1C'><span class='zg-bdg-text'>#1</span>rank</div></div>
+      <div class='recommendation' data-asin='B000000001'>recommendation</div>
+      <div class='sponsored' data-asin='B000000002'>sponsored</div>
+    </main>
+    """
+    rows = extract_server_candidates(html, source_url="https://www.amazon.es/gp/bestsellers/kitchen")
+    assert [row["asin"] for row in rows] == ["B078C6QR1C"]

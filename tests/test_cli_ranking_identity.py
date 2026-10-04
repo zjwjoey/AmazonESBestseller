@@ -1,4 +1,5 @@
 import json
+import pytest
 
 from amazon_es_bestseller import cli
 
@@ -25,3 +26,14 @@ def test_identity_snapshot_cli_can_save_incomplete_debug_snapshot(tmp_path):
                      "--allow-incomplete-debug"]) == 0
     manifest = next(out.glob("**/manifest.json"))
     assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "IDENTITY_PARTIAL"
+
+
+def test_identity_snapshot_cli_rejects_unknown_completeness_in_production(tmp_path):
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "page.html").write_text(
+        "<div id='gridItemRoot' data-asin='B078C6QR1C'></div>", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--offline", "ranking-identity-snapshot", "--evidence-dir", str(evidence),
+                  "--out-dir", str(tmp_path / "snapshots")])
+    assert exc.value.code == 2
