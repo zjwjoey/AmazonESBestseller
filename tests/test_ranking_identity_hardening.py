@@ -51,10 +51,10 @@ def test_invalid_supplemental_json_does_not_fallback_to_token_scan():
 
 def test_initial_and_rendered_representations_share_expected_count(tmp_path):
     initial = "".join(
-        f"<div id='gridItemRoot' data-asin='B{index:09d}'></div>"
+        f"<div id='gridItemRoot' data-asin='B{index:09d}'><span class='zg-bdg-text'>#{index + 1}</span></div>"
         for index in range(30))
     rendered = "".join(
-        f"<div id='gridItemRoot' data-asin='B{index:09d}'></div>"
+        f"<div id='gridItemRoot' data-asin='B{index:09d}'><span class='zg-bdg-text'>#{index + 1}</span></div>"
         for index in range(50))
     (tmp_path / "initial_html.html").write_text(initial, encoding="utf-8")
     (tmp_path / "rendered_html.html").write_text(rendered, encoding="utf-8")
@@ -72,6 +72,34 @@ def test_initial_and_rendered_representations_share_expected_count(tmp_path):
     assert audit["expected_count"] == 50
     assert audit["expected_count_source"] == "RUN_MANIFEST"
     assert audit["identity_complete"] is True
+    assert audit["duplicate_ranking_slot_count"] == 0
     assert {item["page_instance_id"] for item in result["records"][0]["identity_evidence"]} == {
         "page:1|url:https://www.amazon.es/gp/bestsellers/tools"
     }
+
+
+def test_legacy_initial_and_rendered_names_share_page_without_manifest(tmp_path):
+    initial = "<div data-expected-count='50'></div>" + "".join(
+        f"<div id='gridItemRoot' data-asin='B{index:09d}'></div>"
+        for index in range(30))
+    rendered = "<div data-expected-count='50'></div>" + "".join(
+        f"<div id='gridItemRoot' data-asin='B{index:09d}'></div>"
+        for index in range(50))
+    (tmp_path / "initial_html.html").write_text(initial, encoding="utf-8")
+    (tmp_path / "rendered_html.html").write_text(rendered, encoding="utf-8")
+
+    audit = extract_identity_from_evidence(tmp_path)["audit"]
+    assert audit["expected_count"] == 50
+    assert audit["identity_complete"] is True
+
+
+def test_cross_source_asin_conflict_blocks_identity_ready():
+    from amazon_es_bestseller.monitoring.ranking_identity.extract import extract_identity_from_html
+
+    html = "<div id='gridItemRoot' data-asin='B000000001'><span class='zg-bdg-text'>#1</span></div>"
+    result = extract_identity_from_html(
+        html, page_instance_id="page-1",
+        client_recs=[{"asin": "B000000002", "rank": 1}], expected_count=1)
+    assert result["audit"]["identity_conflict_count"] == 2
+    assert result["audit"]["identity_ready"] is False
+    assert result["audit"]["status"] == "IDENTITY_BLOCKED"

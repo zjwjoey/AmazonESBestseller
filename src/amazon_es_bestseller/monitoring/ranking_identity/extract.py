@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -113,7 +114,8 @@ def _metadata(root: Path) -> dict[str, dict[str, Any]]:
     return result
 
 
-def _page_instance(meta: Mapping[str, Any], path: Path, index: int) -> str:
+def _page_instance(meta: Mapping[str, Any], path: Path, index: int,
+                   evidence_root: Path | None = None) -> str:
     explicit = str(meta.get("page_instance_id") or "").strip()
     if explicit:
         return explicit
@@ -122,9 +124,24 @@ def _page_instance(meta: Mapping[str, Any], path: Path, index: int) -> str:
     if page_number is not None or source_url:
         return "page:%s|url:%s" % (page_number if page_number is not None else index,
                                    source_url)
-    # Stable fallback for old evidence without metadata. The path is stable
-    # within a saved evidence directory and does not depend on filesystem
-    # iteration order.
+    # Legacy evidence often stores initial_html.html and rendered_html.html
+    # side by side without metadata. Normalize the representation marker so
+    # both files resolve to one page instance.
+    stem = path.stem.lower()
+    normalized = re.sub(r"(?:^|[_-])(initial|rendered)(?=[_-]|$)", "_", stem)
+    normalized = re.sub(r"_+", "_", normalized).strip("_")
+    if normalized in {"", "html"}:
+        normalized = "page"
+    if normalized != stem:
+        relative = path
+        if evidence_root is not None and evidence_root.is_dir():
+            try:
+                relative = path.relative_to(evidence_root)
+            except ValueError:
+                pass
+        return "legacy:%s:%s" % (relative.parent.as_posix(), normalized)
+    # Stable fallback for other old evidence. The path is stable within a
+    # saved evidence directory and does not depend on filesystem iteration.
     return "file:%s" % path.as_posix()
 
 
@@ -171,7 +188,8 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
             page_number = int(page_number)
         except (TypeError, ValueError):
             page_number = index
-        page_instance_id = _page_instance(meta, path, index)
+        page_instance_id = _page_instance(meta, path, index,
+                                           root if root.is_dir() else root.parent)
         representation_type = _representation(path, meta)
         result = extract_identity_from_html(
             html, source_url=source_url, page_number=page_number,

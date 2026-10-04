@@ -23,7 +23,8 @@ def audit_identity_records(records: Iterable[dict[str, Any]], raw_candidates: It
     duplicate_count = max(0, len(raw_valid) - len(set(raw_valid)))
     duplicate_slots = Counter(
         (row.get("page_instance_id") or row.get("page_number"),
-         row.get("rank"), row.get("evidence_source"))
+         row.get("rank"), normalize_asin(row.get("asin")),
+         row.get("representation_type") or "UNKNOWN")
         for row in raw_candidates
         if is_valid_asin(row.get("asin")) and row.get("rank") is not None
     )
