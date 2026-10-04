@@ -12,9 +12,13 @@ from typing import Iterable, Mapping
 from .models import is_valid_asin, normalize_asin
 
 IDENTITY_MATCH = "IDENTITY_MATCH"
+# V2 names keep the existing persisted value stable while exposing the
+# vocabulary used by the reviewed contract.
+EXACT_ASIN = IDENTITY_MATCH
 PARENT_ASIN_MATCH = "PARENT_ASIN_MATCH"
 VARIATION_RELATED = "VARIATION_RELATED"
 MATCH_BY_EXTERNAL_EVIDENCE = "MATCH_BY_EXTERNAL_EVIDENCE"
+EXTERNAL_EVIDENCE_MATCH = MATCH_BY_EXTERNAL_EVIDENCE
 IDENTITY_UNCONFIRMED = "IDENTITY_UNCONFIRMED"
 IDENTITY_MISMATCH = "IDENTITY_MISMATCH"
 

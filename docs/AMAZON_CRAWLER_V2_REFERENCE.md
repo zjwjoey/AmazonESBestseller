@@ -1,0 +1,51 @@
+# Amazon Crawler V2 reference integration
+
+## Review status
+
+This is an isolated review branch based on the cached `origin/main` commit.
+It is intended to finish as `READY_FOR_EXTERNAL_REVIEW`; it is not a claim
+that the branch is ready to merge into `main`.
+
+## What was added
+
+- Category Graph V1: marketplace-aware placement IDs include the full category
+  path, so the same Amazon category ID can safely have multiple parents.
+  Traversal state is atomic, resumable, serial, and validates parent/path
+  consistency.
+- Ranking Snapshot V2: audits server-rendered count, ACP metadata, hydration
+  count, duplicate ASINs, duplicate/gapped ranks, access state, and authority.
+  Duplicate ranking rows are counted before ASIN deduplication; the product
+  identity remains the ASIN.
+- Transport Adapter V1: a small protocol plus Playwright adapter over the
+  existing browser session, optional curl-cffi experiment, shared failure
+  taxonomy, and a browser/manual fallback contract. No automatic fallback or
+  bypass is introduced.
+- Product Parser V2: preserves ordered duplicate detail labels, variation and
+  parent evidence, page identity evidence, and category provenance while
+  reusing the existing detail parser.
+- Spanish locale normalization: price, rating, and review-count parsing keeps
+  decimal/thousands semantics explicit for `amazon.es`.
+
+## Reference mapping
+
+The design review covered the three requested public projects:
+
+1. `omkarcloud/amazon-scraper`: session warm-up, locale cookies, ACP list
+   metadata, and the need for explicit request/parser failures. Its compact
+   label-to-value detail dictionary was not copied because this repository
+   must preserve duplicate ordered attributes.
+2. `browser-act/skills`: browser-assisted extraction and manual intervention
+   were treated as an optional diagnostic boundary, not as an authority or a
+   CAPTCHA solver.
+3. `asinspotlight/amazon-product-categories`: category placement identity and
+   resumable tree traversal informed the graph/state model. Its external API
+   is not used.
+
+## Safety and scope
+
+- No live Amazon request was made by this branch.
+- No formal 5,000-SKU workbook or production data was modified.
+- No proxy rotation, CAPTCHA solving, cookie rotation, account rotation, IP
+  rotation, stealth bypass, or third-party API was added.
+- Existing Access Gate, saved HTML, checkpoint, snapshot authority, ASIN
+  identity, and raw-detail contracts remain authoritative.

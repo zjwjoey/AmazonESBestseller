@@ -168,6 +168,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                            access_state_summary: Mapping | None = None,
                            parser_version: str = "collection.ranking",
                            html_files: Mapping[str, str] | None = None,
+                           ranking_audit: Mapping | None = None,
                            offline_frozen: bool = False) -> dict:
     """Freeze ranking records and return the manifest/result bundle.
 
@@ -258,6 +259,8 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
         "ranking_schema_version": RANKING_SCHEMA_VERSION,
         "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
     }
+    if ranking_audit is not None:
+        manifest["ranking_v2_audit"] = dict(ranking_audit)
     (target / "audit.json").write_text(json.dumps({"records": len(rows),
         "link_identity_statuses": {state: link_statuses.count(state)
                                     for state in sorted(set(link_statuses))}},
