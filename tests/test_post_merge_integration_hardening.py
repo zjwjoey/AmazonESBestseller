@@ -2,6 +2,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from amazon_es_bestseller.categories.crawler import CategoryCrawler, CategoryCrawlerState
 from amazon_es_bestseller.categories.models import PlacementStatus
 from amazon_es_bestseller.categories.provenance import category_evidence_from_detail
@@ -31,6 +33,7 @@ def test_ranking_v2_never_uses_observed_server_count_as_expected_count():
     result = parse_ranking_snapshot_v2(html, "https://www.amazon.es/gp/bestsellers/test", "now")
     audit = result["audit"]
     assert audit["observed_count"] == 3
+    assert audit["access_state"] == "NORMAL"
     assert audit["expected_count"] is None
     assert audit["expected_count_source"] == "UNKNOWN"
     assert audit["page_complete"] is False
@@ -149,6 +152,7 @@ def test_live_v2_recomputes_identity_after_acp_before_promotion(tmp_path, monkey
     assert manifest["final_authoritative"] is True
     assert manifest["authority_status"] == "AUTHORITATIVE"
     assert manifest["snapshot_status"] == "AUTHORITATIVE"
+    assert manifest["ranking_v2_audit"]["access_state"] == "NORMAL"
     assert (tmp_path / "latest_authoritative_snapshot.json").exists()
     assert manifest["acp_evidence_files"]
 
@@ -178,6 +182,104 @@ def test_live_v2_identity_conflict_blocks_even_when_ranking_is_complete(tmp_path
     assert manifest["final_authoritative"] is False
     assert manifest["snapshot_status"] == "INCOMPLETE"
     assert not (tmp_path / "latest_authoritative_snapshot.json").exists()
+
+
+def test_live_v2_complete_ranking_with_incomplete_final_identity_blocks(tmp_path, monkeypatch):
+    from amazon_es_bestseller.monitoring.ranking_identity import extract as identity_extract
+
+    def stale_identity(_evidence_dir):
+        return {"records": [], "evidence_files": [], "audit": {
+            "identity_ready": True,
+            "identity_complete": False,
+            "product_identity_complete": False,
+            "ranking_slot_complete": False,
+            "identity_conflict_count": 0,
+            "ranking_slot_conflict_count": 0,
+        }}
+
+    monkeypatch.setattr(identity_extract, "extract_identity_from_evidence", stale_identity)
+    acp_html = "".join(_card(f"B{index:09d}", index) for index in range(31, 51))
+    result = _run_fake_live_v2(tmp_path, monkeypatch, acp_html=acp_html)
+    manifest = result["manifest"]
+    assert manifest["ranking_complete"] is True
+    assert manifest["ranking_identity_complete"] is False
+    assert manifest["final_authoritative"] is False
+    assert manifest["snapshot_status"] == "INCOMPLETE"
+    assert not (tmp_path / "latest_authoritative_snapshot.json").exists()
+
+
+def test_live_v2_does_not_publish_pointer_before_acp_evidence_copy(tmp_path, monkeypatch):
+    def fail_copy(*_args, **_kwargs):
+        raise OSError("copy failed")
+
+    monkeypatch.setattr(snapshot_module.shutil, "copytree", fail_copy)
+    acp_html = "".join(_card(f"B{index:09d}", index) for index in range(31, 51))
+    with pytest.raises(OSError, match="copy failed"):
+        _run_fake_live_v2(tmp_path, monkeypatch, acp_html=acp_html)
+    assert not (tmp_path / "latest_authoritative_snapshot.json").exists()
+
+
+def test_two_page_live_v2_replay_equality_uses_saved_page_context(tmp_path, monkeypatch):
+    source = "https://www.amazon.es/gp/bestsellers/test"
+    page2 = source + "?pg=2"
+
+    def page_html(first_rank):
+        entries = ",".join('{"id":"B%09d"}' % index
+                             for index in range(first_rank, first_rank + 50))
+        cards = "".join(_card(f"B{index:09d}", index)
+                         for index in range(first_rank, first_rank + 30))
+        return ("<div data-client-recs-list='[%s]' data-acp-path='/acp/' "
+                "data-acp-params='token=x'></div>" % entries) + cards
+
+    def fake_collect(_urls, _session, _out_dir, *, run_dir, **_kwargs):
+        root = Path(run_dir)
+        (root / "html").mkdir(parents=True)
+        (root / "pages").mkdir()
+        (root / "html" / "ranking_000.html").write_text(page_html(1), encoding="utf-8")
+        (root / "html" / "ranking_001.html").write_text(page_html(51), encoding="utf-8")
+        statuses = [
+            {"source_url": source, "page_url": source, "page_number": 1,
+             "http_status": 200, "access_state": "NORMAL", "parse_status": "PARSE_OK",
+             "parsed_record_count": 30, "expected_count": 50,
+             "expected_count_source": "REVIEWED_SOURCE_MANIFEST"},
+            {"source_url": source, "page_url": page2, "page_number": 2,
+             "http_status": 200, "access_state": "NORMAL", "parse_status": "PARSE_OK",
+             "parsed_record_count": 30, "expected_count": 50,
+             "expected_count_source": "REVIEWED_SOURCE_MANIFEST"},
+        ]
+        (root / "page_statuses.json").write_text(json.dumps(statuses), encoding="utf-8")
+        for index, status in enumerate(statuses):
+            (root / "pages" / ("page_%03d.json" % index)).write_text(
+                json.dumps({"status": status, "records": []}), encoding="utf-8")
+        return []
+
+    class FakeTransport:
+        def fetch_ajax(self, url, **kwargs):
+            first_rank = 81 if "pg=2" in str(kwargs.get("referer") or "") else 31
+            body = "".join(_card(f"B{index:09d}", index)
+                            for index in range(first_rank, first_rank + 20))
+            return TransportResponse(200, url, body, access_state="NORMAL",
+                                     request_method="POST", request_url=url,
+                                     request_headers=kwargs.get("headers") or {},
+                                     request_payload=kwargs.get("payload"))
+
+    monkeypatch.setattr(snapshot_module, "collect_rankings", fake_collect)
+    result = snapshot_module.collect_ranking_snapshot(
+        [source], object(), tmp_path, pages_per_url=2, parser_version="v2",
+        transport=FakeTransport())
+    replay = replay_ranking_snapshot_v2(result["path"])
+    online = {(row["asin"], row["bestseller_rank"], row["ranking_source_url"],
+               row["ranking_page_url"], row["ranking_page_number"])
+              for row in result["records"]}
+    offline = {(row["asin"], row["bestseller_rank"], row["ranking_source_url"],
+                row["ranking_page_url"], row["ranking_page_number"])
+               for row in replay["records"]}
+    assert result["manifest"]["snapshot_status"] == "AUTHORITATIVE"
+    assert result["manifest"]["ranking_v2_audit"]["access_state"] == "NORMAL"
+    assert replay["record_count"] == 100
+    assert online == offline
+    assert all(row["ranking_source_url"] == source for row in replay["records"])
+    assert {row["ranking_page_number"] for row in replay["records"]} == {1, 2}
 
 
 def test_two_page_acp_replay_is_bound_by_page_instance_and_preserves_provenance(tmp_path):

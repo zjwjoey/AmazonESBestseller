@@ -120,6 +120,7 @@ def ranking_completeness(rows: list[Mapping], *, expected_count: int | None,
         "expected_count_source": expected_count_source if expected_count is not None else "UNKNOWN",
         "acp_available": acp_available,
         "acp_hydrated_count": acp_hydrated_count,
+        "access_state": state,
         "raw_item_count": len(rows),
         "unique_asin_count": len(unique_asins),
         "duplicate_asin_count": duplicate_asin_count,
@@ -392,6 +393,7 @@ def build_ranking_snapshot_v2(result: Mapping, output_root, *,
                               snapshot_id=None, started_at=None,
                               completed_at=None, access_state_summary=None,
                               html_files=None, identity_audit=None,
+                              publish_authoritative_pointer=True,
                               offline_frozen=False) -> dict:
     """Persist a V2 parse result through the existing immutable snapshot gate.
 
@@ -412,5 +414,6 @@ def build_ranking_snapshot_v2(result: Mapping, output_root, *,
         html_files=html_files,
         ranking_audit=result.get("audit") or {},
         identity_audit=identity_audit,
+        publish_authoritative_pointer=publish_authoritative_pointer,
         offline_frozen=offline_frozen,
     )

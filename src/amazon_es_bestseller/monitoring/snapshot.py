@@ -171,6 +171,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                            html_files: Mapping[str, str] | None = None,
                            ranking_audit: Mapping | None = None,
                            identity_audit: Mapping | None = None,
+                           publish_authoritative_pointer: bool = True,
                            offline_frozen: bool = False) -> dict:
     """Freeze ranking records and return the manifest/result bundle.
 
@@ -303,7 +304,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
         ensure_ascii=False, indent=2), encoding="utf-8")
     (target / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
                                            encoding="utf-8")
-    if authoritative:
+    if authoritative and publish_authoritative_pointer:
         relative = target.relative_to(output_root).as_posix()
         _atomic_json(output_root / "latest_authoritative_snapshot.json",
                      {"snapshot_id": snapshot_id, "path": relative})
@@ -420,6 +421,7 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                     "completion_reason": "PARSER_ERROR",
                     "parser_error": str(exc)}}
             audit = dict(page_result.get("audit") or {})
+            audit["access_state"] = page_result.get("access_state", "UNKNOWN")
             audit["page_index"] = index
             audit["source_url"] = source_url
             audit["page_number"] = status_row.get("page_number")
@@ -496,7 +498,8 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                                                      else "collection.ranking"),
                                    ranking_audit=ranking_audit,
                                    identity_audit=final_identity_audit,
-                                   **kwargs)
+                                    publish_authoritative_pointer=False,
+                                    **kwargs)
     acp_evidence = run_dir / "acp"
     if acp_evidence.is_dir() and any(acp_evidence.iterdir()):
         target_evidence = result["path"] / "evidence" / "acp"
@@ -506,6 +509,11 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
             for path in sorted(target_evidence.glob("*.json"))]
         (result["path"] / "manifest.json").write_text(
             json.dumps(result["manifest"], ensure_ascii=False, indent=2), encoding="utf-8")
+    if result["manifest"].get("final_authoritative", result["manifest"].get("latest_authoritative")):
+        relative = result["path"].relative_to(Path(output_root)).as_posix()
+        _atomic_json(Path(output_root) / "latest_authoritative_snapshot.json",
+                     {"snapshot_id": result["manifest"]["snapshot_id"],
+                      "path": relative})
     if error:
         result["error"] = error
     return result
