@@ -378,7 +378,9 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
     # planning can consume this immutable identity artifact directly.
     try:
         from ..monitoring.ranking_identity.extract import extract_identity_from_evidence
-        identity_result = extract_identity_from_evidence(html_dir)
+        # Use the complete run directory, not only ``html/``: page_statuses.json
+        # holds the source URL and page number needed by the identity contract.
+        identity_result = extract_identity_from_evidence(run_dir)
         with open(os.path.join(run_dir, "identity.json"), "w", encoding="utf-8") as f:
             json.dump(identity_result["records"], f, ensure_ascii=False, indent=2)
         with open(os.path.join(run_dir, "identity_audit.json"), "w", encoding="utf-8") as f:

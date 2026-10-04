@@ -53,18 +53,27 @@ def _metadata(root: Path) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     for path in sorted(root.glob("*.json")):
         payload = _read_json(path)
+        if isinstance(payload, list):
+            rows = [row for row in payload if isinstance(row, Mapping)]
+        else:
+            rows = []
         if not isinstance(payload, Mapping):
-            continue
-        rows = []
-        for key in ("pages", "page_statuses", "source_statuses"):
-            if isinstance(payload.get(key), list):
-                rows.extend(row for row in payload[key] if isinstance(row, Mapping))
-        if not rows and any(key in payload for key in ("html_file", "source_url")):
-            rows = [payload]
-        for row in rows:
+            if not rows:
+                continue
+        else:
+            for key in ("pages", "page_statuses", "source_statuses"):
+                if isinstance(payload.get(key), list):
+                    rows.extend(row for row in payload[key] if isinstance(row, Mapping))
+            if not rows and any(key in payload for key in ("html_file", "source_url")):
+                rows = [payload]
+        for row_index, row in enumerate(rows):
             name = str(row.get("html_file") or row.get("evidence_file") or "")
             if name:
                 result[Path(name).name] = dict(row)
+            elif path.name == "page_statuses.json":
+                # collect_rankings writes ``ranking_000.html`` in the same
+                # order as its append-only page status list.
+                result[f"ranking_{row_index:03d}.html"] = dict(row)
     return result
 
 

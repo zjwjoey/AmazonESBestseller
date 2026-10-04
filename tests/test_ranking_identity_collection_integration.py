@@ -30,3 +30,5 @@ def test_collector_persists_identity_immediately_after_saved_html(tmp_path):
     identity = json.loads((Path(result.run_dir) / "identity.json").read_text(encoding="utf-8"))
     assert identity[0]["asin"] == "B078C6QR1C"
     assert identity[0]["product_url"] == "https://www.amazon.es/dp/B078C6QR1C"
+    assert identity[0]["source_url"] == "https://www.amazon.es/gp/bestsellers/tools"
+    assert identity[0]["page_number"] == 1
