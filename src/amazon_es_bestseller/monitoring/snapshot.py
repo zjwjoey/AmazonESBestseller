@@ -11,6 +11,7 @@ import csv
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -169,6 +170,7 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
                            parser_version: str = "collection.ranking",
                            html_files: Mapping[str, str] | None = None,
                            ranking_audit: Mapping | None = None,
+                           identity_audit: Mapping | None = None,
                            offline_frozen: bool = False) -> dict:
     """Freeze ranking records and return the manifest/result bundle.
 
@@ -214,6 +216,23 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
     # pointer.
     if ranking_audit is not None and not bool(ranking_audit.get("page_authoritative")):
         authoritative = False
+    authority = None
+    if identity_audit is not None:
+        from .ranking_identity.completeness import evaluate_authority
+        identity_audit = dict(identity_audit)
+        authority = evaluate_authority(
+            ranking_complete=bool(ranking_audit and ranking_audit.get("page_authoritative")),
+            slots_complete=bool(identity_audit.get("ranking_slot_complete")),
+            identity_ready=bool(identity_audit.get("identity_ready")),
+            identity_complete=bool(identity_audit.get("product_identity_complete",
+                                                         identity_audit.get("identity_complete"))),
+            access_normal=all(_status_value(item) in _SUCCESS_STATES for item in statuses),
+            no_conflicts=not bool(identity_audit.get("identity_conflict_count"))
+            and not bool(identity_audit.get("ranking_slot_conflict_count")),
+            no_rank_gap=not bool((ranking_audit or {}).get("rank_gap_count")),
+            no_duplicate_rank_slot=not bool((ranking_audit or {}).get("rank_duplicate_count")),
+        )
+        authoritative = authoritative and authority["authoritative"]
     snapshot_status = "AUTHORITATIVE" if authoritative else "INCOMPLETE"
     output_root = Path(output_root)
     day_dir = output_root / datetime.fromisoformat(started.replace("Z", "+00:00")).strftime("%Y-%m-%d")
@@ -267,6 +286,16 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
     }
     if ranking_audit is not None:
         manifest["ranking_v2_audit"] = dict(ranking_audit)
+    if authority is not None:
+        manifest.update({"authority_status": authority["authority_status"],
+                         "authority_gates": authority["authority_gates"],
+                         "authority_block_reasons": authority["authority_block_reasons"],
+                         "ranking_complete": authority["authority_gates"]["ranking_complete"],
+                         "ranking_identity_ready": authority["authority_gates"]["identity_ready"],
+                         "ranking_identity_complete": authority["authority_gates"]["identity_complete"],
+                         "identity_conflict_count": int(identity_audit.get("identity_conflict_count") or 0),
+                         "final_authoritative": authority["authoritative"],
+                         "authority_reasons": authority["authority_block_reasons"]})
     (target / "audit.json").write_text(json.dumps({"records": len(rows),
         "link_identity_statuses": {state: link_statuses.count(state)
                                     for state in sorted(set(link_statuses))}},
@@ -342,7 +371,7 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
         from ..collection.ranking_v2 import make_acp_hydrator, parse_ranking_snapshot_v2
 
         if acp_hydrator is None and transport is not None:
-            acp_hydrator = make_acp_hydrator(transport)
+            acp_hydrator = make_acp_hydrator(transport, evidence_dir=run_dir / "acp")
 
         v2_records = []
         page_audits = []
@@ -354,14 +383,16 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                 status_row = dict(planned_pages[index])
             else:
                 status_row = {}
-            source_url = str(status_row.get("source_url") or "")
+            source_url = str(status_row.get("page_url") or status_row.get("source_url") or "")
+            ranking_source_url = str(status_row.get("source_url") or source_url)
             collected_at = str(status_row.get("collected_at") or started.isoformat())
             access_stopped = False
             try:
                 page_result = parse_ranking_snapshot_v2(
                     path.read_text(encoding="utf-8"), source_url, collected_at,
                     acp_hydrator=acp_hydrator,
-                    status_code=int(status_row.get("http_status") or 200))
+                    status_code=int(status_row.get("http_status") or 200),
+                    ranking_source_url=ranking_source_url)
             except AccessStopError as exc:
                 error = str(exc)
                 access_stopped = True
@@ -409,7 +440,16 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                                     parser_version=("collection.ranking_v2"
                                                      if effective_parser_version in {"v2", "collection.ranking_v2"}
                                                      else "collection.ranking"),
-                                    ranking_audit=ranking_audit, **kwargs)
+                                   ranking_audit=ranking_audit, **kwargs)
+    acp_evidence = run_dir / "acp"
+    if acp_evidence.is_dir() and any(acp_evidence.iterdir()):
+        target_evidence = result["path"] / "evidence" / "acp"
+        shutil.copytree(acp_evidence, target_evidence, dirs_exist_ok=True)
+        result["manifest"]["acp_evidence_files"] = [
+            str(path.relative_to(result["path"]).as_posix())
+            for path in sorted(target_evidence.glob("*.json"))]
+        (result["path"] / "manifest.json").write_text(
+            json.dumps(result["manifest"], ensure_ascii=False, indent=2), encoding="utf-8")
     if error:
         result["error"] = error
     return result
