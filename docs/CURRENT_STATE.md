@@ -226,7 +226,7 @@ including fake-browser `collect --rankings-only`, offline `reparse-details` acro
 directories with duplicate-ASIN precedence, quota uniqueness/shortfall, translation failure
 isolation and separate partial counts, the select-quota→enrich→translation→enrich→QA→closure→export
 path, and export-gate classifications. The suite does not require Amazon/DeepSeek access or
-credentials. GitHub Actions offline CI is defined for Python 3.11 and 3.12. `run_manifest.py`
+credentials. GitHub Actions offline CI is defined for Python 3.12. `run_manifest.py`
 supplies JSON-only workflow metadata helpers; no `amazon-es run` orchestrator exists yet.
 
 ## 23. Export contract testing
