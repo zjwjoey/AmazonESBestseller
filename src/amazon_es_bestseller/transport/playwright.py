@@ -26,6 +26,9 @@ class PlaywrightTransport:
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
         status = self.session.goto(url)
+        load_lazy = getattr(self.session, "load_lazy_ranking_content", None)
+        if callable(load_lazy):
+            load_lazy()
         page = getattr(self.session, "page", None)
         text = page.content() if page is not None else ""
         final_url = str(getattr(page, "url", "") or url)

@@ -71,7 +71,8 @@ def _write_identity_queue(root: Path, rows: list[dict]) -> None:
 
 
 def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Callable = collect_details,
-                        checkpoint_root=None, saved_html=None, offline: bool = False) -> dict:
+                        checkpoint_root=None, saved_html=None, offline: bool = False,
+                        parser_version: str = "v1") -> dict:
     """Execute a validated plan and atomically merge its delta into state."""
     if isinstance(plan, list):
         plan = {"records": plan,
@@ -126,7 +127,9 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     if reparse_rows:
         html_root = saved_html or next((row.get("saved_html_dir") for row in reparse_rows
                                         if row.get("saved_html_dir")), root / "html")
-        reparsed = reparse_saved_details(html_root, state, asins=[_asin(row) for row in reparse_rows])
+        reparsed = reparse_saved_details(
+            html_root, state, asins=[_asin(row) for row in reparse_rows],
+            parser_version=parser_version)
         reparsed_by_asin = {str(row.get("asin") or "").upper(): row for row in reparsed}
         for row in reparse_rows:
             asin = _asin(row)
@@ -165,12 +168,12 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         try:
             details = collector([_asin(row) for row in pending], session, str(root),
                                 request_urls=request_urls, execution_context=context,
-                                write_summary=False)
+                                write_summary=False, parser_version=parser_version)
         except TypeError as exc:
             if "unexpected keyword argument" not in str(exc):
                 raise
-            details = collector([_asin(row) for row in pending], session, str(root),
-                                request_urls=request_urls, execution_context=context)
+                details = collector([_asin(row) for row in pending], session, str(root),
+                                    request_urls=request_urls, execution_context=context)
         except AccessStopError as exc:
             access_stop = str(exc)
 
@@ -207,7 +210,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     manifest = {"run_id": run_id, "snapshot_id": str(plan.get("snapshot_id") or ""),
                 "plan_id": plan.get("plan_id"), "plan_hash": plan.get("plan_hash"),
                 "records": outcomes, "details_delta": details, "requested_count": len(pending),
-                "access_stop": access_stop, "state_record_count": len(details_full)}
+                "access_stop": access_stop, "state_record_count": len(details_full),
+                "parser_version": parser_version}
     _atomic_json(run_root / "manifest.json", manifest)
     _atomic_json(root / "latest_detail_run.json", {"run_id": run_id,
                                                      "path": str(run_root.relative_to(root))})

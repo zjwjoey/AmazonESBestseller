@@ -29,6 +29,23 @@ that the branch is ready to merge into `main`.
 - Spanish locale normalization: price, rating, and review-count parsing keeps
   decimal/thousands semantics explicit for `amazon.es`.
 
+## Production call-path integration
+
+- `ranking-snapshot --parser-version v2` reparses the saved `ranking_*.html`
+  evidence through Ranking Snapshot V2.  The normal Playwright transport
+  adapter is selected by default; `--transport legacy` is retained for
+  compatibility.  ACP hydration remains an explicit callback, so a missing
+  31--50 response is recorded as incomplete instead of being guessed.
+- `detail-run --parser-version v2` uses Product Parser V2 for cache reuse,
+  saved-HTML reparsing, and new detail pages.  The selected parser version is
+  written into the execution manifest; V1 remains the default.
+- `category-graph-validate --state <state.json>` validates the resumable
+  placement graph offline and reports whether an authoritative graph may be
+  published.  It never contacts Amazon.
+- The curl-cffi adapter and browser fallback are deliberately opt-in
+  boundaries.  They do not silently replace the primary Playwright path or
+  recover from access restrictions automatically.
+
 ## Reference mapping
 
 The design review covered the three requested public projects:

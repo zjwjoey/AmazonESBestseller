@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from amazon_es_bestseller.collection.ranking_v2 import (
     RankingSnapshotIncompleteError, build_ranking_snapshot_v2,
     parse_ranking_snapshot_v2, require_authoritative_page,
 )
+from amazon_es_bestseller.monitoring import snapshot as snapshot_module
 
 
 def _card(asin, rank):
@@ -52,3 +54,30 @@ def test_ranking_v2_can_hydrate_acp_and_persist_audit(tmp_path: Path):
         offline_frozen=True)
     assert frozen["manifest"]["parser_version"] == "collection.ranking_v2"
     assert frozen["manifest"]["ranking_v2_audit"]["unique_asin_count"] == 3
+
+
+def test_collect_ranking_snapshot_v2_persists_incomplete_page_audit(tmp_path, monkeypatch):
+    source = "https://www.amazon.es/test"
+    entries = '[{"id":"B000000001"},{"id":"B000000002"}]'
+    html = (f"<div data-client-recs-list='{entries}' data-acp-path=\"/acp/\"></div>"
+            + _card("B000000001", 1))
+
+    def fake_collect(_urls, _session, _out_dir, *, run_dir, **_kwargs):
+        root = Path(run_dir)
+        (root / "html").mkdir(parents=True)
+        (root / "pages").mkdir()
+        (root / "html" / "ranking_000.html").write_text(html, encoding="utf-8")
+        status = {"source_url": source, "page_number": 1, "http_status": 200,
+                  "access_state": "NORMAL", "parse_status": "PARSE_OK",
+                  "parsed_record_count": 1}
+        (root / "page_statuses.json").write_text(json.dumps([status]), encoding="utf-8")
+        (root / "pages" / "page_000.json").write_text(
+            json.dumps({"status": status, "records": []}), encoding="utf-8")
+        return []
+
+    monkeypatch.setattr(snapshot_module, "collect_rankings", fake_collect)
+    result = snapshot_module.collect_ranking_snapshot(
+        [source], object(), tmp_path, parser_version="v2")
+    assert result["manifest"]["parser_version"] == "collection.ranking_v2"
+    assert result["manifest"]["snapshot_status"] == "INCOMPLETE"
+    assert result["manifest"]["ranking_v2_audit"]["page_authoritative"] is False

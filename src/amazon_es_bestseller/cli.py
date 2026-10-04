@@ -345,10 +345,15 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
         if args.offline:
             parser.error("ranking-snapshot --offline 需要 --rankings-file；不会访问 Amazon")
         from .access.browser import BrowserSession
+        from .transport.playwright import PlaywrightTransport
         with BrowserSession(headless=not args.headful,
                             profile_dir=args.profile_dir or None) as session:
+            transport = (PlaywrightTransport(session)
+                         if args.transport == "playwright" else None)
             result = collect_ranking_snapshot(args.urls, session, output_root,
-                                              pages_per_url=args.pages_per_url)
+                                              pages_per_url=args.pages_per_url,
+                                              parser_version=args.parser_version,
+                                              transport=transport)
     print("ranking snapshot %s：%s（%d 条记录）" %
           (result["manifest"]["snapshot_status"], result["path"],
            result["manifest"]["record_count"]))
@@ -394,12 +399,14 @@ def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
         parser.error("detail-run --offline 发现 %d 个网络动作；计划未执行且不会访问 Amazon" % len(pending))
     if not pending:
         result = execute_detail_plan(plan, None, args.out_dir, offline=True,
-                                     saved_html=args.html_dir or None)
+                                     saved_html=args.html_dir or None,
+                                     parser_version=args.parser_version)
     else:
         with BrowserSession(headless=not args.headful,
                             profile_dir=args.profile_dir or None) as session:
             result = execute_detail_plan(plan, session, args.out_dir, offline=bool(args.offline),
-                                         saved_html=args.html_dir or None)
+                                         saved_html=args.html_dir or None,
+                                         parser_version=args.parser_version)
     print("detail run 完成：计划网络动作 %d，执行记录 %d → %s" %
           (result["requested_count"], len(result["records"]),
            Path(args.out_dir) / "detail_execution_manifest.json"))
@@ -729,6 +736,31 @@ def cmd_discover_tree(args, parser: argparse.ArgumentParser) -> None:
                                           max_pages=args.max_pages)
     _safe_print("类目发现完成：页面 %d，榜单链接 %d → %s" %
                 (result["page_count"], result["link_count"], args.out_dir))
+
+
+def cmd_validate_category_graph(args, parser: argparse.ArgumentParser) -> None:
+    """Validate a persisted placement graph without network access."""
+    from .categories.crawler import CategoryCrawlerState
+
+    state = CategoryCrawlerState(args.state)
+    errors = state.graph.validate()
+    report = {
+        "state": str(Path(args.state)),
+        "placement_count": len(state.graph.placements),
+        "tree_valid": not errors,
+        "tree_errors": errors,
+        "authoritative_graph": str(state.path.parent / "latest_authoritative_category_graph.json")
+        if not errors else None,
+    }
+    if args.out:
+        target = Path(args.out)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    _safe_print("category-graph-validate：%s，placement %d%s" %
+                ("VALID" if not errors else "INVALID", len(state.graph.placements),
+                 (" → " + str(args.out)) if args.out else ""))
+    if errors:
+        parser.error("类目 placement graph 校验失败：%s" % "; ".join(errors))
 
 
 def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
@@ -1303,6 +1335,10 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--rankings-file", default="", help="离线冻结已有榜单 JSON")
     rs.add_argument("--out-dir", default="runtime/ranking_snapshots")
     rs.add_argument("--pages-per-url", type=int, default=1)
+    rs.add_argument("--parser-version", choices=("v1", "v2"), default="v1",
+                    help="榜单解析契约；v2 对每个保存页执行 ACP/完整性审计（默认 v1）")
+    rs.add_argument("--transport", choices=("playwright", "legacy"), default="playwright",
+                    help="采集传输边界；playwright 为正式适配器，legacy 保留旧调用路径")
     rs.add_argument("--headful", action="store_true")
     rs.add_argument("--profile-dir", default="")
     rs.add_argument("--source-manifest", default="",
@@ -1330,6 +1366,8 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--html-dir", default="", help="REPARSE_SAVED_HTML 使用的详情 HTML 目录")
     dr.add_argument("--offline", action="store_true",
                     help="禁止网络动作；REPARSE/VERIFY/BLOCK/REUSE 仍可离线执行")
+    dr.add_argument("--parser-version", choices=("v1", "v2"), default="v1",
+                    help="详情解析契约；v2 保留变体/身份/重复属性证据（默认 v1）")
     dr.set_defaults(func=lambda a, p=dr: cmd_detail_run(a, p))
 
     bc = sub.add_parser("batch-collect", help="联网：按计划分批采集，类目间保持倒计时冷却并自动续跑")
@@ -1369,6 +1407,12 @@ def build_parser() -> argparse.ArgumentParser:
     dt.add_argument("--manual-assist", action="store_true",
                     help="兼容参数；挑战页停止后需人工处理并重新启动")
     dt.set_defaults(func=lambda a, p=dt: cmd_discover_tree(a, p))
+
+    cgv = sub.add_parser("category-graph-validate",
+                         help="离线：校验可恢复的类目 placement graph，不访问 Amazon")
+    cgv.add_argument("--state", required=True, help="CategoryCrawlerState JSON")
+    cgv.add_argument("--out", default="", help="可选：校验报告 JSON")
+    cgv.set_defaults(func=lambda a, p=cgv: cmd_validate_category_graph(a, p))
 
     tc = sub.add_parser("task-collect", help="联网：运行审核后的5000 SKU任务")
     tc.add_argument("--plan", required=True, help="本轮审核任务计划 JSON")

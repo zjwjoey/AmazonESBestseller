@@ -521,7 +521,22 @@ def _page_asin_evidence(html: str) -> list[str]:
         return []
 
 
-def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessState, Optional[dict]]:
+def _parse_detail_for_version(html: str, asin: str, *, parser_version: str = "v1",
+                              requested_url: str = "", final_url: str = "") -> dict:
+    """Parse detail evidence through the explicitly selected parser contract.
+
+    V1 remains the default for backwards compatibility.  Importing V2 lazily
+    avoids the parser module's intentional dependency on ``parse_detail_page``.
+    """
+    if str(parser_version or "v1").casefold() in {"v2", "collection.detail_v2"}:
+        from .detail_v2 import parse_detail_evidence_v2
+        return parse_detail_evidence_v2(
+            html, asin, requested_url=requested_url, final_url=final_url)
+    return parse_detail_page(html, asin)
+
+
+def _classify_saved_page(html: str, asin: str, meta: dict, *,
+                         parser_version: str = "v1") -> tuple[str, AccessState, Optional[dict]]:
     """Classify saved evidence and return parsed data only for valid pages."""
     # HTML evidence is always checked first.  This protects the historical
     # 200 + validateCaptcha cache case and prevents recovery metadata from
@@ -544,7 +559,10 @@ def _classify_saved_page(html: str, asin: str, meta: dict) -> tuple[str, AccessS
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
     soup = BeautifulSoup(html, "lxml")
     candidates = _page_asin_candidates(soup)
-    parsed = parse_detail_page(html, asin)
+    parsed = _parse_detail_for_version(
+        html, asin, parser_version=parser_version,
+        requested_url=str(meta.get("requested_url") or ""),
+        final_url=str(meta.get("final_url") or ""))
     if not parsed.get("title_es_raw") or parsed.get("is_captcha"):
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
     return "VALID_PRODUCT_PAGE", access_state, parsed
@@ -563,7 +581,7 @@ def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | 
     )
 
 
-def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
+def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1") -> list[dict]:
     """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
@@ -593,7 +611,8 @@ def reparse_saved_details(html_dirs, state, asins=None) -> list[dict]:
                     meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     meta = {}
-            classification, state_value, rec = _classify_saved_page(html, asin, meta)
+            classification, state_value, rec = _classify_saved_page(
+                html, asin, meta, parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":
                 continue
             if asin in seen_asins:
@@ -730,7 +749,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     request_urls: Optional[dict] = None,
                     execution_context: Optional[dict] = None,
                     write_summary: bool = True,
-                    details_output_path: Optional[str] = None) -> List[dict]:
+                    details_output_path: Optional[str] = None,
+                    parser_version: str = "v1") -> List[dict]:
     """串行采集详情页：原始 HTML 落盘 html/<asin>.html + 结果 details.json。
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
@@ -834,9 +854,10 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             cache_meta = {"status_code": cached_status, "final_url": cached_url,
                           "initial_access_state": meta.get("initial_access_state"),
                           "access_state": meta.get("access_state"),
-                          "recovered_from_challenge": meta.get("recovered_from_challenge")}
+                          "recovered_from_challenge": meta.get("recovered_from_challenge"),
+                          "requested_url": meta.get("requested_url")}
             classification, parsed_state, rec = _classify_saved_page(
-                html, asin, cache_meta)
+                html, asin, cache_meta, parser_version=parser_version)
             if classification == "CHALLENGE":
                 if not getattr(session, "manual_assist", False):
                     raise AccessStopError(
@@ -943,7 +964,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 html, asin, {"status_code": status, "final_url": final_url,
                              "initial_access_state": initial_state.value,
                              "access_state": state.value,
-                             "recovered_from_challenge": recovered})
+                             "recovered_from_challenge": recovered,
+                             "requested_url": requested_url},
+                parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":
                 quarantine_invalid(asin, path, meta_path)
                 checkpoint(asin, {"asin": asin, "status": "invalid",

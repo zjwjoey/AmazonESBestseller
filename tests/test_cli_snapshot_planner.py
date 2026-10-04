@@ -7,8 +7,15 @@ from amazon_es_bestseller import cli
 def test_v1_commands_are_registered():
     parser = cli.build_parser()
     assert parser.parse_args(["ranking-snapshot", "--rankings-file", "r.json"]).command == "ranking-snapshot"
+    v2 = parser.parse_args(["ranking-snapshot", "--rankings-file", "r.json",
+                            "--parser-version", "v2"])
+    assert v2.parser_version == "v2"
     assert parser.parse_args(["detail-plan", "--snapshot", "s.json", "--out-dir", "out"]).command == "detail-plan"
     assert parser.parse_args(["detail-run", "--plan", "p.json", "--out-dir", "out"]).command == "detail-run"
+    detail_v2 = parser.parse_args(["detail-run", "--plan", "p.json", "--out-dir", "out",
+                                   "--parser-version", "v2"])
+    assert detail_v2.parser_version == "v2"
+    assert parser.parse_args(["category-graph-validate", "--state", "state.json"]).command == "category-graph-validate"
 
 
 def test_offline_cli_chain_writes_snapshot_and_plan(tmp_path):

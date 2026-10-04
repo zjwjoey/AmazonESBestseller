@@ -262,7 +262,7 @@ def parse_bestsellers_page(html: str, source_url: str, collected_at: str) -> lis
 
 def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int = 1,
                     should_stop: Optional[Callable[[], bool]] = None,
-                    run_dir: Optional[str] = None) -> List[dict]:
+                    run_dir: Optional[str] = None, transport=None) -> List[dict]:
     """串行采集榜单页：原始 HTML 落盘 runs/YYYYMMDD_HHMMSS/html/ + rankings.json。
 
     需要 BrowserSession（playwright 仅在 __enter__ 时导入）；联网仅发生在
@@ -314,17 +314,22 @@ def collect_rankings(urls: List[str], session, out_dir: str, pages_per_url: int 
                 persist_page(status_row, page_records)
                 raise AccessStopError("其他工作槽触发访问限制，停止新的榜单请求")
             try:
-                status = session.goto(page_url)
+                if transport is not None:
+                    response = transport.fetch_page(page_url)
+                    status = response.status_code
+                    initial_html = response.text
+                else:
+                    status = session.goto(page_url)
+                    initial_html = session.page.content()
                 status_row["http_status"] = status
                 session.wait_between_requests()
                 # Capture the initial shell first.  Root bestseller pages may only
                 # contain ranks 1--30 until the browser scrolls; trigger lazy
                 # loading on a normal page before taking the authoritative HTML
                 # snapshot.  Fake/offline sessions do not implement the helper.
-                initial_html = session.page.content()
                 initial_state = detect_access_status(status, initial_html)
                 html = initial_html
-                if initial_state.value == "NORMAL":
+                if transport is None and initial_state.value == "NORMAL":
                     load_lazy = getattr(session, "load_lazy_ranking_content", None)
                     if callable(load_lazy):
                         load_lazy()

@@ -39,6 +39,25 @@ def test_executor_only_passes_network_actions_and_records_checkpoint(tmp_path):
     assert json.loads((tmp_path / "detail_execution_manifest.json").read_text())["requested_count"] == 1
 
 
+def test_executor_forwards_detail_parser_version_and_records_it(tmp_path):
+    calls = []
+
+    def fake_collector(asins, _session, _out_dir, **kwargs):
+        calls.append(kwargs)
+        return [{"asin": asins[0], "title_es_raw": "Producto",
+                 "detail_schema_version": 2}]
+
+    plan = {"snapshot_id": "snapshot_v2", "records": [
+        {"snapshot_id": "snapshot_v2", "ranking_asin": "B000000001",
+         "detail_action": "FETCH_NEW"},
+    ]}
+    execute_detail_plan(plan, object(), str(tmp_path), collector=fake_collector,
+                        parser_version="v2")
+    assert calls[0]["parser_version"] == "v2"
+    manifest = json.loads((tmp_path / "detail_execution_manifest.json").read_text())
+    assert manifest["parser_version"] == "v2"
+
+
 def test_executor_resume_does_not_duplicate_successful_request(tmp_path):
     calls = []
 

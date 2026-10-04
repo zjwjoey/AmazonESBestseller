@@ -281,8 +281,17 @@ def build_ranking_snapshot(records: Sequence[Mapping], output_root: str | Path,
 
 
 def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Path,
-                             *, pages_per_url: int = 1, **kwargs) -> dict:
-    """Collect through the existing serial collector and always persist a snapshot."""
+                             *, pages_per_url: int = 1,
+                             parser_version: str = "v1",
+                             acp_hydrator=None, transport=None, **kwargs) -> dict:
+    """Collect through the existing serial collector and always persist a snapshot.
+
+    ``v1`` keeps the historical parser path.  ``v2`` reparses each saved page
+    through the ACP-aware completeness contract after collection, so a page
+    with only the server-rendered prefix is persisted as evidence but cannot
+    become authoritative.  ACP network hydration is explicit via the
+    ``acp_hydrator`` callback; the default never adds an unreviewed request.
+    """
     started = _utc_now()
     records = []
     source_statuses = []
@@ -293,7 +302,8 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                      for url in urls for page in range(1, int(pages_per_url) + 1)]
     try:
         records = collect_rankings(list(urls), session, str(output_root),
-                                   pages_per_url=pages_per_url, run_dir=str(run_dir))
+                                   pages_per_url=pages_per_url, run_dir=str(run_dir),
+                                   transport=transport)
     except Exception as exc:
         error = str(exc)
         if isinstance(exc, AccessStopError):
@@ -326,9 +336,62 @@ def collect_ranking_snapshot(urls: Sequence[str], session, output_root: str | Pa
                 html_files[path.name] = path.read_text(encoding="utf-8")
             except OSError:
                 continue
+    ranking_audit = None
+    effective_parser_version = str(parser_version or "v1").casefold()
+    if effective_parser_version in {"v2", "collection.ranking_v2"}:
+        from ..collection.ranking_v2 import parse_ranking_snapshot_v2
+
+        v2_records = []
+        page_audits = []
+        html_paths = sorted(html_dir.glob("ranking_*.html")) if html_dir.is_dir() else []
+        for index, path in enumerate(html_paths):
+            if index < len(source_statuses):
+                status_row = dict(source_statuses[index])
+            elif index < len(planned_pages):
+                status_row = dict(planned_pages[index])
+            else:
+                status_row = {}
+            source_url = str(status_row.get("source_url") or "")
+            collected_at = str(status_row.get("collected_at") or started.isoformat())
+            try:
+                page_result = parse_ranking_snapshot_v2(
+                    path.read_text(encoding="utf-8"), source_url, collected_at,
+                    acp_hydrator=acp_hydrator,
+                    status_code=int(status_row.get("http_status") or 200))
+            except (OSError, ValueError, TypeError) as exc:
+                page_result = {"records": [], "audit": {
+                    "page_authoritative": False,
+                    "completion_reason": "PARSER_ERROR",
+                    "parser_error": str(exc)}}
+            audit = dict(page_result.get("audit") or {})
+            audit["page_index"] = index
+            audit["source_url"] = source_url
+            audit["page_number"] = status_row.get("page_number")
+            page_audits.append(audit)
+            v2_records.extend(page_result.get("records") or [])
+            status_row["parsed_record_count"] = len(page_result.get("records") or [])
+            status_row["parse_status"] = (
+                "PARSE_OK" if audit.get("page_authoritative") else "PARSE_INCOMPLETE")
+            status_row["v2_completion_reason"] = audit.get("completion_reason", "")
+            if index < len(source_statuses):
+                source_statuses[index] = status_row
+            else:
+                source_statuses.append(status_row)
+        records = v2_records
+        ranking_audit = {
+            "page_authoritative": bool(page_audits) and all(
+                bool(item.get("page_authoritative")) for item in page_audits),
+            "page_count": len(page_audits),
+            "pages": page_audits,
+            "parser_version": "collection.ranking_v2",
+        }
     result = build_ranking_snapshot(records, output_root, planned_sources=planned_pages,
                                     source_statuses=source_statuses,
-                                    started_at=started, html_files=html_files, **kwargs)
+                                    started_at=started, html_files=html_files,
+                                    parser_version=("collection.ranking_v2"
+                                                     if effective_parser_version in {"v2", "collection.ranking_v2"}
+                                                     else "collection.ranking"),
+                                    ranking_audit=ranking_audit, **kwargs)
     if error:
         result["error"] = error
     return result
