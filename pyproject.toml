@@ -7,7 +7,7 @@ name = "amazon-es-bestseller"
 version = "0.1.0"
 description = "Conservative Amazon.es bestseller research pipeline"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
   "beautifulsoup4>=4.12",
   "lxml>=5.0",
