@@ -7,9 +7,9 @@ from typing import Any, Mapping
 
 from .adapters import (
     expected_count_from_html,
-    extract_embedded_supplemental,
+    extract_embedded_supplemental_with_status,
     extract_server_candidates,
-    extract_structured_candidates,
+    extract_structured_candidates_with_status,
 )
 from .completeness import audit_identity_records
 from .resolver import resolve_candidates
@@ -19,27 +19,55 @@ def extract_identity_from_html(
     html: str, *, source_url: str = "", page_number: int | None = 1,
     evidence_file: str | None = None, client_recs: object = None,
     acp_response: object = None, expected_count: int | None = None,
+    expected_count_source: str | None = None,
+    page_instance_id: str | None = None,
+    representation_type: str = "RENDERED",
 ) -> dict[str, Any]:
     server = extract_server_candidates(html, source_url=source_url,
                                        page_number=page_number,
-                                       evidence_file=evidence_file)
-    embedded_client, embedded_acp = extract_embedded_supplemental(
+                                       evidence_file=evidence_file,
+                                       page_instance_id=page_instance_id,
+                                       representation_type=representation_type)
+    embedded_client, embedded_acp, parse_statuses = extract_embedded_supplemental_with_status(
         html, source_url=source_url, page_number=page_number,
-        evidence_file=evidence_file)
-    client = embedded_client + extract_structured_candidates(
-        client_recs, evidence_source="CLIENT_RECS", page_number=page_number,
-        source_url=source_url, evidence_file=evidence_file) if client_recs is not None else embedded_client
-    acp = embedded_acp + extract_structured_candidates(
-        acp_response, evidence_source="ACP", page_number=page_number,
-        source_url=source_url, evidence_file=evidence_file) if acp_response is not None else embedded_acp
+        evidence_file=evidence_file, page_instance_id=page_instance_id)
+    client = list(embedded_client)
+    if client_recs is not None:
+        rows, status = extract_structured_candidates_with_status(
+            client_recs, evidence_source="CLIENT_RECS", page_number=page_number,
+            source_url=source_url, evidence_file=evidence_file,
+            page_instance_id=page_instance_id, representation_type="CLIENT_RECS")
+        client.extend(rows)
+        parse_statuses.append({"evidence_source": "CLIENT_RECS", "status": status,
+                               "evidence_file": evidence_file})
+    acp = list(embedded_acp)
+    if acp_response is not None:
+        rows, status = extract_structured_candidates_with_status(
+            acp_response, evidence_source="ACP", page_number=page_number,
+            source_url=source_url, evidence_file=evidence_file,
+            page_instance_id=page_instance_id, representation_type="ACP")
+        acp.extend(rows)
+        parse_statuses.append({"evidence_source": "ACP", "status": status,
+                               "evidence_file": evidence_file})
     records, raw = resolve_candidates(server + client + acp)
+    if expected_count is not None:
+        count_source = expected_count_source or "CLI_ARGUMENT"
+    else:
+        count_from_html = expected_count_from_html(html)
+        expected_count = count_from_html
+        inferred_source = ("CLIENT_RECS_METADATA" if count_from_html is not None
+                           and "data-client-recs-list" in html else
+                           "HTML_METADATA" if count_from_html is not None else "UNKNOWN")
+        count_source = expected_count_source or inferred_source
     audit = audit_identity_records(
         records, raw, server_rendered_count=len(server), client_recs_count=len(client),
-        acp_identity_count=len(acp), expected_count=(
-            expected_count if expected_count is not None else expected_count_from_html(html)),
+        acp_identity_count=len(acp), expected_count=expected_count,
+        expected_count_source=count_source,
         evidence_files=[evidence_file] if evidence_file else [],
+        supplemental_parse_statuses=parse_statuses,
     )
-    return {"records": records, "raw_candidates": raw, "audit": audit}
+    return {"records": records, "raw_candidates": raw, "audit": audit,
+            "supplemental_parse_status": parse_statuses}
 
 
 def _read_json(path: Path) -> object:
@@ -66,15 +94,50 @@ def _metadata(root: Path) -> dict[str, dict[str, Any]]:
                     rows.extend(row for row in payload[key] if isinstance(row, Mapping))
             if not rows and any(key in payload for key in ("html_file", "source_url")):
                 rows = [payload]
+        named_row = False
         for row_index, row in enumerate(rows):
             name = str(row.get("html_file") or row.get("evidence_file") or "")
             if name:
+                named_row = True
                 result[Path(name).name] = dict(row)
             elif path.name == "page_statuses.json":
                 # collect_rankings writes ``ranking_000.html`` in the same
                 # order as its append-only page status list.
                 result[f"ranking_{row_index:03d}.html"] = dict(row)
+        # A compact evidence manifest may describe the directory as a whole
+        # instead of naming each representation. Both initial/rendered files
+        # must then resolve to the same page instance.
+        if isinstance(payload, Mapping) and not named_row and any(
+                key in payload for key in ("source_url", "page_number", "page_instance_id")):
+            result["__default__"] = dict(payload)
     return result
+
+
+def _page_instance(meta: Mapping[str, Any], path: Path, index: int) -> str:
+    explicit = str(meta.get("page_instance_id") or "").strip()
+    if explicit:
+        return explicit
+    page_number = meta.get("page_number")
+    source_url = str(meta.get("source_url") or meta.get("url") or "")
+    if page_number is not None or source_url:
+        return "page:%s|url:%s" % (page_number if page_number is not None else index,
+                                   source_url)
+    # Stable fallback for old evidence without metadata. The path is stable
+    # within a saved evidence directory and does not depend on filesystem
+    # iteration order.
+    return "file:%s" % path.as_posix()
+
+
+def _representation(path: Path, meta: Mapping[str, Any]) -> str:
+    value = str(meta.get("representation_type") or "").upper()
+    if value:
+        return value
+    name = path.stem.lower()
+    if "initial" in name:
+        return "INITIAL"
+    if "rendered" in name:
+        return "RENDERED"
+    return "RENDERED"
 
 
 def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: int | None = None) -> dict[str, Any]:
@@ -96,20 +159,28 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
     all_client: list[dict[str, Any]] = []
     all_acp: list[dict[str, Any]] = []
     evidence_files: list[str] = []
-    expected_values: list[int] = []
+    expected_by_page: dict[str, int] = {}
+    expected_sources: dict[str, str] = {}
+    all_parse_statuses: list[dict[str, Any]] = []
     for index, path in enumerate(html_paths, start=1):
         html = path.read_text(encoding="utf-8", errors="replace")
-        meta = metadata.get(path.name, {})
+        meta = metadata.get(path.name, metadata.get("__default__", {}))
         source_url = str(meta.get("source_url") or meta.get("url") or "")
         page_number = meta.get("page_number", index)
         try:
             page_number = int(page_number)
         except (TypeError, ValueError):
             page_number = index
+        page_instance_id = _page_instance(meta, path, index)
+        representation_type = _representation(path, meta)
         result = extract_identity_from_html(
             html, source_url=source_url, page_number=page_number,
             evidence_file=str(path.relative_to(root)) if root.is_dir() else path.name,
             expected_count=meta.get("expected_count"),
+            expected_count_source=(str(meta.get("expected_count_source") or "RUN_MANIFEST")
+                                   if meta.get("expected_count") is not None else None),
+            page_instance_id=page_instance_id,
+            representation_type=representation_type,
         )
         all_server.extend(row for row in result["raw_candidates"]
                           if row.get("evidence_source") == "SERVER_RENDERED_CARD")
@@ -117,27 +188,49 @@ def extract_identity_from_evidence(evidence_dir: str | Path, *, expected_count: 
                           if row.get("evidence_source") == "CLIENT_RECS")
         all_acp.extend(row for row in result["raw_candidates"]
                         if row.get("evidence_source") == "ACP")
-        page_expected = meta.get("expected_count") or result["audit"].get("expected_count")
+        all_parse_statuses.extend(result.get("supplemental_parse_status") or [])
+        page_expected = meta.get("expected_count")
+        if page_expected is None:
+            page_expected = result["audit"].get("expected_count")
         if page_expected is not None:
-            expected_values.append(int(page_expected))
+            expected_by_page.setdefault(page_instance_id, int(page_expected))
+            expected_sources.setdefault(
+                page_instance_id,
+                str(meta.get("expected_count_source") or result["audit"].get(
+                    "expected_count_source") or "HTML_METADATA"))
         evidence_files.append(str(path.relative_to(root)) if root.is_dir() else path.name)
     # Standalone supplemental files are intentionally consumed only once and
     # remain offline evidence; embedded payloads are already present above.
     for payload, source, target in ((client_payloads, "CLIENT_RECS", all_client),
                                     (acp_payloads, "ACP", all_acp)):
         for value in payload:
-            target.extend(extract_structured_candidates(value, evidence_source=source,
-                                                        evidence_file=str(source)))
+            rows, status = extract_structured_candidates_with_status(
+                value, evidence_source=source, evidence_file=str(source),
+                page_instance_id="supplemental:%s" % source,
+                representation_type=source)
+            target.extend(rows)
+            all_parse_statuses.append({"evidence_source": source, "status": status,
+                                       "evidence_file": str(source)})
     records, raw = resolve_candidates(all_server + all_client + all_acp)
+    if expected_count is not None:
+        final_expected = expected_count
+        final_source = "CLI_ARGUMENT"
+    elif expected_by_page:
+        final_expected = sum(expected_by_page.values())
+        sources = set(expected_sources.values())
+        final_source = next(iter(sources)) if len(sources) == 1 else "RUN_MANIFEST"
+    else:
+        final_expected = None
+        final_source = "UNKNOWN"
     audit = audit_identity_records(
         records, raw, server_rendered_count=len(all_server),
         client_recs_count=len(all_client), acp_identity_count=len(all_acp),
-        expected_count=(expected_count if expected_count is not None
-                        else sum(expected_values) if expected_values else None),
-        evidence_files=evidence_files,
+        expected_count=final_expected, expected_count_source=final_source,
+        evidence_files=evidence_files, supplemental_parse_statuses=all_parse_statuses,
     )
     return {"records": records, "raw_candidates": raw, "audit": audit,
-            "evidence_files": evidence_files}
+            "evidence_files": evidence_files,
+            "supplemental_parse_status": all_parse_statuses}
 
 
 extract_identity = extract_identity_from_html

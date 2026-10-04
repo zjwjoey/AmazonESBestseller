@@ -64,6 +64,8 @@ def resolve_candidates(candidates: Iterable[dict[str, Any]]) -> tuple[list[dict[
                 "raw_href": candidate.get("raw_href"),
                 "asin_source": candidate.get("asin_source"),
                 "evidence_source": candidate.get("evidence_source"),
+                "page_instance_id": candidate.get("page_instance_id"),
+                "representation_type": candidate.get("representation_type"),
             }],
             "ranking_contexts": [{
                 "rank": candidate.get("rank"),
@@ -71,6 +73,8 @@ def resolve_candidates(candidates: Iterable[dict[str, Any]]) -> tuple[list[dict[
                 "page_number": candidate.get("page_number"),
                 "source_url": candidate.get("source_url") or "",
                 "evidence_file": candidate.get("evidence_file"),
+                "page_instance_id": candidate.get("page_instance_id"),
+                "representation_type": candidate.get("representation_type"),
             }],
         }
         if valid_card and valid_href and card_asin != href_asin:
@@ -82,5 +86,12 @@ def resolve_candidates(candidates: Iterable[dict[str, Any]]) -> tuple[list[dict[
             existing["identity_evidence"].extend(record["identity_evidence"])
             existing["ranking_contexts"].extend(record["ranking_contexts"])
             if existing.get("identity_status") != "IDENTITY_CONFLICT" and status == "IDENTITY_CONFLICT":
-                existing.update(record)
+                # Promote the conflict status without discarding the lower
+                # priority evidence already retained for this ASIN.
+                for key in ("product_url", "product_url_raw", "product_url_source",
+                            "asin_source", "identity_status", "conflict_asins",
+                            "rank", "rank_raw", "page_number", "card_index",
+                            "source_url", "evidence_type", "evidence_file"):
+                    if key in record:
+                        existing[key] = record[key]
     return list(records.values()), raw_candidates

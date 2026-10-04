@@ -24,6 +24,8 @@ class IdentityCandidate:
     source_url: str = ""
     evidence_source: str = ""
     evidence_file: str | None = None
+    page_instance_id: str | None = None
+    representation_type: str = "RANKING_CARD"
     raw: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -40,6 +42,8 @@ class IdentityCandidate:
             "source_url": self.source_url,
             "evidence_source": self.evidence_source,
             "evidence_file": self.evidence_file,
+            "page_instance_id": self.page_instance_id,
+            "representation_type": self.representation_type,
         }
         value.update(self.raw)
         return value

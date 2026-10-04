@@ -52,6 +52,8 @@ def write_identity_snapshot(
         "status": status,
         "identity_ready": bool(audit.get("identity_ready")),
         "identity_complete": bool(audit.get("identity_complete")),
+        "expected_count": audit.get("expected_count"),
+        "expected_count_source": audit.get("expected_count_source", "UNKNOWN"),
         "evidence_files": list(result.get("evidence_files") or audit.get("evidence_files") or []),
     }
     (target / "identity.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
