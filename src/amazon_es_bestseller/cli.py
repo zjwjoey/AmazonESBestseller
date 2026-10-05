@@ -1,1483 +1,86 @@
 # -*- coding: utf-8 -*-
-"""统一 CLI 入口（ARCHITECTURE §59-60）：Amazon.es bestseller research pipeline。
-
-主链按需要组合联网采集与离线处理命令。
-  - collect：联网（榜单+详情，串行 + 显式延迟，无并发）；缺省输出
-    ``outputs/rankings.json`` + ``outputs/details.json``。
-  - discover-tree：联网发现当前 Amazon.es Bestseller 类目树并保存快照。
-  - task-collect：审核后的类目规模任务，支持 parallel3 主模式和 serial 备用模式。
-  - enrich / qa / export：全离线（不联网）。
-  - translate-ds：联网且在首个请求前要求人工确认。
-  - ``--offline``：全局标记；联网采集/真实翻译拒绝离线，Translation V2 dry-run 可用。
-
-示例：
-  amazon-es collect --urls "https://www.amazon.es/Best-Sellers-Hogar-y-cocina/zgbs/1293659031"
-  amazon-es enrich --legacy product_details.json        # 30 条遗留真实数据
-  amazon-es --offline enrich
-  amazon-es --offline qa
-  amazon-es audit-fields --products outputs/products.json --out outputs/field_closure.json
-  amazon-es --offline export
-"""
+'Argument parsing, compatibility dispatch, and top-level CLI error handling.'
 from __future__ import annotations
 
 import argparse
-import csv
-from io import BytesIO
 import json
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
 from typing import List, Mapping, Optional
 
-#: 默认数据目录（仓库相对，避免硬编码绝对路径）
-OUTPUTS = Path("outputs")
+from .commands import collection, detail, export as export_commands, quality, ranking, translation
+from .commands.common import (DEFAULT_DETAILS, DEFAULT_RANKINGS, OUTPUTS,
+                              _load_category_planning, _load_checkpoint_input,
+                              _load_evidence_json, _load_images_by_asin, _load_json,
+                              _load_translation_products, _safe_print, _save_json)
 
-#: 证据输入默认路径。export 与 enrich/qa 共用同一组默认值，保证字段闭环
-#: 门禁在默认调用下也会运行（缺省时曾静默跳过，见 QA_RULES §31）。
-DEFAULT_DETAILS = str(OUTPUTS / "details.json")
-DEFAULT_RANKINGS = str(OUTPUTS / "rankings.json")
+# Public compatibility re-exports: downstream scripts and tests historically
+# imported handlers/helpers from this module. Implementations now live in the
+# scoped command modules below.
+_load_snapshot_records = ranking._load_snapshot_records
+_load_snapshot_input = ranking._load_snapshot_input
+_identity_extraction = ranking._identity_extraction
+_batch_countdown = collection._batch_countdown
+_batch_countdown_until = collection._batch_countdown_until
+_load_json_array_or_empty = collection._load_json_array_or_empty
+_load_quality_records = quality._load_quality_records
+_quality_audit_from_args = quality._quality_audit_from_args
+_print_quality_result = quality._print_quality_result
+_latest_run_dir = quality._latest_run_dir
 
+cmd_ranking_snapshot = ranking.cmd_ranking_snapshot
+cmd_ranking_identity_extract = ranking.cmd_ranking_identity_extract
+cmd_ranking_identity_snapshot = ranking.cmd_ranking_identity_snapshot
+cmd_ranking_identity_audit = ranking.cmd_ranking_identity_audit
+cmd_detail_plan = detail.cmd_detail_plan
+cmd_detail_run = detail.cmd_detail_run
+cmd_discover_tree = ranking.cmd_discover_tree
+cmd_validate_category_graph = ranking.cmd_validate_category_graph
+cmd_select_quota = collection.cmd_select_quota
+cmd_download_images = collection.cmd_download_images
+cmd_reconcile_task = collection.cmd_reconcile_task
+cmd_translate_ds = translation.cmd_translate_ds
+cmd_translate = translation.cmd_translate
+cmd_dictionary_only = translation.cmd_dictionary_only
+cmd_preclean = translation.cmd_preclean
+cmd_enrich = detail.cmd_enrich
+cmd_repair_cache = detail.cmd_repair_cache
+cmd_reparse_details = detail.cmd_reparse_details
+cmd_audit_detail_cache = detail.cmd_audit_detail_cache
+cmd_qa = quality.cmd_qa
+cmd_audit_fields = quality.cmd_audit_fields
+cmd_quality_audit = quality.cmd_quality_audit
+cmd_export = export_commands.cmd_export
 
-def _safe_print(*parts) -> None:
-    """Print diagnostics without letting a narrow Windows code page abort QA."""
-    text = " ".join(str(part) for part in parts)
-    try:
-        print(text)
-    except UnicodeEncodeError:
-        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
-        sys.stdout.write(text.encode(encoding, errors="replace").decode(encoding) + "\n")
-
-
-def _load_json(path: Optional[str]) -> list:
-    if not path:
-        return []
-    p = Path(path)
-    if not p.exists():
-        raise SystemExit("找不到输入文件: %s" % path)
-    with p.open(encoding="utf-8") as f:
-        return json.load(f)
-
-
-TRANSLATION_RESEARCH_CSV_FIELDS = {
-    "ASIN": "asin",
-    "商品名称（西语）": "title_es_raw",
-    "品牌": "brand",
-    "一级类目": "category_l1",
-    "二级类目": "category_l2",
-    "三级类目": "category_l3",
-    "细分类目": "leaf_category",
-    "当前选中规格 / 变体（西语）": "selected_variant_es",
-    "核心规格（西语）": "specification_es",
-    "完整商品详情（西语原文）": "product_details_es",
-    "商品卖点（西语原文）": "feature_bullets_es",
-}
-
-
-def _load_translation_products(path: Optional[str]) -> list:
-    """Load V2 JSON records or the frozen internal-research CSV contract."""
-    if not path or Path(path).suffix.casefold() != ".csv":
-        data = _load_json(path)
-        if isinstance(data, dict) and isinstance(data.get("records"), list):
-            return data["records"]
-        return data
-    p = Path(path)
-    if not p.exists():
-        raise SystemExit("找不到输入文件: %s" % path)
-    with p.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        headers = set(reader.fieldnames or ())
-        if "ASIN" not in headers:
-            raise SystemExit("Translation V2 CSV 缺少 ASIN 列: %s" % path)
-        records = []
-        for row in reader:
-            # Keep every frozen Spanish-Master column (notably notes and URLs)
-            # while adding canonical aliases consumed by Translation V2.
-            record = {str(key): (value or "").strip() for key, value in row.items()
-                      if key is not None}
-            for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items():
-                if not record.get(target):
-                    record[target] = (row.get(source) or "").strip()
-            records.append(record)
-    return records
-
-
-def _save_json(data, path: str) -> None:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def _load_evidence_json(path: Optional[str], default_path: str):
-    """闭环门禁的证据输入：显式指定但缺失 → 报错；默认路径缺失 → 视为不可用。
-
-    默认路径可以合法地不存在（例如只跑离线子链），此时由调用方显式声明门禁
-    降级；显式传入的路径缺失仍必须失败，避免打错路径被当成"没有证据"。
-    """
-    if not path:
-        return None
-    if not Path(path).exists():
-        if str(path) != str(default_path):
-            raise SystemExit("找不到输入文件: %s" % path)
-        return None
-    return _load_json(path)
-
-
-def _load_category_planning(path: Optional[str]):
-    if not path:
-        return None
-    data = _load_json(path)
-    if not isinstance(data, list):
-        raise SystemExit("类目规划 JSON 顶层必须是数组: %s" % path)
-    return data
-
-
-def _load_checkpoint_input(path: Optional[str]):
-    """Read the canonical checkpoint directory, with legacy JSON support."""
-    if not path:
-        return []
-    target = Path(path)
-    if target.is_dir():
-        rows = []
-        for item in sorted(target.glob("*.json")):
-            try:
-                value = json.loads(item.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            if isinstance(value, dict):
-                rows.append(value)
-        return rows
-    return _load_json(path)
-
-
-def _load_images_by_asin(directory: Optional[str], records: list) -> dict:
-    if not directory:
-        return {}
-    root = Path(directory)
-    if not root.is_dir():
-        print("警告：图片目录不存在，跳过内嵌图片: %s" % directory)
-        return {}
-    out = {}
-    for record in records:
-        asin = str(record.get("asin") or "").strip().upper()
-        if not asin:
-            continue
-        for suffix in (".png", ".jpg", ".jpeg"):
-            path = root / (asin + suffix)
-            if path.exists():
-                try:
-                    out[asin] = (BytesIO(path.read_bytes()), 70, 70)
-                except OSError as exc:
-                    print("警告：无法读取图片 %s：%s" % (path, exc))
-                break
-    return out
-
-
-# ---------- collect（联网） ----------
 
 def cmd_collect(args, parser: argparse.ArgumentParser) -> None:
-    """榜单+详情串行采集；rankings.json/details.json 稳定输出到 out_dir 根。"""
-    if args.offline:
-        parser.error("collect 需要联网，不能与 --offline 同用")
-    if not args.urls and not args.rankings_file:
-        parser.error("collect 需要 --urls 或 --rankings-file")
-    from .access.browser import BrowserSession
-    from .access.location import ensure_spain_delivery
-    from .collection.detail import (CURRENT_DETAIL_SCHEMA_VERSION,
-                                    collect_details, reparse_saved_details)
-    from .collection.planning import DetailState, build_plan, collect_asins
-    from .collection.checkpoints import read_checkpoint
-    from .collection.ranking import collect_rankings
-
-    out_dir = str(Path(args.out_dir).resolve())
-    with BrowserSession(headless=not args.headful,
-                        profile_dir=args.profile_dir or None) as session:
-        session.challenge_wait_seconds = args.challenge_wait_seconds
-        session.manual_assist = args.manual_assist
-        location = ensure_spain_delivery(session, args.postal_code)
-        if location is not None:
-            _safe_print("配送地点已确认：%s" % (location.text or "西班牙"))
-        if args.rankings_file:
-            rankings = _load_json(args.rankings_file)
-        elif args.pages_per_url != 1:
-            rankings = collect_rankings(args.urls, session, out_dir,
-                                        pages_per_url=args.pages_per_url)
-        else:
-            rankings = collect_rankings(args.urls, session, out_dir)
-        # Quarantine affects detail planning only; raw ranking evidence remains
-        # unchanged for audit/export.
-        quarantine_dir = Path(out_dir) / "quarantine"
-        quarantined = {p.stem.upper() for p in quarantine_dir.rglob("*.html")}
-        if args.rankings_only:
-            _save_json(rankings, str(Path(out_dir) / "rankings.json"))
-            print("collect rankings-only 完成：榜单 %d 条 → %s" %
-                  (len(rankings), Path(out_dir) / "rankings.json"))
-            return
-        if args.manifest:
-            manifest = _load_json(args.manifest)
-            manifest_records = manifest.get("records", []) if isinstance(manifest, dict) else manifest
-            allowed = {str(r.get("asin") or "").strip().upper() for r in manifest_records if isinstance(r, dict)}
-            rankings = [r for r in rankings if str(r.get("asin") or "").strip().upper() in allowed]
-            if not rankings:
-                raise SystemExit("manifest 与榜单记录没有可匹配的 ASIN")
-        planning_rankings = [r for r in rankings
-                             if str(r.get("asin") or "").strip().upper() not in quarantined]
-        skipped = len(rankings) - len(planning_rankings)
-        if skipped:
-            print("已跳过隔离 ASIN %d 条详情计划，原始榜单证据保留" % skipped)
-        state = DetailState(Path(out_dir) / "state" / "details_state.json")
-        # Promote completed per-ASIN checkpoints before building the next plan;
-        # this is what makes Ctrl-C/resume useful even when the batch summary
-        # was never written.
-        checkpoint_records = []
-        for asin in {str(r.get("asin") or "").strip().upper() for r in rankings}:
-            checkpoint = read_checkpoint(Path(out_dir) / "checkpoints", asin)
-            if checkpoint and checkpoint.get("status") == "success" and checkpoint.get("record"):
-                checkpoint_records.append(checkpoint["record"])
-        if checkpoint_records:
-            state.update(checkpoint_records)
-            state.save()
-        # Upgrade old cached records from local HTML before planning.  This is
-        # deliberately offline and avoids re-requesting pages after a parser
-        # schema bump.
-        stale_asins = [r.get("asin") for r in state.records()
-                       if int(r.get("detail_schema_version", 0) or 0)
-                       < CURRENT_DETAIL_SCHEMA_VERSION]
-        reparsed = (reparse_saved_details(Path(out_dir) / "html", state,
-                                           asins=stale_asins)
-                    if stale_asins else [])
-        if reparsed:
-            state.save()
-        plan = build_plan(planning_rankings, state)
-        planned_asins = collect_asins(plan)
-        def _collect_delta(*collect_args, **collect_kwargs):
-            try:
-                return collect_details(*collect_args, **collect_kwargs, write_summary=False)
-            except TypeError as exc:
-                if "unexpected keyword argument" not in str(exc):
-                    raise
-                return collect_details(*collect_args, **collect_kwargs)
-        if args.progress:
-            def _write_progress(event):
-                _save_json({"planned": len(planned_asins), **event}, args.progress)
-            details = _collect_delta(planned_asins, session, out_dir,
-                                     on_progress=_write_progress)
-        else:
-            details = _collect_delta(planned_asins, session, out_dir)
-        state.update(details)
-        state.save()
-        # details.json 用 state 全量重建：resume 场景下 collect_details 只产出
-        # 本次增量（新增/重采），直接覆盖会丢已缓存详情；state 是跨 run 权威
-        # 持久缓存，含全部 ASIN 的最新详情。
-        _save_json(state.records(), str(Path(out_dir) / "details.json"))
-
-    # 本次采集的榜单产物复制到 out_dir 根，供 enrich/qa/export 读取。
-    # details.json 已由 state 全量重建，绝不用 run 目录副本覆盖；复用
-    # --rankings-file 时本次没有新 run 目录，跳过复制，避免旧 run 的榜单
-    # 覆盖调用方显式提供的输入（会让下游 enrich 与本次详情不同源）。
-    if not args.rankings_file:
-        runs = sorted(Path(out_dir).glob("runs/*"), reverse=True)
-        if runs:
-            src = runs[0] / "rankings.json"
-            if src.exists():
-                shutil.copy(src, Path(out_dir) / "rankings.json")
-    print("collect 完成：榜单 %d 条、详情 %d 条、离线重解析 %d 条、计划收集 %d 条"
-          % (len(rankings), len(details), len(reparsed), len(plan["collect"])))
-
-
-def _load_snapshot_records(path: str) -> list:
-    data = _load_json(path)
-    if isinstance(data, dict):
-        if isinstance(data.get("rankings"), list):
-            return data["rankings"]
-        if isinstance(data.get("records"), list):
-            return data["records"]
-    return data if isinstance(data, list) else []
-
-
-def _load_snapshot_input(path: str) -> dict:
-    """Load ranking rows together with a sibling snapshot manifest when present."""
-    target = Path(path)
-    if target.is_dir():
-        root = target
-        rankings_path = root / "rankings.json"
-        identity_path = root / "identity.json"
-        manifest_path = root / "manifest.json"
-        if not rankings_path.exists() and identity_path.exists():
-            rankings_path = identity_path
-    else:
-        rankings_path = target
-        root = target.parent
-        manifest_path = root / "manifest.json"
-    if not rankings_path.exists():
-        raise SystemExit("找不到快照 rankings.json: %s" % rankings_path)
-    rows = _load_snapshot_records(str(rankings_path))
-    result = {"records": rows}
-    if rankings_path.name == "identity.json":
-        result["snapshot_kind"] = "RANKING_IDENTITY"
-    if manifest_path.exists():
-        manifest = _load_json(str(manifest_path))
-        if isinstance(manifest, dict):
-            if manifest.get("parser_version") == "ranking_identity_v1":
-                result["snapshot_kind"] = "RANKING_IDENTITY"
-                result["snapshot_status"] = manifest.get("status")
-                result["identity_complete"] = bool(manifest.get("identity_complete"))
-            else:
-                result["snapshot_status"] = manifest.get("snapshot_status")
-            result["snapshot_id"] = manifest.get("snapshot_id")
-    return result
-
-
-def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
-    """Freeze a latest ranking observation; ``--rankings-file`` is offline-only."""
-    from .monitoring.snapshot import build_ranking_snapshot, collect_ranking_snapshot
-    output_root = Path(args.out_dir)
-    if args.rankings_file:
-        records = _load_snapshot_records(args.rankings_file)
-        source_statuses = []
-        planned_sources = []
-        offline_frozen = True
-        if args.source_manifest:
-            manifest = _load_json(args.source_manifest)
-            if isinstance(manifest, dict):
-                source_statuses = (manifest.get("page_statuses")
-                                   or manifest.get("source_statuses") or [])
-                planned_sources = (manifest.get("planned_pages")
-                                   or manifest.get("pages") or source_statuses)
-            elif isinstance(manifest, list):
-                source_statuses = manifest
-                planned_sources = manifest
-            offline_frozen = False
-        result = build_ranking_snapshot(records, output_root,
-                                        planned_sources=planned_sources,
-                                        source_statuses=source_statuses,
-                                        offline_frozen=offline_frozen)
-    else:
-        if not args.urls:
-            parser.error("ranking-snapshot 需要 --urls 或 --rankings-file")
-        if args.offline:
-            parser.error("ranking-snapshot --offline 需要 --rankings-file；不会访问 Amazon")
-        from .access.browser import BrowserSession
-        from .transport.playwright import PlaywrightTransport
-        with BrowserSession(headless=not args.headful,
-                            profile_dir=args.profile_dir or None) as session:
-            transport = (PlaywrightTransport(session)
-                         if args.transport == "playwright" else None)
-            result = collect_ranking_snapshot(args.urls, session, output_root,
-                                              pages_per_url=args.pages_per_url,
-                                              parser_version=args.parser_version,
-                                              transport=transport)
-    print("ranking snapshot %s：%s（%d 条记录）" %
-          (result["manifest"]["snapshot_status"], result["path"],
-           result["manifest"]["record_count"]))
-    if result["manifest"]["snapshot_status"] != "AUTHORITATIVE" and not args.allow_incomplete_debug:
-        from .monitoring.snapshot import SnapshotIncompleteError
-        raise SnapshotIncompleteError(
-            "快照已保存为 INCOMPLETE；未更新 latest_authoritative pointer。"
-            "生产模式拒绝以 0 退出，请检查 manifest/page_statuses。")
-
-
-def _identity_extraction(args) -> dict:
-    from .monitoring.ranking_identity.extract import extract_identity_from_evidence
-    return extract_identity_from_evidence(args.evidence_dir,
-                                          expected_count=args.expected_count)
-
-
-def cmd_ranking_identity_extract(args, parser: argparse.ArgumentParser) -> None:
-    """离线：从保存的榜单证据提取 ASIN + canonical product URL。"""
-    result = _identity_extraction(args)
-    out = Path(args.out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "identity.json").write_text(
-        json.dumps(result["records"], ensure_ascii=False, indent=2), encoding="utf-8")
-    (out / "raw_candidates.json").write_text(
-        json.dumps(result["raw_candidates"], ensure_ascii=False, indent=2), encoding="utf-8")
-    (out / "audit.json").write_text(
-        json.dumps(result["audit"], ensure_ascii=False, indent=2), encoding="utf-8")
-    print("ranking identity extract：%s（%d 个唯一 ASIN，状态 %s）" %
-          (out, result["audit"]["unique_asin_count"], result["audit"]["status"]))
-
-
-def cmd_ranking_identity_snapshot(args, parser: argparse.ArgumentParser) -> None:
-    """离线：提取并写入 append-only Ranking Identity Snapshot。"""
-    from .monitoring.ranking_identity.snapshot import write_identity_snapshot
-    from .monitoring.snapshot import SnapshotIncompleteError
-    result = _identity_extraction(args)
-    saved = write_identity_snapshot(result, args.out_dir, snapshot_id=args.snapshot_id or None,
-                                    evidence_dir=args.evidence_dir)
-    print("ranking identity snapshot %s：%s（%d 个唯一 ASIN）" %
-          (saved["manifest"]["status"], saved["path"],
-           saved["audit"]["unique_asin_count"]))
-    if saved["manifest"]["status"] != "IDENTITY_COMPLETE" and not args.allow_incomplete_debug:
-        raise SnapshotIncompleteError(
-            "identity snapshot 未达到 IDENTITY_COMPLETE；已保存不可变诊断快照，"
-            "如需人工检查请使用 --allow-incomplete-debug。")
-
-
-def cmd_ranking_identity_audit(args, parser: argparse.ArgumentParser) -> None:
-    """离线：只输出身份提取审计，不写 snapshot。"""
-    result = _identity_extraction(args)
-    payload = json.dumps(result["audit"], ensure_ascii=False, indent=2)
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(payload, encoding="utf-8")
-    else:
-        print(payload)
-
-
-def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
-    """Build and write a completely offline incremental detail plan."""
-    from .monitoring.detail_planner import build_detail_plan, write_detail_plan
-    snapshot = _load_snapshot_input(args.snapshot)
-    details = _load_json(args.details) if args.details else []
-    state = _load_json(args.state) if args.state else []
-    checkpoints = _load_checkpoint_input(args.checkpoints)
-    plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None,
-                             checkpoints=checkpoints,
-                             current_access_state=args.current_access_state,
-                             target_parser_version=args.target_parser_version or None)
-    paths = write_detail_plan(plan, args.out_dir)
-    print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
-
-
-def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
-    """Execute only actions already present in a saved detail plan."""
-    from .collection.detail_executor import NETWORK_ACTIONS, execute_detail_plan
-    from .access.browser import BrowserSession
-    plan_records = _load_json(args.plan)
-    if isinstance(plan_records, list):
-        snapshot_ids = {str(row.get("snapshot_id") or "")
-                        for row in plan_records if isinstance(row, dict)
-                        and row.get("snapshot_id")}
-        if len(snapshot_ids) > 1:
-            parser.error("detail-run 计划包含多个 snapshot_id，拒绝混合执行")
-        plan = {"records": plan_records,
-                "snapshot_id": next(iter(snapshot_ids), "")}
-    else:
-        plan = plan_records
-    pending = [row for row in plan.get("records", [])
-               if row.get("detail_action") in NETWORK_ACTIONS]
-    if args.offline and pending:
-        parser.error("detail-run --offline 发现 %d 个网络动作；计划未执行且不会访问 Amazon" % len(pending))
-    if not pending:
-        result = execute_detail_plan(plan, None, args.out_dir, offline=True,
-                                     saved_html=args.html_dir or None,
-                                     parser_version=args.parser_version)
-    else:
-        with BrowserSession(headless=not args.headful,
-                            profile_dir=args.profile_dir or None) as session:
-            result = execute_detail_plan(plan, session, args.out_dir, offline=bool(args.offline),
-                                         saved_html=args.html_dir or None,
-                                         parser_version=args.parser_version)
-    print("detail run 完成：计划网络动作 %d，执行记录 %d → %s" %
-          (result["requested_count"], len(result["records"]),
-           Path(args.out_dir) / "detail_execution_manifest.json"))
-
-
-def _batch_countdown(seconds: int, category_name: str) -> None:
-    """Keep the process alive during inter-category cooldown with a live timer."""
-    remaining = max(0, int(seconds))
-    while remaining > 0:
-        hours, rem = divmod(remaining, 3600)
-        minutes, secs = divmod(rem, 60)
-        print("\r[冷却倒计时] %s：%02d:%02d:%02d" %
-              (category_name, hours, minutes, secs), end="", flush=True)
-        time.sleep(1)
-        remaining -= 1
-    if seconds > 0:
-        print("\r[冷却完成] %s：开始下一类目                    " % category_name,
-              flush=True)
-
-
-def _batch_countdown_until(deadline: float, category_name: str) -> None:
-    """Resume an already persisted cooldown without resetting its deadline."""
-    while True:
-        remaining = max(0, int(deadline - time.time() + 0.999))
-        if remaining <= 0:
-            break
-        hours, rem = divmod(remaining, 3600)
-        minutes, secs = divmod(rem, 60)
-        print("\r[冷却倒计时] %s：%02d:%02d:%02d" %
-              (category_name, hours, minutes, secs), end="", flush=True)
-        time.sleep(min(1, remaining))
-    print("\r[冷却完成] %s：开始下一类目                    " % category_name,
-          flush=True)
-
-
-def _load_json_array_or_empty(path: Path) -> list:
-    if not path.exists():
-        return []
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise SystemExit("批处理证据文件损坏，已停止（不会静默清空）: %s (%s)" %
-                         (path, exc))
-    if not isinstance(value, list):
-        raise SystemExit("批处理证据文件顶层必须是数组: %s" % path)
-    return value
+    return collection.cmd_collect(args, parser)
 
 
 def cmd_batch_collect(args, parser: argparse.ArgumentParser) -> None:
-    """Run the corrected source plan category-by-category with resumable cooldown."""
-    if args.offline:
-        parser.error("batch-collect 需要联网，不能与 --offline 同用")
-    plan_path = Path(args.plan)
-    if not plan_path.exists():
-        parser.error("找不到提取计划: %s" % args.plan)
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    sources = plan.get("sources", []) if isinstance(plan, dict) else []
-    if not isinstance(sources, list) or not sources:
-        parser.error("提取计划没有 sources")
-    out_dir = Path(args.out_dir).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    state_path = out_dir / "batch_state.json"
-    state = {}
-    if state_path.exists():
-        try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise SystemExit("批处理状态损坏，已停止（请人工检查后恢复）: %s (%s)" %
-                             (state_path, exc))
-        if not isinstance(state, dict):
-            raise SystemExit("批处理状态顶层必须是对象: %s" % state_path)
-    done_urls = set(str(u) for u in state.get("completed_source_urls", [])
-                    if str(u).strip())
-    done_categories = set(str(g) for g in state.get("completed_categories", [])
-                          if str(g).strip())
-    detail_asins = set(str(a).upper() for a in state.get("detail_asins", [])
-                       if str(a).strip())
-    pending_detail_asins = set(str(a).upper() for a in state.get("pending_detail_asins", [])
-                               if str(a).strip())
-    shortfall_sources = dict(state.get("shortfall_sources", {}) or {})
-    all_rankings = _load_json_array_or_empty(out_dir / "rankings.json")
-    all_details = _load_json_array_or_empty(out_dir / "details.json")
-    # Seed the batch with validated records from the preceding 4,500-SKU run.
-    for path_text in (getattr(args, "seed_rankings", ""),):
-        if path_text:
-            for row in _load_json_array_or_empty(Path(path_text)):
-                if not isinstance(row, dict):
-                    continue
-                try:
-                    rank = int(row.get("bestseller_rank") or 0)
-                except (TypeError, ValueError):
-                    rank = 0
-                if not 31 <= rank <= 50:
-                    continue
-                key = (row.get("ranking_source_url"), rank,
-                       str(row.get("asin") or "").upper())
-                if key not in {(r.get("ranking_source_url"), r.get("bestseller_rank"),
-                                str(r.get("asin") or "").upper())
-                               for r in all_rankings if isinstance(r, dict)}:
-                    all_rankings.append(row)
-    existing_products_path = getattr(args, "existing_products", "")
-    if existing_products_path:
-        for row in _load_json_array_or_empty(Path(existing_products_path)):
-            if isinstance(row, dict) and row.get("asin"):
-                detail_asins.add(str(row["asin"]).upper())
-    existing_details_path = getattr(args, "existing_details", "")
-    if existing_details_path:
-        for row in _load_json_array_or_empty(Path(existing_details_path)):
-            if isinstance(row, dict) and row.get("asin"):
-                all_details.append(row)
-    detail_map = {str(r.get("asin") or "").upper(): r for r in all_details
-                  if isinstance(r, dict) and r.get("asin")}
-    detail_asins.update(detail_map)
-    ranking_keys = {(r.get("ranking_source_url"), r.get("bestseller_rank"),
-                     str(r.get("asin") or "").upper())
-                    for r in all_rankings if isinstance(r, dict)}
-    cooldown = (int(args.cooldown_seconds) if args.cooldown_seconds is not None
-                else int(plan.get("cooldown_between_categories_seconds", 1800)))
-    if cooldown < 0:
-        parser.error("--cooldown-seconds 不能为负数")
-
-    # Plan status is evidence: completed/source_missing sources are not
-    # requested again, even when the process was first started with empty state.
-    for source in sources:
-        if isinstance(source, dict) and source.get("status") in {"completed", "source_missing"}:
-            url = str(source.get("source_url") or "").strip()
-            if url:
-                done_urls.add(url)
-
-    grouped = {}
-    for source in sources:
-        if not isinstance(source, dict):
-            continue
-        group = str(source.get("category_group") or "unknown")
-        grouped.setdefault(group, []).append(source)
-    ordered_groups = sorted(grouped, key=lambda g: (
-        min(int(s.get("category_sequence") or 999) for s in grouped[g]), g))
-    pending_groups = []
-    for group in ordered_groups:
-        pending = [s for s in grouped[group]
-                   if s.get("status") == "pending" and
-                   str(s.get("source_url") or "") not in done_urls]
-        if pending:
-            pending_groups.append((group, pending))
-    if not pending_groups and (args.rankings_only or not pending_detail_asins):
-        print("batch-collect：计划中的待提取来源和详情已全部完成")
-        return
-    from .access.browser import BrowserSession
-    from .access.location import ensure_spain_delivery
-    from .collection.detail import collect_details
-    from .collection.ranking import collect_rankings
-
-    def save_state(active_group=None):
-        state_path.write_text(json.dumps({
-            "plan": str(plan_path),
-            "completed_source_urls": sorted(done_urls),
-            "completed_categories": sorted(done_categories),
-            "detail_asins": sorted(detail_asins),
-            "pending_detail_asins": sorted(pending_detail_asins),
-            "shortfall_sources": shortfall_sources,
-            "cooldown_until": state.get("cooldown_until"),
-            "cooldown_category": state.get("cooldown_category"),
-            "active_category": active_group,
-            "completed_category_count": len(done_categories),
-        }, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    with BrowserSession(headless=not args.headful,
-                        profile_dir=args.profile_dir or None) as session:
-        session.challenge_wait_seconds = args.challenge_wait_seconds
-        session.manual_assist = args.manual_assist
-        location = ensure_spain_delivery(session, args.postal_code)
-        if location is not None:
-            _safe_print("配送地点已确认：%s" % (location.text or "西班牙"))
-
-        # A restart during the inter-category wait resumes the original
-        # deadline; it never silently skips the configured cooling interval.
-        persisted_until = state.get("cooldown_until")
-        if cooldown == 0:
-            # The final 4,500-SKU phase explicitly disabled inter-category
-            # cooling. Any deadline left by an older phase is stale state and
-            # must not block the next category (even if it is malformed).
-            if persisted_until is not None or state.get("cooldown_category") is not None:
-                print("[批处理] 当前配置已取消类目间冷却，已清除历史 cooldown 状态")
-                state["cooldown_until"] = None
-                state["cooldown_category"] = None
-                save_state(None)
-        elif persisted_until:
-            try:
-                deadline = float(persisted_until)
-            except (TypeError, ValueError):
-                raise SystemExit("批处理冷却状态无效: cooldown_until")
-            if deadline > time.time():
-                _batch_countdown_until(deadline, str(state.get("cooldown_category") or "上一类目"))
-            state["cooldown_until"] = None
-            state["cooldown_category"] = None
-            save_state(None)
-
-        # Retry detail failures before moving on to a new category.  A failed
-        # ASIN remains pending and therefore survives a process restart.
-        if pending_detail_asins and not args.rankings_only:
-            retry = sorted(pending_detail_asins - detail_asins)
-            if retry:
-                retry_details = collect_details(retry, session, str(out_dir / "detail_cache"),
-                                                write_summary=False)
-                success = {str(r.get("asin") or "").upper() for r in retry_details if r.get("asin")}
-                for record in retry_details:
-                    asin = str(record.get("asin") or "").upper()
-                    if asin:
-                        detail_map[asin] = record
-                        detail_asins.add(asin)
-                pending_detail_asins.difference_update(success)
-                all_details = list(detail_map.values())
-                (out_dir / "details.json").write_text(json.dumps(all_details, ensure_ascii=False, indent=2), encoding="utf-8")
-                save_state(None)
-
-        for group_index, (group, group_sources) in enumerate(pending_groups):
-            category_name = str(group_sources[0].get("category_name_zh") or group)
-            category_dir = out_dir / "categories" / group
-            category_dir.mkdir(parents=True, exist_ok=True)
-            save_state(group)
-            urls = [str(s["source_url"]) for s in group_sources]
-            print("\n[批处理] %s：%d 个来源页，目标排名31–50" %
-                  (category_name, len(urls)))
-            rankings = collect_rankings(urls, session, str(category_dir), pages_per_url=1)
-            target = [r for r in rankings
-                      if 31 <= int(r.get("bestseller_rank") or 0) <= 50]
-            for r in target:
-                r["batch_target_rank_range"] = "31-50"
-                r["batch_category_group"] = group
-                key = (r.get("ranking_source_url"), r.get("bestseller_rank"),
-                       str(r.get("asin") or "").upper())
-                if key not in ranking_keys:
-                    all_rankings.append(r)
-                    ranking_keys.add(key)
-            (category_dir / "rankings_31_50.json").write_text(
-                json.dumps(target, ensure_ascii=False, indent=2), encoding="utf-8")
-            # Validate each source independently.  A short page is retryable;
-            # it must not be hidden by marking the whole category complete.
-            complete_urls = set()
-            for url in urls:
-                count = sum(1 for r in target if str(r.get("ranking_source_url") or "") == url)
-                if count == 20:
-                    complete_urls.add(url)
-                else:
-                    shortfall_sources[url] = {"expected": 20, "observed": count,
-                                              "status": "shortfall"}
-            unique_targets = []
-            seen_category = set()
-            for r in target:
-                asin = str(r.get("asin") or "").upper()
-                if asin and asin not in seen_category:
-                    seen_category.add(asin)
-                    unique_targets.append(r)
-            manifest = {"category_group": group, "records": unique_targets,
-                        "unique_asins": len(unique_targets), "rank_range": [31, 50]}
-            (category_dir / "manifest_31_50.json").write_text(
-                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-
-            new_asins = [str(r["asin"]).upper() for r in unique_targets
-                         if str(r["asin"]).upper() not in detail_asins]
-            # Persist ranking evidence and the detail work queue before the
-            # first detail request. An access stop during detail collection
-            # therefore leaves a resumable checkpoint instead of losing the
-            # just-collected source results.
-            if not args.rankings_only:
-                pending_detail_asins.update(new_asins)
-            (out_dir / "rankings.json").write_text(
-                json.dumps(all_rankings, ensure_ascii=False, indent=2), encoding="utf-8")
-            save_state(group)
-            details = [] if args.rankings_only else (
-                collect_details(new_asins, session, str(out_dir / "detail_cache"),
-                                write_summary=False)
-                if new_asins else [])
-            for record in details:
-                asin = str(record.get("asin") or "").upper()
-                if asin:
-                    detail_map[asin] = record
-                    detail_asins.add(asin)
-            success_asins = {str(r.get("asin") or "").upper() for r in details if r.get("asin")}
-            pending_detail_asins.difference_update(success_asins)
-            all_details = list(detail_map.values())
-            (out_dir / "rankings.json").write_text(
-                json.dumps(all_rankings, ensure_ascii=False, indent=2), encoding="utf-8")
-            (out_dir / "details.json").write_text(
-                json.dumps(all_details, ensure_ascii=False, indent=2), encoding="utf-8")
-            done_urls.update(complete_urls)
-            if len(complete_urls) != len(urls):
-                print("[批处理] %s 来源短缺 %d/%d；未完成来源会在下次运行重试" %
-                      (category_name, len(urls) - len(complete_urls), len(urls)))
-            done_categories.add(group)
-            save_state(None)
-            print("[批处理] %s 完成：31–50 榜单 %d 条，新增详情 %d 条" %
-                  (category_name, len(target), len(details)))
-            if group_index < len(pending_groups) - 1 and cooldown > 0:
-                state["cooldown_until"] = time.time() + cooldown
-                state["cooldown_category"] = category_name
-                save_state(group)
-                _batch_countdown_until(float(state["cooldown_until"]), category_name)
-                state["cooldown_until"] = None
-                state["cooldown_category"] = None
-                save_state(None)
-    if not pending_groups and not pending_detail_asins:
-        print("batch-collect：计划中的待提取来源和详情已全部完成")
-    print("batch-collect 完成：榜单 %d 条，详情 %d 条；状态文件 %s" %
-          (len(all_rankings), len(all_details), state_path))
-
-
-# ---------- reviewed task collection ----------
-
-def cmd_discover_tree(args, parser: argparse.ArgumentParser) -> None:
-    """Discover a bounded current Amazon Bestseller navigation snapshot."""
-    if args.offline:
-        parser.error("discover-tree 需要联网，不能与 --offline 同用")
-    if not args.urls:
-        parser.error("discover-tree 需要至少一个 --urls")
-    from .access.browser import BrowserSession
-    from .access.location import ensure_spain_delivery
-    from .collection.discovery import discover_bestseller_tree
-
-    with BrowserSession(headless=not args.headful,
-                       profile_dir=args.profile_dir or None) as session:
-        session.challenge_wait_seconds = args.challenge_wait_seconds
-        session.manual_assist = args.manual_assist
-        ensure_spain_delivery(session, args.postal_code)
-        result = discover_bestseller_tree(args.urls, session, args.out_dir,
-                                          max_depth=args.max_depth,
-                                          max_pages=args.max_pages)
-    _safe_print("类目发现完成：页面 %d，榜单链接 %d → %s" %
-                (result["page_count"], result["link_count"], args.out_dir))
-
-
-def cmd_validate_category_graph(args, parser: argparse.ArgumentParser) -> None:
-    """Validate a persisted placement graph without network access."""
-    from .categories.crawler import CategoryCrawlerState
-    from .categories.models import PlacementStatus
-
-    state = CategoryCrawlerState(args.state)
-    errors = state.graph.validate()
-    completion_errors = [
-        f"{placement_id} status is {placement.status.value}"
-        for placement_id, placement in state.graph.placements.items()
-        if placement.status is not PlacementStatus.DONE
-    ]
-    report = {
-        "state": str(Path(args.state)),
-        "placement_count": len(state.graph.placements),
-        "tree_valid": not errors,
-        "crawl_complete": not completion_errors,
-        "tree_errors": errors,
-        "completion_errors": completion_errors,
-        "authoritative_graph": str(state.path.parent / "latest_authoritative_category_graph.json")
-        if not errors and not completion_errors else None,
-    }
-    if args.out:
-        target = Path(args.out)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    label = "VALID" if not errors and not completion_errors else ("INVALID" if errors else "INCOMPLETE")
-    _safe_print("category-graph-validate：%s，placement %d%s" %
-                (label, len(state.graph.placements),
-                 (" → " + str(args.out)) if args.out else ""))
-    if errors:
-        parser.error("类目 placement graph 校验失败：%s" % "; ".join(errors))
-    if completion_errors:
-        parser.error("类目 placement graph 尚未完成：%s" % "; ".join(completion_errors))
-
-
-def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
-    """Compatibility dispatch for the reviewed task-collection command."""
-    from .commands.task_collection import run_task_collection
-    report = run_task_collection(args, parser, project_root=Path(__file__).resolve().parents[2])
-    _safe_print("task-collect %s：%s；最终唯一 ASIN %d；报告 %s" %
-                (report["mode"], report["run_status"],
-                 report["final_unique_asins"],
-                 str(Path(args.out_dir) / "run_report.json")))
-
-
-# ---------- select-quota（离线） ----------
-
-def cmd_select_quota(args) -> None:
-    """根据已采集榜单和审核过的 URL 配置生成 150/50 manifest。"""
-    from .collection.quota import annotate_groups, normalize_group, select_quota, validate_category_config
-
-    rankings = _load_json(args.rankings)
-    config = _load_json(args.config)
-    try:
-        rows = validate_category_config(config)
-    except ValueError as exc:
-        raise SystemExit("%s: %s" % (args.config, exc))
-    quotas: dict[str, int] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        group = normalize_group(row.get("category_group") or row.get("group"))
-        if not group:
-            raise SystemExit("类目配置缺少 group: %r" % row)
-        try:
-            quota = int(row.get("quota"))
-        except (TypeError, ValueError):
-            raise SystemExit("类目配置 quota 必须是整数: %r" % row)
-        quotas[group] = quotas.get(group, 0) + quota
-    tagged = annotate_groups(rankings, rows)
-    try:
-        selected = select_quota(tagged, quotas)
-    except ValueError as exc:
-        raise SystemExit(str(exc))
-    records = [item for group in quotas for item in selected[group]]
-    summary = {group: len(selected[group]) for group in quotas}
-    summary["total"] = len(records)
-    _save_json({"summary": summary, "records": records}, args.out)
-    print("select-quota 完成：家居 %d、DIY %d、总计 %d → %s"
-          % (summary.get("hogar", 0), summary.get("diy", 0), len(records), args.out))
-
-
-def cmd_download_images(args) -> None:
-    """按 ASIN 下载缺失原图；串行、可恢复，不调用 DS。"""
-    from .collection.images import download_images
-    records = _load_json(args.products)
-    if not isinstance(records, list):
-        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
-    result = download_images(records, args.out_dir, delay_seconds=args.delay)
-    _save_json(result, args.report)
-    print("download-images 完成：下载 %d、缓存 %d、失败 %d → %s" %
-          (sum(v.get("status") == "downloaded" for v in result.values()),
-           sum(v.get("status") == "cached" for v in result.values()),
-          sum(v.get("status") == "failed" for v in result.values()), args.report))
-
-
-def cmd_reconcile_task(args) -> None:
-    from .qa.reconcile import reconcile_task
-    task = _load_json(args.task)
-    items = _load_json(args.items)
-    products = _load_json(args.products)
-    translations = _load_json(args.translations) if args.translations else []
-    report = reconcile_task(task, items, products, translations=translations)
-    _save_json(report, args.out)
-    print("reconcile-task：%s，目标 %d → %s" %
-          (report["status"], report["target_count"], args.out))
-
-
-# ---------- translate-ds（联网 API） ----------
-
-def cmd_translate_ds(args) -> None:
-    """按 ASIN 顺序调用 DS，输出 ASIN → 翻译结果映射。"""
-    if args.offline:
-        raise SystemExit("translate-ds 需要联网，不能与 --offline 同用")
-    products = _load_json(args.products)
-    if not isinstance(products, list):
-        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
-
-    endpoint = args.endpoint or os.getenv("DEEPSEEK_ENDPOINT") or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/chat/completions"
-    model = args.model or os.getenv("DEEPSEEK_MODEL") or os.getenv("DS_MODEL") or "deepseek-chat"
-    print("translate-ds 即将调用 DeepSeek API：%d 个 ASIN，endpoint=%s，model=%s"
-          % (len(products), endpoint, model))
-    try:
-        confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
-    except (EOFError, KeyboardInterrupt):
-        raise SystemExit("未确认，已取消 DS API 调用")
-    if confirmation.strip().upper() != "YES":
-        raise SystemExit("未确认，已取消 DS API 调用")
-
-    from .translation.ds import DeepSeekTranslator
-
-    translator = DeepSeekTranslator(
-        endpoint=args.endpoint or None,
-        model=args.model or None,
-        cache_path=args.cache or args.out,
-        max_retries=args.max_retries,
-        backoff_seconds=args.backoff_seconds,
-        timeout=args.timeout,
-    )
-    output: dict[str, dict] = {}
-    for product in products:
-        if args.repair_partial:
-            result = translator.translate_record(product, repair_partial=True)
-        else:
-            result = translator.translate_record(product)
-        asin = str(result.get("asin") or product.get("asin") or "").strip().upper()
-        if asin:
-            output[asin] = result
-        translator.save_cache()
-    _save_json(output, args.out)
-    success = sum(1 for r in output.values() if r.get("translation_status") == "success")
-    partial = sum(1 for r in output.values() if r.get("translation_status") == "partial")
-    failed = sum(1 for r in output.values() if r.get("translation_status") == "failed")
-    print("translate-ds 完成：成功 %d、部分 %d、失败 %d、总计 %d → %s"
-          % (success, partial, failed, len(output), args.out))
-
-
-# ---------- translate（Translation V2） ----------
-
-def cmd_translate(args) -> None:
-    """Field-level Translation V2; dry-run is always offline and side-effect free."""
-    products = _load_translation_products(args.products)
-    if not isinstance(products, list):
-        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
-    # Raw CSV/list input is admitted through the same deterministic Pre-Clean
-    # gate as the standalone command.  Already prepared records are reused so
-    # a rerun never mutates source evidence or repeats cleanup.
-    if not all(isinstance(row, dict) and isinstance(row.get("fields"), dict)
-               for row in products):
-        from .translation.preclean import audit_records
-        # Keep already prepared rows intact when a batch is resumed from a
-        # mixed source; only raw rows need the offline audit pass.
-        prepared = []
-        raw_indexes = []
-        raw_rows = []
-        for index, row in enumerate(products):
-            if isinstance(row, dict) and isinstance(row.get("fields"), dict):
-                prepared.append(row)
-            else:
-                prepared.append(None)
-                raw_indexes.append(index)
-                raw_rows.append(row)
-        cleaned = audit_records(raw_rows)["translation_input_records"]
-        for index, row in zip(raw_indexes, cleaned):
-            prepared[index] = row
-        products = prepared
-    from .translation.cache import TranslationCache
-    from .translation.providers.qwen_mt import QwenMTProvider
-    from .translation.service import TranslationService
-
-    config = {}
-    if args.config:
-        config = _load_json(args.config)
-        if not isinstance(config, dict):
-            raise SystemExit("translation config 顶层必须是对象: %s" % args.config)
-    provider_name = args.provider or config.get("provider", "qwen-mt")
-    if provider_name not in {"qwen-mt", "qwen_mt"}:
-        raise SystemExit("Translation V2 当前只允许 provider=qwen-mt；旧 DeepSeek 请继续使用 translate-ds")
-    model = args.model or config.get("model") or "qwen-mt-flash"
-    provider = QwenMTProvider(model=model,
-                              endpoint=config.get("endpoint"),
-                              protocol=config.get("protocol"),
-                              timeout=float(config.get("timeout", config.get("timeout_seconds", 60))),
-                              max_retries=int(config.get("max_retries", 2)),
-                              backoff_seconds=float(config.get("backoff_seconds", 5.0)),
-                              rate=float(args.rate if args.rate is not None
-                                         else config.get("rate", 0.5)))
-    cache = TranslationCache(args.cache)
-    fields = args.field or ([args.fields] if args.fields else None) or config.get("fields") or None
-    if fields:
-        fields = [item.strip() for value in fields for item in str(value).split(",") if item.strip()]
-    service = TranslationService(provider, cache,
-                                 source_language=config.get("source_language", "es"),
-                                 target_language=config.get("target_language", "zh-CN"))
-    parallel_requested = bool(getattr(args, "parallel_providers", False) or
-                              isinstance(config.get("providers"), list) and len(config["providers"]) > 1)
-    pool = None
-    if parallel_requested:
-        from .translation.pool import build_qwen_provider_pool
-        pool_config = dict(config)
-        pool_config.setdefault("max_workers", len(config.get("providers", [])) or 2)
-        pool = build_qwen_provider_pool(pool_config)
-    if args.dry_run:
-        if pool is not None:
-            result = service.translate_records_parallel(
-                products, pool, fields=fields, offset=args.offset, limit=args.limit,
-                repair_partial=args.repair_partial, repair_failed=args.repair_failed, dry_run=True)
-        else:
-            result = service.translate_records(products, fields=fields, offset=args.offset,
-                                               limit=args.limit, repair_partial=args.repair_partial,
-                                               repair_failed=args.repair_failed, dry_run=True)
-        plan = result["summary"]
-        if pool is not None:
-            plan["pool"] = result.get("pool", pool.snapshot())
-            aliases = [str(item.get("name") or item.get("alias"))
-                       for item in config.get("providers", [])]
-            if aliases:
-                total_requests = int(plan.get("estimated_api_requests", 0))
-                plan["estimated_provider_requests"] = {
-                    alias: total_requests // len(aliases) + (1 if index < total_requests % len(aliases) else 0)
-                    for index, alias in enumerate(aliases)}
-            print("Parallel workers = %d" % pool.max_workers)
-            for alias, spec in ((item.get("name") or item.get("alias"), item)
-                                for item in config.get("providers", [])):
-                print("  Provider %s: model=%s rate=%s" %
-                      (alias, spec.get("model", "qwen-mt-flash"), spec.get("rate", 0.5)))
-        _save_json(plan, args.out)
-        print("translate dry-run%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、review_blocked %d、rate=%.3g/s（未调用 API）→ %s" %
-              (" [parallel-providers]" if pool is not None else "",
-               plan["total_records"], plan["total_fields"], plan["cache_hits"],
-               plan["translation_memory_hits"], plan["estimated_api_requests"],
-               plan["source_missing"], plan["review_blocked"], provider.rate, args.out))
-        return
-    if args.offline:
-        raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
-    plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit,
-                        repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    print("translate V2 即将调用 %s%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、review_blocked %d、model=%s、rate=%.3g/s" %
-          (provider.name, " [parallel-providers]" if pool is not None else "",
-           plan["total_records"], plan["total_fields"], plan["cache_hits"],
-           plan["translation_memory_hits"], plan["estimated_api_requests"],
-           plan["source_missing"], plan["review_blocked"], model, provider.rate))
-    if pool is not None:
-        print("Parallel workers = %d" % pool.max_workers)
-        for alias, spec in ((item.get("name") or item.get("alias"), item)
-                            for item in config.get("providers", [])):
-            print("  Provider %s: model=%s rate=%s" % (alias, spec.get("model", "qwen-mt-flash"), spec.get("rate", 0.5)))
-    if not args.yes:
-        try:
-            confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
-        except (EOFError, KeyboardInterrupt):
-            raise SystemExit("未确认，已取消 Translation V2 API 调用")
-        if confirmation.strip().upper() != "YES":
-            raise SystemExit("未确认，已取消 Translation V2 API 调用")
-    if pool is not None:
-        result = service.translate_records_parallel(
-            products, pool, fields=fields, offset=args.offset, limit=args.limit,
-            repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    else:
-        result = service.translate_records(products, fields=fields, offset=args.offset,
-                                           limit=args.limit, repair_partial=args.repair_partial,
-                                           repair_failed=args.repair_failed)
-    _save_json(result["records"], args.out)
-    qa_out = args.qa_out or str(Path(args.out).with_name("translation_qa.json"))
-    _save_json(result["qa_report"], qa_out)
-    summary_out = getattr(args, "summary_out", "") or str(Path(args.out).with_name("translation_run.json"))
-    _save_json({"summary": result.get("summary", {}), "pool": result.get("pool"),
-                "qa_report": result.get("qa_report", {}), "provider": provider.name,
-                "model": model, "api_calls": result.get("pool", {}).get("providers", {})}, summary_out)
-    if args.audit_out:
-        audit = []
-        for record in result["records"].values():
-            for field, value in (record.get("fields") or {}).items():
-                audit.append({"asin": record.get("asin"), "field": field,
-                              "source_field": value.get("field", field),
-                              "target_field": value.get("target_field", field),
-                              "source_hash": value.get("source_hash"),
-                              "provider": value.get("provider"), "model": value.get("model"),
-                              "status": value.get("translation_status"),
-                              "translation_status": value.get("translation_status"),
-                              "qa_status": value.get("qa_status"),
-                              "last_error": value.get("last_error")})
-        Path(args.audit_out).parent.mkdir(parents=True, exist_ok=True)
-        with Path(args.audit_out).open("w", encoding="utf-8") as handle:
-            for row in audit:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print("translate V2 完成：%s → %s；QA → %s；运行摘要 → %s" % (result["summary"], args.out, qa_out, summary_out))
-
-
-# ---------- dictionary-only（全离线） ----------
-
-def cmd_dictionary_only(args) -> None:
-    """Profile source data and run the conservative dictionary-only pipeline.
-
-    This command intentionally does not construct Qwen/DeepSeek clients.  It
-    is safe to run against the full internal-research dataset and writes all
-    reports to an independent directory.
-    """
-    from .translation.dictionary_only import load_records, run_dictionary_only, write_reports
-    from .translation.dictionary_service import DictionaryService
-
-    products = load_records(args.products)
-    input_asins = [str(row.get("asin") or row.get("ASIN") or "").strip().upper() for row in products]
-    present_asins = [asin for asin in input_asins if asin]
-    print("Input file: %s" % args.products)
-    print("Row count: %d" % len(products))
-    print("Unique ASIN: %d" % len(set(present_asins)))
-    print("Mode: dictionary-only")
-    print("Qwen API: disabled")
-    service = DictionaryService()
-    result = run_dictionary_only(products, service=service, top_n=args.top_n)
-    paths = write_reports(result, args.out, service=service)
-    summary = result["summary"]
-    print("dictionary-only 完成：SKU %d、唯一 ASIN %d、总处理单元 %d、字典 %d、规则 %d、保护/保留 %d、未解决 %d、Qwen API 0 → %s" %
-          (summary["total_skus"], summary["unique_asins"], summary["total_units"],
-           summary["resolved_by_dictionary"], summary["resolved_by_rules"],
-           summary["source_preserved"] + summary["protected"],
-           summary["remaining_for_qwen"], args.out))
-    for name, path in paths.items():
-        print("  %s -> %s" % (name, path))
-
-
-def cmd_preclean(args) -> None:
-    """Fully offline Translation V2 input preparation and audit."""
-    from .translation.preclean import run_preclean, write_reports
-    result = run_preclean(args.products)
-    paths = write_reports(result, args.out_dir)
-    summary = result["summary"]
-    print("Input file: %s" % args.products)
-    print("Row count: %d" % summary["input_rows"])
-    print("Unique ASIN: %d" % summary["unique_asins"])
-    print("Mode: preclean (offline)")
-    print("Qwen API: disabled")
-    print("Pre-Clean 完成：状态=%s、CLEAN/NORMALIZED=%d、review_queue=%d、cross_field=%d、identity=%d → %s" % (
-        summary["final_state"],
-        sum(summary["status_counts"].get(key, 0) for key in ("CLEAN", "NORMALIZED")),
-        summary["review_queue_count"], summary["cross_field_issue_count"],
-        summary["identity_count"], args.out_dir))
-    for name, path in paths.items():
-        print("  %s -> %s" % (name, path))
-
-
-# ---------- enrich（离线） ----------
-
-def cmd_enrich(args) -> None:
-    """榜单+详情 → 规范化+中文派生商品表（products.json）。"""
-    from .pipeline import enrich_products, legacy_flat_to_detail, legacy_flat_to_ranking
-
-    if args.legacy:
-        data = _load_json(args.legacy)
-        rankings = [legacy_flat_to_ranking(r) for r in data]
-        details = [legacy_flat_to_detail(r) for r in data]
-        print("legacy 导入：%d 条真实记录（构造型 BSR 列已丢弃）" % len(data))
-    else:
-        rankings = _load_json(args.rankings)
-        details = _load_json(args.details)
-        print("榜单 %d 条、详情 %d 条" % (len(rankings), len(details)))
-
-    translations = _load_json(args.translations) if args.translations else None
-    products = enrich_products(rankings, details, translations)
-    _save_json(products, args.out)
-    print("enrich 完成：%d 条商品 → %s" % (len(products), args.out))
-
-
-def cmd_repair_cache(args) -> None:
-    """离线：用已保存详情 HTML 补齐 canonical 商品字段。"""
-    from .collection.repair import repair_cached_products
-
-    products = _load_json(args.products)
-    repaired, report = repair_cached_products(products, args.html_dir)
-    _save_json(repaired, args.out)
-    print("repair-cache 完成：匹配 %d 页、忽略 %d 页、修改 %d 个商品、%d 个字段 → %s"
-          % (report["matched_pages"], report["ignored_pages"],
-             report["changed_products"], report["changed_fields"], args.out))
-
-
-def cmd_reparse_details(args) -> None:
-    """离线：用保存 HTML 升级详情 schema，不发起 Amazon 请求。"""
-    from .collection.detail import reparse_saved_details
-    from .collection.planning import DetailState
-    state = DetailState(args.state)
-    records = reparse_saved_details(args.html_dir, state)
-    state.save()
-    _save_json(state.records(), args.out)
-    print("reparse-details 完成：重解析 %d 条、缓存总计 %d 条 → %s"
-          % (len(records), len(state), args.out))
-
-
-def cmd_audit_detail_cache(args) -> None:
-    """离线：审计保存详情 HTML，识别验证页并生成隔离清单。"""
-    from .collection.detail import audit_saved_detail_cache
-    from .collection.planning import DetailState
-    if args.move and not args.quarantine_dir:
-        raise SystemExit("--move 需要同时指定 --quarantine-dir：证据只移动，绝不删除")
-    state = DetailState(args.state) if args.state else None
-    report = audit_saved_detail_cache(args.html_dir, asins=args.asins or None,
-                                      quarantine_dir=args.quarantine_dir or None,
-                                      state=state, move=args.move)
-    if state:
-        state.save()
-    _save_json(report, args.out)
-    s = report["summary"]
-    print("detail-cache-audit：有效 %d、挑战 %d、无效/空 %d → %s" %
-          (s["VALID_PRODUCT_PAGE"], s["CHALLENGE"], s["INVALID_OR_EMPTY"], args.out))
-    if args.move:
-        print("已移出活动缓存 %d 个文件 → %s（原件保留在隔离目录，续采可恢复）"
-              % (s.get("removed_from_cache", 0), args.quarantine_dir))
-
-
-# ---------- qa（离线） ----------
-
-def cmd_qa(args) -> None:
-    """商品表 → QA 结果（qa.json）+ 控制台汇总。"""
-    from .qa.run import qa_summary, run_qa
-
-    products = _load_json(args.products)
-    results = []
-    p0p1 = []
-    for p in products:
-        res = run_qa(p)
-        rec = {"asin": p.get("asin"), "qa_status": res["qa_status"], "counts": res["counts"],
-               "issues": [{"code": i.code, "severity": i.severity, "field": i.field,
-                           "message": i.message} for i in res["qa_issues"]]}
-        results.append(rec)
-        for i in res["qa_issues"]:
-            if i.severity in ("P0", "P1"):
-                p0p1.append((p.get("asin"), i.code, i.message))
-    summary = qa_summary(products)
-    out = {"summary": summary, "records": results}
-    _save_json(out, args.out)
-    print("QA：%s" % summary)
-    print("QA 结果 → %s" % args.out)
-    if p0p1:
-        _safe_print("!! P0/P1 问题 %d 条：" % len(p0p1))
-        for asin, code, msg in p0p1[:20]:
-            _safe_print("   %s %s: %s" % (asin, code, msg))
-    else:
-        print("0 P0 / 0 P1 OK")   # 不用 ✓（U+2713）：GBK 控制台无法编码
-
-
-# ---------- field closure audit（离线） ----------
-
-def cmd_audit_fields(args) -> None:
-    """Audit Source → Raw → Canonical → Derived → Excel without mutation."""
-    from .qa.field_closure import audit_field_closure, write_report
-
-    products = _load_json(args.products)
-    details = _load_json(args.details) if args.details else []
-    rankings = _load_json(args.rankings) if args.rankings else []
-    translations = _load_json(args.translations) if args.translations else None
-    # Field closure may inspect large saved HTML pages and therefore take a few
-    # minutes.  Emit an immediate, flushed status line so a long-running audit
-    # is distinguishable from a hung process; the final summary remains the
-    # authoritative result.
-    print("开始字段闭环审查：%d SKU；HTML=%s" %
-          (len(products), "已启用" if args.html_dir else "未启用"), flush=True)
-    report = audit_field_closure(products, details=details, rankings=rankings,
-                                 html_dir=args.html_dir or None, run_dir=args.run_dir or None,
-                                 workbook_path=args.workbook or None, translations=translations)
-    write_report(report, args.out, args.md_out or None)
-    s = report["summary"]
-    print("Field Closure Audit：%d SKU、%d 字段；PASS %d / SOURCE_MISSING %d / PARSER_MISSED %d / MAPPING_MISSED %d / DERIVED_MISSING %d / EXPORT_MISMATCH %d / IMAGE_MISSING %d"
-          % (s["total_skus"], s["fields_checked"], s["pass"], s["SOURCE_MISSING"],
-             s["PARSER_MISSED"], s["MAPPING_MISSED"], s["DERIVED_MISSING"],
-             s.get("EXPORT_VALUE_MISMATCH", 0), s.get("IMAGE_MISSING", 0)))
-    print("审计 JSON → %s" % args.out)
-    print("审计 Markdown → %s" % (args.md_out or str(Path(args.out).with_suffix(".md"))))
-
-
-# ---------- stable research quality gate（离线审查） ----------
-
-def _load_quality_records(path: str, kind: str, *, required: bool = False) -> list:
-    """Load a JSON array or a named record wrapper for the Quality Gate."""
-    if not path:
-        if required:
-            raise SystemExit("quality-audit 需要 --%s" % kind)
-        return []
-    data = _load_json(path)
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for key in (kind, "records", "items"):
-            if isinstance(data.get(key), list):
-                return data[key]
-    raise SystemExit("输入文件不是 %s 记录数组：%s" % (kind, path))
-
-
-def _quality_audit_from_args(args, *, network_mode: str = "OFFLINE_QUALITY_AUDIT") -> dict:
-    from .quality.audit import run_quality_audit
-    from .quality.report import write_quality_report
-
-    rankings = _load_quality_records(args.rankings, "rankings", required=True)
-    details = _load_quality_records(getattr(args, "details", ""), "details")
-    products = _load_quality_records(getattr(args, "products", ""), "products")
-    source_manifest = (_load_json(args.source_manifest)
-                       if getattr(args, "source_manifest", "") else None)
-    if source_manifest is None and getattr(args, "run_dir", ""):
-        status_path = Path(args.run_dir) / "page_statuses.json"
-        if status_path.exists():
-            source_manifest = _load_json(str(status_path))
-    translations = (_load_json(args.translations)
-                    if getattr(args, "translations", "") else None)
-    report = run_quality_audit(
-        rankings,
-        details,
-        products=products or None,
-        ranking_html_dirs=getattr(args, "ranking_html", None) or None,
-        detail_html_dirs=getattr(args, "detail_html", None) or None,
-        run_dir=getattr(args, "run_dir", "") or None,
-        source_manifest=source_manifest,
-        translations=translations,
-        workbook_path=getattr(args, "workbook", "") or None,
-        asins=getattr(args, "asin", None) or None,
-        checks=getattr(args, "check", None) or None,
-        profile="stable-research",
-        network_mode=network_mode,
-        run_id=getattr(args, "run_id", "") or "",
-    )
-    saved = write_quality_report(report, args.out_dir)
-    report["report"] = saved
-    return report
-
-
-def _print_quality_result(report: Mapping) -> None:
-    summary = report.get("summary") or {}
-    saved = report.get("report") or {}
-    print("Quality Gate：%s；研究状态：%s；SKU %d；BLOCK %d / REVIEW %d / WARN %d" % (
-        report.get("final_quality_status", "BLOCKED"),
-        (report.get("gate") or {}).get("research_status", "BLOCKED"),
-        summary.get("total_skus", 0), summary.get("block", 0),
-        summary.get("review", 0), summary.get("warn", 0)))
-    print("网络请求：%d；报告 → %s" %
-          (summary.get("network_requests", 0), saved.get("path", "")))
-
-
-def cmd_quality_audit(args) -> None:
-    """Offline-only audit of saved V1 records and HTML evidence."""
-    report = _quality_audit_from_args(args)
-    _print_quality_result(report)
-    if ((report.get("gate") or {}).get("research_status") != "RESEARCH_READY"
-            and not args.allow_non_ready):
-        raise SystemExit(2)
-
-
-def _latest_run_dir(root: str) -> str:
-    runs = sorted(Path(root).glob("runs/*"), reverse=True)
-    return str(runs[0]) if runs else ""
+    return collection.cmd_batch_collect(args, parser, countdown=_batch_countdown,
+                                        countdown_until=_batch_countdown_until)
 
 
 def cmd_stable_research(args) -> None:
-    """Run unchanged V1 collection, then the offline stable-research gate."""
-    from .quality.profile import execution_plan_text
-
-    print(execution_plan_text())
-    collect_root = Path(args.collect_out_dir or (Path(args.out_dir) / "collection"))
-    quality_root = Path(args.quality_out_dir or (Path(args.out_dir) / "quality"))
-    if args.offline:
-        if not args.rankings:
-            raise SystemExit("stable-research --offline 需要 --rankings")
-        audit_args = argparse.Namespace(**vars(args))
-        audit_args.out_dir = str(quality_root)
-        report = _quality_audit_from_args(audit_args)
-    else:
-        if not args.urls:
-            raise SystemExit("stable-research 联网模式需要 --urls；离线模式请使用 --offline --rankings")
-        collect_args = argparse.Namespace(
-            offline=False, urls=args.urls, out_dir=str(collect_root),
-            headful=args.headful, profile_dir=args.profile_dir,
-            postal_code=args.postal_code,
-            challenge_wait_seconds=args.challenge_wait_seconds,
-            manual_assist=args.manual_assist, pages_per_url=args.pages_per_url,
-            rankings_only=False, rankings_file="", manifest="", progress="",
-        )
-        cmd_collect(collect_args, build_parser())
-        audit_args = argparse.Namespace(**vars(args))
-        audit_args.rankings = str(collect_root / "rankings.json")
-        audit_args.details = str(collect_root / "details.json")
-        audit_args.products = args.products or ""
-        audit_args.out_dir = str(quality_root)
-        audit_args.run_dir = args.run_dir or _latest_run_dir(str(collect_root))
-        audit_args.ranking_html = args.ranking_html or (
-            [str(Path(audit_args.run_dir) / "html")
-             if (Path(audit_args.run_dir) / "html").is_dir() else audit_args.run_dir]
-            if audit_args.run_dir else [])
-        audit_args.detail_html = args.detail_html or [str(collect_root / "html")]
-        report = _quality_audit_from_args(
-            audit_args, network_mode="V1_COLLECTION_THEN_OFFLINE_AUDIT")
-    _print_quality_result(report)
-    if ((report.get("gate") or {}).get("research_status") != "RESEARCH_READY"
-            and not args.allow_non_ready):
-        raise SystemExit(2)
+    return quality.cmd_stable_research(args, collect_command=cmd_collect,
+                                       parser_factory=build_parser)
 
 
-# ---------- export（离线） ----------
+def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
+    'Compatibility dispatch for the reviewed task-collection command.'
+    from .commands.task_collection import run_task_collection
+    report = run_task_collection(args, parser, project_root=Path(__file__).resolve().parents[2])
+    _safe_print('task-collect %s\uff1a%s\uff1b\u6700\u7ec8\u552f\u4e00 ASIN %d\uff1b\u62a5\u544a %s' %
+                (report['mode'], report['run_status'],
+                 report['final_unique_asins'],
+                 str(Path(args.out_dir) / 'run_report.json')))
 
-def cmd_export(args) -> None:
-    """商品表 → Excel 工作簿（B3x 重写为新 3 表/26 列契约）。
-
-    QA 硬门禁（QA_RULES §31）：导出前跑全量 QA，存在任何 P0/P1 即拒绝导出，
-    除非显式 --force（保留上游错误证据，不静默修复，§25）。
-    """
-    from .export.excel import export_workbook
-    from .qa.run import blocking_issues
-
-    products = _load_json(args.products)
-    blocked = blocking_issues(products)
-
-    translations = _load_json(args.translations) if args.translations else None
-    closure_findings = []
-    from .qa.field_closure import audit_field_closure
-    details = _load_evidence_json(getattr(args, "details", ""), DEFAULT_DETAILS)
-    rankings = _load_evidence_json(getattr(args, "rankings", ""), DEFAULT_RANKINGS)
-    closure_enabled = bool(args.translations or details or rankings or
-                            getattr(args, "html_dir", None) or getattr(args, "run_dir", ""))
-    closure = audit_field_closure(products, details=details, rankings=rankings,
-                                  html_dir=getattr(args, "html_dir", None) or None,
-                                  run_dir=getattr(args, "run_dir", "") or None,
-                                  translations=translations) if closure_enabled else {"records": []}
-    if not closure_enabled:
-        # 门禁降级必须可见：静默跳过会让导出看起来通过了实际未执行的审计。
-        print("警告：未找到 details/rankings/translations 证据，字段闭环门禁未运行；"
-              "本次仅执行 QA 门禁")
-    blocked_closure = [r for r in closure.get("records", [])
-                       if r.get("severity") == "P1" and r.get("classification") in
-                       {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING",
-                        "TRANSLATION_INCOMPLETE"}]
-    closure_findings = [(r.get("asin"), r.get("classification"), r.get("message"))
-                        for r in blocked_closure]
-    blocked = blocked + closure_findings
-    if blocked and not args.force:
-        lines = ["QA/字段闭环门禁未通过：%d 条 P0/P1 问题，拒绝导出（--force 强制）"
-                 % len(blocked)]
-        for asin, code, msg in blocked[:10]:
-            lines.append("   %s %s: %s" % (asin, code, msg))
-        raise SystemExit("\n".join(lines))
-    if blocked and args.force:
-        print("警告：--force 忽略 %d 条 QA/字段闭环 P0/P1 问题" % len(blocked))
-    images_by_asin = _load_images_by_asin(args.images_dir, products)
-    category_planning = _load_category_planning(args.category_planning)
-    prev_workbook = None
-    if args.prev_workbook:
-        import openpyxl
-        prev_workbook = openpyxl.load_workbook(args.prev_workbook)
-    wb = export_workbook(products, translations=translations,
-                         images_by_asin=images_by_asin,
-                         category_planning=category_planning,
-                         prev_workbook=prev_workbook, out_path=args.out,
-                         profile=getattr(args, "profile", "research"))
-    print("export 完成：%s（%s 条商品，%d 张表）" % (args.out, len(products), len(wb.sheetnames)))
-
-
-# ---------- parser ----------
 
 def cmd_translation_production(args) -> None:
-    """Thin argparse dispatch for the offline production translation command."""
+    'Thin argparse dispatch for the offline production translation command.'
     from .commands.translation import run_translation_production
     return run_translation_production(
         args, load_products=_load_translation_products, load_json=_load_json,
@@ -1488,14 +91,14 @@ def cmd_translation_production(args) -> None:
 
 
 def cmd_production_run(args) -> None:
-    """Thin dispatch for the evidence-driven Production V1 runner."""
+    'Thin dispatch for the evidence-driven Production V1 runner.'
     from .commands.run import run_production
     result = run_production(args)
     _safe_print(json.dumps(result, ensure_ascii=False, sort_keys=True))
 
 
 def cmd_production_translation_selection(args) -> None:
-    """Thin dispatch for the explicit, human-reviewable translation subset."""
+    'Thin dispatch for the explicit, human-reviewable translation subset.'
     from .commands.run import create_translation_selection
     result = create_translation_selection(args)
     _safe_print(json.dumps(result, ensure_ascii=False, sort_keys=True))
@@ -1503,406 +106,406 @@ def cmd_production_translation_selection(args) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="amazon-es",
-        description="Amazon.es bestseller research pipeline")
-    parser.add_argument("--offline", action="store_true",
-                        help="离线标记：collect/translate-ds/真实 translate 拒绝；Translation V2 dry-run 可用")
-    sub = parser.add_subparsers(dest="command", required=True)
+        prog='amazon-es',
+        description='Amazon.es bestseller research pipeline')
+    parser.add_argument('--offline', action='store_true',
+                        help='\u79bb\u7ebf\u6807\u8bb0\uff1acollect/translate-ds/\u771f\u5b9e translate \u62d2\u7edd\uff1bTranslation V2 dry-run \u53ef\u7528')
+    sub = parser.add_subparsers(dest='command', required=True)
 
-    c = sub.add_parser("collect", help="联网采集榜单+详情（串行）")
-    c.add_argument("--urls", nargs="+", default=[],
-                   help="榜单页 URL（/zgbs/<NODE>）")
-    c.add_argument("--out-dir", default=str(OUTPUTS), help="输出目录（默认 outputs/）")
-    c.add_argument("--headful", action="store_true", help="有头浏览器（默认 headless）")
-    c.add_argument("--profile-dir", default="",
-                   help="可选：复用本机 Chrome 用户配置目录（例如 Chrome User Data）")
-    c.add_argument("--postal-code", default="28001",
-                   help="配送地点检查使用的西班牙邮编（默认 28001，马德里）")
-    c.add_argument("--challenge-wait-seconds", type=float, default=180.0,
-                   help="遇到挑战页时等待自动恢复的秒数（默认 180；分段轮询）")
-    c.add_argument("--manual-assist", action="store_true",
-                   help="等待后仍是挑战页时，在 --headful 浏览器中暂停并等待人工接管")
-    c.add_argument("--pages-per-url", type=int, default=1,
-                   help="每个榜单 URL 依次访问的页数；默认 1，使用 ?pg=N 分页")
-    c.add_argument("--rankings-only", action="store_true", help="只采集榜单页，不访问详情页")
-    c.add_argument("--rankings-file", default="", help="复用已保存榜单 JSON，仅访问 manifest 中详情")
-    c.add_argument("--manifest", default="", help="详情采集 ASIN manifest JSON（与 --rankings-file 配合）")
-    c.add_argument("--progress", default="", help="可选：逐 ASIN 写入运行进度 JSON")
+    c = sub.add_parser('collect', help='\u8054\u7f51\u91c7\u96c6\u699c\u5355+\u8be6\u60c5\uff08\u4e32\u884c\uff09')
+    c.add_argument('--urls', nargs='+', default=[],
+                   help='\u699c\u5355\u9875 URL\uff08/zgbs/<NODE>\uff09')
+    c.add_argument('--out-dir', default=str(OUTPUTS), help='\u8f93\u51fa\u76ee\u5f55\uff08\u9ed8\u8ba4 outputs/\uff09')
+    c.add_argument('--headful', action='store_true', help='\u6709\u5934\u6d4f\u89c8\u5668\uff08\u9ed8\u8ba4 headless\uff09')
+    c.add_argument('--profile-dir', default='',
+                   help='\u53ef\u9009\uff1a\u590d\u7528\u672c\u673a Chrome \u7528\u6237\u914d\u7f6e\u76ee\u5f55\uff08\u4f8b\u5982 Chrome User Data\uff09')
+    c.add_argument('--postal-code', default='28001',
+                   help='\u914d\u9001\u5730\u70b9\u68c0\u67e5\u4f7f\u7528\u7684\u897f\u73ed\u7259\u90ae\u7f16\uff08\u9ed8\u8ba4 28001\uff0c\u9a6c\u5fb7\u91cc\uff09')
+    c.add_argument('--challenge-wait-seconds', type=float, default=180.0,
+                   help='\u9047\u5230\u6311\u6218\u9875\u65f6\u7b49\u5f85\u81ea\u52a8\u6062\u590d\u7684\u79d2\u6570\uff08\u9ed8\u8ba4 180\uff1b\u5206\u6bb5\u8f6e\u8be2\uff09')
+    c.add_argument('--manual-assist', action='store_true',
+                   help='\u7b49\u5f85\u540e\u4ecd\u662f\u6311\u6218\u9875\u65f6\uff0c\u5728 --headful \u6d4f\u89c8\u5668\u4e2d\u6682\u505c\u5e76\u7b49\u5f85\u4eba\u5de5\u63a5\u7ba1')
+    c.add_argument('--pages-per-url', type=int, default=1,
+                   help='\u6bcf\u4e2a\u699c\u5355 URL \u4f9d\u6b21\u8bbf\u95ee\u7684\u9875\u6570\uff1b\u9ed8\u8ba4 1\uff0c\u4f7f\u7528 ?pg=N \u5206\u9875')
+    c.add_argument('--rankings-only', action='store_true', help='\u53ea\u91c7\u96c6\u699c\u5355\u9875\uff0c\u4e0d\u8bbf\u95ee\u8be6\u60c5\u9875')
+    c.add_argument('--rankings-file', default='', help='\u590d\u7528\u5df2\u4fdd\u5b58\u699c\u5355 JSON\uff0c\u4ec5\u8bbf\u95ee manifest \u4e2d\u8be6\u60c5')
+    c.add_argument('--manifest', default='', help='\u8be6\u60c5\u91c7\u96c6 ASIN manifest JSON\uff08\u4e0e --rankings-file \u914d\u5408\uff09')
+    c.add_argument('--progress', default='', help='\u53ef\u9009\uff1a\u9010 ASIN \u5199\u5165\u8fd0\u884c\u8fdb\u5ea6 JSON')
     c.set_defaults(func=lambda a, p=c: cmd_collect(a, p))
 
-    rs = sub.add_parser("ranking-snapshot", help="冻结最新榜单快照；--rankings-file 可离线运行")
-    rs.add_argument("--urls", nargs="*", default=[], help="已审核 Amazon Bestseller 来源 URL")
-    rs.add_argument("--rankings-file", default="", help="离线冻结已有榜单 JSON")
-    rs.add_argument("--out-dir", default="runtime/ranking_snapshots")
-    rs.add_argument("--pages-per-url", type=int, default=1)
-    rs.add_argument("--parser-version", choices=("v1", "v2"), default="v1",
-                    help="榜单解析契约；v2 对每个保存页执行 ACP/完整性审计（默认 v1）")
-    rs.add_argument("--transport", choices=("playwright", "legacy"), default="playwright",
-                    help="采集传输边界；playwright 为正式适配器，legacy 保留旧调用路径")
-    rs.add_argument("--headful", action="store_true")
-    rs.add_argument("--profile-dir", default="")
-    rs.add_argument("--source-manifest", default="",
-                    help="离线正式快照的原始计划/page-level evidence manifest")
-    rs.add_argument("--allow-incomplete-debug", action="store_true",
-                    help="允许保存 INCOMPLETE 快照并以 0 退出，仅供人工调试")
+    rs = sub.add_parser('ranking-snapshot', help='\u51bb\u7ed3\u6700\u65b0\u699c\u5355\u5feb\u7167\uff1b--rankings-file \u53ef\u79bb\u7ebf\u8fd0\u884c')
+    rs.add_argument('--urls', nargs='*', default=[], help='\u5df2\u5ba1\u6838 Amazon Bestseller \u6765\u6e90 URL')
+    rs.add_argument('--rankings-file', default='', help='\u79bb\u7ebf\u51bb\u7ed3\u5df2\u6709\u699c\u5355 JSON')
+    rs.add_argument('--out-dir', default='runtime/ranking_snapshots')
+    rs.add_argument('--pages-per-url', type=int, default=1)
+    rs.add_argument('--parser-version', choices=('v1', 'v2'), default='v1',
+                    help='\u699c\u5355\u89e3\u6790\u5951\u7ea6\uff1bv2 \u5bf9\u6bcf\u4e2a\u4fdd\u5b58\u9875\u6267\u884c ACP/\u5b8c\u6574\u6027\u5ba1\u8ba1\uff08\u9ed8\u8ba4 v1\uff09')
+    rs.add_argument('--transport', choices=('playwright', 'legacy'), default='playwright',
+                    help='\u91c7\u96c6\u4f20\u8f93\u8fb9\u754c\uff1bplaywright \u4e3a\u6b63\u5f0f\u9002\u914d\u5668\uff0clegacy \u4fdd\u7559\u65e7\u8c03\u7528\u8def\u5f84')
+    rs.add_argument('--headful', action='store_true')
+    rs.add_argument('--profile-dir', default='')
+    rs.add_argument('--source-manifest', default='',
+                    help='\u79bb\u7ebf\u6b63\u5f0f\u5feb\u7167\u7684\u539f\u59cb\u8ba1\u5212/page-level evidence manifest')
+    rs.add_argument('--allow-incomplete-debug', action='store_true',
+                    help='\u5141\u8bb8\u4fdd\u5b58 INCOMPLETE \u5feb\u7167\u5e76\u4ee5 0 \u9000\u51fa\uff0c\u4ec5\u4f9b\u4eba\u5de5\u8c03\u8bd5')
     rs.set_defaults(func=lambda a, p=rs: cmd_ranking_snapshot(a, p))
 
-    rie = sub.add_parser("ranking-identity-extract", help="离线：从保存榜单证据提取 ASIN 与商品链接")
-    rie.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
-    rie.add_argument("--out-dir", required=True, help="identity.json/raw_candidates.json/audit.json 输出目录")
-    rie.add_argument("--expected-count", type=int, default=None)
+    rie = sub.add_parser('ranking-identity-extract', help='\u79bb\u7ebf\uff1a\u4ece\u4fdd\u5b58\u699c\u5355\u8bc1\u636e\u63d0\u53d6 ASIN \u4e0e\u5546\u54c1\u94fe\u63a5')
+    rie.add_argument('--evidence-dir', required=True, help='saved HTML/JSON evidence \u76ee\u5f55')
+    rie.add_argument('--out-dir', required=True, help='identity.json/raw_candidates.json/audit.json \u8f93\u51fa\u76ee\u5f55')
+    rie.add_argument('--expected-count', type=int, default=None)
     rie.set_defaults(func=lambda a, p=rie: cmd_ranking_identity_extract(a, p))
 
-    ris = sub.add_parser("ranking-identity-snapshot", help="离线：创建不可变 Ranking Identity Snapshot")
-    ris.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
-    ris.add_argument("--out-dir", required=True, help="snapshot 根目录")
-    ris.add_argument("--expected-count", type=int, default=None)
-    ris.add_argument("--snapshot-id", default="")
-    ris.add_argument("--allow-incomplete-debug", action="store_true")
+    ris = sub.add_parser('ranking-identity-snapshot', help='\u79bb\u7ebf\uff1a\u521b\u5efa\u4e0d\u53ef\u53d8 Ranking Identity Snapshot')
+    ris.add_argument('--evidence-dir', required=True, help='saved HTML/JSON evidence \u76ee\u5f55')
+    ris.add_argument('--out-dir', required=True, help='snapshot \u6839\u76ee\u5f55')
+    ris.add_argument('--expected-count', type=int, default=None)
+    ris.add_argument('--snapshot-id', default='')
+    ris.add_argument('--allow-incomplete-debug', action='store_true')
     ris.set_defaults(func=lambda a, p=ris: cmd_ranking_identity_snapshot(a, p))
 
-    ria = sub.add_parser("ranking-identity-audit", help="离线：审计保存证据中的身份完整性")
-    ria.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
-    ria.add_argument("--expected-count", type=int, default=None)
-    ria.add_argument("--out", default="")
+    ria = sub.add_parser('ranking-identity-audit', help='\u79bb\u7ebf\uff1a\u5ba1\u8ba1\u4fdd\u5b58\u8bc1\u636e\u4e2d\u7684\u8eab\u4efd\u5b8c\u6574\u6027')
+    ria.add_argument('--evidence-dir', required=True, help='saved HTML/JSON evidence \u76ee\u5f55')
+    ria.add_argument('--expected-count', type=int, default=None)
+    ria.add_argument('--out', default='')
     ria.set_defaults(func=lambda a, p=ria: cmd_ranking_identity_audit(a, p))
 
-    dp = sub.add_parser("detail-plan", help="离线：按榜单快照与详情缓存生成增量详情计划")
-    dp.add_argument("--snapshot", required=True, help="rankings.json 或快照 records JSON")
-    dp.add_argument("--details", default="", help="已有详情缓存 JSON")
-    dp.add_argument("--state", default="", help="详情状态 JSON")
-    dp.add_argument("--checkpoints", default="", help="详情 checkpoint 目录，兼容 JSON 文件或记录列表")
-    dp.add_argument("--html-dir", default="", help="保存的详情 HTML 目录，用于 schema 离线重解析决策")
-    dp.add_argument("--current-access-state", default="UNKNOWN",
-                    help="当前 Access Gate 状态；恢复为 NORMAL 时允许历史受限记录重试")
-    dp.add_argument("--target-parser-version", choices=("v1", "v2"), default="",
-                    help="可选：要求详情缓存达到指定 parser contract；v2 缺失时必须重解析或重新抓取")
-    dp.add_argument("--out-dir", required=True, help="detail_plan.json/csv/summary 输出目录")
+    dp = sub.add_parser('detail-plan', help='\u79bb\u7ebf\uff1a\u6309\u699c\u5355\u5feb\u7167\u4e0e\u8be6\u60c5\u7f13\u5b58\u751f\u6210\u589e\u91cf\u8be6\u60c5\u8ba1\u5212')
+    dp.add_argument('--snapshot', required=True, help='rankings.json \u6216\u5feb\u7167 records JSON')
+    dp.add_argument('--details', default='', help='\u5df2\u6709\u8be6\u60c5\u7f13\u5b58 JSON')
+    dp.add_argument('--state', default='', help='\u8be6\u60c5\u72b6\u6001 JSON')
+    dp.add_argument('--checkpoints', default='', help='\u8be6\u60c5 checkpoint \u76ee\u5f55\uff0c\u517c\u5bb9 JSON \u6587\u4ef6\u6216\u8bb0\u5f55\u5217\u8868')
+    dp.add_argument('--html-dir', default='', help='\u4fdd\u5b58\u7684\u8be6\u60c5 HTML \u76ee\u5f55\uff0c\u7528\u4e8e schema \u79bb\u7ebf\u91cd\u89e3\u6790\u51b3\u7b56')
+    dp.add_argument('--current-access-state', default='UNKNOWN',
+                    help='\u5f53\u524d Access Gate \u72b6\u6001\uff1b\u6062\u590d\u4e3a NORMAL \u65f6\u5141\u8bb8\u5386\u53f2\u53d7\u9650\u8bb0\u5f55\u91cd\u8bd5')
+    dp.add_argument('--target-parser-version', choices=('v1', 'v2'), default='',
+                    help='\u53ef\u9009\uff1a\u8981\u6c42\u8be6\u60c5\u7f13\u5b58\u8fbe\u5230\u6307\u5b9a parser contract\uff1bv2 \u7f3a\u5931\u65f6\u5fc5\u987b\u91cd\u89e3\u6790\u6216\u91cd\u65b0\u6293\u53d6')
+    dp.add_argument('--out-dir', required=True, help='detail_plan.json/csv/summary \u8f93\u51fa\u76ee\u5f55')
     dp.set_defaults(func=lambda a, p=dp: cmd_detail_plan(a, p))
 
-    dr = sub.add_parser("detail-run", help="按已保存的 detail plan 执行明确网络动作")
-    dr.add_argument("--plan", required=True, help="detail_plan.json 或包含 records 的 JSON")
-    dr.add_argument("--out-dir", required=True)
-    dr.add_argument("--headful", action="store_true")
-    dr.add_argument("--profile-dir", default="")
-    dr.add_argument("--html-dir", default="", help="REPARSE_SAVED_HTML 使用的详情 HTML 目录")
-    dr.add_argument("--offline", action="store_true",
-                    help="禁止网络动作；REPARSE/VERIFY/BLOCK/REUSE 仍可离线执行")
-    dr.add_argument("--parser-version", choices=("v1", "v2"), default="v1",
-                    help="详情解析契约；v2 保留变体/身份/重复属性证据（默认 v1）")
+    dr = sub.add_parser('detail-run', help='\u6309\u5df2\u4fdd\u5b58\u7684 detail plan \u6267\u884c\u660e\u786e\u7f51\u7edc\u52a8\u4f5c')
+    dr.add_argument('--plan', required=True, help='detail_plan.json \u6216\u5305\u542b records \u7684 JSON')
+    dr.add_argument('--out-dir', required=True)
+    dr.add_argument('--headful', action='store_true')
+    dr.add_argument('--profile-dir', default='')
+    dr.add_argument('--html-dir', default='', help='REPARSE_SAVED_HTML \u4f7f\u7528\u7684\u8be6\u60c5 HTML \u76ee\u5f55')
+    dr.add_argument('--offline', action='store_true',
+                    help='\u7981\u6b62\u7f51\u7edc\u52a8\u4f5c\uff1bREPARSE/VERIFY/BLOCK/REUSE \u4ecd\u53ef\u79bb\u7ebf\u6267\u884c')
+    dr.add_argument('--parser-version', choices=('v1', 'v2'), default='v1',
+                    help='\u8be6\u60c5\u89e3\u6790\u5951\u7ea6\uff1bv2 \u4fdd\u7559\u53d8\u4f53/\u8eab\u4efd/\u91cd\u590d\u5c5e\u6027\u8bc1\u636e\uff08\u9ed8\u8ba4 v1\uff09')
     dr.set_defaults(func=lambda a, p=dr: cmd_detail_run(a, p))
 
-    bc = sub.add_parser("batch-collect", help="联网：按计划分批采集，类目间保持倒计时冷却并自动续跑")
-    bc.add_argument("--plan", required=True, help="来源页提取计划 JSON")
-    bc.add_argument("--out-dir", required=True, help="批处理输出目录")
-    bc.add_argument("--headful", action="store_true", help="有头浏览器")
-    bc.add_argument("--profile-dir", default="", help="可选：复用本机浏览器配置目录")
-    bc.add_argument("--postal-code", default="28001", help="配送地点检查使用的西班牙邮编")
-    bc.add_argument("--challenge-wait-seconds", type=float, default=180.0,
-                    help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
-    bc.add_argument("--manual-assist", action="store_true",
-                    help="兼容参数；挑战页停止后需人工处理并重新启动")
-    bc.add_argument("--cooldown-seconds", type=int, default=None,
-                    help="类目间冷却秒数；省略时读取计划，默认1800")
-    bc.add_argument("--existing-products", default="",
-                    help="已有规范化商品 JSON；其中 ASIN 不再重复请求详情")
-    bc.add_argument("--existing-details", default="",
-                    help="已有详情 JSON；合并写入批处理 details.json")
-    bc.add_argument("--seed-rankings", default="",
-                    help="已有31–50榜单 JSON；作为已完成来源的证据种子")
-    bc.add_argument("--rankings-only", action="store_true", help="只提取榜单，不访问详情页")
+    bc = sub.add_parser('batch-collect', help='\u8054\u7f51\uff1a\u6309\u8ba1\u5212\u5206\u6279\u91c7\u96c6\uff0c\u7c7b\u76ee\u95f4\u4fdd\u6301\u5012\u8ba1\u65f6\u51b7\u5374\u5e76\u81ea\u52a8\u7eed\u8dd1')
+    bc.add_argument('--plan', required=True, help='\u6765\u6e90\u9875\u63d0\u53d6\u8ba1\u5212 JSON')
+    bc.add_argument('--out-dir', required=True, help='\u6279\u5904\u7406\u8f93\u51fa\u76ee\u5f55')
+    bc.add_argument('--headful', action='store_true', help='\u6709\u5934\u6d4f\u89c8\u5668')
+    bc.add_argument('--profile-dir', default='', help='\u53ef\u9009\uff1a\u590d\u7528\u672c\u673a\u6d4f\u89c8\u5668\u914d\u7f6e\u76ee\u5f55')
+    bc.add_argument('--postal-code', default='28001', help='\u914d\u9001\u5730\u70b9\u68c0\u67e5\u4f7f\u7528\u7684\u897f\u73ed\u7259\u90ae\u7f16')
+    bc.add_argument('--challenge-wait-seconds', type=float, default=180.0,
+                    help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u73b0\u5728\u7acb\u5373\u505c\u6b62\uff0c\u4e0d\u4f1a\u81ea\u52a8\u7b49\u5f85\u6062\u590d')
+    bc.add_argument('--manual-assist', action='store_true',
+                    help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u505c\u6b62\u540e\u9700\u4eba\u5de5\u5904\u7406\u5e76\u91cd\u65b0\u542f\u52a8')
+    bc.add_argument('--cooldown-seconds', type=int, default=None,
+                    help='\u7c7b\u76ee\u95f4\u51b7\u5374\u79d2\u6570\uff1b\u7701\u7565\u65f6\u8bfb\u53d6\u8ba1\u5212\uff0c\u9ed8\u8ba41800')
+    bc.add_argument('--existing-products', default='',
+                    help='\u5df2\u6709\u89c4\u8303\u5316\u5546\u54c1 JSON\uff1b\u5176\u4e2d ASIN \u4e0d\u518d\u91cd\u590d\u8bf7\u6c42\u8be6\u60c5')
+    bc.add_argument('--existing-details', default='',
+                    help='\u5df2\u6709\u8be6\u60c5 JSON\uff1b\u5408\u5e76\u5199\u5165\u6279\u5904\u7406 details.json')
+    bc.add_argument('--seed-rankings', default='',
+                    help='\u5df2\u670931\u201350\u699c\u5355 JSON\uff1b\u4f5c\u4e3a\u5df2\u5b8c\u6210\u6765\u6e90\u7684\u8bc1\u636e\u79cd\u5b50')
+    bc.add_argument('--rankings-only', action='store_true', help='\u53ea\u63d0\u53d6\u699c\u5355\uff0c\u4e0d\u8bbf\u95ee\u8be6\u60c5\u9875')
     bc.set_defaults(func=lambda a, p=bc: cmd_batch_collect(a, p))
 
-    dt = sub.add_parser("discover-tree", help="联网：发现当前 Amazon.es Bestseller 类目树并保存快照")
-    dt.add_argument("--urls", nargs="+", required=True,
-                    help="要发现的 Amazon.es Bestseller 根类目 URL")
-    dt.add_argument("--out-dir", required=True, help="类目发现输出目录")
-    dt.add_argument("--max-depth", type=int, default=1,
-                    help="向下发现层级；默认1，只读取根页和直接子榜单")
-    dt.add_argument("--max-pages", type=int, default=200,
-                    help="最多访问页面数，默认200")
-    dt.add_argument("--headful", action="store_true", help="有头浏览器")
-    dt.add_argument("--profile-dir", default="", help="可选：复用本机浏览器配置目录")
-    dt.add_argument("--postal-code", default="28001", help="西班牙配送邮编")
-    dt.add_argument("--challenge-wait-seconds", type=float, default=180.0,
-                    help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
-    dt.add_argument("--manual-assist", action="store_true",
-                    help="兼容参数；挑战页停止后需人工处理并重新启动")
+    dt = sub.add_parser('discover-tree', help='\u8054\u7f51\uff1a\u53d1\u73b0\u5f53\u524d Amazon.es Bestseller \u7c7b\u76ee\u6811\u5e76\u4fdd\u5b58\u5feb\u7167')
+    dt.add_argument('--urls', nargs='+', required=True,
+                    help='\u8981\u53d1\u73b0\u7684 Amazon.es Bestseller \u6839\u7c7b\u76ee URL')
+    dt.add_argument('--out-dir', required=True, help='\u7c7b\u76ee\u53d1\u73b0\u8f93\u51fa\u76ee\u5f55')
+    dt.add_argument('--max-depth', type=int, default=1,
+                    help='\u5411\u4e0b\u53d1\u73b0\u5c42\u7ea7\uff1b\u9ed8\u8ba41\uff0c\u53ea\u8bfb\u53d6\u6839\u9875\u548c\u76f4\u63a5\u5b50\u699c\u5355')
+    dt.add_argument('--max-pages', type=int, default=200,
+                    help='\u6700\u591a\u8bbf\u95ee\u9875\u9762\u6570\uff0c\u9ed8\u8ba4200')
+    dt.add_argument('--headful', action='store_true', help='\u6709\u5934\u6d4f\u89c8\u5668')
+    dt.add_argument('--profile-dir', default='', help='\u53ef\u9009\uff1a\u590d\u7528\u672c\u673a\u6d4f\u89c8\u5668\u914d\u7f6e\u76ee\u5f55')
+    dt.add_argument('--postal-code', default='28001', help='\u897f\u73ed\u7259\u914d\u9001\u90ae\u7f16')
+    dt.add_argument('--challenge-wait-seconds', type=float, default=180.0,
+                    help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u73b0\u5728\u7acb\u5373\u505c\u6b62\uff0c\u4e0d\u4f1a\u81ea\u52a8\u7b49\u5f85\u6062\u590d')
+    dt.add_argument('--manual-assist', action='store_true',
+                    help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u505c\u6b62\u540e\u9700\u4eba\u5de5\u5904\u7406\u5e76\u91cd\u65b0\u542f\u52a8')
     dt.set_defaults(func=lambda a, p=dt: cmd_discover_tree(a, p))
 
-    cgv = sub.add_parser("category-graph-validate",
-                         help="离线：校验可恢复的类目 placement graph，不访问 Amazon")
-    cgv.add_argument("--state", required=True, help="CategoryCrawlerState JSON")
-    cgv.add_argument("--out", default="", help="可选：校验报告 JSON")
+    cgv = sub.add_parser('category-graph-validate',
+                         help='\u79bb\u7ebf\uff1a\u6821\u9a8c\u53ef\u6062\u590d\u7684\u7c7b\u76ee placement graph\uff0c\u4e0d\u8bbf\u95ee Amazon')
+    cgv.add_argument('--state', required=True, help='CategoryCrawlerState JSON')
+    cgv.add_argument('--out', default='', help='\u53ef\u9009\uff1a\u6821\u9a8c\u62a5\u544a JSON')
     cgv.set_defaults(func=lambda a, p=cgv: cmd_validate_category_graph(a, p))
 
-    tc = sub.add_parser("task-collect", help="联网：运行审核后的5000 SKU任务")
-    tc.add_argument("--plan", required=True, help="本轮审核任务计划 JSON")
-    tc.add_argument("--out-dir", required=True, help="本轮独立输出目录")
-    tc.add_argument("--mode", choices=("parallel3", "serial"), default=None,
-                    help="parallel3=三类目并行主模块；serial=单类目备用模块")
-    tc.add_argument("--headful", action="store_true", help="有头浏览器")
-    tc.add_argument("--profile-dir", default="",
-                    help="仅串行模式使用的浏览器配置目录；parallel3不接受共享Profile")
-    tc.add_argument("--postal-code", default="28001", help="西班牙配送邮编")
-    tc.add_argument("--challenge-wait-seconds", type=float, default=None,
-                    help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
-    tc.add_argument("--manual-assist", action="store_true",
-                    help="兼容参数；挑战页停止后需人工处理并重新启动")
+    tc = sub.add_parser('task-collect', help='\u8054\u7f51\uff1a\u8fd0\u884c\u5ba1\u6838\u540e\u76845000 SKU\u4efb\u52a1')
+    tc.add_argument('--plan', required=True, help='\u672c\u8f6e\u5ba1\u6838\u4efb\u52a1\u8ba1\u5212 JSON')
+    tc.add_argument('--out-dir', required=True, help='\u672c\u8f6e\u72ec\u7acb\u8f93\u51fa\u76ee\u5f55')
+    tc.add_argument('--mode', choices=('parallel3', 'serial'), default=None,
+                    help='parallel3=\u4e09\u7c7b\u76ee\u5e76\u884c\u4e3b\u6a21\u5757\uff1bserial=\u5355\u7c7b\u76ee\u5907\u7528\u6a21\u5757')
+    tc.add_argument('--headful', action='store_true', help='\u6709\u5934\u6d4f\u89c8\u5668')
+    tc.add_argument('--profile-dir', default='',
+                    help='\u4ec5\u4e32\u884c\u6a21\u5f0f\u4f7f\u7528\u7684\u6d4f\u89c8\u5668\u914d\u7f6e\u76ee\u5f55\uff1bparallel3\u4e0d\u63a5\u53d7\u5171\u4eabProfile')
+    tc.add_argument('--postal-code', default='28001', help='\u897f\u73ed\u7259\u914d\u9001\u90ae\u7f16')
+    tc.add_argument('--challenge-wait-seconds', type=float, default=None,
+                    help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u73b0\u5728\u7acb\u5373\u505c\u6b62\uff0c\u4e0d\u4f1a\u81ea\u52a8\u7b49\u5f85\u6062\u590d')
+    tc.add_argument('--manual-assist', action='store_true',
+                    help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u505c\u6b62\u540e\u9700\u4eba\u5de5\u5904\u7406\u5e76\u91cd\u65b0\u542f\u52a8')
     tc.set_defaults(func=lambda a, p=tc: cmd_task_collect(a, p))
 
-    s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")
-    s.add_argument("--rankings", required=True, help="榜单记录 JSON")
-    s.add_argument("--config", required=True, help="类目配置 JSON")
-    s.add_argument("--out", required=True, help="配额 manifest JSON")
+    s = sub.add_parser('select-quota', help='\u79bb\u7ebf\uff1a\u6309\u5ba1\u6838\u7c7b\u76ee\u914d\u7f6e\u9009\u62e9 150/50 \u552f\u4e00 ASIN')
+    s.add_argument('--rankings', required=True, help='\u699c\u5355\u8bb0\u5f55 JSON')
+    s.add_argument('--config', required=True, help='\u7c7b\u76ee\u914d\u7f6e JSON')
+    s.add_argument('--out', required=True, help='\u914d\u989d manifest JSON')
     s.set_defaults(func=cmd_select_quota)
 
-    im = sub.add_parser("download-images", help="联网：按 ASIN 串行下载缺失原图")
-    im.add_argument("--products", required=True, help="商品 JSON 数组")
-    im.add_argument("--out-dir", required=True, help="图片缓存目录")
-    im.add_argument("--report", required=True, help="下载结果 JSON")
-    im.add_argument("--delay", type=float, default=1.0, help="图片请求间隔秒数")
+    im = sub.add_parser('download-images', help='\u8054\u7f51\uff1a\u6309 ASIN \u4e32\u884c\u4e0b\u8f7d\u7f3a\u5931\u539f\u56fe')
+    im.add_argument('--products', required=True, help='\u5546\u54c1 JSON \u6570\u7ec4')
+    im.add_argument('--out-dir', required=True, help='\u56fe\u7247\u7f13\u5b58\u76ee\u5f55')
+    im.add_argument('--report', required=True, help='\u4e0b\u8f7d\u7ed3\u679c JSON')
+    im.add_argument('--delay', type=float, default=1.0, help='\u56fe\u7247\u8bf7\u6c42\u95f4\u9694\u79d2\u6570')
     im.set_defaults(func=cmd_download_images)
 
-    rc = sub.add_parser("reconcile-task", help="离线：对账任务目标与各阶段 ASIN 集合")
-    rc.add_argument("--task", required=True)
-    rc.add_argument("--items", required=True)
-    rc.add_argument("--products", required=True)
-    rc.add_argument("--translations", default="")
-    rc.add_argument("--out", required=True)
+    rc = sub.add_parser('reconcile-task', help='\u79bb\u7ebf\uff1a\u5bf9\u8d26\u4efb\u52a1\u76ee\u6807\u4e0e\u5404\u9636\u6bb5 ASIN \u96c6\u5408')
+    rc.add_argument('--task', required=True)
+    rc.add_argument('--items', required=True)
+    rc.add_argument('--products', required=True)
+    rc.add_argument('--translations', default='')
+    rc.add_argument('--out', required=True)
     rc.set_defaults(func=cmd_reconcile_task)
 
-    e = sub.add_parser("enrich", help="离线：榜单+详情 → 规范化+中文派生商品表")
-    e.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"),
-                   help="榜单记录 JSON")
-    e.add_argument("--details", default=str(OUTPUTS / "details.json"),
-                   help="详情记录 JSON")
-    e.add_argument("--legacy", default="",
-                   help="遗留扁平数据（product_details.json），导入时丢弃构造型 BSR")
-    e.add_argument("--translations", default="", help="翻译表 JSON（ASIN → {title_zh}）")
-    e.add_argument("--out", default=str(OUTPUTS / "products.json"), help="输出商品表 JSON")
+    e = sub.add_parser('enrich', help='\u79bb\u7ebf\uff1a\u699c\u5355+\u8be6\u60c5 \u2192 \u89c4\u8303\u5316+\u4e2d\u6587\u6d3e\u751f\u5546\u54c1\u8868')
+    e.add_argument('--rankings', default=str(OUTPUTS / 'rankings.json'),
+                   help='\u699c\u5355\u8bb0\u5f55 JSON')
+    e.add_argument('--details', default=str(OUTPUTS / 'details.json'),
+                   help='\u8be6\u60c5\u8bb0\u5f55 JSON')
+    e.add_argument('--legacy', default='',
+                   help='\u9057\u7559\u6241\u5e73\u6570\u636e\uff08product_details.json\uff09\uff0c\u5bfc\u5165\u65f6\u4e22\u5f03\u6784\u9020\u578b BSR')
+    e.add_argument('--translations', default='', help='\u7ffb\u8bd1\u8868 JSON\uff08ASIN \u2192 {title_zh}\uff09')
+    e.add_argument('--out', default=str(OUTPUTS / 'products.json'), help='\u8f93\u51fa\u5546\u54c1\u8868 JSON')
     e.set_defaults(func=cmd_enrich)
 
-    r = sub.add_parser("repair-cache", help="离线：用保存 HTML 修复已有商品的 canonical/display 字段")
-    r.add_argument("--products", required=True, help="规范化商品 JSON 数组")
-    r.add_argument("--html-dir", required=True, help="保存的详情 HTML 目录")
-    r.add_argument("--out", required=True, help="修复后的商品 JSON")
+    r = sub.add_parser('repair-cache', help='\u79bb\u7ebf\uff1a\u7528\u4fdd\u5b58 HTML \u4fee\u590d\u5df2\u6709\u5546\u54c1\u7684 canonical/display \u5b57\u6bb5')
+    r.add_argument('--products', required=True, help='\u89c4\u8303\u5316\u5546\u54c1 JSON \u6570\u7ec4')
+    r.add_argument('--html-dir', required=True, help='\u4fdd\u5b58\u7684\u8be6\u60c5 HTML \u76ee\u5f55')
+    r.add_argument('--out', required=True, help='\u4fee\u590d\u540e\u7684\u5546\u54c1 JSON')
     r.set_defaults(func=cmd_repair_cache)
 
-    rp = sub.add_parser("reparse-details", help="离线：按当前详情 schema 重建 raw details（重复 ASIN 取首个有效目录）")
-    rp.add_argument("--html-dir", nargs="+", required=True)
-    rp.add_argument("--state", required=True, help="DetailState JSON")
-    rp.add_argument("--out", required=True, help="重建后的 details JSON")
+    rp = sub.add_parser('reparse-details', help='\u79bb\u7ebf\uff1a\u6309\u5f53\u524d\u8be6\u60c5 schema \u91cd\u5efa raw details\uff08\u91cd\u590d ASIN \u53d6\u9996\u4e2a\u6709\u6548\u76ee\u5f55\uff09')
+    rp.add_argument('--html-dir', nargs='+', required=True)
+    rp.add_argument('--state', required=True, help='DetailState JSON')
+    rp.add_argument('--out', required=True, help='\u91cd\u5efa\u540e\u7684 details JSON')
     rp.set_defaults(func=cmd_reparse_details)
 
-    ca = sub.add_parser("audit-detail-cache", help="离线：审计详情 HTML 缓存，不访问 Amazon")
-    ca.add_argument("--html-dir", nargs="+", required=True)
-    ca.add_argument("--asins", nargs="*", default=[])
-    ca.add_argument("--quarantine-dir", default="")
-    ca.add_argument("--move", action="store_true",
-                    help="把挑战/无效页移出活动缓存（移动不删除，续采才能恢复）")
-    ca.add_argument("--state", default="")
-    ca.add_argument("--out", required=True)
+    ca = sub.add_parser('audit-detail-cache', help='\u79bb\u7ebf\uff1a\u5ba1\u8ba1\u8be6\u60c5 HTML \u7f13\u5b58\uff0c\u4e0d\u8bbf\u95ee Amazon')
+    ca.add_argument('--html-dir', nargs='+', required=True)
+    ca.add_argument('--asins', nargs='*', default=[])
+    ca.add_argument('--quarantine-dir', default='')
+    ca.add_argument('--move', action='store_true',
+                    help='\u628a\u6311\u6218/\u65e0\u6548\u9875\u79fb\u51fa\u6d3b\u52a8\u7f13\u5b58\uff08\u79fb\u52a8\u4e0d\u5220\u9664\uff0c\u7eed\u91c7\u624d\u80fd\u6062\u590d\uff09')
+    ca.add_argument('--state', default='')
+    ca.add_argument('--out', required=True)
     ca.set_defaults(func=cmd_audit_detail_cache)
 
-    t = sub.add_parser("translate-ds", help="联网：调用 DeepSeek API 翻译中文显示字段")
-    t.add_argument("--products", required=True, help="规范化商品 JSON 数组")
-    t.add_argument("--cache", default="", help="翻译缓存 JSON（默认写入 --out）")
-    t.add_argument("--out", required=True, help="ASIN → 翻译结果 JSON")
-    t.add_argument("--endpoint", default="", help="完整 API endpoint（默认 DeepSeek chat/completions）")
-    t.add_argument("--model", default="", help="模型名（默认 deepseek-chat）")
-    t.add_argument("--max-retries", type=int, default=2)
-    t.add_argument("--backoff-seconds", type=float, default=1.0)
-    t.add_argument("--timeout", type=float, default=60.0)
-    t.add_argument("--repair-partial", action="store_true",
-                   help="已确认调用 API 时，绕过同源 partial 缓存并补翻缺失字段")
+    t = sub.add_parser('translate-ds', help='\u8054\u7f51\uff1a\u8c03\u7528 DeepSeek API \u7ffb\u8bd1\u4e2d\u6587\u663e\u793a\u5b57\u6bb5')
+    t.add_argument('--products', required=True, help='\u89c4\u8303\u5316\u5546\u54c1 JSON \u6570\u7ec4')
+    t.add_argument('--cache', default='', help='\u7ffb\u8bd1\u7f13\u5b58 JSON\uff08\u9ed8\u8ba4\u5199\u5165 --out\uff09')
+    t.add_argument('--out', required=True, help='ASIN \u2192 \u7ffb\u8bd1\u7ed3\u679c JSON')
+    t.add_argument('--endpoint', default='', help='\u5b8c\u6574 API endpoint\uff08\u9ed8\u8ba4 DeepSeek chat/completions\uff09')
+    t.add_argument('--model', default='', help='\u6a21\u578b\u540d\uff08\u9ed8\u8ba4 deepseek-chat\uff09')
+    t.add_argument('--max-retries', type=int, default=2)
+    t.add_argument('--backoff-seconds', type=float, default=1.0)
+    t.add_argument('--timeout', type=float, default=60.0)
+    t.add_argument('--repair-partial', action='store_true',
+                   help='\u5df2\u786e\u8ba4\u8c03\u7528 API \u65f6\uff0c\u7ed5\u8fc7\u540c\u6e90 partial \u7f13\u5b58\u5e76\u8865\u7ffb\u7f3a\u5931\u5b57\u6bb5')
     t.set_defaults(func=cmd_translate_ds)
 
-    tv2 = sub.add_parser("translate", help="Translation V2：字段级 Qwen-MT 翻译（默认先 dry-run）")
-    tv2.add_argument("--products", required=True,
-                     help="规范化商品 JSON 数组，或内部研究 CSV（按 ASIN/西语字段映射）")
-    tv2.add_argument("--provider", default="qwen-mt", choices=("qwen-mt",), help="翻译提供商")
-    tv2.add_argument("--model", default="", help="模型名（默认 qwen-mt-flash）")
-    tv2.add_argument("--rate", type=float, default=None,
-                     help="Qwen API 最大调用速率（次/秒，默认 0.5；0 表示不限速）")
-    tv2.add_argument("--cache", default=str(OUTPUTS / "translation_v2_cache.json"), help="字段级翻译缓存")
-    tv2.add_argument("--out", required=True, help="ASIN → Translation V2 结果 JSON")
-    tv2.add_argument("--qa-out", default="", help="translation_qa.json 输出路径")
-    tv2.add_argument("--audit-out", default="", help="可选字段审计 JSONL")
-    tv2.add_argument("--summary-out", default="", help="翻译运行摘要（含池状态与 QA 汇总）")
-    tv2.add_argument("--config", default="", help="configs/translation_v2.json")
-    tv2.add_argument("--field", action="append", default=[], help="只翻译指定 source/target 字段，可重复")
-    tv2.add_argument("--fields", default="", help="逗号分隔的字段名（--field 的简写）")
-    tv2.add_argument("--repair-partial", action="store_true", help="重试 partial 字段")
-    tv2.add_argument("--repair-failed", action="store_true", help="重试 failed 字段")
-    tv2.add_argument("--limit", type=int, default=None)
-    tv2.add_argument("--offset", type=int, default=0)
-    tv2.add_argument("--dry-run", action="store_true", help="仅生成字段计划，不调用 API")
-    tv2.add_argument("--parallel-providers", action="store_true",
-                     help="按配置启用双 Provider 并行池（真实调用仍需 YES）")
-    tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
+    tv2 = sub.add_parser('translate', help='Translation V2\uff1a\u5b57\u6bb5\u7ea7 Qwen-MT \u7ffb\u8bd1\uff08\u9ed8\u8ba4\u5148 dry-run\uff09')
+    tv2.add_argument('--products', required=True,
+                     help='\u89c4\u8303\u5316\u5546\u54c1 JSON \u6570\u7ec4\uff0c\u6216\u5185\u90e8\u7814\u7a76 CSV\uff08\u6309 ASIN/\u897f\u8bed\u5b57\u6bb5\u6620\u5c04\uff09')
+    tv2.add_argument('--provider', default='qwen-mt', choices=('qwen-mt',), help='\u7ffb\u8bd1\u63d0\u4f9b\u5546')
+    tv2.add_argument('--model', default='', help='\u6a21\u578b\u540d\uff08\u9ed8\u8ba4 qwen-mt-flash\uff09')
+    tv2.add_argument('--rate', type=float, default=None,
+                     help='Qwen API \u6700\u5927\u8c03\u7528\u901f\u7387\uff08\u6b21/\u79d2\uff0c\u9ed8\u8ba4 0.5\uff1b0 \u8868\u793a\u4e0d\u9650\u901f\uff09')
+    tv2.add_argument('--cache', default=str(OUTPUTS / 'translation_v2_cache.json'), help='\u5b57\u6bb5\u7ea7\u7ffb\u8bd1\u7f13\u5b58')
+    tv2.add_argument('--out', required=True, help='ASIN \u2192 Translation V2 \u7ed3\u679c JSON')
+    tv2.add_argument('--qa-out', default='', help='translation_qa.json \u8f93\u51fa\u8def\u5f84')
+    tv2.add_argument('--audit-out', default='', help='\u53ef\u9009\u5b57\u6bb5\u5ba1\u8ba1 JSONL')
+    tv2.add_argument('--summary-out', default='', help='\u7ffb\u8bd1\u8fd0\u884c\u6458\u8981\uff08\u542b\u6c60\u72b6\u6001\u4e0e QA \u6c47\u603b\uff09')
+    tv2.add_argument('--config', default='', help='configs/translation_v2.json')
+    tv2.add_argument('--field', action='append', default=[], help='\u53ea\u7ffb\u8bd1\u6307\u5b9a source/target \u5b57\u6bb5\uff0c\u53ef\u91cd\u590d')
+    tv2.add_argument('--fields', default='', help='\u9017\u53f7\u5206\u9694\u7684\u5b57\u6bb5\u540d\uff08--field \u7684\u7b80\u5199\uff09')
+    tv2.add_argument('--repair-partial', action='store_true', help='\u91cd\u8bd5 partial \u5b57\u6bb5')
+    tv2.add_argument('--repair-failed', action='store_true', help='\u91cd\u8bd5 failed \u5b57\u6bb5')
+    tv2.add_argument('--limit', type=int, default=None)
+    tv2.add_argument('--offset', type=int, default=0)
+    tv2.add_argument('--dry-run', action='store_true', help='\u4ec5\u751f\u6210\u5b57\u6bb5\u8ba1\u5212\uff0c\u4e0d\u8c03\u7528 API')
+    tv2.add_argument('--parallel-providers', action='store_true',
+                     help='\u6309\u914d\u7f6e\u542f\u7528\u53cc Provider \u5e76\u884c\u6c60\uff08\u771f\u5b9e\u8c03\u7528\u4ecd\u9700 YES\uff09')
+    tv2.add_argument('--yes', action='store_true', help='\u8df3\u8fc7\u771f\u5b9e API \u8c03\u7528\u524d\u7684 YES \u786e\u8ba4')
     tv2.set_defaults(func=cmd_translate)
 
-    prod = sub.add_parser("translation-production", help="stage Production Translation V2 artifacts")
-    prod.add_argument("--stage", required=True,
-                      choices=("build-input", "preclean", "plan", "translate", "promote", "export"))
-    prod.add_argument("--master", default="")
-    prod.add_argument("--run-dir", default="")
-    prod.add_argument("--run-id", default="production-run")
-    prod.add_argument("--source-run-id", default="")
-    prod.add_argument("--source-schema-version", default="master-v1")
-    prod.add_argument("--config", default="configs/translation_v2_production.example.json")
-    prod.add_argument("--model", default="")
-    prod.add_argument("--rate", type=float, default=None)
-    prod.add_argument("--limit", type=int, default=None)
-    prod.add_argument("--offset", type=int, default=0)
-    prod.add_argument("--asin-list", default="", help="ASIN JSON array or comma-separated list")
-    prod.add_argument("--category", default="", help="match any canonical category level")
-    prod.add_argument("--yes", action="store_true", help="confirm offline fake translation")
-    prod.add_argument("--dry-run", action="store_true", help="translate stage writes only an offline plan")
-    prod.add_argument("--out", default="", help="production-export workbook output")
-    prod.add_argument("--details", default="")
-    prod.add_argument("--rankings", default="")
-    prod.add_argument("--html-dir", nargs="+", default=[])
-    prod.add_argument("--collection-run-dir", default="")
-    prod.add_argument("--prev-workbook", default="")
-    prod.add_argument("--images-dir", default="")
-    prod.add_argument("--category-planning", default="")
-    prod.add_argument("--force", action="store_true")
-    prod.add_argument("--debug-export", action="store_true",
-                      help="write a NOT_FOR_RELEASE diagnostic workbook only")
-    prod.add_argument("--profile", choices=("research", "business", "task"), default="research")
+    prod = sub.add_parser('translation-production', help='stage Production Translation V2 artifacts')
+    prod.add_argument('--stage', required=True,
+                      choices=('build-input', 'preclean', 'plan', 'translate', 'promote', 'export'))
+    prod.add_argument('--master', default='')
+    prod.add_argument('--run-dir', default='')
+    prod.add_argument('--run-id', default='production-run')
+    prod.add_argument('--source-run-id', default='')
+    prod.add_argument('--source-schema-version', default='master-v1')
+    prod.add_argument('--config', default='configs/translation_v2_production.example.json')
+    prod.add_argument('--model', default='')
+    prod.add_argument('--rate', type=float, default=None)
+    prod.add_argument('--limit', type=int, default=None)
+    prod.add_argument('--offset', type=int, default=0)
+    prod.add_argument('--asin-list', default='', help='ASIN JSON array or comma-separated list')
+    prod.add_argument('--category', default='', help='match any canonical category level')
+    prod.add_argument('--yes', action='store_true', help='confirm offline fake translation')
+    prod.add_argument('--dry-run', action='store_true', help='translate stage writes only an offline plan')
+    prod.add_argument('--out', default='', help='production-export workbook output')
+    prod.add_argument('--details', default='')
+    prod.add_argument('--rankings', default='')
+    prod.add_argument('--html-dir', nargs='+', default=[])
+    prod.add_argument('--collection-run-dir', default='')
+    prod.add_argument('--prev-workbook', default='')
+    prod.add_argument('--images-dir', default='')
+    prod.add_argument('--category-planning', default='')
+    prod.add_argument('--force', action='store_true')
+    prod.add_argument('--debug-export', action='store_true',
+                      help='write a NOT_FOR_RELEASE diagnostic workbook only')
+    prod.add_argument('--profile', choices=('research', 'business', 'task'), default='research')
     prod.set_defaults(func=cmd_translation_production)
 
-    run = sub.add_parser("production-run", help="evidence-driven Production V1 stage runner")
-    run.add_argument("--run-dir", required=True)
-    run.add_argument("--run-id", required=True)
-    run.add_argument("--config", required=True, help="TaskConfig JSON; stage payload injection is forbidden")
-    run.add_argument("--schema-version", default="production-v1")
-    run.add_argument("--resume", action="store_true", help="reuse only matching READY stage artifacts")
-    run.add_argument("--from-stage", default="", help="restart at a named stage after hash verification")
-    run.add_argument("--profile", choices=("full", "source-only"), default="full")
-    run.add_argument("--allow-live-transport", action="store_true",
-                     help="allow only a reviewed live V1 browser transport declared in TaskConfig")
-    run.add_argument("--transport-preflight-only", action="store_true",
-                     help="verify reviewed Amazon delivery transport and save diagnostics without ranking/detail collection")
-    run.add_argument("--allow-qwen-translation", action="store_true",
-                     help="allow configured Qwen translation only through the <=5 CNY durable budget ledger")
+    run = sub.add_parser('production-run', help='evidence-driven Production V1 stage runner')
+    run.add_argument('--run-dir', required=True)
+    run.add_argument('--run-id', required=True)
+    run.add_argument('--config', required=True, help='TaskConfig JSON; stage payload injection is forbidden')
+    run.add_argument('--schema-version', default='production-v1')
+    run.add_argument('--resume', action='store_true', help='reuse only matching READY stage artifacts')
+    run.add_argument('--from-stage', default='', help='restart at a named stage after hash verification')
+    run.add_argument('--profile', choices=('full', 'source-only'), default='full')
+    run.add_argument('--allow-live-transport', action='store_true',
+                     help='allow only a reviewed live V1 browser transport declared in TaskConfig')
+    run.add_argument('--transport-preflight-only', action='store_true',
+                     help='verify reviewed Amazon delivery transport and save diagnostics without ranking/detail collection')
+    run.add_argument('--allow-qwen-translation', action='store_true',
+                     help='allow configured Qwen translation only through the <=5 CNY durable budget ledger')
     run.set_defaults(func=cmd_production_run)
 
-    selection = sub.add_parser("production-translation-selection",
-                               help="bind a reviewed <=1500-ASIN translation batch to spanish-master evidence")
-    selection.add_argument("--master-artifact", required=True,
-                           help="artifacts/spanish-master.json from a completed source-only run")
-    selection.add_argument("--asins", required=True,
-                           help="comma/newline ASINs, or a JSON list/file containing a list or {asins:[...]}")
-    selection.add_argument("--out", required=True)
-    selection.add_argument("--selection-id", default="")
+    selection = sub.add_parser('production-translation-selection',
+                               help='bind a reviewed <=1500-ASIN translation batch to spanish-master evidence')
+    selection.add_argument('--master-artifact', required=True,
+                           help='artifacts/spanish-master.json from a completed source-only run')
+    selection.add_argument('--asins', required=True,
+                           help='comma/newline ASINs, or a JSON list/file containing a list or {asins:[...]}')
+    selection.add_argument('--out', required=True)
+    selection.add_argument('--selection-id', default='')
     selection.set_defaults(func=cmd_production_translation_selection)
 
-    pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
-    pc.add_argument("--products", required=True,
-                    help="内部研究 CSV、规范化商品 JSON 数组，或带 records 的内部研究 JSON")
-    pc.add_argument("--out-dir", default=str(OUTPUTS / "translation_v2_preclean"),
-                    help="Pre-Clean 独立输出目录")
+    pc = sub.add_parser('preclean', help='\u5168\u79bb\u7ebf\uff1aTranslation V2 Pre-Clean \u6e05\u6d17\u4e0e\u5168\u91cf\u5ba1\u8ba1')
+    pc.add_argument('--products', required=True,
+                    help='\u5185\u90e8\u7814\u7a76 CSV\u3001\u89c4\u8303\u5316\u5546\u54c1 JSON \u6570\u7ec4\uff0c\u6216\u5e26 records \u7684\u5185\u90e8\u7814\u7a76 JSON')
+    pc.add_argument('--out-dir', default=str(OUTPUTS / 'translation_v2_preclean'),
+                    help='Pre-Clean \u72ec\u7acb\u8f93\u51fa\u76ee\u5f55')
     pc.set_defaults(func=cmd_preclean)
 
-    do = sub.add_parser("dictionary-only", help="全离线：画像、字典候选与确定性解析（绝不调用翻译 API）")
-    do.add_argument("--products", required=True,
-                    help="内部研究 CSV、规范化商品 JSON 数组，或带 records 的内部研究 JSON")
-    do.add_argument("--out", default=str(OUTPUTS / "translation_v2_dictionary"),
-                    help="独立报告目录")
-    do.add_argument("--top-n", type=int, default=100,
-                    help="候选清单默认高频观察窗口（报告仍保留全部候选）")
+    do = sub.add_parser('dictionary-only', help='\u5168\u79bb\u7ebf\uff1a\u753b\u50cf\u3001\u5b57\u5178\u5019\u9009\u4e0e\u786e\u5b9a\u6027\u89e3\u6790\uff08\u7edd\u4e0d\u8c03\u7528\u7ffb\u8bd1 API\uff09')
+    do.add_argument('--products', required=True,
+                    help='\u5185\u90e8\u7814\u7a76 CSV\u3001\u89c4\u8303\u5316\u5546\u54c1 JSON \u6570\u7ec4\uff0c\u6216\u5e26 records \u7684\u5185\u90e8\u7814\u7a76 JSON')
+    do.add_argument('--out', default=str(OUTPUTS / 'translation_v2_dictionary'),
+                    help='\u72ec\u7acb\u62a5\u544a\u76ee\u5f55')
+    do.add_argument('--top-n', type=int, default=100,
+                    help='\u5019\u9009\u6e05\u5355\u9ed8\u8ba4\u9ad8\u9891\u89c2\u5bdf\u7a97\u53e3\uff08\u62a5\u544a\u4ecd\u4fdd\u7559\u5168\u90e8\u5019\u9009\uff09')
     do.set_defaults(func=cmd_dictionary_only)
 
-    q = sub.add_parser("qa", help="离线：商品表 → QA 结果")
-    q.add_argument("--products", default=str(OUTPUTS / "products.json"))
-    q.add_argument("--out", default=str(OUTPUTS / "qa.json"))
+    q = sub.add_parser('qa', help='\u79bb\u7ebf\uff1a\u5546\u54c1\u8868 \u2192 QA \u7ed3\u679c')
+    q.add_argument('--products', default=str(OUTPUTS / 'products.json'))
+    q.add_argument('--out', default=str(OUTPUTS / 'qa.json'))
     q.set_defaults(func=cmd_qa)
 
-    a = sub.add_parser("audit-fields", help="离线：Source→Raw→Canonical→Derived→Excel 字段闭环审计")
-    a.add_argument("--products", default=str(OUTPUTS / "products.json"), help="规范化商品表 JSON")
-    a.add_argument("--details", default=str(OUTPUTS / "details.json"), help="详情 raw JSON（可选）")
-    a.add_argument("--rankings", default=str(OUTPUTS / "rankings.json"), help="榜单 raw JSON（可选）")
-    a.add_argument("--html-dir", nargs="+", default=[],
-                   help="保存的详情 HTML 目录（可选，可传多个，用于识别 PARSER_MISSED）")
-    a.add_argument("--run-dir", default="", help="采集 run 根目录（可选，自动读取 ranking_*.html 作为类目来源）")
-    a.add_argument("--workbook", default="", help="导出的 Excel 工作簿（可选，逐 ASIN 核验展示层）")
-    a.add_argument("--translations", default="", help="翻译映射 JSON（可选，用于中文表对账）")
-    a.add_argument("--out", default=str(OUTPUTS / "field_closure.json"))
-    a.add_argument("--md-out", default="", help="Markdown 输出路径（默认与 JSON 同名 .md）")
+    a = sub.add_parser('audit-fields', help='\u79bb\u7ebf\uff1aSource\u2192Raw\u2192Canonical\u2192Derived\u2192Excel \u5b57\u6bb5\u95ed\u73af\u5ba1\u8ba1')
+    a.add_argument('--products', default=str(OUTPUTS / 'products.json'), help='\u89c4\u8303\u5316\u5546\u54c1\u8868 JSON')
+    a.add_argument('--details', default=str(OUTPUTS / 'details.json'), help='\u8be6\u60c5 raw JSON\uff08\u53ef\u9009\uff09')
+    a.add_argument('--rankings', default=str(OUTPUTS / 'rankings.json'), help='\u699c\u5355 raw JSON\uff08\u53ef\u9009\uff09')
+    a.add_argument('--html-dir', nargs='+', default=[],
+                   help='\u4fdd\u5b58\u7684\u8be6\u60c5 HTML \u76ee\u5f55\uff08\u53ef\u9009\uff0c\u53ef\u4f20\u591a\u4e2a\uff0c\u7528\u4e8e\u8bc6\u522b PARSER_MISSED\uff09')
+    a.add_argument('--run-dir', default='', help='\u91c7\u96c6 run \u6839\u76ee\u5f55\uff08\u53ef\u9009\uff0c\u81ea\u52a8\u8bfb\u53d6 ranking_*.html \u4f5c\u4e3a\u7c7b\u76ee\u6765\u6e90\uff09')
+    a.add_argument('--workbook', default='', help='\u5bfc\u51fa\u7684 Excel \u5de5\u4f5c\u7c3f\uff08\u53ef\u9009\uff0c\u9010 ASIN \u6838\u9a8c\u5c55\u793a\u5c42\uff09')
+    a.add_argument('--translations', default='', help='\u7ffb\u8bd1\u6620\u5c04 JSON\uff08\u53ef\u9009\uff0c\u7528\u4e8e\u4e2d\u6587\u8868\u5bf9\u8d26\uff09')
+    a.add_argument('--out', default=str(OUTPUTS / 'field_closure.json'))
+    a.add_argument('--md-out', default='', help='Markdown \u8f93\u51fa\u8def\u5f84\uff08\u9ed8\u8ba4\u4e0e JSON \u540c\u540d .md\uff09')
     a.set_defaults(func=cmd_audit_fields)
 
-    qa = sub.add_parser("quality-audit", help="离线：对已有 V1 数据和 HTML 运行统一 Quality Gate")
-    qa.add_argument("--rankings", required=True, help="榜单记录 JSON")
-    qa.add_argument("--details", default="", help="详情记录 JSON")
-    qa.add_argument("--products", default="", help="规范化商品 JSON（可选）")
-    qa.add_argument("--ranking-html", nargs="*", default=[],
-                    help="保存的榜单 HTML 目录（可传多个，离线重放）")
-    qa.add_argument("--detail-html", nargs="*", default=[],
-                    help="保存的详情 HTML 目录（可传多个，离线重放）")
-    qa.add_argument("--run-dir", default="", help="采集 run 目录（可选）")
-    qa.add_argument("--source-manifest", default="", help="来源页状态/计划 manifest JSON")
-    qa.add_argument("--translations", default="", help="翻译映射 JSON（可选）")
-    qa.add_argument("--workbook", default="", help="Excel 工作簿（可选）")
-    qa.add_argument("--asin", action="append", default=[], help="只审查指定 ASIN，可重复")
+    qa = sub.add_parser('quality-audit', help='\u79bb\u7ebf\uff1a\u5bf9\u5df2\u6709 V1 \u6570\u636e\u548c HTML \u8fd0\u884c\u7edf\u4e00 Quality Gate')
+    qa.add_argument('--rankings', required=True, help='\u699c\u5355\u8bb0\u5f55 JSON')
+    qa.add_argument('--details', default='', help='\u8be6\u60c5\u8bb0\u5f55 JSON')
+    qa.add_argument('--products', default='', help='\u89c4\u8303\u5316\u5546\u54c1 JSON\uff08\u53ef\u9009\uff09')
+    qa.add_argument('--ranking-html', nargs='*', default=[],
+                    help='\u4fdd\u5b58\u7684\u699c\u5355 HTML \u76ee\u5f55\uff08\u53ef\u4f20\u591a\u4e2a\uff0c\u79bb\u7ebf\u91cd\u653e\uff09')
+    qa.add_argument('--detail-html', nargs='*', default=[],
+                    help='\u4fdd\u5b58\u7684\u8be6\u60c5 HTML \u76ee\u5f55\uff08\u53ef\u4f20\u591a\u4e2a\uff0c\u79bb\u7ebf\u91cd\u653e\uff09')
+    qa.add_argument('--run-dir', default='', help='\u91c7\u96c6 run \u76ee\u5f55\uff08\u53ef\u9009\uff09')
+    qa.add_argument('--source-manifest', default='', help='\u6765\u6e90\u9875\u72b6\u6001/\u8ba1\u5212 manifest JSON')
+    qa.add_argument('--translations', default='', help='\u7ffb\u8bd1\u6620\u5c04 JSON\uff08\u53ef\u9009\uff09')
+    qa.add_argument('--workbook', default='', help='Excel \u5de5\u4f5c\u7c3f\uff08\u53ef\u9009\uff09')
+    qa.add_argument('--asin', action='append', default=[], help='\u53ea\u5ba1\u67e5\u6307\u5b9a ASIN\uff0c\u53ef\u91cd\u590d')
     from .quality.audit import DEFAULT_CHECKS
-    qa.add_argument("--check", action="append", choices=DEFAULT_CHECKS, default=[],
-                    help="只运行指定检查，可重复；默认运行全部检查")
-    qa.add_argument("--run-id", default="", help="报告运行 ID（可选）")
-    qa.add_argument("--out-dir", required=True, help="质量报告根目录")
-    qa.add_argument("--allow-non-ready", action="store_true",
-                    help="允许 REVIEW/BLOCK 状态以退出码0结束（仅诊断）")
+    qa.add_argument('--check', action='append', choices=DEFAULT_CHECKS, default=[],
+                    help='\u53ea\u8fd0\u884c\u6307\u5b9a\u68c0\u67e5\uff0c\u53ef\u91cd\u590d\uff1b\u9ed8\u8ba4\u8fd0\u884c\u5168\u90e8\u68c0\u67e5')
+    qa.add_argument('--run-id', default='', help='\u62a5\u544a\u8fd0\u884c ID\uff08\u53ef\u9009\uff09')
+    qa.add_argument('--out-dir', required=True, help='\u8d28\u91cf\u62a5\u544a\u6839\u76ee\u5f55')
+    qa.add_argument('--allow-non-ready', action='store_true',
+                    help='\u5141\u8bb8 REVIEW/BLOCK \u72b6\u6001\u4ee5\u9000\u51fa\u78010\u7ed3\u675f\uff08\u4ec5\u8bca\u65ad\uff09')
     qa.set_defaults(func=cmd_quality_audit)
 
-    sr = sub.add_parser("stable-research", help="V1稳定采集 + 离线 Quality Gate")
-    sr.add_argument("--offline", action="store_true", default=argparse.SUPPRESS,
-                    help="仅使用已保存 JSON/HTML，不执行任何网络请求")
-    sr.add_argument("--urls", nargs="*", default=[], help="V1 榜单来源 URL（联网模式）")
-    sr.add_argument("--rankings", default="", help="离线榜单记录 JSON")
-    sr.add_argument("--details", default="", help="离线详情记录 JSON")
-    sr.add_argument("--products", default="", help="规范化商品 JSON（可选）")
-    sr.add_argument("--out-dir", default="runtime/stable_research",
-                    help="稳定研究输出根目录")
-    sr.add_argument("--collect-out-dir", default="", help="V1 采集输出目录")
-    sr.add_argument("--quality-out-dir", default="", help="Quality Gate 报告根目录")
-    sr.add_argument("--ranking-html", nargs="*", default=[])
-    sr.add_argument("--detail-html", nargs="*", default=[])
-    sr.add_argument("--run-dir", default="")
-    sr.add_argument("--source-manifest", default="")
-    sr.add_argument("--translations", default="")
-    sr.add_argument("--workbook", default="")
-    sr.add_argument("--asin", action="append", default=[])
-    sr.add_argument("--check", action="append", choices=DEFAULT_CHECKS, default=[])
-    sr.add_argument("--run-id", default="")
-    sr.add_argument("--allow-non-ready", action="store_true",
-                    help="允许 REVIEW/BLOCK 状态以退出码0结束（仅诊断）")
-    sr.add_argument("--headful", action="store_true")
-    sr.add_argument("--profile-dir", default="")
-    sr.add_argument("--postal-code", default="28001")
-    sr.add_argument("--challenge-wait-seconds", type=float, default=180.0)
-    sr.add_argument("--manual-assist", action="store_true")
-    sr.add_argument("--pages-per-url", type=int, default=1)
+    sr = sub.add_parser('stable-research', help='V1\u7a33\u5b9a\u91c7\u96c6 + \u79bb\u7ebf Quality Gate')
+    sr.add_argument('--offline', action='store_true', default=argparse.SUPPRESS,
+                    help='\u4ec5\u4f7f\u7528\u5df2\u4fdd\u5b58 JSON/HTML\uff0c\u4e0d\u6267\u884c\u4efb\u4f55\u7f51\u7edc\u8bf7\u6c42')
+    sr.add_argument('--urls', nargs='*', default=[], help='V1 \u699c\u5355\u6765\u6e90 URL\uff08\u8054\u7f51\u6a21\u5f0f\uff09')
+    sr.add_argument('--rankings', default='', help='\u79bb\u7ebf\u699c\u5355\u8bb0\u5f55 JSON')
+    sr.add_argument('--details', default='', help='\u79bb\u7ebf\u8be6\u60c5\u8bb0\u5f55 JSON')
+    sr.add_argument('--products', default='', help='\u89c4\u8303\u5316\u5546\u54c1 JSON\uff08\u53ef\u9009\uff09')
+    sr.add_argument('--out-dir', default='runtime/stable_research',
+                    help='\u7a33\u5b9a\u7814\u7a76\u8f93\u51fa\u6839\u76ee\u5f55')
+    sr.add_argument('--collect-out-dir', default='', help='V1 \u91c7\u96c6\u8f93\u51fa\u76ee\u5f55')
+    sr.add_argument('--quality-out-dir', default='', help='Quality Gate \u62a5\u544a\u6839\u76ee\u5f55')
+    sr.add_argument('--ranking-html', nargs='*', default=[])
+    sr.add_argument('--detail-html', nargs='*', default=[])
+    sr.add_argument('--run-dir', default='')
+    sr.add_argument('--source-manifest', default='')
+    sr.add_argument('--translations', default='')
+    sr.add_argument('--workbook', default='')
+    sr.add_argument('--asin', action='append', default=[])
+    sr.add_argument('--check', action='append', choices=DEFAULT_CHECKS, default=[])
+    sr.add_argument('--run-id', default='')
+    sr.add_argument('--allow-non-ready', action='store_true',
+                    help='\u5141\u8bb8 REVIEW/BLOCK \u72b6\u6001\u4ee5\u9000\u51fa\u78010\u7ed3\u675f\uff08\u4ec5\u8bca\u65ad\uff09')
+    sr.add_argument('--headful', action='store_true')
+    sr.add_argument('--profile-dir', default='')
+    sr.add_argument('--postal-code', default='28001')
+    sr.add_argument('--challenge-wait-seconds', type=float, default=180.0)
+    sr.add_argument('--manual-assist', action='store_true')
+    sr.add_argument('--pages-per-url', type=int, default=1)
     sr.set_defaults(func=cmd_stable_research)
 
-    x = sub.add_parser("export", help="离线：商品表 → Excel")
-    x.add_argument("--products", default=str(OUTPUTS / "products.json"))
-    x.add_argument("--translations", default="")
-    x.add_argument("--details", default=DEFAULT_DETAILS,
-                   help="详情 raw JSON（默认 outputs/details.json，用于字段闭环门禁）")
-    x.add_argument("--rankings", default=DEFAULT_RANKINGS,
-                   help="榜单 raw JSON（默认 outputs/rankings.json，用于字段闭环门禁）")
-    x.add_argument("--html-dir", nargs="+", default=[], help="保存的详情 HTML 目录（可选）")
-    x.add_argument("--run-dir", default="", help="采集 run 根目录（可选）")
-    x.add_argument("--prev-workbook", default="", help="前版工作簿（按 ASIN 保留备注）")
-    x.add_argument("--images-dir", default="", help="本地图片目录（<ASIN>.png/.jpg/.jpeg）")
-    x.add_argument("--category-planning", default="", help="类目规划 JSON（字典行数组或二维数组）")
-    x.add_argument("--out", default=str(OUTPUTS / "选品清单.xlsx"))
-    x.add_argument("--force", action="store_true",
-                   help="跳过 QA 硬门禁（存在 P0/P1 也导出，保留上游证据）")
-    x.add_argument("--profile", choices=("research", "business", "task"), default="research",
-                   help="research=类目规划+双语三表；business=仅西语/中文两表；task=三表+采集任务元数据")
+    x = sub.add_parser('export', help='\u79bb\u7ebf\uff1a\u5546\u54c1\u8868 \u2192 Excel')
+    x.add_argument('--products', default=str(OUTPUTS / 'products.json'))
+    x.add_argument('--translations', default='')
+    x.add_argument('--details', default=DEFAULT_DETAILS,
+                   help='\u8be6\u60c5 raw JSON\uff08\u9ed8\u8ba4 outputs/details.json\uff0c\u7528\u4e8e\u5b57\u6bb5\u95ed\u73af\u95e8\u7981\uff09')
+    x.add_argument('--rankings', default=DEFAULT_RANKINGS,
+                   help='\u699c\u5355 raw JSON\uff08\u9ed8\u8ba4 outputs/rankings.json\uff0c\u7528\u4e8e\u5b57\u6bb5\u95ed\u73af\u95e8\u7981\uff09')
+    x.add_argument('--html-dir', nargs='+', default=[], help='\u4fdd\u5b58\u7684\u8be6\u60c5 HTML \u76ee\u5f55\uff08\u53ef\u9009\uff09')
+    x.add_argument('--run-dir', default='', help='\u91c7\u96c6 run \u6839\u76ee\u5f55\uff08\u53ef\u9009\uff09')
+    x.add_argument('--prev-workbook', default='', help='\u524d\u7248\u5de5\u4f5c\u7c3f\uff08\u6309 ASIN \u4fdd\u7559\u5907\u6ce8\uff09')
+    x.add_argument('--images-dir', default='', help='\u672c\u5730\u56fe\u7247\u76ee\u5f55\uff08<ASIN>.png/.jpg/.jpeg\uff09')
+    x.add_argument('--category-planning', default='', help='\u7c7b\u76ee\u89c4\u5212 JSON\uff08\u5b57\u5178\u884c\u6570\u7ec4\u6216\u4e8c\u7ef4\u6570\u7ec4\uff09')
+    x.add_argument('--out', default=str(OUTPUTS / '\u9009\u54c1\u6e05\u5355.xlsx'))
+    x.add_argument('--force', action='store_true',
+                   help='\u8df3\u8fc7 QA \u786c\u95e8\u7981\uff08\u5b58\u5728 P0/P1 \u4e5f\u5bfc\u51fa\uff0c\u4fdd\u7559\u4e0a\u6e38\u8bc1\u636e\uff09')
+    x.add_argument('--profile', choices=('research', 'business', 'task'), default='research',
+                   help='research=\u7c7b\u76ee\u89c4\u5212+\u53cc\u8bed\u4e09\u8868\uff1bbusiness=\u4ec5\u897f\u8bed/\u4e2d\u6587\u4e24\u8868\uff1btask=\u4e09\u8868+\u91c7\u96c6\u4efb\u52a1\u5143\u6570\u636e')
     x.set_defaults(func=cmd_export)
     return parser
 
@@ -1916,10 +519,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         args.func(args)
     except (AccessStopError, DeliveryLocationError, SnapshotIncompleteError) as e:
-        # 访问门禁或配送地点无法确认：停止采集，退出码 2
-        parser.exit(2, "!! %s\n" % e)
+        # \u8bbf\u95ee\u95e8\u7981\u6216\u914d\u9001\u5730\u70b9\u65e0\u6cd5\u786e\u8ba4\uff1a\u505c\u6b62\u91c7\u96c6\uff0c\u9000\u51fa\u7801 2
+        parser.exit(2, '!! %s\n' % e)
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())
