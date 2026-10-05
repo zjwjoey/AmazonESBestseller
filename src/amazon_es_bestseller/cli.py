@@ -1518,6 +1518,13 @@ def cmd_production_run(args) -> None:
     _safe_print(json.dumps(result, ensure_ascii=False, sort_keys=True))
 
 
+def cmd_production_translation_selection(args) -> None:
+    """Thin dispatch for the explicit, human-reviewable translation subset."""
+    from .commands.run import create_translation_selection
+    result = create_translation_selection(args)
+    _safe_print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="amazon-es",
@@ -1799,7 +1806,21 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--resume", action="store_true", help="reuse only matching READY stage artifacts")
     run.add_argument("--from-stage", default="", help="restart at a named stage after hash verification")
     run.add_argument("--profile", choices=("full", "source-only"), default="full")
+    run.add_argument("--allow-live-transport", action="store_true",
+                     help="allow only a reviewed live V1 browser transport declared in TaskConfig")
+    run.add_argument("--allow-qwen-translation", action="store_true",
+                     help="allow configured Qwen translation only through the <=5 CNY durable budget ledger")
     run.set_defaults(func=cmd_production_run)
+
+    selection = sub.add_parser("production-translation-selection",
+                               help="bind a reviewed <=1500-ASIN translation batch to spanish-master evidence")
+    selection.add_argument("--master-artifact", required=True,
+                           help="artifacts/spanish-master.json from a completed source-only run")
+    selection.add_argument("--asins", required=True,
+                           help="comma/newline ASINs, or a JSON list/file containing a list or {asins:[...]}")
+    selection.add_argument("--out", required=True)
+    selection.add_argument("--selection-id", default="")
+    selection.set_defaults(func=cmd_production_translation_selection)
 
     pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
     pc.add_argument("--products", required=True,

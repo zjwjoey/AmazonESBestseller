@@ -9,6 +9,7 @@ from amazon_es_bestseller.collection.planning import DetailState
 from amazon_es_bestseller.monitoring.snapshot import build_ranking_snapshot
 from amazon_es_bestseller.orchestration.production_run import ProductionRun
 from amazon_es_bestseller.orchestration.task_config import TaskConfig
+from amazon_es_bestseller.orchestration.translation_batch import create_selection_manifest, write_selection_manifest
 from amazon_es_bestseller.orchestration.workflow import (
     ExistingV1DetailCollector,
     ExistingV1SnapshotCollector,
@@ -16,6 +17,8 @@ from amazon_es_bestseller.orchestration.workflow import (
 )
 from amazon_es_bestseller.translation.budget import BudgetLedger, BudgetedProvider, VerifiedPriceCard
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
+from amazon_es_bestseller.translation.service import source_hash
+from amazon_es_bestseller.quality.chinese import audit_field
 
 
 ASIN = "B000000001"
@@ -47,6 +50,12 @@ def _write_fixture(root, *, rank=1, mode="initial"):
               "translation": {"provider_mode": "fake"}}
     config_path = root / "task.json"; config_path.write_text(json.dumps(config), encoding="utf-8")
     return config_path
+
+
+def _attach_live_plan(raw, root):
+    plan_path = root / "reviewed_task_plan.json"
+    plan_path.write_text(json.dumps({"fixture": True}), encoding="utf-8")
+    raw["reviewed_task_plan"] = plan_path.name
 
 
 def test_offline_source_only_executes_real_v1_snapshot_reparse_audit_and_master(tmp_path):
@@ -169,6 +178,7 @@ def test_live_v1_adapter_is_explicit_and_fake_transport_exercises_source_flow(tm
     config_path = _write_fixture(tmp_path)
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     raw["network_mode"] = "live"
+    _attach_live_plan(raw, tmp_path)
     raw["source"] = {"source_urls": [SOURCE_URL], "pages_per_url": 1, "detail_html_dirs": ["html"]}
     task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
     evidence = json.loads((tmp_path / "ranking.json").read_text(encoding="utf-8"))
@@ -205,6 +215,7 @@ def test_live_v1_detail_adapter_uses_fake_transport_only_when_plan_requires_fetc
     config_path = _write_fixture(tmp_path)
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     raw["network_mode"] = "live"
+    _attach_live_plan(raw, tmp_path)
     raw["source"] = {"source_urls": [SOURCE_URL], "pages_per_url": 1, "detail_html_dirs": []}
     task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
     evidence = json.loads((tmp_path / "ranking.json").read_text(encoding="utf-8"))
@@ -250,6 +261,7 @@ def test_qwen_mode_requires_injected_budgeted_provider_without_real_transport(tm
     config_path = _write_fixture(tmp_path)
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     raw["network_mode"] = "live"
+    _attach_live_plan(raw, tmp_path)
     raw["source"] = {"source_urls": [SOURCE_URL], "pages_per_url": 1, "detail_html_dirs": ["html"]}
     raw["translation"] = {"provider_mode": "qwen-mt"}
     task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
@@ -278,13 +290,25 @@ def test_qwen_mode_requires_injected_budgeted_provider_without_real_transport(tm
             return ProviderResponse(text="离线预算测试", provider=self.name, model=self.model,
                                     raw={"usage": {"prompt_tokens": 1, "completion_tokens": 1}})
 
+    # A billable-mode run consumes a selection only after a source-only run
+    # wrote its immutable Spanish Master producer artifact.
+    source_task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+    source_dir = tmp_path / "source-only"
+    ProductionRun(source_dir, run_id="source-only", config=source_task.runner_config(), offline=False).run(
+        ProductionWorkflow(source_task, source_dir, run_id="source-only",
+                           snapshot_collector=FakeSnapshotCollector()).handlers(), profile="source-only")
+    selection = create_selection_manifest(master_artifact_path=source_dir / "artifacts" / "spanish-master.json",
+                                          selected_asins=[ASIN], selection_id="qwen-test")
+    write_selection_manifest(tmp_path / "selection.json", selection)
+    raw["translation"]["selection_manifest"] = "selection.json"
+    task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+
     raw_provider = FakeBudgetedQwen()
-    unbudgeted_dir = tmp_path / "unbudgeted"
     with pytest.raises(Exception, match="QWEN_PROVIDER_MUST_BE_BUDGETED"):
-        ProductionRun(unbudgeted_dir, run_id="unbudgeted", config=task.runner_config(), offline=False).run(
-            ProductionWorkflow(task, unbudgeted_dir, run_id="unbudgeted",
+        ProductionRun(source_dir, run_id="source-only", config=task.runner_config(), offline=False).run(
+            ProductionWorkflow(task, source_dir, run_id="source-only",
                                snapshot_collector=FakeSnapshotCollector(),
-                               translation_provider=raw_provider).handlers(), profile="full")
+                               translation_provider=raw_provider).handlers(), from_stage="translation-input", profile="full")
     assert raw_provider.calls == 0
     card = VerifiedPriceCard.from_mapping({
         "provider": raw_provider.name, "model": raw_provider.model, "currency": "CNY",
@@ -295,15 +319,49 @@ def test_qwen_mode_requires_injected_budgeted_provider_without_real_transport(tm
     ledger = BudgetLedger(tmp_path / "budget.json", limit_cny="5.00", price_card=card,
                           max_output_tokens=32, prompt_overhead_tokens=16, max_unique_asins=1500)
     provider = BudgetedProvider(raw_provider, ledger)
-    run_dir = tmp_path / "budgeted"
     with pytest.raises(Exception, match="RELEASE_GATE_NOT_READY"):
-        ProductionRun(run_dir, run_id="budgeted", config=task.runner_config(), offline=False).run(
-            ProductionWorkflow(task, run_dir, run_id="budgeted", snapshot_collector=FakeSnapshotCollector(),
-                               translation_provider=provider).handlers(), profile="full")
-    translation = json.loads((run_dir / "artifacts" / "translation.json").read_text(encoding="utf-8"))
+        ProductionRun(source_dir, run_id="source-only", config=task.runner_config(), offline=False).run(
+            ProductionWorkflow(task, source_dir, run_id="source-only", snapshot_collector=FakeSnapshotCollector(),
+                               translation_provider=provider).handlers(), from_stage="translation", profile="full")
+    translation = json.loads((source_dir / "artifacts" / "translation.json").read_text(encoding="utf-8"))
     assert raw_provider.calls > 0
     assert translation["provider_provenance"] == {
         "provider": "qwen-mt", "model": "qwen-mt-fixture", "verified": True,
         "request_count": translation["counts"]["total"],
     }
     assert ledger.snapshot()["selected_asins"] == [ASIN]
+
+
+def test_field_repair_retries_only_failed_field_with_real_provider_result_and_reqa(tmp_path):
+    task = TaskConfig.from_mapping(json.loads(_write_fixture(tmp_path).read_text(encoding="utf-8")), base_dir=tmp_path)
+    run_dir = tmp_path / "repair"
+    class RepairProvider(TranslationProvider):
+        name = "fake-repair"
+
+        @property
+        def model(self):
+            return "fake-repair-v1"
+
+        def translate(self, _text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+            return ProviderResponse(text="\u5305\u542b LED 9V", provider=self.name, model=self.model,
+                                    raw={"offline": True, "asin": asin, "field": field, "context": context or {}})
+
+    workflow = ProductionWorkflow(task, run_dir, run_id="repair", translation_provider=RepairProvider())
+    source = "Incluye LED 9V"
+    failed = audit_field(asin=ASIN, field="description", source_es=source,
+                         translated_zh="\u5305\u542b", source_hash=source_hash(source))
+    assert failed["status"] == "REPAIR"
+    state = {"records": [{"asin": ASIN, "source_record_hash": "record-hash", "fields": [{
+        "field": "description", "target_field": "description_zh", "source_text": source,
+        "source_hash": source_hash(source), "final_zh": "\u5305\u542b",
+        "candidate_text": "\u5305\u542b", "promotion_status": "QA_BLOCKED",
+    }]}]}
+    qa_payload = workflow._store("chinese-qa", {"status": "READY", "fields": [failed],
+                                                  "translation_state": state})
+    repair = workflow.stage_field_repair({"manifest": {"stages": {"chinese-qa": {"payload": qa_payload}}}})
+    result = repair["repair_results"]
+    assert result and result[0]["status"] == "PASS" and result[0]["attempt"] == 1
+    repaired = repair["translation_state"]["records"][0]["fields"][0]
+    assert repaired["repair_status"] == "READY" and repaired["final_zh"] != "\u5305\u542b"
+    reqa = workflow.stage_re_qa({"manifest": {"stages": {"field-repair": {"payload": repair}}}})
+    assert reqa["fields"][0]["status"] == "PASS"

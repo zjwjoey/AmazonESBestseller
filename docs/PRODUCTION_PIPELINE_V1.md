@@ -88,6 +88,78 @@ Historical evidence (August 200-SKU and 496-SKU material) remains historical
 evidence only; it does not prove this October V1 release. The old source-plan
 count remains 15 categories. No unreviewed source was added.
 
+## Controlled V1 operator boundary
+
+`production-run` is the only Production V1 orchestrator.  A source-only
+invocation remains DRAFT and cannot emit a bilingual READY export:
+
+```text
+amazon-es --offline production-run --run-dir RUN --run-id ID --config TASK.json --profile source-only
+```
+
+Live collection remains off by default.  It requires both a reviewed task JSON
+with `network_mode: "live"` and `live_transport.enabled: true`, plus an
+explicit `--allow-live-transport`.  The CLI then verifies the frozen reviewed
+plan hash, calls the existing Scope/Access Gate, and uses only the existing V1
+`BrowserSession` / Spain-delivery / snapshot / serial-detail adapters.  It
+does not construct V2 canary parsing, proxy rotation, CAPTCHA handling, or an
+unreviewed source route.
+
+The reviewed 5,500 plan is
+`configs/tasks/amazon_es_bestseller_5500_202610_plan.json`.  Its derivation
+record freezes the parent-plan and category-tree hashes, 15 categories, 55
+primary + 31 reserve URLs, and two pages per URL.  It changes only the
+per-category unique-ASIN quotas from the reviewed 5,000 plan to a 5,500 total.
+It is a plan, not evidence that 5,500 products were collected.
+
+The checked-in diagnostic sample
+`configs/tasks/amazon_es_bestseller_5500_202610_sample.json` names one
+existing reviewed primary URL, preserves its two-page rule, caps collection at
+two ranking requests and five detail requests, and uses the source-only
+profile. Its `sample.diagnostic` marker means its artifacts are never evidence
+that the 5,500-SKU task is complete or releaseable.
+
+Before any Qwen call, finish a source-only run and create a small, reviewed
+batch bound to its immutable `artifacts/spanish-master.json`:
+
+```text
+amazon-es production-translation-selection --master-artifact RUN/artifacts/spanish-master.json --asins selected-asins.json --out selection.json
+```
+
+The manifest records the exact parent artifact hash and contains a unique
+sorted ASIN set of at most 1,500.  Configure its path as
+`translation.selection_manifest`, then continue the same run with
+`--resume --from-stage translation-input`.  Selection is fingerprinted from
+translation onward but deliberately excluded from earlier source-stage
+fingerprints, so this continuation does not recollect saved evidence.  The
+full Spanish master remains a source-only DRAFT; formal Spanish/Chinese output
+can contain only the selected subset.
+
+Qwen construction additionally requires `--allow-qwen-translation`,
+`translation.enabled: true`, an approved DashScope HTTPS endpoint, credentials
+already available in the environment, and a current official CNY price-card
+record.  Calls pass only through `BudgetedProvider`, whose durable ledger
+enforces 5 CNY total and 1,500 unique ASINs including repair retries.  This
+worktree performed no Amazon or Qwen request.
+
+For the default Beijing endpoint (`dashscope.aliyuncs.com`), the operator must
+record the account's CNY billing confirmation, endpoint host, official-price
+page SHA-256, verification timestamp, and the current official model rates
+before enabling Qwen.  The parent review on 2026-10-05 identified the official
+Qwen-MT Flash CNY page as
+`https://help.aliyun.com/zh/model-studio/qwen-mt-flash`, with Beijing input
+0.700 and output 1.950 CNY per million tokens; that read-only lookup is not a
+substitute for a source-byte hash and account-currency confirmation.  The
+runtime rejects either omission, refuses non-CNY billing, caps input/output at
+8,192 tokens each within the 16,384-token context, and treats
+`finish_reason=length` as an incomplete failed field.  No live price-card is
+committed here, so Qwen remains disabled for actual calls.
+
+The repair stage reruns canonical QA and never copies the failed candidate. A
+dictionary rerender failure remains manual; provider-retry-eligible fields
+receive at most two newly budgeted provider attempts, then unresolved fields
+remain manual. Re-QA runs after every accepted candidate.
+
 ## Older branch reports: do not merge wholesale
 
 `4698957` changed only `translation/production.py` (+4) and

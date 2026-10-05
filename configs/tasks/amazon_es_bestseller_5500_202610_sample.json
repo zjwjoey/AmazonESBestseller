@@ -1,0 +1,34 @@
+{
+  "task_id": "amazon_es_bestseller_5500_202610",
+  "mode": "initial",
+  "network_mode": "live",
+  "profile": "production-research",
+  "reviewed_task_plan": "amazon_es_bestseller_5500_202610_plan.json",
+  "source": {
+    "source_urls": [
+      "https://www.amazon.es/gp/bestsellers/kitchen/2822691031"
+    ],
+    "pages_per_url": 2,
+    "detail_html_dirs": []
+  },
+  "live_transport": {
+    "enabled": true,
+    "kind": "browser-v1",
+    "postal_code": "28001",
+    "headful": false,
+    "manual_assist": false,
+    "challenge_wait_seconds": 180,
+    "request_budget": {
+      "max_ranking_pages": 2,
+      "max_detail_requests": 5
+    }
+  },
+  "translation": {
+    "provider_mode": "fake"
+  },
+  "sample": {
+    "diagnostic": true,
+    "purpose": "AccessGate-scoped V1 source-only smoke sample; not a 5500-SKU research run.",
+    "formal_release_forbidden": true
+  }
+}

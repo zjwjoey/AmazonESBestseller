@@ -37,6 +37,7 @@ from ..translation.cache import TranslationCache
 from .history import HistoryRepository, JsonHistoryRepository
 from .production_run import STAGES, artifact_hash
 from .task_config import TaskConfig
+from .translation_batch import TranslationBatchError, load_selection_manifest
 
 
 class ProductionWorkflowError(RuntimeError):
@@ -385,14 +386,70 @@ class ProductionWorkflow:
     def _master(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         return self._artifact_data(self._prior(context, "spanish-master"))["master"]
 
+    def _translation_batch(self, context: Mapping[str, Any]) -> dict[str, Any]:
+        """Build the only master that later translation/release stages may use.
+
+        The collection master remains complete and DRAFT-capable.  A billable
+        run instead operates on a separately hash-bound <=1500-ASIN subset,
+        so unselected source records can never accidentally appear in a
+        bilingual READY export.
+        """
+        parent_payload = self._prior(context, "spanish-master")
+        master = self._artifact_data(parent_payload)["master"]
+        records = [dict(row) for row in master.get("records") or [] if isinstance(row, Mapping)]
+        available = {str(row.get("asin") or "").upper(): row for row in records}
+        provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
+        path = self.task.translation_selection_manifest
+        if path is None:
+            if provider_mode == "qwen-mt" or self.task.task_id == "amazon_es_bestseller_5500_202610":
+                raise ProductionWorkflowError("TRANSLATION_SELECTION_MANIFEST_REQUIRED")
+            selected_asins = sorted(available)
+            selection = {"selection_schema_version": "implicit-fake-selection-v1",
+                         "selected_asins": selected_asins, "selected_count": len(selected_asins),
+                         "max_unique_asins": len(selected_asins), "manifest_file_hash": ""}
+        else:
+            try:
+                selection = load_selection_manifest(
+                    path,
+                    parent_artifact_hash=str(parent_payload.get("artifact_file_hash") or ""),
+                    parent_content_hash=str(master.get("artifact_hash") or ""),
+                    available_asins=available,
+                )
+            except TranslationBatchError as exc:
+                raise ProductionWorkflowError(str(exc)) from exc
+            selected_asins = list(selection["selected_asins"])
+        selected = [available[asin] for asin in selected_asins]
+        # Rebuild source facts only for the releaseable subset.  This avoids
+        # reusing a full-collection PASS report to bless records that have not
+        # entered the selected translation batch.
+        batch_audit = audit_source_fields(selected)
+        batch_gate = evaluate_source_gate(batch_audit)
+        if not batch_gate.get("ready"):
+            raise ProductionWorkflowError("TRANSLATION_BATCH_SOURCE_AUDIT_NOT_READY:%s" % batch_gate.get("status"))
+        batch_master = build_spanish_master(selected, batch_audit, batch_gate,
+                                            run_id=self.run_id, refresh_strategy="preserve_prior")
+        return {"parent_spanish_master_artifact_hash": parent_payload.get("artifact_file_hash"),
+                "selection_manifest": selection, "translation_batch_master": batch_master,
+                "translation_batch_source_audit": batch_audit,
+                "translation_batch_source_gate": batch_gate}
+
+    def _translation_master(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
+        value = self._artifact_data(self._prior(context, "translation-input"))
+        master = value.get("translation_batch_master")
+        if not isinstance(master, Mapping):
+            raise ProductionWorkflowError("TRANSLATION_BATCH_MASTER_MISSING")
+        return master
+
     def stage_translation_input(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        master = self._master(context)
+        batch = self._translation_batch(context)
+        master = batch["translation_batch_master"]
         value = build_production_input(master.get("records") or [], source_run_id=self.run_id,
                                        source_schema_version=str(master.get("master_schema_version") or "master-v1"),
                                        translation_schema_version=TRANSLATION_SCHEMA_VERSION, run_id=self.run_id)
-        return self._store("translation-input", {"status": "READY", "translation_input": value,
+        return self._store("translation-input", {"status": "READY", "translation_input": value, **batch,
             "input_artifact_hashes": {"spanish-master": self._prior(context, "spanish-master").get("artifact_file_hash")},
-            "counts": {"records": len(value.get("records") or [])}})
+            "counts": {"records": len(value.get("records") or []),
+                       "selected_asins": len(value.get("records") or [])}})
 
     def stage_preclean(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         value = self._artifact_data(self._prior(context, "translation-input"))["translation_input"]
@@ -526,7 +583,7 @@ class ProductionWorkflow:
         return evidence, qa_results
 
     def stage_dictionary_rerender(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        master = self._master(context); translation = self._artifact_data(self._prior(context, "translation"))
+        master = self._translation_master(context); translation = self._artifact_data(self._prior(context, "translation"))
         dictionary = self._artifact_data(self._prior(context, "dictionary"))
         prior_manifest = dictionary["dictionary_manifest"]
         state = translation["state"]
@@ -574,6 +631,9 @@ class ProductionWorkflow:
             "counts": {"fields": len(rows), "passed": sum(r.get("status") == "PASS" for r in rows)}})
 
     def stage_field_repair(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
+        from ..commands.translation import FakeTranslationProvider
+        from ..translation.budget import BudgetedProvider
+
         qa_stage = self._artifact_data(self._prior(context, "chinese-qa"))
         state = qa_stage.get("translation_state") or {}
         qa_rows = qa_stage.get("fields") or []
@@ -581,20 +641,56 @@ class ProductionWorkflow:
         field_lookup = {(str(record.get("asin") or ""), str(field.get("field") or "")): field
                         for record in state.get("records") or [] for field in record.get("fields") or []}
         results, changed = [], self._translation_map(state)
+        provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
+        provider = self.translation_provider
+        if provider is None and provider_mode == "fake":
+            provider = FakeTranslationProvider()
+        if provider_mode == "qwen-mt" and not isinstance(provider, BudgetedProvider):
+            raise ProductionWorkflowError("QWEN_PROVIDER_MUST_BE_BUDGETED")
         for item in queue:
             field = field_lookup.get((str(item.get("asin") or ""), str(item.get("field") or "")))
             if not field or item.get("strategy") == "manual_review":
                 results.append({**item, "status": "MANUAL_REVIEW", "code": "NO_SAFE_AUTOMATIC_REPAIR"}); continue
-            candidate = str(field.get("final_zh") or field.get("candidate_text") or "")
-            outcome = apply_repair(item, source_hash=str(field.get("source_hash") or ""), candidate=candidate,
-                                   qa_result=next((row for row in qa_rows if row.get("asin") == item.get("asin") and row.get("field") == item.get("field")), {}),
-                                   provider="fake", model="fake-offline-v1")
-            results.append(outcome)
-            if outcome.get("status") == "PASS":
+            # Dictionary rerender happened as a real preceding stage.  If its
+            # canonical QA did not accept a replacement, a provider must not
+            # guess over that evidence mismatch.
+            if item.get("strategy") == "dictionary_rerender":
+                results.append({**item, "status": "MANUAL_REVIEW", "code": "RERENDER_QA_NOT_PASS"}); continue
+            if provider is None:
+                raise ProductionWorkflowError("REPAIR_PROVIDER_UNCONFIGURED")
+            current = dict(item)
+            successful = None
+            while int(current.get("attempt") or 0) < int(current.get("max_attempts") or 0):
+                attempt_number = int(current.get("attempt") or 0) + 1
+                response = provider.translate(
+                    str(field.get("source_text") or ""), asin=str(item.get("asin") or ""),
+                    field=str(item.get("field") or ""),
+                    context={"repair": True,
+                             "budget_request_id": "repair:%s:%s:%s:%s:%d" % (
+                                 self.run_id, item.get("asin"), item.get("field"),
+                                 field.get("source_hash"), attempt_number)},
+                )
+                outcome = apply_repair(
+                    current, source_hash=str(field.get("source_hash") or ""),
+                    candidate=str(response.text or ""),
+                    qa_result=next((row for row in qa_rows if row.get("asin") == item.get("asin")
+                                    and row.get("field") == item.get("field")), {}),
+                    provider=provider.name, model=provider.model,
+                )
+                if response.status != "success":
+                    outcome.update(status="MANUAL_REVIEW", code="PROVIDER_RETRY_FAILED",
+                                   provider_error=str(response.error or ""))
+                results.append(outcome)
+                if outcome.get("status") == "PASS":
+                    successful = outcome
+                    break
+                current = {**outcome, "status": "PENDING"}
+            if successful is not None:
                 envelope = changed.get(str(item.get("asin") or "").upper(), {}).get("fields", {}).get(field.get("target_field"))
                 if envelope is not None:
-                    envelope.update(translated_text=outcome.get("repaired_translation"), candidate_text=outcome.get("repaired_translation"),
-                                    final_zh=outcome.get("repaired_translation"), repair_status="READY")
+                    envelope.update(translated_text=successful.get("repaired_translation"),
+                                    candidate_text=successful.get("repaired_translation"),
+                                    final_zh=successful.get("repaired_translation"), repair_status="READY")
         updated_state = self._replace_state_fields(state, changed)
         return self._store("field-repair", {"status": "READY", "repair_queue": queue, "repair_results": results,
             "translation_state": updated_state,
@@ -611,8 +707,10 @@ class ProductionWorkflow:
 
     def stage_field_closure(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         from ..quality.field_closure import audit_field_closure_quality
-        master = self._master(context); _manifest, rankings = self._snapshot_bundle(context)
-        details = self.history.load_details()
+        master = self._translation_master(context); _manifest, rankings = self._snapshot_bundle(context)
+        selected = {str(row.get("asin") or "").upper() for row in master.get("records") or []}
+        rankings = [row for row in rankings if str(row.get("asin") or "").upper() in selected]
+        details = [row for row in self.history.load_details() if str(row.get("asin") or "").upper() in selected]
         report = audit_field_closure_quality(master.get("records"), details, rankings)
         closure = report.to_dict() if hasattr(report, "to_dict") else dict(report)
         return self._store("field-closure", {"status": "READY", "field_closure": closure,
@@ -631,8 +729,8 @@ class ProductionWorkflow:
 
         ranking = self._artifact_data(self._prior(context, "ranking-authority"))
         details = self._artifact_data(self._prior(context, "offline-reparse"))
-        source = self._artifact_data(self._prior(context, "source-audit"))
-        master = self._master(context)
+        translation_input = self._artifact_data(self._prior(context, "translation-input"))
+        master = self._translation_master(context)
         translation = self._artifact_data(self._prior(context, "translation"))
         rerender = self._artifact_data(self._prior(context, "dictionary-rerender"))
         qa = self._artifact_data(self._prior(context, "re-qa"))
@@ -667,8 +765,8 @@ class ProductionWorkflow:
         artifacts = {
             "spanish_master": master,
             "ranking_authority": seal_artifact("ranking_authority", authority_report),
-            "source_audit": seal_artifact("source_audit", source["audit"]),
-            "source_gate": seal_artifact("source_gate", source["source_gate"]),
+            "source_audit": seal_artifact("source_audit", translation_input["translation_batch_source_audit"]),
+            "source_gate": seal_artifact("source_gate", translation_input["translation_batch_source_gate"]),
             "detail_identity": seal_artifact("detail_identity", detail_report),
             "offline_replay": seal_artifact("offline_replay", replay_report),
             "field_closure": seal_artifact("field_closure", closure["field_closure"]),
@@ -683,8 +781,10 @@ class ProductionWorkflow:
         }
         return self._store("release", {"status": "READY", "artifacts": artifacts,
             "input_artifact_hashes": {"field-closure": self._prior(context, "field-closure").get("artifact_file_hash"),
+                                        "translation-input": self._prior(context, "translation-input").get("artifact_file_hash"),
                                         "spanish-master": self._prior(context, "spanish-master").get("artifact_file_hash")},
-            "counts": {"records": len(chinese_rows)}})
+            "translation_batch": translation_input.get("selection_manifest"),
+            "counts": {"records": len(chinese_rows), "selected_asins": len(chinese_rows)}})
 
     def stage_excel(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         """The only producer path to the frozen three-sheet Excel exporter."""

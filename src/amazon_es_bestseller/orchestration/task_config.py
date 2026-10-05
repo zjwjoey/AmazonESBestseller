@@ -24,10 +24,14 @@ class TaskConfig:
     ranking_evidence: Path | None
     source_urls: tuple[str, ...]
     pages_per_url: int
+    reviewed_task_plan: Path | None
+    reviewed_task_plan_hash: str | None
     detail_html_dirs: tuple[Path, ...]
     history_dir: Path | None
     profile: str
     translation: Mapping[str, Any]
+    translation_selection_manifest: Path | None
+    translation_selection_manifest_hash: str | None
     refresh_due_asins: frozenset[str]
     raw: Mapping[str, Any]
 
@@ -67,6 +71,16 @@ class TaskConfig:
             raise TaskConfigError("TASK_CONFIG_RANKING_EVIDENCE_REQUIRED")
         if network_mode == "live" and not source_urls:
             raise TaskConfigError("TASK_CONFIG_SOURCE_URLS_REQUIRED")
+        plan_value = str(value.get("reviewed_task_plan") or "").strip()
+        reviewed_task_plan = ((root / plan_value).resolve()
+                              if plan_value and not Path(plan_value).is_absolute()
+                              else Path(plan_value) if plan_value else None)
+        if network_mode == "live" and reviewed_task_plan is None:
+            raise TaskConfigError("TASK_CONFIG_REVIEWED_TASK_PLAN_REQUIRED")
+        if reviewed_task_plan is not None and not reviewed_task_plan.is_file():
+            raise TaskConfigError("REVIEWED_TASK_PLAN_MISSING:%s" % reviewed_task_plan)
+        reviewed_task_plan_hash = (_file_hash(reviewed_task_plan)
+                                   if reviewed_task_plan is not None else None)
         html_values = source.get("detail_html_dirs") or value.get("detail_html_dirs") or []
         if isinstance(html_values, (str, Path)):
             html_values = [html_values]
@@ -80,6 +94,14 @@ class TaskConfig:
         translation = value.get("translation") or {}
         if not isinstance(translation, Mapping):
             raise TaskConfigError("TASK_CONFIG_TRANSLATION_INVALID")
+        selection_value = str(translation.get("selection_manifest") or "").strip()
+        selection_manifest = ((root / selection_value).resolve()
+                              if selection_value and not Path(selection_value).is_absolute()
+                              else Path(selection_value) if selection_value else None)
+        if selection_manifest is not None and not selection_manifest.is_file():
+            raise TaskConfigError("TRANSLATION_SELECTION_MANIFEST_MISSING:%s" % selection_manifest)
+        selection_manifest_hash = (_file_hash(selection_manifest)
+                                   if selection_manifest is not None else None)
         profile = str(value.get("profile") or "production-research")
         if "v2-canary" in profile.casefold():
             raise TaskConfigError("TASK_CONFIG_CANARY_PROFILE_FORBIDDEN")
@@ -91,7 +113,9 @@ class TaskConfig:
             raise TaskConfigError("TASK_CONFIG_REFRESH_DUE_INVALID")
         refresh_due_asins = frozenset(str(asin).strip().upper() for asin in due if str(asin).strip())
         return cls(task_id, mode, network_mode, ranking_evidence, source_urls, pages_per_url,
-                   dirs, history_dir, profile, dict(translation), refresh_due_asins, dict(value))
+                   reviewed_task_plan, reviewed_task_plan_hash, dirs, history_dir,
+                   profile, dict(translation), selection_manifest, selection_manifest_hash,
+                   refresh_due_asins, dict(value))
 
     def evidence_fingerprints(self) -> dict[str, str]:
         if self.ranking_evidence is not None and not self.ranking_evidence.is_file():
@@ -100,6 +124,8 @@ class TaskConfig:
                   if self.ranking_evidence is not None else
                   {"live_source_plan": hashlib.sha256(json.dumps({"urls": self.source_urls,
                       "pages_per_url": self.pages_per_url}, sort_keys=True).encode("utf-8")).hexdigest()})
+        if self.reviewed_task_plan_hash:
+            result["reviewed_task_plan"] = self.reviewed_task_plan_hash
         for index, root in enumerate(self.detail_html_dirs):
             if not root.is_dir():
                 raise TaskConfigError("DETAIL_HTML_DIR_MISSING:%s" % root)
@@ -115,6 +141,8 @@ class TaskConfig:
                 "network_mode": self.network_mode, "profile": self.profile,
                 "evidence_fingerprints": self.evidence_fingerprints(),
                 "source_urls": list(self.source_urls), "pages_per_url": self.pages_per_url,
+                "reviewed_task_plan_hash": self.reviewed_task_plan_hash or "",
+                "translation_selection_manifest_hash": self.translation_selection_manifest_hash or "",
                 "refresh_due_asins": sorted(self.refresh_due_asins),
                 "parser": {"ranking": "V1", "detail": "V1"},
                 "translation": dict(self.translation)}

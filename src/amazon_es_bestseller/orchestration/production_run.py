@@ -7,6 +7,7 @@ cannot silently consume stale evidence.
 from __future__ import annotations
 import hashlib
 import json
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -73,7 +74,27 @@ class ProductionRun:
         prior = manifest.get("stages") or {}
         upstream = {name: row.get("artifact_hash") for name, row in prior.items()
                     if isinstance(row, Mapping) and STAGES.index(name) < STAGES.index(stage)}
-        return artifact_hash({"stage": stage, "config": self.config, "schema": self.schema_version,
+        config = deepcopy(self.config)
+        # A selection manifest is intentionally created after the source-only
+        # Spanish Master exists.  It is an input to translation and later
+        # stages, not to collection/source audit.  Excluding only this value
+        # before ``translation-input`` permits a safe --resume --from-stage
+        # continuation without recollecting already hash-validated evidence.
+        if STAGES.index(stage) < STAGES.index("translation-input"):
+            config.pop("translation_selection_manifest_hash", None)
+            raw = config.get("task_config")
+            if isinstance(raw, Mapping):
+                raw = dict(raw)
+                raw_translation = raw.get("translation")
+                if isinstance(raw_translation, Mapping):
+                    raw["translation"] = {key: value for key, value in raw_translation.items()
+                                          if key != "selection_manifest"}
+                config["task_config"] = raw
+            translation = config.get("translation")
+            if isinstance(translation, Mapping):
+                config["translation"] = {key: value for key, value in translation.items()
+                                         if key != "selection_manifest"}
+        return artifact_hash({"stage": stage, "config": config, "schema": self.schema_version,
                               "offline": self.offline, "upstream": upstream})
 
     def _record_error(self, stage: str, code: str, detail: str = "") -> None:
