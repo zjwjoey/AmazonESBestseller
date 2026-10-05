@@ -78,6 +78,10 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
                 if isinstance(shard, Mapping) and shard.get("batch_id"):
                     candidate.setdefault("batch_id", shard.get("batch_id"))
                 old = current_fields.get(field)
+                if not candidate.get("source_hash"):
+                    candidate.update(translation_status="source_changed", qa_status="review_required",
+                                     promotion_status="SOURCE_CHANGED", last_error={
+                                         "code": "MISSING_SOURCE_HASH"})
                 if old and old.get("source_hash") and candidate.get("source_hash") \
                         and old.get("source_hash") != candidate.get("source_hash"):
                     history = list(old.get("history") or [])
@@ -107,9 +111,11 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
 
 
 def shard_batch_id(*, dataset_hash: str, selection: Mapping[str, Any],
-                   prompt_version: str, schema_version: str) -> str:
+                   prompt_version: str, schema_version: str, provider: str = "",
+                   execution_mode: str = "") -> str:
     payload = {"dataset_hash": dataset_hash, "selection": dict(selection),
-               "prompt_version": prompt_version, "schema_version": schema_version}
+               "prompt_version": prompt_version, "schema_version": schema_version,
+               "provider": provider, "execution_mode": execution_mode}
     return "batch_" + _hash(payload)[:16]
 
 
@@ -125,6 +131,14 @@ def shard_records_equal(left: Any, right: Any) -> bool:
         return value
 
     return scrub(left) == scrub(right)
+
+
+def shard_immutable_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    """Require every immutable batch identity component to match on retry."""
+    keys = ("run_id", "batch_id", "selection", "input_dataset_hash",
+            "translation_schema_version", "prompt_version", "provider", "execution_mode")
+    return all(left.get(key) == right.get(key) for key in keys) and shard_records_equal(
+        left.get("records"), right.get("records"))
 
 
 def compute_release_status(statuses: Iterable[str]) -> str:

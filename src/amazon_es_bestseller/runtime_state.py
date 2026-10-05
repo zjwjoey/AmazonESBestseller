@@ -12,6 +12,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -50,6 +51,29 @@ class VersionedCheckpointStore:
         self._atomic_json(self.latest_path, payload)
         return version_path
 
+    def load_or_migrate(self, *, legacy_path: str | Path | None = None,
+                        default: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Load versioned state, migrating one valid legacy JSON object once.
+
+        An absent store is a normal first-run condition.  A malformed existing
+        state is not: callers must fail closed rather than silently restart a
+        long-running collection task from an empty scheduler state.
+        """
+        if self.latest_path.exists() or self.last_good_path.exists():
+            return self.load()
+        if legacy_path is not None:
+            legacy = Path(legacy_path)
+            if legacy.exists():
+                try:
+                    value = self._load_json(legacy)
+                except (OSError, ValueError) as exc:
+                    raise CheckpointRecoveryError(
+                        f"CHECKPOINT_UNRECOVERABLE:{self.name}:legacy={exc}"
+                    ) from exc
+                self.save(value)
+                return value
+        return dict(default or {})
+
     def load(self) -> dict[str, Any]:
         """Load latest state, recovering from last-good only when necessary."""
         latest_error: Exception | None = None
@@ -79,21 +103,46 @@ class VersionedCheckpointStore:
 
     @staticmethod
     def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
-        encoded = (json.dumps(dict(payload), ensure_ascii=False, indent=2,
-                              sort_keys=True) + "\n").encode("utf-8")
-        descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-        temporary = Path(name)
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(encoded)
-                handle.flush()
-                os.fsync(handle.fileno())
-            # ``replace`` is atomic on supported Windows filesystems.  Failure
-            # leaves the prior latest/last-good file intact rather than writing
-            # an unvalidated partial JSON document in place.
-            os.replace(temporary, path)
-        finally:
+        atomic_write_json(path, dict(payload), sort_keys=True)
+
+
+def atomic_write_json(path: str | Path, payload: Any, *, sort_keys: bool = False) -> None:
+    """Write verified JSON through fsync + replace, never direct-overwrite.
+
+    Windows readers can transiently deny a rename.  Retrying preserves the
+    last complete target; falling back to ``open(path, 'w')`` would risk a torn
+    scheduler checkpoint, so an exhausted retry surfaces PermissionError and
+    leaves the uniquely named staged evidence in place for recovery.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(payload, ensure_ascii=False, indent=2,
+                          sort_keys=sort_keys) + "\n").encode("utf-8")
+    # Validate before mutating any visible checkpoint path.
+    json.loads(encoded.decode("utf-8"))
+    descriptor, name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+    temporary = Path(name)
+    replaced = False
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        last_error: PermissionError | None = None
+        for delay in (0.0, 0.05, 0.15, 0.35, 0.75):
+            try:
+                os.replace(temporary, target)
+                replaced = True
+                return
+            except PermissionError as exc:
+                last_error = exc
+                if delay:
+                    time.sleep(delay)
+        if last_error is not None:
+            raise last_error
+    finally:
+        if replaced:
             temporary.unlink(missing_ok=True)
 
 
-__all__ = ["CheckpointRecoveryError", "VersionedCheckpointStore"]
+__all__ = ["CheckpointRecoveryError", "VersionedCheckpointStore", "atomic_write_json"]

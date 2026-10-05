@@ -29,3 +29,23 @@ def test_versioned_checkpoint_rejects_unrecoverable_state(tmp_path):
 
     with pytest.raises(CheckpointRecoveryError, match="CHECKPOINT_UNRECOVERABLE"):
         store.load()
+
+
+def test_versioned_checkpoint_migrates_legacy_and_never_overwrites_good_state_on_permission_error(monkeypatch, tmp_path):
+    legacy = tmp_path / "batch_state_v2.json"
+    legacy.write_text('{"run_status": "RUNNING"}', encoding="utf-8")
+    store = VersionedCheckpointStore(tmp_path / "checkpoints", "batch_state_v2")
+    assert store.load_or_migrate(legacy_path=legacy) == {"run_status": "RUNNING"}
+    assert store.latest_path.exists() and store.last_good_path.exists()
+
+    original_replace = __import__("os").replace
+
+    def deny_latest(source, destination):
+        if destination == store.latest_path:
+            raise PermissionError(13, "locked latest")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr("amazon_es_bestseller.runtime_state.os.replace", deny_latest)
+    with pytest.raises(PermissionError):
+        store.save({"run_status": "COMPLETE"})
+    assert store.load() == {"run_status": "RUNNING"}

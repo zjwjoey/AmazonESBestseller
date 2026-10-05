@@ -49,10 +49,13 @@ def test_checkpoint_write_falls_back_when_windows_replace_is_denied(monkeypatch,
     monkeypatch.setattr(task_module.os, "replace", deny_replace)
     monkeypatch.setattr(task_module.time, "sleep", lambda _seconds: None)
 
-    task_module._write_json_atomic(target, {"run_status": "RUNNING"})
+    with pytest.raises(PermissionError):
+        task_module._write_json_atomic(target, {"run_status": "RUNNING"})
 
-    assert json.loads(target.read_text(encoding="utf-8")) == {"run_status": "RUNNING"}
-    assert not list(tmp_path.glob(".*.tmp"))
+    # Never fall back to direct overwrite: a valid old state is safer than a
+    # potentially torn final JSON file on Windows.
+    assert json.loads(target.read_text(encoding="utf-8")) == {"old": True}
+    assert list(tmp_path.glob(".*.tmp"))
 
 
 def test_reviewed_task_plan_requires_real_sources_and_three_slots():
@@ -248,6 +251,8 @@ def test_parallel_task_runner_writes_manifest_and_report(monkeypatch, tmp_path):
     assert json.loads((tmp_path / "run" / "final_manifest.json").read_text(encoding="utf-8"))
     assert (tmp_path / "run" / "category_summary.csv").exists()
     assert (tmp_path / "run" / "run_report.json").exists()
+    assert (tmp_path / "run" / "checkpoints" / "batch_state_v2.latest.json").exists()
+    assert (tmp_path / "run" / "checkpoints" / "batch_state_v2.last_good.json").exists()
 
 
 def test_parallel_access_stop_closes_worker_request_gate(monkeypatch, tmp_path):
@@ -310,11 +315,14 @@ def test_category_detail_failure_is_persisted_and_retried(monkeypatch, tmp_path)
     monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", FakeSession)
     monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery",
                         lambda session, postal_code="28001": None)
-    monkeypatch.setattr("amazon_es_bestseller.collection.ranking.collect_rankings",
-                        lambda urls, session, out_dir, pages_per_url=1: [{
-                            "asin": "A000000001", "bestseller_rank": 1,
-                            "ranking_source_url": urls[0], "ranking_page_number": 1,
-                        }])
+    ranking_calls = []
+
+    def fake_rankings(urls, session, out_dir, pages_per_url=1):
+        ranking_calls.append(list(urls))
+        return [{"asin": "A000000001", "bestseller_rank": 1,
+                 "ranking_source_url": urls[0], "ranking_page_number": 1}]
+
+    monkeypatch.setattr("amazon_es_bestseller.collection.ranking.collect_rankings", fake_rankings)
 
     def fake_details(asins, session, out_dir):
         detail_calls.append(list(asins))
@@ -345,6 +353,7 @@ def test_category_detail_failure_is_persisted_and_retried(monkeypatch, tmp_path)
     assert second["status"] == "COMPLETE"
     assert second["pending_detail_asins"] == []
     assert len(detail_calls) == 2
+    assert ranking_calls == [["https://www.amazon.es/gp/bestsellers/a"]]
 
 
 def test_task_completion_gate_rejects_missing_selected_details(monkeypatch, tmp_path):

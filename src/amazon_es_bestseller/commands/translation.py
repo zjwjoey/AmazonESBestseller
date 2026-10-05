@@ -16,7 +16,7 @@ from ..translation.cache import TranslationCache
 from ..translation.preclean import audit_records, write_reports
 from ..translation.production import (
     build_production_input, build_production_state, merge_translation_shards,
-    records_for_preclean, release_gate, shard_batch_id, shard_records_equal,
+    records_for_preclean, release_gate, shard_batch_id, shard_immutable_equal,
 )
 from ..translation.production_contract import matches_category_filter, normalize_asin_filter
 from ..translation.providers.base import ProviderResponse, TranslationProvider
@@ -82,8 +82,20 @@ def _selected_records(records: list[dict[str, Any]], args: Any) -> tuple[list[di
 
 
 def _service(run_dir: Path, config: Mapping[str, Any], args: Any) -> TranslationService:
+    provider_mode = str(config.get("provider_mode") or "fake").strip().lower()
+    if provider_mode == "qwen-mt":
+        from ..translation.providers.qwen_mt import QwenMTProvider
+        provider: TranslationProvider = QwenMTProvider(
+            model=args.model or str(config.get("model") or "qwen-mt-flash"),
+            endpoint=config.get("endpoint"), protocol=config.get("protocol"),
+            rate=float(args.rate if args.rate is not None else config.get("rate", 0.5)),
+        )
+    elif provider_mode == "fake":
+        provider = FakeTranslationProvider()
+    else:
+        raise SystemExit("unsupported provider_mode: %s" % provider_mode)
     return TranslationService(
-        FakeTranslationProvider(), TranslationCache(run_dir / "translations" / "translation_cache.json"),
+        provider, TranslationCache(run_dir / "translations" / "translation_cache.json"),
         schema_version=str(config.get("schema_version") or TRANSLATION_SCHEMA_VERSION),
         prompt_version=str(config.get("prompt_version") or "amazon-es-retail-v2"),
         source_language=str(config.get("source_language") or "es"),
@@ -118,8 +130,23 @@ def _current_release_is_bound(state: Mapping[str, Any], production_input: Mappin
         return False
     expected = {str(item.get("asin") or "").upper(): item.get("source_record_hash")
                 for item in production_input.get("records", [])}
-    return bool(expected) and all(expected.get(str(row.get("asin") or "").upper()) == row.get("source_record_hash")
-                                  for row in state.get("records", []))
+    actual_rows = list(state.get("records") or [])
+    actual = {str(row.get("asin") or "").upper(): row for row in actual_rows if row.get("asin")}
+    if not expected or set(actual) != set(expected):
+        return False
+    for item in production_input.get("records", []):
+        asin = str(item.get("asin") or "").upper()
+        row = actual.get(asin, {})
+        if row.get("source_record_hash") != expected[asin]:
+            return False
+        expected_fields = item.get("fields") or {}
+        actual_fields = {field.get("field"): field for field in row.get("fields", []) if isinstance(field, Mapping)}
+        if set(actual_fields) != set(expected_fields):
+            return False
+        if any(actual_fields[name].get("source_hash") != source.get("source_hash")
+               for name, source in expected_fields.items()):
+            return False
+    return True
 
 
 def run_translation_production(args: Any, *, load_products: Callable[[str], list],
@@ -175,15 +202,21 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         batch_id = shard_batch_id(dataset_hash=str(manifest.get("dataset_hash") or ""), selection=selection,
                                   prompt_version=str(config.get("prompt_version") or "amazon-es-retail-v2"),
                                   schema_version=str(config.get("schema_version") or TRANSLATION_SCHEMA_VERSION))
+        provider_mode = str(config.get("provider_mode") or "fake").lower()
+        batch_id = shard_batch_id(dataset_hash=str(manifest.get("dataset_hash") or ""), selection=selection,
+                                  prompt_version=str(config.get("prompt_version") or "amazon-es-retail-v2"),
+                                  schema_version=str(config.get("schema_version") or TRANSLATION_SCHEMA_VERSION),
+                                  provider=service.provider.name, execution_mode=provider_mode)
         shard = {"run_id": args.run_id, "batch_id": batch_id, "created_at": _now(), "selection": selection,
                  "input_dataset_hash": manifest.get("dataset_hash"), "translation_schema_version": TRANSLATION_SCHEMA_VERSION,
-                 "prompt_version": config.get("prompt_version", "amazon-es-retail-v2"), "provider": "fake", "records": result["records"]}
+                 "prompt_version": config.get("prompt_version", "amazon-es-retail-v2"), "provider": service.provider.name,
+                 "execution_mode": provider_mode, "records": result["records"]}
         shard_dir = run_dir / "translations" / "shards"
         shard_path = shard_dir / (batch_id + ".json")
         existing = load_json(str(shard_path)) if shard_path.exists() else None
         if existing is None:
             save_json(shard, str(shard_path))
-        elif not shard_records_equal(existing.get("records"), shard.get("records")):
+        elif not shard_immutable_equal(existing, shard):
             raise SystemExit("BATCH_ID_CONFLICT: immutable shard differs: %s" % batch_id)
         shards = [load_json(str(path)) for path in sorted(shard_dir.glob("batch_*.json"))]
         aggregate = merge_translation_shards(shards)
@@ -201,6 +234,8 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         state = build_production_state(production_input, preclean_records, load_json(str(translations_path)),
                                        qa_version=str(config.get("qa_version") or "translation-qa-v1"),
                                        prompt_version=str(config.get("prompt_version") or "amazon-es-retail-v2"))
+        state["translation_execution_mode"] = str(config.get("provider_mode") or "fake").lower()
+        state["release_candidate"]["translation_execution_mode"] = state["translation_execution_mode"]
         save_json(state, str(run_dir / "state" / "translation_state.json"))
         save_json(state["release_candidate"], str(run_dir / "release" / "production_release_candidate.json"))
         save_json(state["repair_queue"], str(run_dir / "repair" / "repair_queue.json"))
@@ -217,6 +252,9 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         if not _current_release_is_bound(state, production_input):
             raise SystemExit("Release Gate blocked: stored READY failed source-hash revalidation")
         ready, status = release_gate(release)
+        fake_run = str(state.get("translation_execution_mode") or "fake").lower() == "fake"
+        if fake_run and not args.debug_export:
+            raise SystemExit("Release Gate blocked: fake translation output is never a formal release")
         if not ready and not args.debug_export:
             raise SystemExit("Release Gate blocked: release_status=%s" % status)
         products = [dict(item.get("source_record") or {}) for item in production_input.get("records", [])]
@@ -244,9 +282,10 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
                                    images_by_asin=load_images(args.images_dir, products),
                                    category_planning=load_category_planning(args.category_planning),
                                    prev_workbook=previous, out_path=out_path, profile=args.profile)
-        save_json({"release_status": "FORCED_DEBUG" if args.debug_export else "READY",
-                   "formal_release": not args.debug_export,
-                   "label": "NOT_FOR_RELEASE" if args.debug_export else "PRODUCTION_RELEASE",
+        debug_only = args.debug_export or fake_run
+        save_json({"release_status": "FORCED_DEBUG" if debug_only else "READY",
+                   "formal_release": not debug_only,
+                   "label": "NOT_FOR_RELEASE" if debug_only else "PRODUCTION_RELEASE",
                    "blocked_count": len(blocked)}, str(Path(out_path).with_suffix(".release_status.json")))
         return
     raise SystemExit("unknown translation-production stage: %s" % stage)

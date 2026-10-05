@@ -22,6 +22,7 @@ import time
 from typing import Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
+from ..runtime_state import VersionedCheckpointStore, atomic_write_json
 from .quota import (QuotaError, normalize_source_url, select_research_quota,
                      validate_research_categories)
 
@@ -32,44 +33,28 @@ def _read_json(path: Path, default):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _write_json_atomic(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(value, ensure_ascii=False, indent=2)
-    # A fixed ``.tmp`` name allowed stale files and antivirus/indexer locks to
-    # make Windows ``os.replace`` fail with WinError 5.  Keep each write's
-    # staging file unique so a previous interrupted write cannot collide with
-    # the current checkpoint.
-    tmp = path.with_name(
-        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-    )
-    tmp.write_text(payload, encoding="utf-8")
-    last_error: PermissionError | None = None
-    for delay in (0.0, 0.05, 0.15, 0.35, 0.75, 1.5):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError as exc:
-            last_error = exc
-            if delay:
-                time.sleep(delay)
+def _category_store(category_dir: Path, name: str) -> VersionedCheckpointStore:
+    return VersionedCheckpointStore(category_dir / "checkpoints", name)
 
-    # Some Windows readers deny delete/rename sharing but still allow a normal
-    # write.  Preserve the same JSON payload through that fallback instead of
-    # terminating the scheduler; the next successful checkpoint will restore
-    # atomic replacement.  If the target also denies writing, surface the
-    # original permission error and retain the staged file for recovery.
-    try:
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        tmp.unlink(missing_ok=True)
-        print(f"[任务] 检查点替换被占用，已使用直接写入回退：{path}")
-        return
-    except OSError:
-        if last_error is not None:
-            raise last_error
-        raise
+
+def _load_category_mapping(category_dir: Path, name: str, legacy_name: str) -> dict:
+    return _category_store(category_dir, name).load_or_migrate(
+        legacy_path=category_dir / legacy_name, default={})
+
+
+def _load_category_records(category_dir: Path, name: str, legacy_name: str) -> list[dict]:
+    payload = _load_category_mapping(category_dir, name, legacy_name)
+    records = (payload.get("records") or []) if isinstance(payload, Mapping) else []
+    return [dict(row) for row in records if isinstance(row, Mapping)]
+
+
+def _write_json_atomic(path: Path, value: object) -> None:
+    """Compatibility wrapper for derived task output JSON.
+
+    It intentionally shares the checkpoint writer's fail-closed Windows
+    semantics: a locked target is never opened for an in-place overwrite.
+    """
+    atomic_write_json(path, value)
 
 
 def _normalize_url(url: object) -> str:
@@ -271,10 +256,13 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
     group = str(category["research_category"])
     category_dir = output / "categories" / group
     category_dir.mkdir(parents=True, exist_ok=True)
-    category_state_path = category_dir / "category_state.json"
-    category_state = _read_json(category_state_path, {})
-    rankings = _read_json(category_dir / "rankings.json", [])
-    details = _read_json(category_dir / "details.json", [])
+    category_state_store = _category_store(category_dir, "category_state")
+    rankings_store = _category_store(category_dir, "rankings")
+    details_store = _category_store(category_dir, "details")
+    category_state = category_state_store.load_or_migrate(
+        legacy_path=category_dir / "category_state.json", default={})
+    rankings = _load_category_records(category_dir, "rankings", "rankings.json")
+    details = _load_category_records(category_dir, "details", "details.json")
     ranking_keys = {(r.get("ranking_source_url"), r.get("ranking_page_number"),
                     r.get("bestseller_rank"), str(r.get("asin") or "").upper())
                    for r in rankings if isinstance(r, Mapping)}
@@ -289,7 +277,7 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
     collected_at = datetime.now().isoformat(timespec="seconds")
 
     def save_category(status: str, active_url: str = "") -> None:
-        _write_json_atomic(category_state_path, {
+        category_state_store.save({
             "schema_version": 1,
             "research_category": group,
             "worker_id": worker_id,
@@ -302,11 +290,11 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
             "pending_detail_asins": sorted(pending_detail_asins),
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         })
-        _write_json_atomic(category_dir / "rankings.json", rankings)
-        _write_json_atomic(category_dir / "details.json", list(detail_map.values()))
+        rankings_store.save({"records": rankings})
+        details_store.save({"records": list(detail_map.values())})
 
     completed_for_category = set(completed_urls) | {
-        url for url, status in source_status.items() if status == "completed"
+        url for url, status in source_status.items() if status in {"ranked", "completed"}
     }
     pending_sources = _source_urls(category, completed_for_category)
     pending_sources.sort(key=lambda source: 1 if str(source.get("role") or "primary").lower() == "reserve" else 0)
@@ -330,13 +318,17 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
         if location is not None:
             print("[%s][槽位%d] 配送地点已确认" % (group, worker_id))
 
-        def collect_detail_batch(asins: list[str]) -> None:
+        def collect_detail_batch(asins: list[str], active_url: str = "") -> None:
             """Collect and persist a retryable detail batch."""
             if not asins:
                 return
             claimed = claim_asins(asins)
             if not claimed:
                 return
+            pending_detail_asins.update(claimed)
+            # Persist the durable source result plus exactly the ASINs claimed
+            # by this worker before a detail request can be interrupted.
+            save_category("RUNNING", active_url)
             try:
                 detail_dir = str(category_dir / "detail_cache")
                 if stop_event is None:
@@ -404,10 +396,15 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
                 if asin and asin not in seen:
                     seen.add(asin)
                     candidates.append(asin)
+            # Ranking evidence is independently durable before its first
+            # detail request.  A restart therefore retries only the pending
+            # details instead of requesting an already verified source page.
+            source_status[url] = "ranked"
+            save_category("RUNNING", url)
             if should_stop():
                 from ..access.detector import AccessStopError
                 raise AccessStopError("其他工作槽触发访问限制，停止新请求")
-            collect_detail_batch(candidates)
+            collect_detail_batch(candidates, url)
             source_status[url] = "completed"
             save_category("RUNNING", "")
         final_status = "COMPLETE" if not pending_detail_asins else "DETAIL_INCOMPLETE"
@@ -487,7 +484,8 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     output = Path(out_dir).resolve()
     output.mkdir(parents=True, exist_ok=True)
     state_path = output / "batch_state_v2.json"
-    state = _read_json(state_path, {})
+    state_store = VersionedCheckpointStore(output / "checkpoints", "batch_state_v2")
+    state = state_store.load_or_migrate(legacy_path=state_path, default={})
     categories = plan["categories"]
     category_map = {row["research_category"]: row for row in categories}
     force_reserve_sources = state.get("run_status") == "QUOTA_UNIQUE_SHORTFALL"
@@ -518,7 +516,7 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                 claimed.discard(asin)
 
     def save_state(run_status: str, ready_at: list[float], active: list[str]) -> None:
-        _write_json_atomic(state_path, {
+        state_store.save({
             "schema_version": 2, "task_id": plan["task_id"], "mode": mode,
             "run_status": run_status, "categories": category_states,
             "worker_ready_at": ready_at, "active_workers": active,
@@ -535,7 +533,8 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
         # reopen already exhausted reserve URLs.
         if not source_status:
             category_state_path = output / "categories" / group / "category_state.json"
-            saved = _read_json(category_state_path, {})
+            saved = _category_store(category_state_path.parent, "category_state").load_or_migrate(
+                legacy_path=category_state_path, default={})
             source_status = saved.get("source_status") or {}
         completed = {url for url, status in source_status.items()
                      if status == "completed"}
