@@ -1,0 +1,10 @@
+# Bounded, source-only compatibility ranges for the offline CI matrix.
+# Platform-specific wheels remain selected by pip for each Python/OS runner.
+beautifulsoup4>=4.12,<5
+lxml>=5,<6
+openpyxl>=3.1,<4
+Pillow>=10,<12
+playwright>=1.40,<2
+pytest>=8,<10
+ruff>=0.8,<1
+setuptools>=68,<81

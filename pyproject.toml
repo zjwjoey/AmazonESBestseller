@@ -17,7 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8.0"]
+# CI constrains these separately; upper bounds keep local test installs within
+# the compatibility line that CI exercises without pinning platform wheels.
+test = ["pytest>=8.0,<10", "ruff>=0.8,<1"]
 transport = ["curl-cffi>=0.7"]
 
 [project.scripts]
@@ -33,3 +35,21 @@ where = ["src"]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff.lint]
+# Start with runtime-correctness diagnostics.  The legacy codebase has a large
+# style backlog; enabling every formatter/modernisation rule would make CI
+# permanently red or require unsafe cross-module churn.
+select = ["E4", "E7", "E9", "F"]
+# Existing findings are limited to these legacy cleanup categories.  Keep
+# undefined-name/import failures enabled; this is not an all-rules bypass.
+ignore = ["E701", "E702", "F401", "F601", "F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# Compatibility modules intentionally retain their old public adapters.  These
+# narrow exceptions are tracked rather than disabling redefinition/import
+# diagnostics for the repository as a whole.
+"src/amazon_es_bestseller/quality/source_fields.py" = ["E402", "F811"]
+"src/amazon_es_bestseller/translation/__init__.py" = ["E402"]
+"tests/test_access_stop.py" = ["F811"]
+"tests/test_pipeline.py" = ["F811"]
