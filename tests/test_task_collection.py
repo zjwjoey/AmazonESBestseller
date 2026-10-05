@@ -86,6 +86,39 @@ def test_task_and_discovery_commands_are_registered():
     assert tree_args.command == "discover-tree"
 
 
+def test_task_collect_cli_dispatches_to_existing_scheduler_with_runtime_overrides(
+        monkeypatch, tmp_path, capsys):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps({"task_id": "reviewed"}), encoding="utf-8")
+    observed = {}
+
+    def fake_run_task(plan, out_dir, **kwargs):
+        observed.update({"plan": plan, "out_dir": out_dir, **kwargs})
+        return {"mode": "serial", "run_status": "COMPLETE", "final_unique_asins": 1}
+
+    monkeypatch.setattr("amazon_es_bestseller.collection.task.run_task", fake_run_task)
+    assert cli.main([
+        "task-collect", "--plan", str(plan_path), "--out-dir", str(tmp_path / "run"),
+        "--mode", "serial", "--postal-code", "28001", "--challenge-wait-seconds", "12",
+        "--manual-assist",
+    ]) == 0
+    assert observed["plan"] == {
+        "task_id": "reviewed", "postal_code": "28001",
+        "challenge_wait_seconds": 12.0, "manual_assist": True,
+    }
+    assert observed["mode"] == "serial"
+    assert observed["project_root"].name == "production-v1-complete"
+    assert "task-collect serial" in capsys.readouterr().out
+
+
+def test_task_collect_retains_legacy_offline_rejection(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--offline", "task-collect", "--plan", str(tmp_path / "missing.json"),
+                  "--out-dir", str(tmp_path / "run")])
+    assert exc_info.value.code == 2
+    assert "需要联网" in capsys.readouterr().err
+
+
 def test_reviewed_task_plan_rejects_duplicate_source():
     plan = _plan()
     plan["categories"][1]["sources"] = plan["categories"][0]["sources"]

@@ -2,13 +2,16 @@
 
 Last evidence review: 2026-10-05. This is a code-and-test inventory, not a
 claim that a live production run occurred. **Overall: NOT_READY_FOR_MERGE.** A
-fresh local full offline pytest run ended with exit code 0 on 2026-10-05. This
-does not replace separately approved live Amazon and Provider evidence.
+fresh local full offline pytest run ended with exit code 0 on 2026-10-05
+(`full_pytest_20261005_174000.exit`). This does not replace separately
+approved live Amazon and Provider evidence.
 
 Status vocabulary: `IMPLEMENTED` = code exists; `OFFLINE_VERIFIED` = focused
-tests passed in this worktree; `LIVE_NOT_EXECUTED` = no Amazon/provider call
-was made for this release; `PENDING` = integration/evidence still required;
-`BLOCKED` = a release prerequisite is not yet satisfied.
+tests passed in this worktree; `LIVE_TRANSPORT_STOPPED` = a bounded live
+transport preflight ran, but no ranking/detail source collection was allowed
+to start; `LIVE_NOT_EXECUTED` = the indicated Amazon/provider production step
+has not run; `PENDING` = integration/evidence still required; `BLOCKED` = a
+release prerequisite is not yet satisfied.
 
 | # | Requirement / entrypoint | Evidence | Status |
 |---:|---|---|---|
@@ -75,18 +78,39 @@ was made for this release; `PENDING` = integration/evidence still required;
 |61|V2 default promotion prohibited|canary tests|IMPLEMENTED/OFFLINE_VERIFIED|
 |62|V2 one-source/two-page/five-detail cap|canary profile/tests|IMPLEMENTED/OFFLINE_VERIFIED|
 |63|5500 task excludes V2 canary|canary tests|IMPLEMENTED/OFFLINE_VERIFIED|
-|64|AccessGate challenge StopAll|access tests|IMPLEMENTED/OFFLINE_VERIFIED|
+|64|AccessGate challenge StopAll|access tests; live 202 shell classified normal before delivery gate|IMPLEMENTED/OFFLINE_VERIFIED; challenge stop not live-observed|
 |65|no proxy/CAPTCHA/stealth bypass|AGENTS + code policy|IMPLEMENTED/OFFLINE_VERIFIED|
-|66|no live Amazon in this release|run evidence|LIVE_NOT_EXECUTED|
+|66|live Amazon ranking/detail collection|bounded delivery preflight `amazon_es_bestseller_5500_delivery_preflight_20261005t165100z`: 3 observed homepage navigations, 0 ranking/pagination/detail; stopped before source collection|LIVE_TRANSPORT_STOPPED|
 |67|no Provider API in this release|run evidence|LIVE_NOT_EXECUTED|
-|68|15 reviewed source categories unchanged|existing configs; no new sources|IMPLEMENTED; not re-run|
-|69|5500 collection not performed|no manifest/run evidence|LIVE_NOT_EXECUTED|
+|68|15 reviewed source categories unchanged|existing configs; no new sources; no category source collection after reviewed plan|IMPLEMENTED/OFFLINE_VERIFIED; live source evidence pending|
+|69|5500 collection completed|no completed collection manifest/run evidence|LIVE_NOT_EXECUTED|
 |70|CI offline matrix declared 3.10/11/12|`.github/workflows/ci.yml`|IMPLEMENTED; remote not verified|
 |71|merge decision|this matrix + final integration|**NOT_READY_FOR_MERGE**|
 
 Historical evidence (August 200-SKU and 496-SKU material) remains historical
 evidence only; it does not prove this October V1 release. The old source-plan
 count remains 15 categories. No unreviewed source was added.
+
+## Command and scheduler responsibility gap
+
+This is intentionally a separate matrix from the delivery DoD: it reports
+where code lives today, rather than implying that a module move is a production
+validation result.
+
+| Boundary | Current evidence | Status / remaining gap |
+|---|---|---|
+|`production-run` CLI|`cli.cmd_production_run` delegates to `commands.run`; the handler builds only reviewed V1 adapters|IMPLEMENTED/OFFLINE_VERIFIED; live collection remains blocked at delivery verification|
+|`task-collect` CLI|`cli.cmd_task_collect` is now a compatibility dispatcher to `commands.task_collection`; regression monkeypatches the existing `collection.task.run_task` scheduler|IMPLEMENTED/OFFLINE_VERIFIED in this worktree|
+|Other legacy CLI commands|`cli.py` remains about 1,900 lines and still contains `collect`, `batch-collect`, `stable-research`, translation, QA, and export orchestration|PARTIAL; no claim that the CLI is globally thin|
+|Reviewed task plan validation|`collection.task.validate_task_plan` owns source snapshot, URL, pagination, quota, and scheduler-contract checks|IMPLEMENTED/OFFLINE_VERIFIED; still colocated with runtime scheduling|
+|Task scheduler and worker lifecycle|`collection.task.run_task` and `_run_category_live` own category slots, reserve activation, shared stop event, serial in-category details, retry, cooldown, and report assembly|IMPLEMENTED/OFFLINE_VERIFIED; plan, worker, scheduler, and report/state responsibilities are not yet separately packaged|
+|Checkpoint/state primitives|`runtime_state.VersionedCheckpointStore` owns atomic versioned persistence; `collection.task` owns task-specific state shape|IMPLEMENTED/OFFLINE_VERIFIED; a task-state repository boundary is still PENDING|
+|Production V1 orchestration|`TaskConfig`, `ProductionRun`, `ProductionWorkflow`, and JSON history repository are distinct modules with offline initial/incremental/resume tests|IMPLEMENTED/OFFLINE_VERIFIED; real Amazon source and real provider evidence are still required|
+
+The next safe refactor is another individually tested legacy-command adapter or
+an extracted task-state repository. It must preserve the current scheduler
+semantics and old CLI monkeypatch seam; it is not justified as a broad rewrite
+while live source evidence is blocked.
 
 ## Controlled V1 operator boundary
 

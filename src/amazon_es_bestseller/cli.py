@@ -839,33 +839,9 @@ def cmd_validate_category_graph(args, parser: argparse.ArgumentParser) -> None:
 
 
 def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
-    """Run the reviewed 5,000-SKU task in parallel3 or serial mode."""
-    if args.offline:
-        parser.error("task-collect 需要联网，不能与 --offline 同用")
-    plan_path = Path(args.plan)
-    if not plan_path.exists():
-        parser.error("找不到任务计划: %s" % args.plan)
-    try:
-        plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        parser.error("任务计划不是有效 JSON: %s" % exc)
-    from .collection.task import run_task
-    # Runtime access controls are command-line overrides; the reviewed plan
-    # remains immutable on disk so a restart uses the same source contract.
-    plan = dict(plan)
-    if args.postal_code:
-        plan["postal_code"] = args.postal_code
-    if args.challenge_wait_seconds is not None:
-        plan["challenge_wait_seconds"] = args.challenge_wait_seconds
-    if args.manual_assist:
-        plan["manual_assist"] = True
-    try:
-        report = run_task(plan, args.out_dir, mode=args.mode,
-                          headful=args.headful, profile_dir=args.profile_dir,
-                          plan_path=plan_path,
-                          project_root=Path(__file__).resolve().parents[2])
-    except ValueError as exc:
-        parser.error(str(exc))
+    """Compatibility dispatch for the reviewed task-collection command."""
+    from .commands.task_collection import run_task_collection
+    report = run_task_collection(args, parser, project_root=Path(__file__).resolve().parents[2])
     _safe_print("task-collect %s：%s；最终唯一 ASIN %d；报告 %s" %
                 (report["mode"], report["run_status"],
                  report["final_unique_asins"],
