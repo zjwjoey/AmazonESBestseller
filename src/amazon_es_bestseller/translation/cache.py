@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 
 
 class TranslationCache:
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -25,9 +25,10 @@ class TranslationCache:
 
     @staticmethod
     def key(asin: str, field: str, source_hash: str, provider: str,
-            model: str, schema_version: str, prompt_version: str) -> str:
+            model: str, schema_version: str, prompt_version: str,
+            dictionary_version: str = "0") -> str:
         return "|".join((asin.upper(), field, source_hash, provider, model,
-                          schema_version, prompt_version))
+                          str(dictionary_version), schema_version, prompt_version))
 
     def load(self) -> None:
         if not self.path.exists():

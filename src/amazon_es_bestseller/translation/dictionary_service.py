@@ -73,7 +73,8 @@ def _load_json(name: str) -> dict[str, str]:
 class DictionaryService:
     """One lookup surface for categories, labels, values and protected terms."""
 
-    def __init__(self, directory: Optional[str | Path] = None):
+    def __init__(self, directory: Optional[str | Path] = None,
+                 *, manifest: Optional[Mapping[str, Any]] = None):
         root = Path(directory) if directory else PACKAGE_DICTIONARIES
         self.directory = root
         self.categories = self._load(root, "categories.json")
@@ -96,6 +97,17 @@ class DictionaryService:
                 "packaging": self.packaging,
                 "protected_terms": self.protected_terms,
             }.items()
+        }
+        manifest = manifest or {}
+        self.dictionary_version = str(manifest.get("dictionary_version", "0"))
+        self.dictionary_hash = str(manifest.get("dictionary_hash", ""))
+        # Runtime promotions are deliberately context-only.  They never merge
+        # into package dictionaries, so an ambiguous term cannot become a
+        # global fallback merely because it was reviewed in one category.
+        self.promoted_dictionary = {
+            str(key): str(value) for key, value in
+            (manifest.get("promoted_dictionary") or manifest.get("promoted_map") or {}).items()
+            if str(key).strip() and str(value).strip()
         }
 
     @staticmethod
@@ -151,6 +163,20 @@ class DictionaryService:
         return (self.lookup_normalized(text, "materials")
                 or self.lookup_normalized(text, "colors")
                 or self.lookup_normalized(text, "packaging"))
+
+    def lookup_promoted(self, value: Any, *, field_type: str,
+                        context_key: str) -> Optional[str]:
+        """Resolve only an exact context-scoped promoted entry.
+
+        No context means no promoted result.  Callers must use a normal
+        checked-in dictionary or leave the field unresolved instead of
+        silently reusing a contextual promotion globally.
+        """
+        if not str(context_key or "").strip():
+            return None
+        key = "%s|%s|%s" % (str(field_type or "").strip().lower(),
+                              str(context_key).strip(), normalize_key(value))
+        return self.promoted_dictionary.get(key)
 
     def is_protected(self, value: Any) -> bool:
         text = str(value or "").strip()

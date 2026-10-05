@@ -63,7 +63,8 @@ class TranslationService:
                  *, field_map: Optional[Dict[str, str]] = None,
                  schema_version: str = TRANSLATION_SCHEMA_VERSION,
                  prompt_version: str = "v1", max_fields: Optional[Sequence[str]] = None,
-                 source_language: str = "es", target_language: str = "zh-CN"):
+                 source_language: str = "es", target_language: str = "zh-CN",
+                 dictionary_manifest: Optional[Dict[str, Any]] = None):
         self.provider = provider
         self.cache = cache
         self.field_map = dict(field_map or DEFAULT_FIELD_MAP)
@@ -80,7 +81,10 @@ class TranslationService:
         # One shared lookup surface for deterministic labels.  The provider
         # still handles unresolved prose; this only prevents duplicate label
         # dictionaries from drifting between the offline and Qwen paths.
-        self.dictionary = DictionaryService()
+        self.dictionary_manifest = dict(dictionary_manifest or {})
+        self.dictionary_version = str(self.dictionary_manifest.get("dictionary_version", "0"))
+        self.dictionary_hash = str(self.dictionary_manifest.get("dictionary_hash", ""))
+        self.dictionary = DictionaryService(manifest=self.dictionary_manifest)
 
     @staticmethod
     def _now() -> str:
@@ -90,7 +94,8 @@ class TranslationService:
         return self.cache.memory_key(
             text, self.source_language, self.target_language,
             canonical_translation_unit_field(field, label=label), self.provider.name,
-            self.provider.model, self.schema_version, self.prompt_version)
+            self.provider.model, self.schema_version, self.prompt_version,
+            self.dictionary_version)
 
     def _memory_get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._memory_lock:
@@ -100,6 +105,12 @@ class TranslationService:
     def _memory_put(self, key: str, value: Dict[str, Any]) -> None:
         with self._memory_lock:
             self._memory[key] = dict(value)
+
+    def _stamp_dictionary_version(self, envelope: Dict[str, Any]) -> Dict[str, Any]:
+        """Attach the cache namespace to every emitted field envelope."""
+        envelope["dictionary_version"] = self.dictionary_version
+        envelope["dictionary_hash"] = self.dictionary_hash
+        return envelope
 
     @staticmethod
     def _structured_rows(value: Any) -> Optional[List[tuple[str, str]]]:
@@ -293,7 +304,8 @@ class TranslationService:
                                  "label": label, "translation_unit_field": unit_field,
                                  "protected_tokens": list(protected.tokens),
                                  "schema_version": self.schema_version,
-                                 "prompt_version": self.prompt_version})
+                                 "prompt_version": self.prompt_version,
+                                 "dictionary_version": self.dictionary_version})
                     attempts += response.attempts
                     item_provider = response.provider or self.provider.name
                     item_alias = (response.raw or {}).get("provider_alias")
@@ -328,7 +340,8 @@ class TranslationService:
                                          "protected_tokens": [],
                                          "retry_reason": "protected_token_missing",
                                          "schema_version": self.schema_version,
-                                         "prompt_version": self.prompt_version})
+                                         "prompt_version": self.prompt_version,
+                                         "dictionary_version": self.dictionary_version})
                             attempts += retry.attempts
                             item_attempts += retry.attempts
                             if retry.status == "success" and retry.text:
@@ -534,7 +547,8 @@ class TranslationService:
             for source, target, text in selected:
                 digest = source_hash(text)
                 key = self.cache.key(asin, source, digest, self.provider.name,
-                                     self.provider.model, self.schema_version, self.prompt_version)
+                                     self.provider.model, self.schema_version, self.prompt_version,
+                                     self.dictionary_version)
                 deterministic = self._resolve_scalar_before_provider(
                     asin=asin, source_field=source, target=target, text=text)
                 if deterministic is not None:
@@ -606,10 +620,12 @@ class TranslationService:
         for source_field, target, text in self.selected_fields(record, fields):
             digest = source_hash(text)
             key = self.cache.key(asin, source_field, digest, self.provider.name,
-                                 self.provider.model, self.schema_version, self.prompt_version)
+                                 self.provider.model, self.schema_version, self.prompt_version,
+                                 self.dictionary_version)
             deterministic_result = self._resolve_scalar_before_provider(
                 asin=asin, source_field=source_field, target=target, text=text)
             if deterministic_result is not None:
+                self._stamp_dictionary_version(deterministic_result)
                 self.cache.put(key, deterministic_result)
                 output_fields[target] = deterministic_result
                 continue
@@ -634,6 +650,7 @@ class TranslationService:
                     source_text=text, raw_value=raw_value, record=record,
                     repair_partial=repair_partial, repair_failed=repair_failed)
                 if structured_result:
+                    self._stamp_dictionary_version(structured_result)
                     self.cache.put(key, structured_result)
                     output_fields[target] = structured_result
                     continue
@@ -668,8 +685,9 @@ class TranslationService:
                                                    source_language=self.source_language,
                                                    target_language=self.target_language,
                                                    context={"target_field": target, "protected_tokens": list(protected.tokens),
-                                                            "schema_version": self.schema_version,
-                                                            "prompt_version": self.prompt_version})
+                                                   "schema_version": self.schema_version,
+                                                   "prompt_version": self.prompt_version,
+                                                   "dictionary_version": self.dictionary_version})
                 result = {"asin": asin, "field": source_field, "target_field": target,
                           "source_text": text, "source_hash": digest,
                           "translated_text": response.text or "", "translation_status": response.status,
@@ -713,7 +731,8 @@ class TranslationService:
                                      "protected_tokens": [],
                                      "retry_reason": "protected_token_missing",
                                      "schema_version": self.schema_version,
-                                     "prompt_version": self.prompt_version})
+                                     "prompt_version": self.prompt_version,
+                                     "dictionary_version": self.dictionary_version})
                         result["attempt_count"] += retry.attempts
                         if retry.status == "success" and retry.text:
                             retry_normalized = postprocess(source_field, retry.text, text)
@@ -761,6 +780,7 @@ class TranslationService:
                     result["qa_issues"] = [{"code": "EMPTY_TRANSLATION"}]
                 elif response.status == "failed":
                     result["translation_status"] = "failed"
+            self._stamp_dictionary_version(result)
             self.cache.put(key, result)
             output_fields[target] = result
         if fields:
@@ -808,6 +828,8 @@ class TranslationService:
                         "translated_at": self._now(),
                     }
                 present_targets.add(target)
+        for envelope in output_fields.values():
+            self._stamp_dictionary_version(envelope)
         statuses = [v.get("translation_status") for v in output_fields.values()]
         blocked = "preclean_blocked" in statuses
         actionable_statuses = [status for status in statuses
