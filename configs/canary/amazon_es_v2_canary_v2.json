@@ -1,0 +1,12 @@
+{
+  "profile_version": "amazon-es-v2-canary-v2",
+  "stable_parser": "v1",
+  "candidate_parser": "v2",
+  "enabled": false,
+  "allow_network": false,
+  "promote_by_default": false,
+  "max_sources": 1,
+  "max_pages_per_source": 2,
+  "max_detail_asins": 5,
+  "excluded_task_ids": ["amazon_es_bestseller_5000_202610"]
+}
