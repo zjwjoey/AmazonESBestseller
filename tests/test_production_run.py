@@ -13,9 +13,10 @@ def _handlers(calls):
 
 def test_offline_run_persists_hash_bound_stages_and_resumes(tmp_path):
     calls = []; run = ProductionRun(tmp_path, run_id="r1", config={"source": "fixture"}, offline=True)
-    summary = run.run(_handlers(calls))
-    assert summary["status"] == "READY" and len(calls) == len(STAGES)
-    assert run.run(_handlers(calls))["status"] == "READY" and len(calls) == len(STAGES)
+    summary = run.run(_handlers(calls), profile="source-only")
+    source_stage_count = STAGES.index("spanish-master") + 1
+    assert summary["status"] == "DRAFT_SOURCE_ONLY" and len(calls) == source_stage_count
+    assert run.run(_handlers(calls), profile="source-only")["status"] == "DRAFT_SOURCE_ONLY" and len(calls) == source_stage_count
     assert (tmp_path / "runmanifest.json").exists() and (tmp_path / "progress.json").exists()
 
 
@@ -33,6 +34,8 @@ def test_empty_or_missing_stage_cannot_be_ready(tmp_path):
         run.run({})
     with pytest.raises(ProductionRunError, match="STAGE_NOT_READY:preflight"):
         run.run({"preflight": lambda _ctx: {}})
+    with pytest.raises(ProductionRunError, match="RELEASE_ARTIFACTS_MISSING"):
+        ProductionRun(tmp_path / "full", run_id="r2", config={}).run(_handlers([]))
 
 
 def test_cli_runs_fixture_only_and_registers_resume_controls(tmp_path):
@@ -40,5 +43,5 @@ def test_cli_runs_fixture_only_and_registers_resume_controls(tmp_path):
     config.write_text(json.dumps({"stages": {stage: {"status": "READY", "counts": {"fixture": 1}}
                                              for stage in STAGES}}), encoding="utf-8")
     assert main(["--offline", "production-run", "--run-dir", str(run_dir), "--run-id", "fixture",
-                 "--config", str(config), "--resume"]) == 0
-    assert json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))["status"] == "READY"
+                 "--config", str(config), "--resume", "--profile", "source-only"]) == 0
+    assert json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))["status"] == "DRAFT_SOURCE_ONLY"

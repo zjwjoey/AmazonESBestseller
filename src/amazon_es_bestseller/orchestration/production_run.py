@@ -105,6 +105,25 @@ class ProductionRun:
             if not payload or payload.get("status") not in {None, "READY"}:
                 self._record_error(stage, "STAGE_NOT_READY")
                 raise ProductionRunError("STAGE_NOT_READY:%s" % stage)
+            if stage == "release":
+                # Formal release is owned by the single Production Release
+                # Gate.  A runner/fixture cannot promote a self-declared
+                # READY flag or a generic sealed blob into final evidence.
+                from ..production.release import evaluate_release_gate
+                artifacts = payload.get("artifacts")
+                if not isinstance(artifacts, Mapping):
+                    self._record_error(stage, "RELEASE_ARTIFACTS_MISSING")
+                    raise ProductionRunError("RELEASE_ARTIFACTS_MISSING")
+                decision = evaluate_release_gate(artifacts, formal=True)
+                payload["release_decision"] = decision
+                if not decision.get("ready"):
+                    self._record_error(stage, "RELEASE_GATE_NOT_READY", str(decision.get("status")))
+                    raise ProductionRunError("RELEASE_GATE_NOT_READY:%s" % decision.get("status"))
+            if stage == "excel":
+                release = completed.get("release", {}).get("payload", {}).get("release_decision", {})
+                if not release.get("ready"):
+                    self._record_error(stage, "RELEASE_GATE_NOT_READY")
+                    raise ProductionRunError("RELEASE_GATE_NOT_READY")
             artifact = {"stage": stage, "status": "READY", "completed_at": _now(),
                         "fingerprint": fingerprint, "artifact_hash": artifact_hash(payload), "payload": payload}
             completed[stage] = artifact
