@@ -1511,6 +1511,23 @@ def cmd_translation_production(args) -> None:
     )
 
 
+def cmd_production_run(args) -> None:
+    """Thin dispatch for the offline, hash-bound top-level runner."""
+    from .orchestration.production_run import ProductionRun
+    config = _load_json(args.config) if args.config else {}
+    if not isinstance(config, dict):
+        raise SystemExit("production-run config must be an object")
+    configured = config.get("stages") or {}
+    handlers = {
+        str(stage): (lambda _context, payload=payload: dict(payload))
+        for stage, payload in configured.items() if isinstance(payload, dict)
+    }
+    runner = ProductionRun(args.run_dir, run_id=args.run_id, config=config,
+                           schema_version=args.schema_version, offline=True)
+    result = runner.run(handlers, from_stage=args.from_stage or None, profile=args.profile)
+    _safe_print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="amazon-es",
@@ -1783,6 +1800,16 @@ def build_parser() -> argparse.ArgumentParser:
                       help="write a NOT_FOR_RELEASE diagnostic workbook only")
     prod.add_argument("--profile", choices=("research", "business", "task"), default="research")
     prod.set_defaults(func=cmd_translation_production)
+
+    run = sub.add_parser("production-run", help="offline hash-bound Production V1 stage runner")
+    run.add_argument("--run-dir", required=True)
+    run.add_argument("--run-id", required=True)
+    run.add_argument("--config", required=True, help="fixture/stage payload config JSON")
+    run.add_argument("--schema-version", default="production-v1")
+    run.add_argument("--resume", action="store_true", help="reuse only matching READY stage artifacts")
+    run.add_argument("--from-stage", default="", help="restart at a named stage after hash verification")
+    run.add_argument("--profile", choices=("full", "source-only"), default="full")
+    run.set_defaults(func=cmd_production_run)
 
     pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
     pc.add_argument("--products", required=True,
