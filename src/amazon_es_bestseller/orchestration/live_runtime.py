@@ -16,7 +16,7 @@ from typing import Any, Mapping
 from urllib.parse import urlparse
 
 from ..collection.quota import normalize_source_url
-from ..collection.task import validate_task_plan
+from .plan import validate_task_plan
 from ..translation.budget import BudgetLedger, BudgetedProvider, VerifiedPriceCard
 from ..translation.providers.qwen_mt import QwenMTProvider
 from ..translation.providers.base import ProviderResponse, TranslationProvider
