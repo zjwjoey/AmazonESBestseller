@@ -100,17 +100,18 @@ validation result.
 | Boundary | Current evidence | Status / remaining gap |
 |---|---|---|
 |`production-run` CLI|`cli.cmd_production_run` delegates to `commands.run`; the handler builds only reviewed V1 adapters|IMPLEMENTED/OFFLINE_VERIFIED; live collection remains blocked at delivery verification|
-|`task-collect` CLI|`cli.cmd_task_collect` is now a compatibility dispatcher to `commands.task_collection`; regression monkeypatches the existing `collection.task.run_task` scheduler|IMPLEMENTED/OFFLINE_VERIFIED in this worktree|
+|`task-collect` CLI|`cli.cmd_task_collect` remains a compatibility dispatcher to `commands.task_collection`; `collection.task.run_task` remains the explicit legacy/monkeypatch facade|IMPLEMENTED/OFFLINE_VERIFIED in this worktree|
 |Other legacy CLI commands|`cli.py` remains about 1,900 lines and still contains `collect`, `batch-collect`, `stable-research`, translation, QA, and export orchestration|PARTIAL; no claim that the CLI is globally thin|
-|Reviewed task plan validation|`collection.task.validate_task_plan` owns source snapshot, URL, pagination, quota, and scheduler-contract checks|IMPLEMENTED/OFFLINE_VERIFIED; still colocated with runtime scheduling|
-|Task scheduler and worker lifecycle|`collection.task.run_task` and `_run_category_live` own category slots, reserve activation, shared stop event, serial in-category details, retry, cooldown, and report assembly|IMPLEMENTED/OFFLINE_VERIFIED; plan, worker, scheduler, and report/state responsibilities are not yet separately packaged|
-|Checkpoint/state primitives|`runtime_state.VersionedCheckpointStore` owns atomic versioned persistence; `collection.task` owns task-specific state shape|IMPLEMENTED/OFFLINE_VERIFIED; a task-state repository boundary is still PENDING|
+|Reviewed task plan validation|`orchestration.plan` owns source snapshot, URL/role, pagination, quota and scheduler-contract checks; `collection.task.validate_task_plan` re-exports it|IMPLEMENTED/OFFLINE_VERIFIED; validation remains entirely offline|
+|Task scheduler and worker lifecycle|`orchestration.scheduler` owns serial/three-slot scheduling, cooldown, retry, shared StopAll and resume dispatch; `orchestration.worker` owns one-category serial ranking/detail collection|IMPLEMENTED/OFFLINE_VERIFIED; `collection.task` preserves the old worker monkeypatch seam without owning lifecycle logic|
+|Task state and checkpoints|`orchestration.state` owns run/category state, claims, pending details and completed-source resume semantics; `orchestration.checkpoint` adapts the existing `runtime_state.VersionedCheckpointStore`|IMPLEMENTED/OFFLINE_VERIFIED; existing checkpoint filenames and legacy-state migration are preserved|
+|Task manifests and summaries|`orchestration.manifest` owns deduplicated ranking/detail outputs and category summaries; scheduler owns only final completion-gate decision/report assembly|IMPLEMENTED/OFFLINE_VERIFIED; no raw evidence or Excel ownership moved|
 |Production V1 orchestration|`TaskConfig`, `ProductionRun`, `ProductionWorkflow`, and JSON history repository are distinct modules with offline initial/incremental/resume tests|IMPLEMENTED/OFFLINE_VERIFIED; real Amazon source and real provider evidence are still required|
 
-The next safe refactor is another individually tested legacy-command adapter or
-an extracted task-state repository. It must preserve the current scheduler
-semantics and old CLI monkeypatch seam; it is not justified as a broad rewrite
-while live source evidence is blocked.
+This extraction is a behavior-preserving offline refactor, not live collection
+evidence. Any next legacy-command adapter must preserve the current scheduler
+semantics, checkpoint compatibility, and old CLI monkeypatch seam; it is not
+justified as a broad rewrite while live source evidence is blocked.
 
 ## Controlled V1 operator boundary
 
