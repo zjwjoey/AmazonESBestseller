@@ -92,8 +92,13 @@ def _load_translation_products(path: Optional[str]) -> list:
             raise SystemExit("Translation V2 CSV 缺少 ASIN 列: %s" % path)
         records = []
         for row in reader:
-            record = {target: (row.get(source) or "").strip()
-                      for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items()}
+            # Keep every frozen Spanish-Master column (notably notes and URLs)
+            # while adding canonical aliases consumed by Translation V2.
+            record = {str(key): (value or "").strip() for key, value in row.items()
+                      if key is not None}
+            for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items():
+                if not record.get(target):
+                    record[target] = (row.get(source) or "").strip()
             records.append(record)
     return records
 
@@ -1495,6 +1500,17 @@ def cmd_export(args) -> None:
 
 # ---------- parser ----------
 
+def cmd_translation_production(args) -> None:
+    """Thin argparse dispatch for the offline production translation command."""
+    from .commands.translation import run_translation_production
+    return run_translation_production(
+        args, load_products=_load_translation_products, load_json=_load_json,
+        save_json=_save_json, load_evidence_json=_load_evidence_json,
+        default_details=DEFAULT_DETAILS, default_rankings=DEFAULT_RANKINGS,
+        load_images=_load_images_by_asin, load_category_planning=_load_category_planning,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="amazon-es",
@@ -1736,6 +1752,37 @@ def build_parser() -> argparse.ArgumentParser:
                      help="按配置启用双 Provider 并行池（真实调用仍需 YES）")
     tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
     tv2.set_defaults(func=cmd_translate)
+
+    prod = sub.add_parser("translation-production", help="stage Production Translation V2 artifacts")
+    prod.add_argument("--stage", required=True,
+                      choices=("build-input", "preclean", "plan", "translate", "promote", "export"))
+    prod.add_argument("--master", default="")
+    prod.add_argument("--run-dir", default="")
+    prod.add_argument("--run-id", default="production-run")
+    prod.add_argument("--source-run-id", default="")
+    prod.add_argument("--source-schema-version", default="master-v1")
+    prod.add_argument("--config", default="configs/translation_v2_production.example.json")
+    prod.add_argument("--model", default="")
+    prod.add_argument("--rate", type=float, default=None)
+    prod.add_argument("--limit", type=int, default=None)
+    prod.add_argument("--offset", type=int, default=0)
+    prod.add_argument("--asin-list", default="", help="ASIN JSON array or comma-separated list")
+    prod.add_argument("--category", default="", help="match any canonical category level")
+    prod.add_argument("--yes", action="store_true", help="confirm offline fake translation")
+    prod.add_argument("--dry-run", action="store_true", help="translate stage writes only an offline plan")
+    prod.add_argument("--out", default="", help="production-export workbook output")
+    prod.add_argument("--details", default="")
+    prod.add_argument("--rankings", default="")
+    prod.add_argument("--html-dir", nargs="+", default=[])
+    prod.add_argument("--collection-run-dir", default="")
+    prod.add_argument("--prev-workbook", default="")
+    prod.add_argument("--images-dir", default="")
+    prod.add_argument("--category-planning", default="")
+    prod.add_argument("--force", action="store_true")
+    prod.add_argument("--debug-export", action="store_true",
+                      help="write a NOT_FOR_RELEASE diagnostic workbook only")
+    prod.add_argument("--profile", choices=("research", "business", "task"), default="research")
+    prod.set_defaults(func=cmd_translation_production)
 
     pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
     pc.add_argument("--products", required=True,
