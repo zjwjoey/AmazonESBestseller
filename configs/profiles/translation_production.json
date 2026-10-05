@@ -1,0 +1,11 @@
+{
+  "profile": "translation-production",
+  "source_contract": "Spanish Master V1 with source-record hash",
+  "provider": "qwen-mt only for formal production",
+  "offline_provider": "fake fixture only; never formal release",
+  "max_unique_asins": 1500,
+  "budget_currency": "CNY",
+  "budget_limit_cny": "5.00",
+  "dictionary_sync": "required before rerender",
+  "excel_export": "formal release gate only"
+}

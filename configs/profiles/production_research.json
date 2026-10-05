@@ -1,0 +1,12 @@
+{
+  "profile": "production-research",
+  "description": "Evidence-driven Production V1 research collection and Spanish Master promotion",
+  "ranking_collector": "V1",
+  "ranking_parser": "V1",
+  "detail_collector": "V1",
+  "detail_parser": "V1",
+  "translation": "OPTIONAL_AFTER_SOURCE_MASTER",
+  "excel_export": "FORMAL_RELEASE_ONLY",
+  "network_mode": "offline saved evidence by default; any live adapter requires explicit reviewed transport",
+  "canary_promotion": "DISABLED"
+}

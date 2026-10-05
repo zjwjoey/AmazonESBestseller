@@ -38,10 +38,10 @@ def test_empty_or_missing_stage_cannot_be_ready(tmp_path):
         ProductionRun(tmp_path / "full", run_id="r2", config={}).run(_handlers([]))
 
 
-def test_cli_runs_fixture_only_and_registers_resume_controls(tmp_path):
+def test_cli_rejects_fixture_stage_payloads(tmp_path):
     config = tmp_path / "fixture.json"; run_dir = tmp_path / "run"
     config.write_text(json.dumps({"stages": {stage: {"status": "READY", "counts": {"fixture": 1}}
                                              for stage in STAGES}}), encoding="utf-8")
-    assert main(["--offline", "production-run", "--run-dir", str(run_dir), "--run-id", "fixture",
-                 "--config", str(config), "--resume", "--profile", "source-only"]) == 0
-    assert json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))["status"] == "DRAFT_SOURCE_ONLY"
+    with pytest.raises(SystemExit, match="TASK_CONFIG_STAGE_PAYLOADS_FORBIDDEN"):
+        main(["--offline", "production-run", "--run-dir", str(run_dir), "--run-id", "fixture",
+              "--config", str(config), "--resume", "--profile", "source-only"])

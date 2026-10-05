@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from ..runtime_state import atomic_write_json
+from ..run_manifest import create_manifest, finalize_manifest, load_manifest, update_manifest, write_manifest
 
 STAGES = (
     "preflight", "ranking-authority", "detail-evidence", "offline-reparse",
@@ -51,6 +52,8 @@ class ProductionRun:
     def summary_path(self) -> Path: return self.directory / "summary.json"
     @property
     def errors_path(self) -> Path: return self.directory / "errors.jsonl"
+    @property
+    def metrics_path(self) -> Path: return self.directory / "run_manifest.json"
 
     def _load(self, path: Path, default: Any) -> Any:
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
@@ -77,6 +80,18 @@ class ProductionRun:
         with self.errors_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"at": _now(), "stage": stage, "code": code, "detail": detail}, ensure_ascii=False) + "\n")
 
+    def _update_metrics(self, payload: Mapping[str, Any]) -> None:
+        """Publish stable operational counters from actual stage producers."""
+        if self.metrics_path.exists():
+            metrics = load_manifest(self.metrics_path)
+        else:
+            metrics = create_manifest(self.run_id, status="running",
+                                      config_hash=artifact_hash(self.config))
+        updates = dict(payload.get("manifest_counts") or {})
+        if updates:
+            metrics = update_manifest(metrics, **updates)
+        write_manifest(metrics, self.metrics_path)
+
     def run(self, handlers: Mapping[str, Callable[[Mapping[str, Any]], Mapping[str, Any]]], *,
             from_stage: str | None = None, profile: str = "full") -> dict[str, Any]:
         if profile not in {"full", "source-only"}: raise ProductionRunError("PROFILE_INVALID")
@@ -91,8 +106,15 @@ class ProductionRun:
                 if not isinstance(old, Mapping) or old.get("status") != "READY" or old.get("fingerprint") != fingerprint:
                     raise ProductionRunError("RESUME_FINGERPRINT_MISMATCH:%s" % stage)
                 continue
-            if isinstance(old, Mapping) and old.get("status") == "READY" and old.get("fingerprint") == fingerprint:
-                continue
+            if isinstance(old, Mapping) and old.get("status") == "READY":
+                if old.get("fingerprint") == fingerprint:
+                    continue
+                # A completed producer artifact is immutable.  Letting a
+                # changed input execute over it would turn resume into a
+                # silent partial rerun, so operators must choose a new run
+                # directory/run id after inspecting the evidence change.
+                self._record_error(stage, "RESUME_FINGERPRINT_MISMATCH")
+                raise ProductionRunError("RESUME_FINGERPRINT_MISMATCH:%s" % stage)
             handler = handlers.get(stage)
             if handler is None:
                 self._record_error(stage, "STAGE_HANDLER_MISSING")
@@ -125,9 +147,12 @@ class ProductionRun:
                     self._record_error(stage, "RELEASE_GATE_NOT_READY")
                     raise ProductionRunError("RELEASE_GATE_NOT_READY")
             artifact = {"stage": stage, "status": "READY", "completed_at": _now(),
-                        "fingerprint": fingerprint, "artifact_hash": artifact_hash(payload), "payload": payload}
+                        "fingerprint": fingerprint, "artifact_hash": artifact_hash(payload),
+                        "input_artifact_hashes": dict(payload.get("input_artifact_hashes") or {}),
+                        "payload": payload}
             completed[stage] = artifact
             manifest["updated_at"] = _now(); self._write(self.manifest_path, manifest)
+            self._update_metrics(payload)
             progress = {"run_id": self.run_id, "current_stage": stage, "completed": list(completed),
                         "counts": payload.get("counts") or {}, "updated_at": _now()}
             self._write(self.progress_path, progress)
@@ -136,4 +161,8 @@ class ProductionRun:
                    "stage_count": len(completed), "counts": {stage: (row.get("payload", {}).get("counts") or {})
                    for stage, row in completed.items()}, "manifest_hash": artifact_hash(manifest)}
         self._write(self.summary_path, summary)
+        if self.metrics_path.exists():
+            metrics = load_manifest(self.metrics_path)
+            write_manifest(finalize_manifest(metrics, status="draft" if profile == "source-only" else "success"),
+                           self.metrics_path)
         return summary

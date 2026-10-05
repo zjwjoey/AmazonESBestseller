@@ -1512,19 +1512,9 @@ def cmd_translation_production(args) -> None:
 
 
 def cmd_production_run(args) -> None:
-    """Thin dispatch for the offline, hash-bound top-level runner."""
-    from .orchestration.production_run import ProductionRun
-    config = _load_json(args.config) if args.config else {}
-    if not isinstance(config, dict):
-        raise SystemExit("production-run config must be an object")
-    configured = config.get("stages") or {}
-    handlers = {
-        str(stage): (lambda _context, payload=payload: dict(payload))
-        for stage, payload in configured.items() if isinstance(payload, dict)
-    }
-    runner = ProductionRun(args.run_dir, run_id=args.run_id, config=config,
-                           schema_version=args.schema_version, offline=True)
-    result = runner.run(handlers, from_stage=args.from_stage or None, profile=args.profile)
+    """Thin dispatch for the evidence-driven Production V1 runner."""
+    from .commands.run import run_production
+    result = run_production(args)
     _safe_print(json.dumps(result, ensure_ascii=False, sort_keys=True))
 
 
@@ -1801,10 +1791,10 @@ def build_parser() -> argparse.ArgumentParser:
     prod.add_argument("--profile", choices=("research", "business", "task"), default="research")
     prod.set_defaults(func=cmd_translation_production)
 
-    run = sub.add_parser("production-run", help="offline hash-bound Production V1 stage runner")
+    run = sub.add_parser("production-run", help="evidence-driven Production V1 stage runner")
     run.add_argument("--run-dir", required=True)
     run.add_argument("--run-id", required=True)
-    run.add_argument("--config", required=True, help="fixture/stage payload config JSON")
+    run.add_argument("--config", required=True, help="TaskConfig JSON; stage payload injection is forbidden")
     run.add_argument("--schema-version", default="production-v1")
     run.add_argument("--resume", action="store_true", help="reuse only matching READY stage artifacts")
     run.add_argument("--from-stage", default="", help="restart at a named stage after hash verification")
