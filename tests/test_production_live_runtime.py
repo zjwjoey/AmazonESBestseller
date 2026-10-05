@@ -247,6 +247,123 @@ def test_transport_preflight_only_writes_draft_diagnostics_without_collection(tm
     assert summary["status"] == "PREFLIGHT_PASSED" and summary["stage_count"] == 0
 
 
+def test_unreserved_observed_navigation_stops_before_any_delivery_ui_retry(tmp_path, monkeypatch):
+    config = _task_config(tmp_path)
+    run_dir = tmp_path / "run"
+
+    class Page:
+        url = "https://www.amazon.es/"
+
+        def __init__(self):
+            self.main_frame = self
+            self.callbacks = []
+
+        def on(self, event, callback):
+            assert event == "framenavigated"
+            self.callbacks.append(callback)
+
+        def content(self):
+            return "<button id='nav-global-location-popover-link'>Enviar a Madrid 28001</button>"
+
+        def screenshot(self, *, type):
+            assert type == "png"
+            return b"fixture"
+
+    class RedirectingBrowser:
+        def __init__(self, **_kwargs):
+            self.page = Page()
+            self.delivery_diagnostics = {}
+            self.goto_calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def goto(self, url, **_kwargs):
+            self.goto_calls += 1
+            self.page.url = url
+            # One reserved root navigation followed by two browser-observed,
+            # unreserved root documents reproduces the recorded budget case.
+            for _ in range(3):
+                for callback in self.page.callbacks:
+                    callback(self.page)
+            return 202
+
+    browser = RedirectingBrowser()
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", lambda **_kwargs: browser)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery",
+                        lambda session, _postal: session.goto("https://www.amazon.es/"))
+    with pytest.raises(SystemExit, match="LIVE_TRANSPORT_UNRESERVED_NAVIGATION_OBSERVED"):
+        main(["production-run", "--allow-live-transport", "--transport-preflight-only",
+              "--run-dir", str(run_dir), "--run-id", "live", "--config", str(config),
+              "--profile", "source-only"])
+    assert browser.goto_calls == 1
+    observations = json.loads((run_dir / "runmanifest.json").read_text(encoding="utf-8"))["transport_observations"]
+    assert observations["explicit_reservation_counts"]["setup"] == 1
+    assert observations["explicit_observed_navigation_counts"]["homepage"] == 1
+    assert observations["unreserved_navigation_count"] == 2
+
+
+def test_third_explicit_setup_navigation_is_rejected_before_driver_goto(tmp_path, monkeypatch):
+    config = _task_config(tmp_path)
+    run_dir = tmp_path / "run"
+
+    class Page:
+        url = "https://www.amazon.es/"
+
+        def __init__(self):
+            self.main_frame = self
+            self.callbacks = []
+
+        def on(self, event, callback):
+            self.callbacks.append(callback)
+
+        def content(self):
+            return "<button id='nav-global-location-popover-link'>Enviar a Madrid 28001</button>"
+
+        def screenshot(self, *, type):
+            return b"fixture"
+
+    class BoundedBrowser:
+        def __init__(self, **_kwargs):
+            self.page = Page()
+            self.delivery_diagnostics = {}
+            self.goto_calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def goto(self, url, **_kwargs):
+            self.goto_calls += 1
+            self.page.url = url
+            for callback in self.page.callbacks:
+                callback(self.page)
+            return 202
+
+    browser = BoundedBrowser()
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", lambda **_kwargs: browser)
+
+    def three_setup_requests(session, _postal):
+        session.goto("https://www.amazon.es/")
+        session.goto("https://www.amazon.es/")
+        session.goto("https://www.amazon.es/")
+
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery", three_setup_requests)
+    with pytest.raises(SystemExit, match="LIVE_TRANSPORT_SETUP_NAVIGATION_BUDGET_EXCEEDED"):
+        main(["production-run", "--allow-live-transport", "--transport-preflight-only",
+              "--run-dir", str(run_dir), "--run-id", "live", "--config", str(config),
+              "--profile", "source-only"])
+    assert browser.goto_calls == 2
+    observations = json.loads((run_dir / "runmanifest.json").read_text(encoding="utf-8"))["transport_observations"]
+    assert observations["explicit_reservation_counts"]["setup"] == 2
+    assert observations["unreserved_navigation_count"] == 0
+
+
 def test_scope_hash_and_qwen_authorization_are_checked_before_transport(tmp_path):
     config_path = _task_config(tmp_path)
     raw = json.loads(config_path.read_text(encoding="utf-8"))

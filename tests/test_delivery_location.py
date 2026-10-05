@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Offline tests for Amazon delivery-destination enforcement."""
+from pathlib import Path
+
 import pytest
 
 from amazon_es_bestseller.access.browser import BrowserSession
@@ -81,6 +83,22 @@ class _FakePage:
         return '<button id="nav-global-location-popover-link">%s</button>' % destination
 
 
+class _NoZipLocator(_FakeLocator):
+    def is_visible(self):
+        if self.selector == "#GLUXZipUpdateInput":
+            return False
+        return super().is_visible()
+
+
+class _Saved202NoZipPage(_FakePage):
+    def locator(self, selector):
+        return _NoZipLocator(self, selector)
+
+    def content(self):
+        return (Path(__file__).parent / "fixtures" / "html" /
+                "amazon_es_202_home_delivery_no_zip.html").read_text(encoding="utf-8")
+
+
 def test_browser_session_changes_non_spain_destination_and_verifies_header(monkeypatch):
     session = BrowserSession()
     session.page = _FakePage()
@@ -107,6 +125,19 @@ def test_browser_session_accepts_rendered_amazon_202_shell(monkeypatch):
     monkeypatch.setattr(session, "wait_for_product_page", lambda timeout_ms=20000: None)
 
     assert session.ensure_spain_delivery("28001").is_spain is True
+
+
+def test_saved_202_home_fixture_stops_when_click_has_no_visible_zip_input(monkeypatch):
+    session = BrowserSession()
+    session.page = _Saved202NoZipPage()
+    monkeypatch.setattr(session, "goto", lambda url, timeout_ms=45000: 202)
+    monkeypatch.setattr(session, "wait_for_product_page", lambda timeout_ms=20000: None)
+    with pytest.raises(DeliveryLocationError):
+        session.ensure_spain_delivery("28001")
+    assert session.delivery_diagnostics["initial_header_text"] == "Enviar a Estados Unidos"
+    assert session.delivery_diagnostics["location_control_found"] is True
+    assert session.delivery_diagnostics["postal_input_found"] is False
+    assert session.delivery_diagnostics["postal_code_submitted"] is False
 
 
 def test_delivery_diagnostics_record_submitted_postal_when_confirmation_is_missing(monkeypatch):

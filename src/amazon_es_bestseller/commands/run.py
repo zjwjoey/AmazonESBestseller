@@ -19,6 +19,8 @@ def _live_transport_start_code(exc: BaseException) -> str:
     from ..access.detector import AccessStopError
     from ..access.location import DeliveryLocationError
 
+    if isinstance(exc, LiveRuntimeError):
+        return str(exc)
     if isinstance(exc, AccessStopError):
         return "ACCESS_GATE_STOP"
     if isinstance(exc, DeliveryLocationError):
@@ -58,6 +60,7 @@ def run_production(args: Any) -> dict[str, Any]:
                 "source_counts": dict(scope.source_counts),
                 "max_ranking_pages": scope.max_ranking_pages,
                 "max_detail_requests": scope.max_detail_requests,
+                "max_setup_navigations": scope.max_setup_navigations,
             }}
             provider = (build_qwen_provider(
                 task, run_dir=args.run_dir,

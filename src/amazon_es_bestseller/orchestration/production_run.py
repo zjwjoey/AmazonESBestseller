@@ -122,10 +122,21 @@ class ProductionRun:
         allowed = ("homepage", "setup", "delivery", "ranking", "pagination", "reload",
                    "detail", "other", "unknown")
         normalized = {name: max(0, int(counts.get(name, 0) or 0)) for name in allowed}
+        reservations = data.get("explicit_reservation_counts")
+        reservations = reservations if isinstance(reservations, Mapping) else {}
+        observed = data.get("explicit_observed_navigation_counts")
+        observed = observed if isinstance(observed, Mapping) else {}
         return {
             "amazon_site_navigation_total": sum(normalized.values()),
             **{"amazon_navigation_%s" % name: value for name, value in normalized.items()},
             "amazon_navigation_observer": bool(data.get("observer_installed")),
+            "amazon_explicit_setup_reserved": max(0, int(reservations.get("setup", 0) or 0)),
+            "amazon_explicit_ranking_reserved": max(0, int(reservations.get("ranking", 0) or 0)),
+            "amazon_explicit_detail_reserved": max(0, int(reservations.get("detail", 0) or 0)),
+            "amazon_explicit_navigation_observed": sum(
+                max(0, int(value or 0)) for value in observed.values()),
+            "amazon_unreserved_navigation_count": max(
+                0, int(data.get("unreserved_navigation_count", 0) or 0)),
         }
 
     def _persist_transport_evidence(self, evidence: Mapping[str, Any] | None,

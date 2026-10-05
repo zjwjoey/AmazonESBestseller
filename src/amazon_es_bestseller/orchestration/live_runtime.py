@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -89,6 +90,7 @@ class LiveTransportScope:
 
     max_ranking_pages: int
     max_detail_requests: int
+    max_setup_navigations: int
     postal_code: str
     headful: bool
     profile_dir: str
@@ -116,6 +118,8 @@ def load_live_transport_scope(task: TaskConfig, *, config_dir: str | Path) -> Li
                                  code="LIVE_TRANSPORT_RANKING_BUDGET_INVALID")
     max_detail_requests = _integer(budget.get("max_detail_requests"),
                                    code="LIVE_TRANSPORT_DETAIL_BUDGET_INVALID")
+    max_setup_navigations = _integer(budget.get("max_setup_navigations", 2),
+                                     code="LIVE_TRANSPORT_SETUP_BUDGET_INVALID")
     if len(task.source_urls) * task.pages_per_url > max_ranking_pages:
         raise LiveRuntimeError("LIVE_TRANSPORT_RANKING_BUDGET_EXCEEDED")
 
@@ -167,6 +171,7 @@ def load_live_transport_scope(task: TaskConfig, *, config_dir: str | Path) -> Li
     return LiveTransportScope(
         max_ranking_pages=max_ranking_pages,
         max_detail_requests=max_detail_requests,
+        max_setup_navigations=max_setup_navigations,
         postal_code=postal_code,
         headful=bool(raw.get("headful", False)),
         profile_dir=str(raw.get("profile_dir") or "").strip(),
@@ -213,6 +218,17 @@ class ReviewedV1Transport:
         )}
         self._category_navigation_counts: dict[str, int] = {}
         self._navigation_observer_installed = False
+        self._navigation_lock = threading.Lock()
+        self._reservation_limits = {
+            "setup": scope.max_setup_navigations,
+            "ranking": scope.max_ranking_pages,
+            "detail": scope.max_detail_requests,
+        }
+        self._reservation_counts = {name: 0 for name in self._reservation_limits}
+        self._pending_reservations: list[dict[str, str]] = []
+        self._explicit_observed_counts = {name: 0 for name in self._navigation_counts}
+        self._unreserved_navigations: list[dict[str, str]] = []
+        self._navigation_timeline: list[dict[str, str]] = []
         self.failure_evidence: dict[str, Any] = {}
 
     @staticmethod
@@ -231,17 +247,54 @@ class ReviewedV1Transport:
             return "detail", ""
         return "other", ""
 
+    @staticmethod
+    def _reservation_bucket(kind: str) -> str:
+        if kind in {"ranking", "pagination"}:
+            return "ranking"
+        if kind == "detail":
+            return "detail"
+        return "setup"
+
+    def _reserve_navigation(self, url: str) -> None:
+        kind, _category = self._navigation_kind(url)
+        if kind == "unknown":
+            raise LiveRuntimeError("LIVE_TRANSPORT_NON_AMAZON_NAVIGATION_FORBIDDEN")
+        bucket = self._reservation_bucket(kind)
+        with self._navigation_lock:
+            used, limit = self._reservation_counts[bucket], self._reservation_limits[bucket]
+            if used >= limit:
+                raise LiveRuntimeError("LIVE_TRANSPORT_%s_NAVIGATION_BUDGET_EXCEEDED" % bucket.upper())
+            self._reservation_counts[bucket] = used + 1
+            self._pending_reservations.append({"kind": kind, "url": str(url)})
+            self._navigation_timeline.append({"event": "explicit_reserved", "kind": kind,
+                                              "url": str(url), "bucket": bucket})
+
+    def _raise_if_unreserved_navigation(self) -> None:
+        if self._unreserved_navigations:
+            raise LiveRuntimeError("LIVE_TRANSPORT_UNRESERVED_NAVIGATION_OBSERVED")
+
     def _observe_navigation(self, frame: Any) -> None:
         page = getattr(self.session, "page", None)
         if frame is not getattr(page, "main_frame", None):
             return
-        kind, category = self._navigation_kind(getattr(frame, "url", ""))
+        url = str(getattr(frame, "url", ""))
+        kind, category = self._navigation_kind(url)
         if kind == "unknown":
             return
-        self._navigation_counts[kind] += 1
-        if category:
-            self._category_navigation_counts[category] = (
-                self._category_navigation_counts.get(category, 0) + 1)
+        with self._navigation_lock:
+            self._navigation_counts[kind] += 1
+            if category:
+                self._category_navigation_counts[category] = (
+                    self._category_navigation_counts.get(category, 0) + 1)
+            if self._pending_reservations and self._pending_reservations[0]["kind"] == kind:
+                reservation = self._pending_reservations.pop(0)
+                self._explicit_observed_counts[kind] += 1
+                self._navigation_timeline.append({"event": "reserved_navigation_observed", "kind": kind,
+                                                  "url": url, "reserved_url": reservation["url"]})
+            else:
+                self._unreserved_navigations.append({"kind": kind, "url": url})
+                self._navigation_timeline.append({"event": "unreserved_navigation_observed",
+                                                  "kind": kind, "url": url})
 
     def _track_session_goto(self) -> None:
         """Retain the last status while the browser keeps normal V1 pacing."""
@@ -250,12 +303,26 @@ class ReviewedV1Transport:
             return
 
         def tracked_goto(url: str, *args: Any, **kwargs: Any) -> Any:
+            self._reserve_navigation(str(url))
             self._last_navigation_url = str(url)
             status = original(url, *args, **kwargs)
             self._last_http_status = status if isinstance(status, int) else None
+            self._raise_if_unreserved_navigation()
             return status
 
         self.session.goto = tracked_goto
+        for name in ("wait_for_product_page", "wait_for_price_text", "wait_between_requests",
+                     "_stable_page_content", "_visible_locator"):
+            original_wait = getattr(self.session, name, None)
+            if not callable(original_wait):
+                continue
+
+            def guarded_wait(*args: Any, _wait: Any = original_wait, **kwargs: Any) -> Any:
+                result = _wait(*args, **kwargs)
+                self._raise_if_unreserved_navigation()
+                return result
+
+            setattr(self.session, name, guarded_wait)
         page = getattr(self.session, "page", None)
         on = getattr(page, "on", None)
         if callable(on):
@@ -320,6 +387,12 @@ class ReviewedV1Transport:
             "site_navigation_total": sum(counts.values()),
             "site_navigation_counts": counts,
             "category_navigation_counts": dict(self._category_navigation_counts),
+            "explicit_reservation_limits": dict(self._reservation_limits),
+            "explicit_reservation_counts": dict(self._reservation_counts),
+            "explicit_observed_navigation_counts": dict(self._explicit_observed_counts),
+            "unreserved_navigation_count": len(self._unreserved_navigations),
+            "unreserved_navigations": list(self._unreserved_navigations),
+            "navigation_timeline": list(self._navigation_timeline),
             "last_requested_url": self._last_navigation_url,
             "last_http_status": self._last_http_status,
             "delivery": dict(getattr(self.session, "delivery_diagnostics", {}) or {}),
