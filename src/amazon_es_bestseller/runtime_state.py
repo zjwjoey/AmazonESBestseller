@@ -27,6 +27,7 @@ class VersionedCheckpointStore:
     def __init__(self, directory: str | Path, name: str) -> None:
         self.directory = Path(directory)
         self.name = str(name)
+        self._last_save_warning: dict[str, str] | None = None
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", self.name):
             raise ValueError("invalid checkpoint name")
 
@@ -38,8 +39,18 @@ class VersionedCheckpointStore:
     def last_good_path(self) -> Path:
         return self.directory / f"{self.name}.last_good.json"
 
+    @property
+    def last_save_warning(self) -> Mapping[str, str] | None:
+        """Non-fatal post-commit backup warning from the most recent save.
+
+        ``latest`` is the commit point. A locked recovery copy therefore must
+        not make a caller retry a state transition that has already committed.
+        """
+        return self._last_save_warning
+
     def save(self, state: Mapping[str, Any]) -> Path:
         """Write and validate a new immutable version before updating pointers."""
+        self._last_save_warning = None
         payload = dict(state)
         self.directory.mkdir(parents=True, exist_ok=True)
         version = self._next_version()
@@ -50,7 +61,18 @@ class VersionedCheckpointStore:
         self._atomic_json(self.latest_path, payload)
         # latest is the commit point.  Do not advance the recovery pointer
         # until the current pointer is durably visible as the same state.
-        self._atomic_json(self.last_good_path, payload)
+        try:
+            self._atomic_json(self.last_good_path, payload)
+        except OSError as exc:
+            # The new state is already committed through ``latest`` and the
+            # immutable version. Preserve that truthful outcome, expose an
+            # observable warning, and leave the staged temporary evidence for
+            # an operator/retry instead of risking a direct overwrite.
+            self._last_save_warning = {
+                "code": "CHECKPOINT_LAST_GOOD_BACKUP_FAILED",
+                "path": str(self.last_good_path),
+                "error": str(exc),
+            }
         return version_path
 
     def load_or_migrate(self, *, legacy_path: str | Path | None = None,
@@ -77,18 +99,42 @@ class VersionedCheckpointStore:
         return dict(default or {})
 
     def load(self) -> dict[str, Any]:
-        """Load latest state, recovering from last-good only when necessary."""
+        """Load latest state, then immutable versions, then last-good state."""
         latest_error: Exception | None = None
         try:
             return self._load_json(self.latest_path)
         except (OSError, ValueError) as exc:
             latest_error = exc
+        version_error: Exception | None = None
+        try:
+            return self._load_newest_version()
+        except (OSError, ValueError) as exc:
+            version_error = exc
+            pass
         try:
             return self._load_json(self.last_good_path)
         except (OSError, ValueError) as exc:
             raise CheckpointRecoveryError(
-                f"CHECKPOINT_UNRECOVERABLE:{self.name}:latest={latest_error};last_good={exc}"
+                f"CHECKPOINT_UNRECOVERABLE:{self.name}:latest={latest_error};"
+                f"versions={version_error};last_good={exc}"
             ) from exc
+
+    def _load_newest_version(self) -> dict[str, Any]:
+        pattern = re.compile(rf"^{re.escape(self.name)}\.(\d{{6}})\.json$")
+        versions = sorted(
+            (path for path in self.directory.glob(f"{self.name}.*.json")
+             if pattern.match(path.name)),
+            reverse=True,
+        )
+        if not versions:
+            raise FileNotFoundError(f"no immutable checkpoint versions for {self.name}")
+        errors: list[Exception] = []
+        for path in versions:
+            try:
+                return self._load_json(path)
+            except (OSError, ValueError) as exc:
+                errors.append(exc)
+        raise ValueError(f"all immutable versions invalid for {self.name}: {errors}")
 
     def _next_version(self) -> int:
         pattern = re.compile(rf"^{re.escape(self.name)}\.(\d{{6}})\.json$")

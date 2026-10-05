@@ -26,9 +26,35 @@ def test_versioned_checkpoint_rejects_unrecoverable_state(tmp_path):
     store.save({"ok": True})
     store.latest_path.write_text("[]", encoding="utf-8")
     store.last_good_path.write_text("broken", encoding="utf-8")
+    for path in store.directory.glob("run.??????.json"):
+        path.write_text("broken", encoding="utf-8")
 
     with pytest.raises(CheckpointRecoveryError, match="CHECKPOINT_UNRECOVERABLE"):
         store.load()
+
+
+def test_checkpoint_latest_commit_survives_permanently_locked_last_good(monkeypatch, tmp_path):
+    store = VersionedCheckpointStore(tmp_path / "state", "run")
+    store.save({"run": 1})
+    import amazon_es_bestseller.runtime_state as runtime_state
+
+    original_write = runtime_state.atomic_write_json
+
+    def deny_last_good(path, payload, *, sort_keys=False):
+        if path == store.last_good_path:
+            raise PermissionError(13, "last-good remains locked")
+        return original_write(path, payload, sort_keys=sort_keys)
+
+    monkeypatch.setattr(runtime_state, "atomic_write_json", deny_last_good)
+    committed = store.save({"run": 2})
+
+    assert committed.name == "run.000002.json"
+    assert store.last_save_warning and store.last_save_warning["code"] == "CHECKPOINT_LAST_GOOD_BACKUP_FAILED"
+    assert store.load() == {"run": 2}
+    store.latest_path.write_text("broken", encoding="utf-8")
+    # The immutable version is the recovery path while last_good remains
+    # permanently locked at the older state.
+    assert store.load() == {"run": 2}
 
 
 def test_versioned_checkpoint_migrates_legacy_and_never_overwrites_good_state_on_permission_error(monkeypatch, tmp_path):
