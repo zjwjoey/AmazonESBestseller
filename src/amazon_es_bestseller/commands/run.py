@@ -14,6 +14,21 @@ from ..orchestration.translation_batch import (TranslationBatchError, create_sel
 from ..orchestration.workflow import ProductionWorkflow, ProductionWorkflowError
 
 
+def _live_transport_start_code(exc: BaseException) -> str:
+    """Map transport setup failures to stable, externally-readable stop codes."""
+    from ..access.detector import AccessStopError
+    from ..access.location import DeliveryLocationError
+
+    if isinstance(exc, AccessStopError):
+        return "ACCESS_GATE_STOP"
+    if isinstance(exc, DeliveryLocationError):
+        return "DELIVERY_LOCATION_UNVERIFIED"
+    message = str(exc).casefold()
+    if "browsertype.launch" in message and "executable doesn't exist" in message:
+        return "LIVE_BROWSER_EXECUTABLE_MISSING"
+    return "LIVE_TRANSPORT_STARTUP_FAILED"
+
+
 def run_production(args: Any) -> dict[str, Any]:
     """Build concrete stage adapters; task JSON cannot provide stage payloads."""
     config_path = Path(args.config)
@@ -54,28 +69,36 @@ def run_production(args: Any) -> dict[str, Any]:
             # runner independently verifies every skipped V1 producer stage.
             transport_required = (not args.from_stage
                                   or STAGES.index(args.from_stage) <= STAGES.index("detail-evidence"))
+            runner = ProductionRun(args.run_dir, run_id=args.run_id,
+                                   config=runtime_config, schema_version=args.schema_version,
+                                   offline=False)
             if transport_required:
-                with ReviewedV1Transport(task, scope) as transport:
-                    workflow = ProductionWorkflow(
-                        task, args.run_dir, run_id=args.run_id,
-                        snapshot_collector=transport.snapshot_collector,
-                        detail_collector=transport.detail_collector,
-                        detail_session=transport.session,
-                        translation_provider=provider,
-                    )
-                    runner = ProductionRun(args.run_dir, run_id=args.run_id,
-                                           config=runtime_config, schema_version=args.schema_version,
-                                           offline=False)
-                    return runner.run(workflow.handlers(), from_stage=args.from_stage or None,
-                                      profile=args.profile)
+                entered = False
+                try:
+                    with ReviewedV1Transport(task, scope) as transport:
+                        entered = True
+                        workflow = ProductionWorkflow(
+                            task, args.run_dir, run_id=args.run_id,
+                            snapshot_collector=transport.snapshot_collector,
+                            detail_collector=transport.detail_collector,
+                            detail_session=transport.session,
+                            translation_provider=provider,
+                        )
+                        return runner.run(workflow.handlers(), from_stage=args.from_stage or None,
+                                          profile=args.profile)
+                except Exception as exc:
+                    if entered:
+                        raise
+                    code = _live_transport_start_code(exc)
+                    runner.record_stop(stage="live-transport", code=code,
+                                       detail="%s: %s" % (type(exc).__name__, exc),
+                                       profile=args.profile)
+                    raise LiveRuntimeError(code) from exc
             else:
                 workflow = ProductionWorkflow(
                     task, args.run_dir, run_id=args.run_id,
                     translation_provider=provider,
                 )
-                runner = ProductionRun(args.run_dir, run_id=args.run_id,
-                                       config=runtime_config, schema_version=args.schema_version,
-                                       offline=False)
                 return runner.run(workflow.handlers(), from_stage=args.from_stage or None,
                                   profile=args.profile)
         workflow = ProductionWorkflow(task, args.run_dir, run_id=args.run_id)

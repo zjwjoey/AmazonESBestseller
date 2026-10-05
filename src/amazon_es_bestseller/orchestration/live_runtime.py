@@ -215,16 +215,24 @@ class ReviewedV1Transport:
             headless=not self.scope.headful,
             profile_dir=self.scope.profile_dir or None,
         )
-        self.session = self._browser_context.__enter__()
-        self.session.challenge_wait_seconds = self.scope.challenge_wait_seconds
-        self.session.manual_assist = self.scope.manual_assist
-        # This is a normal Amazon UI check, not a bypass.  Any access signal
-        # raises through the existing AccessGate before ranking collection.
-        ensure_spain_delivery(self.session, self.scope.postal_code)
-        self.snapshot_collector = ExistingV1SnapshotCollector(self.session)
-        self.detail_collector = _BudgetedDetailCollector(
-            self.session, self.scope.max_detail_requests)
-        return self
+        try:
+            self.session = self._browser_context.__enter__()
+            self.session.challenge_wait_seconds = self.scope.challenge_wait_seconds
+            self.session.manual_assist = self.scope.manual_assist
+            # This is a normal Amazon UI check, not a bypass. Any access
+            # signal raises through the existing AccessGate before ranking
+            # collection.
+            ensure_spain_delivery(self.session, self.scope.postal_code)
+            self.snapshot_collector = ExistingV1SnapshotCollector(self.session)
+            self.detail_collector = _BudgetedDetailCollector(
+                self.session, self.scope.max_detail_requests)
+            return self
+        except BaseException as exc:
+            # A failed BrowserSession enter or delivery check happens before
+            # the outer ``with`` body exists, so clean it up here rather than
+            # leaking a Playwright driver on a fail-closed stop.
+            self.__exit__(type(exc), exc, exc.__traceback__)
+            raise
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
         if self._browser_context is not None:

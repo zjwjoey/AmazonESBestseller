@@ -123,6 +123,34 @@ def test_cli_live_factory_is_fail_closed_before_browser_creation(tmp_path, monke
               "--config", str(config), "--profile", "source-only"])
 
 
+def test_live_browser_start_failure_is_persisted_before_any_stage(tmp_path, monkeypatch):
+    config = _task_config(tmp_path)
+    run_dir = tmp_path / "run"
+    observed = {"exited": 0}
+
+    class MissingBrowser:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            raise RuntimeError("BrowserType.launch: Executable doesn't exist")
+
+        def __exit__(self, *_args):
+            observed["exited"] += 1
+            return False
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", MissingBrowser)
+    with pytest.raises(SystemExit, match="LIVE_BROWSER_EXECUTABLE_MISSING"):
+        main(["production-run", "--allow-live-transport", "--run-dir", str(run_dir),
+              "--run-id", "live", "--config", str(config), "--profile", "source-only"])
+    assert observed["exited"] == 1
+    manifest = json.loads((run_dir / "runmanifest.json").read_text(encoding="utf-8"))
+    progress = json.loads((run_dir / "progress.json").read_text(encoding="utf-8"))
+    error = json.loads((run_dir / "errors.jsonl").read_text(encoding="utf-8").strip())
+    assert manifest["stop_code"] == progress["stop_code"] == error["code"]
+    assert manifest["stop_code"] == "LIVE_BROWSER_EXECUTABLE_MISSING"
+
+
 def test_scope_hash_and_qwen_authorization_are_checked_before_transport(tmp_path):
     config_path = _task_config(tmp_path)
     raw = json.loads(config_path.read_text(encoding="utf-8"))

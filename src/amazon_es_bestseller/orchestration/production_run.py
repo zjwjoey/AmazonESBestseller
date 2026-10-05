@@ -113,6 +113,46 @@ class ProductionRun:
             metrics = update_manifest(metrics, **updates)
         write_manifest(metrics, self.metrics_path)
 
+    def record_stop(self, *, stage: str, code: str, detail: str = "",
+                    profile: str = "source-only") -> dict[str, Any]:
+        """Persist a fail-closed stop which occurred before a stage can run.
+
+        Live transport opens before ``preflight`` because the existing V1
+        adapters require a reviewed browser session. A browser launch or
+        delivery-location failure must still leave the same externally
+        readable recovery trail as a stage failure; otherwise operators cannot
+        distinguish an empty run directory from a run that safely stopped.
+        ``code`` is deliberately caller-supplied and stable, while ``detail``
+        retains bounded diagnostics without becoming a state transition.
+        """
+        if not stage or not code:
+            raise ProductionRunError("STOP_STAGE_AND_CODE_REQUIRED")
+        manifest = self._manifest()
+        manifest.update({"status": "STOPPED", "stop_stage": str(stage),
+                         "stop_code": str(code), "updated_at": _now()})
+        self._write(self.manifest_path, manifest)
+        self._record_error(str(stage), str(code), str(detail)[:2000])
+        progress = {"run_id": self.run_id, "status": "STOPPED",
+                    "current_stage": str(stage), "completed": list(manifest["stages"]),
+                    "counts": {}, "stop_code": str(code), "updated_at": _now()}
+        self._write(self.progress_path, progress)
+        summary = {"run_id": self.run_id, "status": "STOPPED",
+                   "formal_release": False, "stage_count": len(manifest["stages"]),
+                   "counts": {stage_name: (row.get("payload", {}).get("counts") or {})
+                              for stage_name, row in manifest["stages"].items()},
+                   "stop_stage": str(stage), "stop_code": str(code),
+                   "manifest_hash": artifact_hash(manifest)}
+        self._write(self.summary_path, summary)
+        if self.metrics_path.exists():
+            metrics = load_manifest(self.metrics_path)
+        else:
+            metrics = create_manifest(self.run_id, status="stopped",
+                                      config_hash=artifact_hash(self.config))
+        metrics = update_manifest(metrics, status="stopped", error_stage=str(stage),
+                                  error_message=str(code))
+        write_manifest(finalize_manifest(metrics, status="stopped"), self.metrics_path)
+        return summary
+
     def run(self, handlers: Mapping[str, Callable[[Mapping[str, Any]], Mapping[str, Any]]], *,
             from_stage: str | None = None, profile: str = "full") -> dict[str, Any]:
         if profile not in {"full", "source-only"}: raise ProductionRunError("PROFILE_INVALID")

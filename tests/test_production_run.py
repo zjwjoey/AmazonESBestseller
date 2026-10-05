@@ -38,6 +38,22 @@ def test_empty_or_missing_stage_cannot_be_ready(tmp_path):
         ProductionRun(tmp_path / "full", run_id="r2", config={}).run(_handlers([]))
 
 
+def test_pre_stage_stop_writes_recoverable_operational_artifacts(tmp_path):
+    run = ProductionRun(tmp_path, run_id="r1", config={"source": "fixture"}, offline=False)
+    summary = run.record_stop(stage="live-transport", code="LIVE_BROWSER_EXECUTABLE_MISSING",
+                              detail="browser executable was not installed")
+    assert summary["status"] == "STOPPED"
+    assert summary["stop_code"] == "LIVE_BROWSER_EXECUTABLE_MISSING"
+    manifest = json.loads((tmp_path / "runmanifest.json").read_text(encoding="utf-8"))
+    progress = json.loads((tmp_path / "progress.json").read_text(encoding="utf-8"))
+    metrics = json.loads((tmp_path / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["stop_stage"] == progress["current_stage"] == "live-transport"
+    assert manifest["stop_code"] == progress["stop_code"] == "LIVE_BROWSER_EXECUTABLE_MISSING"
+    assert metrics["status"] == "stopped" and metrics["error_stage"] == "live-transport"
+    error = json.loads((tmp_path / "errors.jsonl").read_text(encoding="utf-8").strip())
+    assert error["code"] == "LIVE_BROWSER_EXECUTABLE_MISSING"
+
+
 def test_cli_rejects_fixture_stage_payloads(tmp_path):
     config = tmp_path / "fixture.json"; run_dir = tmp_path / "run"
     config.write_text(json.dumps({"stages": {stage: {"status": "READY", "counts": {"fixture": 1}}
