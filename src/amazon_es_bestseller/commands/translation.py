@@ -231,10 +231,17 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         if not translations_path.exists():
             raise SystemExit("production-translate required: %s" % translations_path)
         config = load_json(args.config) if args.config and Path(args.config).exists() else {}
+        shards = [load_json(str(path)) for path in sorted((run_dir / "translations" / "shards").glob("batch_*.json"))]
+        modes = {str(shard.get("execution_mode") or "unknown").lower() for shard in shards}
+        providers = {str(shard.get("provider") or "unknown").lower() for shard in shards}
+        execution_mode = next(iter(modes)) if len(modes) == 1 else "mixed"
         state = build_production_state(production_input, preclean_records, load_json(str(translations_path)),
                                        qa_version=str(config.get("qa_version") or "translation-qa-v1"),
                                        prompt_version=str(config.get("prompt_version") or "amazon-es-retail-v2"))
-        state["translation_execution_mode"] = str(config.get("provider_mode") or "fake").lower()
+        # Promotion trusts immutable translation evidence, never a later CLI
+        # config.  Missing or mixed evidence is deliberately non-formal.
+        state["translation_execution_mode"] = execution_mode
+        state["translation_providers"] = sorted(providers)
         state["release_candidate"]["translation_execution_mode"] = state["translation_execution_mode"]
         save_json(state, str(run_dir / "state" / "translation_state.json"))
         save_json(state["release_candidate"], str(run_dir / "release" / "production_release_candidate.json"))
@@ -252,9 +259,10 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         if not _current_release_is_bound(state, production_input):
             raise SystemExit("Release Gate blocked: stored READY failed source-hash revalidation")
         ready, status = release_gate(release)
-        fake_run = str(state.get("translation_execution_mode") or "fake").lower() == "fake"
+        execution_mode = str(state.get("translation_execution_mode") or "unknown").lower()
+        fake_run = execution_mode != "qwen-mt" or len(state.get("translation_providers") or []) != 1
         if fake_run and not args.debug_export:
-            raise SystemExit("Release Gate blocked: fake translation output is never a formal release")
+            raise SystemExit("Release Gate blocked: non-provider or mixed translation evidence is never a formal release")
         if not ready and not args.debug_export:
             raise SystemExit("Release Gate blocked: release_status=%s" % status)
         products = [dict(item.get("source_record") or {}) for item in production_input.get("records", [])]

@@ -47,8 +47,10 @@ class VersionedCheckpointStore:
         self._atomic_json(version_path, payload)
         # Validate the durable version before it can be referenced by recovery.
         self._load_json(version_path)
-        self._atomic_json(self.last_good_path, payload)
         self._atomic_json(self.latest_path, payload)
+        # latest is the commit point.  Do not advance the recovery pointer
+        # until the current pointer is durably visible as the same state.
+        self._atomic_json(self.last_good_path, payload)
         return version_path
 
     def load_or_migrate(self, *, legacy_path: str | Path | None = None,
