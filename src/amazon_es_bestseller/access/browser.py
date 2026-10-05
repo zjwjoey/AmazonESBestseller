@@ -41,6 +41,11 @@ class BrowserSession:
         self.context = None
         self._delivery_location_checked = False
         self._delivery_location: Optional[DeliveryLocation] = None
+        # Delivery diagnostics are evidence of ordinary UI state only. They
+        # contain no cookies, local storage, credentials, or bypass actions.
+        self.delivery_diagnostics: dict = {}
+        self.last_navigation_url = ""
+        self.last_navigation_status: Optional[int] = None
         # Retained for CLI compatibility and evidence metadata.  Challenges
         # are never solved automatically; explicit manual-assist mode can keep
         # the visible page open while a human clears the challenge.
@@ -79,7 +84,10 @@ class BrowserSession:
     def goto(self, url: str, timeout_ms: int = 45000) -> Optional[int]:
         """访问 URL，返回 HTTP 状态码（无响应对象时 None）。"""
         resp = self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        return resp.status if resp is not None else None
+        status = resp.status if resp is not None else None
+        self.last_navigation_url = str(url)
+        self.last_navigation_status = status
+        return status
 
     def wait_for_product_page(self, timeout_ms: int = 20000) -> None:
         """给详情页固定渲染缓冲，避免 DOM 协议等待在失活页面上挂死。"""
@@ -195,7 +203,20 @@ class BrowserSession:
             return self._delivery_location or DeliveryLocation(
                 "", True, code)
 
+        self.delivery_diagnostics = {
+            "postal_code_requested": code,
+            "homepage_status": None,
+            "initial_header_text": "",
+            "final_header_text": "",
+            "location_control_found": False,
+            "postal_input_found": False,
+            "postal_code_filled": False,
+            "postal_code_submitted": False,
+            "confirmation_clicked": False,
+            "verified": False,
+        }
         status = self.goto("https://www.amazon.es/", timeout_ms=timeout_ms)
+        self.delivery_diagnostics["homepage_status"] = status
         self.wait_for_product_page(timeout_ms=20000)
 
         # Amazon sometimes returns a normal HTTP 202 shell and fills the
@@ -210,6 +231,7 @@ class BrowserSession:
             html = self._stable_page_content()
             current = inspect_delivery_location(html)
 
+        self.delivery_diagnostics["initial_header_text"] = current.text
         state = detect_access_status(status, html)
         # A rendered Amazon 202 shell is a valid page response once the
         # destination control exists.  Re-evaluate the fully rendered body as
@@ -217,6 +239,8 @@ class BrowserSession:
         if state.value == "UNKNOWN" and status == 202 and current.text:
             state = detect_access_status(200, html)
         require_normal_access(state, "配送地点检查（Amazon.es 首页）")
+        self.delivery_diagnostics["final_header_text"] = current.text
+        self.delivery_diagnostics["final_url"] = str(getattr(self.page, "url", "") or "")
         if current.is_spain is not True:
             location_button = self._visible_locator((
                 "#nav-global-location-popover-link",
@@ -226,6 +250,7 @@ class BrowserSession:
                 raise DeliveryLocationError(
                     "无法打开 Amazon 配送地点设置；当前页未找到配送地点控件。"
                 )
+            self.delivery_diagnostics["location_control_found"] = True
             location_button.click(timeout=5000)
 
             zip_input = self._visible_locator(("#GLUXZipUpdateInput",))
@@ -233,11 +258,14 @@ class BrowserSession:
                 raise DeliveryLocationError(
                     "Amazon 配送地点弹窗未提供西班牙邮编输入框。"
                 )
+            self.delivery_diagnostics["postal_input_found"] = True
             zip_input.fill(code, timeout=5000)
+            self.delivery_diagnostics["postal_code_filled"] = True
             apply_button = self._visible_locator(("#GLUXZipUpdate",))
             if apply_button is None:
                 raise DeliveryLocationError("Amazon 配送地点弹窗未找到邮编确认按钮。")
             apply_button.click(timeout=5000)
+            self.delivery_diagnostics["postal_code_submitted"] = True
 
             done_button = self._visible_locator((
                 "#a-autoid-67",
@@ -249,6 +277,7 @@ class BrowserSession:
                     "Amazon 未确认邮编 %s，无法完成配送地点切换。" % code
                 )
             done_button.click(timeout=5000)
+            self.delivery_diagnostics["confirmation_clicked"] = True
             self.wait_for_product_page(timeout_ms=5000)
 
             # Amazon updates the ingress header asynchronously after closing
@@ -268,6 +297,7 @@ class BrowserSession:
             )
         self._delivery_location_checked = True
         self._delivery_location = current
+        self.delivery_diagnostics["verified"] = True
         return current
 
     def wait_for_challenge_clear(self, html: str, status=None):

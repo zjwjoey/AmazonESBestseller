@@ -74,9 +74,13 @@ def run_production(args: Any) -> dict[str, Any]:
                                    offline=False)
             if transport_required:
                 entered = False
+                transport = ReviewedV1Transport(task, scope)
                 try:
-                    with ReviewedV1Transport(task, scope) as transport:
+                    with transport:
                         entered = True
+                        if bool(getattr(args, "transport_preflight_only", False)):
+                            return runner.record_transport_preflight(
+                                transport.transport_observations(), transport._page_evidence())
                         workflow = ProductionWorkflow(
                             task, args.run_dir, run_id=args.run_id,
                             snapshot_collector=transport.snapshot_collector,
@@ -84,15 +88,20 @@ def run_production(args: Any) -> dict[str, Any]:
                             detail_session=transport.session,
                             translation_provider=provider,
                         )
-                        return runner.run(workflow.handlers(), from_stage=args.from_stage or None,
-                                          profile=args.profile)
+                        result = runner.run(workflow.handlers(), from_stage=args.from_stage or None,
+                                            profile=args.profile)
+                        observations = runner.record_transport_observations(
+                            transport.transport_observations())
+                        return {**result, "transport_observations": observations}
                 except Exception as exc:
                     if entered:
                         raise
                     code = _live_transport_start_code(exc)
                     runner.record_stop(stage="live-transport", code=code,
                                        detail="%s: %s" % (type(exc).__name__, exc),
-                                       profile=args.profile)
+                                       profile=args.profile,
+                                       transport_observations=transport.transport_observations(),
+                                       failure_evidence=transport.failure_evidence)
                     raise LiveRuntimeError(code) from exc
             else:
                 workflow = ProductionWorkflow(

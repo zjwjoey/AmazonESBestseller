@@ -1808,6 +1808,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--profile", choices=("full", "source-only"), default="full")
     run.add_argument("--allow-live-transport", action="store_true",
                      help="allow only a reviewed live V1 browser transport declared in TaskConfig")
+    run.add_argument("--transport-preflight-only", action="store_true",
+                     help="verify reviewed Amazon delivery transport and save diagnostics without ranking/detail collection")
     run.add_argument("--allow-qwen-translation", action="store_true",
                      help="allow configured Qwen translation only through the <=5 CNY durable budget ledger")
     run.set_defaults(func=cmd_production_run)

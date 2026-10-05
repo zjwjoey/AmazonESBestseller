@@ -151,6 +151,100 @@ def test_live_browser_start_failure_is_persisted_before_any_stage(tmp_path, monk
     assert manifest["stop_code"] == "LIVE_BROWSER_EXECUTABLE_MISSING"
 
 
+def test_delivery_stop_preserves_homepage_evidence_and_actual_navigation_count(tmp_path, monkeypatch):
+    from amazon_es_bestseller.access.location import DeliveryLocationError
+
+    config = _task_config(tmp_path)
+    run_dir = tmp_path / "run"
+
+    class Page:
+        url = "https://www.amazon.es/"
+
+        def __init__(self):
+            self.main_frame = self
+            self._callbacks = []
+
+        def on(self, event, callback):
+            assert event == "framenavigated"
+            self._callbacks.append(callback)
+
+        def content(self):
+            return "<html><body><div id='error'>Delivery location pending</div></body></html>"
+
+        def screenshot(self, *, type):
+            assert type == "png"
+            return b"fixture-png"
+
+    class DeliveryFailureBrowser:
+        def __init__(self, **_kwargs):
+            self.page = Page()
+            self.delivery_diagnostics = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def goto(self, url, **_kwargs):
+            self.page.url = url
+            for callback in self.page._callbacks:
+                callback(self.page)
+            return 200
+
+    def fake_delivery(session, _postal_code):
+        session.goto("https://www.amazon.es/")
+        session.delivery_diagnostics = {"postal_code_requested": "28001",
+                                        "postal_code_submitted": True, "verified": False}
+        raise DeliveryLocationError("fixture delivery location unverified")
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", DeliveryFailureBrowser)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery", fake_delivery)
+    with pytest.raises(SystemExit, match="DELIVERY_LOCATION_UNVERIFIED"):
+        main(["production-run", "--allow-live-transport", "--run-dir", str(run_dir),
+              "--run-id", "live", "--config", str(config), "--profile", "source-only"])
+    metadata = json.loads((run_dir / "evidence" / "live-transport-stop" / "metadata.json").read_text(
+        encoding="utf-8"))
+    assert (run_dir / "evidence" / "live-transport-stop" / "homepage.html").read_text(
+        encoding="utf-8").startswith("<html>")
+    assert (run_dir / "evidence" / "live-transport-stop" / "homepage.png").read_bytes() == b"fixture-png"
+    assert metadata["access_state"] == "NORMAL"
+    assert metadata["delivery"]["postal_code_submitted"] is True
+    metrics = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert metrics["amazon_site_navigation_total"] == metrics["amazon_navigation_homepage"] == 1
+
+
+def test_transport_preflight_only_writes_draft_diagnostics_without_collection(tmp_path, monkeypatch):
+    config = _task_config(tmp_path)
+    observed = {"snapshot": 0}
+
+    class PreflightBrowser:
+        def __init__(self, **_kwargs):
+            self.page = None
+            self.delivery_diagnostics = {"postal_code_requested": "28001", "verified": True}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fake_snapshot(*_args, **_kwargs):
+        observed["snapshot"] += 1
+        return {}
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", PreflightBrowser)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery", lambda *_args: None)
+    monkeypatch.setattr("amazon_es_bestseller.monitoring.snapshot.collect_ranking_snapshot", fake_snapshot)
+    run_dir = tmp_path / "run"
+    assert main(["production-run", "--allow-live-transport", "--transport-preflight-only",
+                 "--run-dir", str(run_dir), "--run-id", "live", "--config", str(config),
+                 "--profile", "source-only"]) == 0
+    assert observed["snapshot"] == 0
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "PREFLIGHT_PASSED" and summary["stage_count"] == 0
+
+
 def test_scope_hash_and_qwen_authorization_are_checked_before_transport(tmp_path):
     config_path = _task_config(tmp_path)
     raw = json.loads(config_path.read_text(encoding="utf-8"))

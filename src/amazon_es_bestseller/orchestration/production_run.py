@@ -7,6 +7,7 @@ cannot silently consume stale evidence.
 from __future__ import annotations
 import hashlib
 import json
+import os
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -113,8 +114,97 @@ class ProductionRun:
             metrics = update_manifest(metrics, **updates)
         write_manifest(metrics, self.metrics_path)
 
+    @staticmethod
+    def _transport_metric_updates(observations: Mapping[str, Any] | None) -> dict[str, Any]:
+        data = observations if isinstance(observations, Mapping) else {}
+        counts = data.get("site_navigation_counts")
+        counts = counts if isinstance(counts, Mapping) else {}
+        allowed = ("homepage", "setup", "delivery", "ranking", "pagination", "reload",
+                   "detail", "other", "unknown")
+        normalized = {name: max(0, int(counts.get(name, 0) or 0)) for name in allowed}
+        return {
+            "amazon_site_navigation_total": sum(normalized.values()),
+            **{"amazon_navigation_%s" % name: value for name, value in normalized.items()},
+            "amazon_navigation_observer": bool(data.get("observer_installed")),
+        }
+
+    def _persist_transport_evidence(self, evidence: Mapping[str, Any] | None,
+                                    *, label: str) -> dict[str, Any]:
+        """Write raw document/screenshot separately from serializable metadata."""
+        source = evidence if isinstance(evidence, Mapping) else {}
+        root = self.directory / "evidence" / label
+        root.mkdir(parents=True, exist_ok=True)
+        metadata = {key: value for key, value in source.items()
+                    if key not in {"homepage_html", "screenshot_png"}}
+        html = source.get("homepage_html")
+        if isinstance(html, str):
+            html_path = root / "homepage.html"
+            temporary = html_path.with_suffix(".html.tmp")
+            temporary.write_text(html, encoding="utf-8")
+            os.replace(temporary, html_path)
+            metadata["homepage_html_path"] = str(html_path.relative_to(self.directory))
+            metadata["homepage_html_sha256"] = hashlib.sha256(html.encode("utf-8")).hexdigest()
+        screenshot = source.get("screenshot_png")
+        if isinstance(screenshot, (bytes, bytearray)):
+            screenshot_path = root / "homepage.png"
+            temporary = screenshot_path.with_suffix(".png.tmp")
+            temporary.write_bytes(bytes(screenshot))
+            os.replace(temporary, screenshot_path)
+            metadata["homepage_screenshot_path"] = str(screenshot_path.relative_to(self.directory))
+            metadata["homepage_screenshot_sha256"] = hashlib.sha256(bytes(screenshot)).hexdigest()
+        metadata_path = root / "metadata.json"
+        self._write(metadata_path, metadata)
+        return {"metadata_path": str(metadata_path.relative_to(self.directory)), **metadata}
+
+    def record_transport_observations(self, observations: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Attach actual browser navigation counters after a completed run."""
+        value = dict(observations or {}) if isinstance(observations, Mapping) else {}
+        manifest = self._manifest()
+        manifest["transport_observations"] = value
+        manifest["updated_at"] = _now()
+        self._write(self.manifest_path, manifest)
+        if self.metrics_path.exists():
+            metrics = load_manifest(self.metrics_path)
+        else:
+            metrics = create_manifest(self.run_id, status="running",
+                                      config_hash=artifact_hash(self.config))
+        write_manifest(update_manifest(metrics, **self._transport_metric_updates(value)), self.metrics_path)
+        if self.summary_path.exists():
+            summary = self._load(self.summary_path, {})
+            summary["transport_observations"] = value
+            self._write(self.summary_path, summary)
+        return value
+
+    def record_transport_preflight(self, observations: Mapping[str, Any] | None,
+                                   evidence: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Persist a delivery-only diagnostic without starting source stages."""
+        value = dict(observations or {}) if isinstance(observations, Mapping) else {}
+        saved_evidence = self._persist_transport_evidence(evidence, label="live-transport-preflight")
+        manifest = self._manifest()
+        manifest.update({"status": "PREFLIGHT_PASSED", "updated_at": _now(),
+                         "transport_observations": value,
+                         "preflight_evidence": saved_evidence})
+        self._write(self.manifest_path, manifest)
+        summary = {"run_id": self.run_id, "status": "PREFLIGHT_PASSED",
+                   "formal_release": False, "stage_count": len(manifest["stages"]),
+                   "counts": {}, "transport_observations": value,
+                   "preflight_evidence": saved_evidence,
+                   "manifest_hash": artifact_hash(manifest)}
+        self._write(self.summary_path, summary)
+        progress = {"run_id": self.run_id, "status": "PREFLIGHT_PASSED",
+                    "current_stage": "live-transport", "completed": list(manifest["stages"]),
+                    "counts": {}, "updated_at": _now()}
+        self._write(self.progress_path, progress)
+        metrics = create_manifest(self.run_id, status="preflight_passed",
+                                  config_hash=artifact_hash(self.config))
+        metrics = update_manifest(metrics, **self._transport_metric_updates(value))
+        write_manifest(finalize_manifest(metrics, status="preflight_passed"), self.metrics_path)
+        return summary
+
     def record_stop(self, *, stage: str, code: str, detail: str = "",
-                    profile: str = "source-only") -> dict[str, Any]:
+                    profile: str = "source-only",
+                    transport_observations: Mapping[str, Any] | None = None,
+                    failure_evidence: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Persist a fail-closed stop which occurred before a stage can run.
 
         Live transport opens before ``preflight`` because the existing V1
@@ -127,9 +217,14 @@ class ProductionRun:
         """
         if not stage or not code:
             raise ProductionRunError("STOP_STAGE_AND_CODE_REQUIRED")
+        observations = (dict(transport_observations) if isinstance(transport_observations, Mapping)
+                        else {})
+        evidence = self._persist_transport_evidence(failure_evidence, label="live-transport-stop")
         manifest = self._manifest()
         manifest.update({"status": "STOPPED", "stop_stage": str(stage),
-                         "stop_code": str(code), "updated_at": _now()})
+                         "stop_code": str(code), "updated_at": _now(),
+                         "transport_observations": observations,
+                         "failure_evidence": evidence})
         self._write(self.manifest_path, manifest)
         self._record_error(str(stage), str(code), str(detail)[:2000])
         progress = {"run_id": self.run_id, "status": "STOPPED",
@@ -141,6 +236,8 @@ class ProductionRun:
                    "counts": {stage_name: (row.get("payload", {}).get("counts") or {})
                               for stage_name, row in manifest["stages"].items()},
                    "stop_stage": str(stage), "stop_code": str(code),
+                   "transport_observations": observations,
+                   "failure_evidence": evidence,
                    "manifest_hash": artifact_hash(manifest)}
         self._write(self.summary_path, summary)
         if self.metrics_path.exists():
@@ -149,7 +246,8 @@ class ProductionRun:
             metrics = create_manifest(self.run_id, status="stopped",
                                       config_hash=artifact_hash(self.config))
         metrics = update_manifest(metrics, status="stopped", error_stage=str(stage),
-                                  error_message=str(code))
+                                  error_message=str(code),
+                                  **self._transport_metric_updates(observations))
         write_manifest(finalize_manifest(metrics, status="stopped"), self.metrics_path)
         return summary
 

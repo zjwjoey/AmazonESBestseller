@@ -205,6 +205,112 @@ class ReviewedV1Transport:
         self.session: Any = None
         self.snapshot_collector: ExistingV1SnapshotCollector | None = None
         self.detail_collector: _BudgetedDetailCollector | None = None
+        self._last_navigation_url = ""
+        self._last_http_status: int | None = None
+        self._navigation_counts = {name: 0 for name in (
+            "homepage", "setup", "delivery", "ranking", "pagination", "reload",
+            "detail", "other", "unknown",
+        )}
+        self._category_navigation_counts: dict[str, int] = {}
+        self._navigation_observer_installed = False
+        self.failure_evidence: dict[str, Any] = {}
+
+    @staticmethod
+    def _navigation_kind(url: object) -> tuple[str, str]:
+        """Classify top-level Amazon documents, never subresources."""
+        parsed = urlparse(str(url or ""))
+        host, path = (parsed.hostname or "").casefold(), parsed.path.casefold()
+        if not host.endswith("amazon.es"):
+            return "unknown", ""
+        if path in {"", "/"}:
+            return "homepage", ""
+        if "/gp/bestsellers" in path:
+            category = path.split("/gp/bestsellers", 1)[1].strip("/")
+            return ("pagination" if "pg=" in parsed.query.casefold() else "ranking"), category
+        if any(marker in path for marker in ("/dp/", "/gp/product/", "/gp/aw/d/", "/product/")):
+            return "detail", ""
+        return "other", ""
+
+    def _observe_navigation(self, frame: Any) -> None:
+        page = getattr(self.session, "page", None)
+        if frame is not getattr(page, "main_frame", None):
+            return
+        kind, category = self._navigation_kind(getattr(frame, "url", ""))
+        if kind == "unknown":
+            return
+        self._navigation_counts[kind] += 1
+        if category:
+            self._category_navigation_counts[category] = (
+                self._category_navigation_counts.get(category, 0) + 1)
+
+    def _track_session_goto(self) -> None:
+        """Retain the last status while the browser keeps normal V1 pacing."""
+        original = getattr(self.session, "goto", None)
+        if not callable(original):
+            return
+
+        def tracked_goto(url: str, *args: Any, **kwargs: Any) -> Any:
+            self._last_navigation_url = str(url)
+            status = original(url, *args, **kwargs)
+            self._last_http_status = status if isinstance(status, int) else None
+            return status
+
+        self.session.goto = tracked_goto
+        page = getattr(self.session, "page", None)
+        on = getattr(page, "on", None)
+        if callable(on):
+            on("framenavigated", self._observe_navigation)
+            self._navigation_observer_installed = True
+
+    def _page_evidence(self) -> dict[str, Any]:
+        """Read the current document only; no extra navigation or retry."""
+        from ..access.detector import detect_access_status
+
+        page = getattr(self.session, "page", None)
+        html = ""
+        screenshot = b""
+        try:
+            html = str(page.content() if page is not None else "")
+        except Exception as exc:
+            html_error = "%s: %s" % (type(exc).__name__, exc)
+        else:
+            html_error = ""
+        try:
+            candidate = page.screenshot(type="png") if page is not None else b""
+            screenshot = bytes(candidate) if isinstance(candidate, (bytes, bytearray)) else b""
+        except Exception as exc:
+            screenshot_error = "%s: %s" % (type(exc).__name__, exc)
+        else:
+            screenshot_error = ""
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = re.sub(r"\s+", " ", text).strip()
+        state = detect_access_status(self._last_http_status, html).value
+        return {
+            "homepage_html": html,
+            "screenshot_png": screenshot,
+            "final_url": str(getattr(page, "url", "") or self._last_navigation_url),
+            "http_status": self._last_http_status,
+            "access_state": state,
+            "visible_text_excerpt": text[:2000],
+            "html_capture_error": html_error,
+            "screenshot_capture_error": screenshot_error,
+            "delivery": dict(getattr(self.session, "delivery_diagnostics", {}) or {}),
+        }
+
+    def transport_observations(self) -> dict[str, Any]:
+        """Stable counters: top-level Amazon documents, not page subresources."""
+        counts = dict(self._navigation_counts)
+        return {
+            "definition": "top-level Amazon.es document navigations observed via Playwright; "
+                          "delivery UI submissions are reported separately and subresources are excluded",
+            "observer_installed": self._navigation_observer_installed,
+            "site_navigation_total": sum(counts.values()),
+            "site_navigation_counts": counts,
+            "category_navigation_counts": dict(self._category_navigation_counts),
+            "last_requested_url": self._last_navigation_url,
+            "last_http_status": self._last_http_status,
+            "delivery": dict(getattr(self.session, "delivery_diagnostics", {}) or {}),
+        }
 
     def __enter__(self) -> "ReviewedV1Transport":
         # Imported here so offline workflows and their tests need no Playwright.
@@ -217,6 +323,7 @@ class ReviewedV1Transport:
         )
         try:
             self.session = self._browser_context.__enter__()
+            self._track_session_goto()
             self.session.challenge_wait_seconds = self.scope.challenge_wait_seconds
             self.session.manual_assist = self.scope.manual_assist
             # This is a normal Amazon UI check, not a bypass. Any access
@@ -231,6 +338,7 @@ class ReviewedV1Transport:
             # A failed BrowserSession enter or delivery check happens before
             # the outer ``with`` body exists, so clean it up here rather than
             # leaking a Playwright driver on a fail-closed stop.
+            self.failure_evidence = self._page_evidence()
             self.__exit__(type(exc), exc, exc.__traceback__)
             raise
 

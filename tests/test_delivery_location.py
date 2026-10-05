@@ -92,6 +92,10 @@ def test_browser_session_changes_non_spain_destination_and_verifies_header(monke
     assert observed.is_spain is True
     assert observed.postal_code == "28001"
     assert session.page.postal_code == "28001"
+    assert session.delivery_diagnostics["homepage_status"] == 200
+    assert session.delivery_diagnostics["postal_code_submitted"] is True
+    assert session.delivery_diagnostics["confirmation_clicked"] is True
+    assert session.delivery_diagnostics["verified"] is True
     # The check is idempotent after successful verification.
     assert session.ensure_spain_delivery("28001") == observed
 
@@ -103,6 +107,26 @@ def test_browser_session_accepts_rendered_amazon_202_shell(monkeypatch):
     monkeypatch.setattr(session, "wait_for_product_page", lambda timeout_ms=20000: None)
 
     assert session.ensure_spain_delivery("28001").is_spain is True
+
+
+def test_delivery_diagnostics_record_submitted_postal_when_confirmation_is_missing(monkeypatch):
+    session = BrowserSession()
+    session.page = _FakePage()
+    monkeypatch.setattr(session, "goto", lambda url, timeout_ms=45000: 200)
+    monkeypatch.setattr(session, "wait_for_product_page", lambda timeout_ms=20000: None)
+    original_locator = session._visible_locator
+
+    def no_confirmation(selectors, timeout_seconds=5.0):
+        if "#GLUXConfirmClose" in selectors:
+            return None
+        return original_locator(selectors, timeout_seconds)
+
+    monkeypatch.setattr(session, "_visible_locator", no_confirmation)
+    with pytest.raises(DeliveryLocationError):
+        session.ensure_spain_delivery("28001")
+    assert session.delivery_diagnostics["postal_code_submitted"] is True
+    assert session.delivery_diagnostics["confirmation_clicked"] is False
+    assert session.delivery_diagnostics["verified"] is False
 
 
 def test_browser_session_rejects_invalid_postal_code():
