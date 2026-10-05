@@ -85,7 +85,7 @@ class DictionaryService:
         self.packaging = self._load(root, "packaging.json")
         self.protected_terms = self._load(root, "protected_terms.json")
         self._indexes = {
-            name: {normalize_key(k): v for k, v in values.items()}
+            name: self._normalized_index(name, values)
             for name, values in {
                 "categories": self.categories,
                 "attribute_labels": self.attribute_labels,
@@ -97,6 +97,17 @@ class DictionaryService:
                 "protected_terms": self.protected_terms,
             }.items()
         }
+
+    @staticmethod
+    def _normalized_index(name: str, values: Mapping[str, str]) -> dict[str, str]:
+        index: dict[str, str] = {}
+        for raw, target in values.items():
+            key = normalize_key(raw)
+            previous = index.get(key)
+            if previous is not None and previous != target:
+                raise ValueError("NORMALIZED_DICTIONARY_COLLISION:%s:%s" % (name, key))
+            index[key] = target
+        return index
 
     @staticmethod
     def _load(root: Path, name: str) -> dict[str, str]:

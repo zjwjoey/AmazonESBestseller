@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 
 
 class TranslationCache:
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -69,11 +69,12 @@ class TranslationCache:
     @staticmethod
     def memory_key(source_text: str, source_language: str, target_language: str,
                    field_type: str, provider: str, model: str,
-                   schema_version: str, prompt_version: str) -> str:
+                   schema_version: str, prompt_version: str,
+                   dictionary_version: str = "v1") -> str:
         import hashlib
         digest = hashlib.sha256(str(source_text or "").encode("utf-8")).hexdigest()
         return "|".join((digest, source_language, target_language, field_type,
-                          provider, model, schema_version, prompt_version))
+                          provider, model, dictionary_version, schema_version, prompt_version))
 
     def get_memory(self, key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
