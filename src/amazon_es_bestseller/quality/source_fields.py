@@ -113,6 +113,7 @@ __all__ = ["audit_source_fields", "source_gate"]
 # adapter so old import paths remain stable while the richer contract can be
 # integrated independently by the orchestration task.
 import json as _json
+import hashlib as _hashlib
 from collections import Counter as _Counter
 from datetime import date as _date
 
@@ -141,6 +142,18 @@ _SPEC_TYPES = {
     "cantidad": {"pcs", "pack", "uds", "unidades", "piezas"},
     "unidades": {"pcs", "pack", "uds", "unidades", "piezas"},
     "piezas": {"pcs", "pack", "uds", "unidades", "piezas"},
+}
+_BINDING_EXCLUDED = {
+    "notes", "remark", "remarks", "备注", "title_zh", "specification_zh",
+    "product_details_zh", "feature_bullets_zh", "audit_status", "auditstatus",
+    "source_hash", "sourcehash", "artifact_hash", "raw_source", "observed_source",
+}
+_RAW_EVIDENCE_FIELDS = {
+    "title_es_raw", "brand_raw", "current_price_raw", "current_price", "original_price_raw",
+    "original_price", "rating_raw", "rating", "review_count_raw", "review_count",
+    "selected_variation_raw", "product_details_es", "details_json", "attributes",
+    "feature_bullets_es", "feature_bullets_raw", "product_description_raw",
+    "date_first_available_raw", "detail_bsr_raw",
 }
 
 
@@ -272,7 +285,7 @@ def _sf_values(row, asin, issues, fields):
             _sf_issue(issues, fields, asin, code, BLOCKED, "P1", f"{field} is invalid", field)
     locale = str(row.get("locale") or row.get("marketplace") or "").strip()
     if locale and locale.casefold().replace("_", "-") not in {"es", "es-es"}:
-        _sf_issue(issues, fields, asin, "LOCALE_INVALID", REVIEW_REQUIRED, "P2", "locale is not es-ES", "locale", {"locale": locale})
+        _sf_issue(issues, fields, asin, "LOCALE_INVALID", REVIEW_REQUIRED, "P1", "locale is not es-ES", "locale", {"locale": locale})
     raw_date, normalized = row.get("date_first_available_raw"), row.get("date_first_available")
     if raw_date and not _parse_es_date(raw_date):
         _sf_issue(issues, fields, asin, "DATE_INVALID", BLOCKED, "P1", "Spanish date is invalid", "date_first_available_raw")
@@ -370,6 +383,26 @@ def _sf_rankings(rows, issues, fields):
                 _sf_issue(issues, fields, "", "RANK_GAP", REVIEW_REQUIRED, "P2", "rank page has gaps", "bestseller_rank", {"source": source, "page": page, "missing": missing})
 
 
+def _sf_hash(value) -> str:
+    payload = _json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return _hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _sf_record_binding(row: Mapping) -> dict:
+    """Bind audit conclusions to exact stage data rather than ASIN/status alone."""
+    source = {str(key): value for key, value in row.items() if key not in _BINDING_EXCLUDED}
+    raw_evidence = {key: value for key, value in source.items()
+                    if key in _RAW_EVIDENCE_FIELDS or key.endswith("_raw")}
+    return {
+        "record_hash": _sf_hash(source),
+        "raw_evidence_hash": _sf_hash(raw_evidence),
+        "raw_evidence_present": bool(raw_evidence),
+        "detail_schema_version": source.get("detail_schema_version"),
+        "ranking_schema_version": source.get("ranking_schema_version", source.get("ranking_parser_version")),
+        "parser_version": source.get("parser_version", source.get("detail_parser_version")),
+    }
+
+
 def audit_source_fields(products: Iterable[Mapping]) -> dict:
     """Perform the production source audit without network access or mutation."""
     rows = [dict(row) for row in (products or ()) if isinstance(row, Mapping)]
@@ -420,9 +453,14 @@ def audit_source_fields(products: Iterable[Mapping]) -> dict:
         else:
             sku_status[asin] = SOURCE_READY
     overall = "BLOCK" if BLOCKED in sku_status.values() else "REVIEW" if REVIEW_REQUIRED in sku_status.values() else "PASS"
+    bindings = defaultdict(list)
+    for row in rows:
+        asin = normalize_asin(row.get("asin"))
+        if is_valid_asin(asin):
+            bindings[asin].append(_sf_record_binding(row))
     return {"check": "source_fields", "status": overall, "summary": {"record_count": len(rows), "issue_count": len(issues),
             "classifications": dict(_Counter(item["classification"] for item in fields))}, "issues": issues,
-            "field_audits": fields, "sku_status": sku_status}
+            "field_audits": fields, "sku_status": sku_status, "record_bindings": dict(bindings)}
 
 
 def source_gate(audit: Mapping) -> tuple[bool, str]:

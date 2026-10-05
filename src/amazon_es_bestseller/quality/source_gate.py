@@ -15,7 +15,9 @@ from .source_fields import BLOCKED, REVIEW_REQUIRED, SOURCE_READY
 
 def canonical_audit_hash(audit: Mapping) -> str:
     """Hash source-audit facts, excluding self-referential/private metadata."""
-    value = {key: audit.get(key) for key in ("check", "status", "summary", "issues", "field_audits", "sku_status")}
+    value = {key: audit.get(key) for key in (
+        "check", "status", "summary", "issues", "field_audits", "sku_status", "record_bindings",
+    )}
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

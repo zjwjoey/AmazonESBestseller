@@ -73,6 +73,16 @@ def test_auxiliary_unit_price_warns_without_becoming_current_price_or_blocking_s
     assert report["sku_status"][ASIN] == "SOURCE_READY"
 
 
+def test_invalid_locale_requires_review_and_audit_binds_raw_evidence_hashes():
+    report = audit_source_fields([row(locale="en-GB")])
+    assert report["sku_status"][ASIN] == "REVIEW_REQUIRED"
+    binding = report["record_bindings"][ASIN][0]
+    assert binding["record_hash"]
+    assert binding["raw_evidence_hash"]
+    assert binding["detail_schema_version"]
+    assert binding["parser_version"]
+
+
 def test_identity_uses_explicit_variation_evidence_but_rejects_unexplained_redirect():
     related = audit_source_fields([row(
         final_asin="B000000001", final_url="https://www.amazon.es/dp/B000000001",

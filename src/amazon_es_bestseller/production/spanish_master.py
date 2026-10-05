@@ -15,9 +15,15 @@ from collections.abc import Iterable, Mapping
 from ..collection.detail import CURRENT_DETAIL_SCHEMA_VERSION, CURRENT_DETAIL_PARSER_VERSION
 from ..models import is_valid_asin, normalize_asin
 from ..quality.source_gate import canonical_audit_hash, evaluate_source_gate, verify_source_gate
+from ..quality.source_fields import audit_source_fields
 
 
 MASTER_SCHEMA_VERSION = "spanish-master-v1"
+_CONFLICT_FACTS = (
+    "title_es_raw", "brand", "brand_raw", "current_price", "current_price_raw",
+    "original_price", "original_price_raw", "product_details_es", "details_json",
+    "feature_bullets_es", "feature_bullets_raw", "selected_variation_raw",
+)
 
 
 class MasterPromotionError(ValueError):
@@ -92,7 +98,8 @@ def _schema_metadata(record: Mapping, run_id: str) -> dict:
     return metadata
 
 
-def _merge_by_asin(records: Iterable[Mapping], existing: Mapping | None, run_id: str) -> list[dict]:
+def _merge_by_asin(records: Iterable[Mapping], existing: Mapping | None, run_id: str,
+                   refresh_strategy: str) -> list[dict]:
     grouped: dict[str, list[dict]] = {}
     for row in records or ():
         if not isinstance(row, Mapping):
@@ -105,6 +112,10 @@ def _merge_by_asin(records: Iterable[Mapping], existing: Mapping | None, run_id:
     output = []
     for asin in sorted(grouped):
         candidates = grouped[asin]
+        for field in _CONFLICT_FACTS:
+            values = {_canonical(candidate.get(field)) for candidate in candidates if _nonempty(candidate.get(field))}
+            if len(values) > 1:
+                raise MasterPromotionError("same ASIN has conflicting facts requiring review: %s (%s)" % (asin, field))
         seed = candidates[0]
         source = _immutable_raw(seed)
         all_contexts = []
@@ -118,6 +129,8 @@ def _merge_by_asin(records: Iterable[Mapping], existing: Mapping | None, run_id:
         all_contexts.sort(key=_context_key)
         old = prior.get(asin)
         if old and isinstance(old.get("raw_source"), Mapping):
+            if refresh_strategy != "preserve_prior":
+                raise MasterPromotionError("historical source selection requires preserve_prior strategy")
             raw_source = copy.deepcopy(dict(old["raw_source"]))
             observed_source = source
         else:
@@ -131,19 +144,26 @@ def _merge_by_asin(records: Iterable[Mapping], existing: Mapping | None, run_id:
         canonical["ranking_contexts"] = all_contexts
         canonical["raw_source"] = raw_source
         canonical["observed_source"] = observed_source
+        canonical["evidence_selection"] = {
+            "strategy": refresh_strategy,
+            "selected_raw_source_hash": _hash(raw_source),
+            "observed_source_hash": _hash(observed_source),
+        }
         canonical["notes"] = _note(old) if old and _nonempty(_note(old)) else _note(seed)
         canonical.update(_schema_metadata(seed, run_id))
         output.append(canonical)
     return output
 
 
-def _artifact_payload(records: list[dict], audit_hash: str, gate: Mapping, run_id: str) -> dict:
+def _artifact_payload(records: list[dict], audit_hash: str, bindings_hash: str, gate: Mapping, run_id: str) -> dict:
     return {"master_schema_version": MASTER_SCHEMA_VERSION, "source_audit_hash": audit_hash,
-            "source_gate_status": gate.get("status"), "run_id": run_id, "records": records}
+            "source_record_bindings_hash": bindings_hash, "source_gate_status": gate.get("status"),
+            "run_id": run_id, "records": records}
 
 
 def build_spanish_master(records: Iterable[Mapping], source_audit: Mapping, source_gate: Mapping | None = None,
-                         *, existing_master: Mapping | None = None, run_id: str = "") -> dict:
+                         *, existing_master: Mapping | None = None, run_id: str = "",
+                         refresh_strategy: str = "preserve_prior") -> dict:
     """Promote one canonical record per ASIN after a bound source-gate check.
 
     ``source_gate`` is optional for ergonomic use but is always recomputed and
@@ -151,13 +171,32 @@ def build_spanish_master(records: Iterable[Mapping], source_audit: Mapping, sour
     """
     if not isinstance(source_audit, Mapping) or source_audit.get("check") != "source_fields":
         raise MasterPromotionError("Spanish Master requires a source_fields audit")
+    source_rows = [copy.deepcopy(dict(row)) for row in records or () if isinstance(row, Mapping)]
+    bindings = source_audit.get("record_bindings")
+    if not isinstance(bindings, Mapping):
+        raise MasterPromotionError("source audit is missing record bindings")
+    # Replaying the audit is the authority check.  It prevents a caller from
+    # inventing a SOURCE_READY dictionary or reusing an audit for changed raw
+    # title/price/detail evidence.
+    rebuilt_audit = audit_source_fields(source_rows)
+    if canonical_audit_hash(rebuilt_audit) != canonical_audit_hash(source_audit):
+        raise MasterPromotionError("source audit facts do not match promotion records")
+    for asin, rows in (rebuilt_audit.get("record_bindings") or {}).items():
+        supplied = bindings.get(asin)
+        if supplied != rows:
+            raise MasterPromotionError("source record bindings do not match promotion records: %s" % asin)
+        if any(not item.get("raw_evidence_present") for item in rows):
+            raise MasterPromotionError("raw evidence is required for Spanish Master: %s" % asin)
+        if any(not item.get("detail_schema_version") or not item.get("ranking_schema_version")
+               or not item.get("parser_version") for item in rows):
+            raise MasterPromotionError("parser/schema evidence is required for Spanish Master: %s" % asin)
     calculated_gate = evaluate_source_gate(source_audit)
     gate = source_gate or calculated_gate
     if not verify_source_gate(source_audit, gate):
         raise MasterPromotionError("source gate is not bound to this audit")
     if not calculated_gate["ready"]:
         raise MasterPromotionError("P0/P1 source findings or review evidence block Spanish Master promotion")
-    master_records = _merge_by_asin(records, existing_master, run_id)
+    master_records = _merge_by_asin(source_rows, existing_master, run_id, refresh_strategy)
     if not master_records:
         raise MasterPromotionError("empty input cannot enter Spanish Master")
     statuses = source_audit.get("sku_status") or {}
@@ -171,7 +210,8 @@ def build_spanish_master(records: Iterable[Mapping], source_audit: Mapping, sour
         record["auditstatus"] = "SOURCE_READY"
     audit_hash = canonical_audit_hash(source_audit)
     effective_run_id = run_id or (master_records[0].get("run_id", "") if master_records else "")
-    payload = _artifact_payload(master_records, audit_hash, gate, effective_run_id)
+    bindings_hash = _hash(source_audit.get("record_bindings"))
+    payload = _artifact_payload(master_records, audit_hash, bindings_hash, gate, effective_run_id)
     artifact = {**payload, "artifact_hash": _hash(payload)}
     return copy.deepcopy(artifact)
 
@@ -180,7 +220,9 @@ def verify_artifact_hash(artifact: Mapping) -> bool:
     """Return whether a Spanish Master artifact has not changed in transit."""
     if not isinstance(artifact, Mapping) or artifact.get("master_schema_version") != MASTER_SCHEMA_VERSION:
         return False
-    payload = {key: artifact.get(key) for key in ("master_schema_version", "source_audit_hash", "source_gate_status", "run_id", "records")}
+    payload = {key: artifact.get(key) for key in (
+        "master_schema_version", "source_audit_hash", "source_record_bindings_hash", "source_gate_status", "run_id", "records",
+    )}
     return bool(artifact.get("artifact_hash")) and artifact.get("artifact_hash") == _hash(payload)
 
 

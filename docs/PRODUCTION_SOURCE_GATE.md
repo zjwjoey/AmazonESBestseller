@@ -18,6 +18,13 @@ Its `audit_hash` is the canonical SHA-256 digest of source facts.
 `verify_source_gate` recomputes it, so callers cannot promote a record by
 passing an arbitrary ready/PASS value.
 
+The audit additionally emits `record_bindings` for every ASIN input: a full
+record hash, raw-evidence hash, raw-evidence presence flag, and parser/schema
+versions. Spanish Master independently replays the audit over its supplied
+records and requires the rebuilt bindings to equal the supplied audit. Thus a
+caller cannot reuse an ASIN's ready status after changing its title, price,
+details, evidence, or parser/schema facts.
+
 `production.spanish_master.build_spanish_master` is the only production
 promotion entry point. It requires the exact audit plus its verified gate,
 stores one canonical row per ASIN, preserves independent ranking contexts, and
@@ -27,3 +34,9 @@ are retained by ASIN unchanged. The returned artifact includes stable
 `artifact_hash`, source hash, parser/schema versions, audit status, collected
 and observed timestamps, and run id. `verify_artifact_hash` validates it after
 serialization.
+
+Multiple input rows for one ASIN may contribute distinct ranking contexts, but
+conflicting title, brand, price, variation, or detail facts are rejected for
+review rather than silently selecting the first row. Historical refreshes use
+the explicit `preserve_prior` evidence-selection strategy: prior accepted raw
+evidence remains selected and the new source is retained separately.

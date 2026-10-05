@@ -78,3 +78,39 @@ def test_master_does_not_mutate_caller_records():
     before = copy.deepcopy(records)
     promoted(records)
     assert records == before
+
+
+def test_master_rejects_record_changed_after_audit_even_when_asin_is_ready():
+    records = [source()]
+    audit = audit_source_fields(records)
+    changed = [source(title_es_raw="Otra botella 750 ml")]
+    with pytest.raises(MasterPromotionError, match="facts do not match"):
+        build_spanish_master(changed, audit, evaluate_source_gate(audit), run_id="fixture-run")
+
+
+def test_master_rejects_missing_binding_and_duplicate_same_asin_fact_conflict():
+    audit = audit_source_fields([source()])
+    audit.pop("record_bindings", None)
+    with pytest.raises(MasterPromotionError, match="record bindings"):
+        build_spanish_master([source()], audit, evaluate_source_gate(audit), run_id="fixture-run")
+
+    conflicting = [source(), source(current_price="14,00", ranking_contexts=[{
+        "ranking_source_url": "https://www.amazon.es/Best-Sellers/zgbs/43",
+        "ranking_page_number": 1, "bestseller_rank": 3,
+        "leaf_category": "Botellas", "browse_node_id": "43",
+    }])]
+    conflict_audit = audit_source_fields(conflicting)
+    with pytest.raises(MasterPromotionError, match="conflicting facts"):
+        build_spanish_master(conflicting, conflict_audit, evaluate_source_gate(conflict_audit), run_id="fixture-run")
+
+
+def test_master_rejects_record_without_raw_evidence_or_schema_evidence():
+    missing_raw = source(title_es_raw=None, current_price=None, rating=None)
+    raw_audit = audit_source_fields([missing_raw])
+    with pytest.raises(MasterPromotionError, match="raw evidence"):
+        build_spanish_master([missing_raw], raw_audit, evaluate_source_gate(raw_audit), run_id="fixture-run")
+
+    missing_schema = source(detail_schema_version=None)
+    schema_audit = audit_source_fields([missing_schema])
+    with pytest.raises(MasterPromotionError, match="parser/schema"):
+        build_spanish_master([missing_schema], schema_audit, evaluate_source_gate(schema_audit), run_id="fixture-run")
