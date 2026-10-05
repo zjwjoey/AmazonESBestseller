@@ -13,7 +13,7 @@ import json
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Protocol
 
 from ..collection.detail import CURRENT_DETAIL_SCHEMA_VERSION, reparse_saved_details
 from ..collection.detail_executor import NETWORK_ACTIONS, execute_detail_plan
@@ -41,6 +41,40 @@ from .task_config import TaskConfig
 
 class ProductionWorkflowError(RuntimeError):
     pass
+
+
+class RankingSnapshotCollector(Protocol):
+    """Explicit seam for the existing conservative V1 browser collector."""
+
+    def collect(self, task: TaskConfig, output_root: Path) -> Mapping[str, Any]: ...
+
+
+class ExistingV1SnapshotCollector:
+    """Thin adapter; it never changes browser pacing or Access Gate policy."""
+
+    def __init__(self, session: Any) -> None:
+        self.session = session
+
+    def collect(self, task: TaskConfig, output_root: Path) -> Mapping[str, Any]:
+        from ..monitoring.snapshot import collect_ranking_snapshot
+        return collect_ranking_snapshot(task.source_urls, self.session, output_root,
+                                        pages_per_url=task.pages_per_url, parser_version="v1")
+
+
+class ExistingV1DetailCollector:
+    """Callable adapter for the existing serial V1 detail collector.
+
+    The session is deliberately supplied by the reviewed caller rather than
+    constructed from a task file.  ``collect_details`` retains ownership of
+    its Access Gate, pacing, saved-HTML and checkpoint behavior.
+    """
+
+    def __init__(self, session: Any) -> None:
+        self.session = session
+
+    def __call__(self, asins: list[str], _session: Any, output_root: str, **kwargs: Any) -> list[dict]:
+        from ..collection.detail import collect_details
+        return collect_details(asins, self.session, output_root, **kwargs)
 
 
 class _TargetedRefreshPolicy(DetailRefreshPolicy):
@@ -126,9 +160,15 @@ class ProductionWorkflow:
     """Concrete V1 stage producer backed by saved files and existing modules."""
 
     def __init__(self, task: TaskConfig, run_dir: str | Path, *, run_id: str,
-                 history: HistoryRepository | None = None) -> None:
+                 history: HistoryRepository | None = None,
+                 snapshot_collector: RankingSnapshotCollector | None = None,
+                 detail_collector: Callable[..., list[dict]] | None = None,
+                 detail_session: Any = None,
+                 translation_provider: Any | None = None) -> None:
         self.task, self.run_dir, self.run_id = task, Path(run_dir), str(run_id)
         self.history = history or JsonHistoryRepository(task.history_dir or (self.run_dir / "history"))
+        self.snapshot_collector, self.detail_collector = snapshot_collector, detail_collector
+        self.detail_session, self.translation_provider = detail_session, translation_provider
         self.artifacts = self.run_dir / "artifacts"
         self.work = self.run_dir / "work"
 
@@ -171,15 +211,14 @@ class ProductionWorkflow:
 
     def stage_preflight(self, _context: Mapping[str, Any]) -> Mapping[str, Any]:
         evidence = self.task.evidence_fingerprints()
-        if self.task.network_mode != "offline":
-            # The V1 transport remains in the existing collector command. It
-            # must be explicitly adapted/reviewed rather than accidentally
-            # activated by an orchestration configuration.
+        if self.task.network_mode == "live" and self.snapshot_collector is None:
+            # CLI has no implicit browser/profile construction. Callers must
+            # hand in the same reviewed V1 session used by the collector.
             raise ProductionWorkflowError("LIVE_TRANSPORT_UNCONFIGURED")
         provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
-        if provider_mode != "fake":
+        if self.task.network_mode == "offline" and provider_mode != "fake":
             raise ProductionWorkflowError("OFFLINE_PROVIDER_MUST_BE_FAKE")
-        return self._store("preflight", {"status": "READY", "offline": True,
+        return self._store("preflight", {"status": "READY", "offline": self.task.network_mode == "offline",
             "parser": {"ranking": "V1", "detail": "V1"}, "evidence_fingerprints": evidence,
             "translation_provider": provider_mode,
             "counts": {"network_requests": 0},
@@ -187,24 +226,34 @@ class ProductionWorkflow:
 
     def stage_ranking_authority(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         preflight = self._prior(context, "preflight")
-        raw = self.task.load_ranking_evidence()
-        records = [dict(row) for row in raw.get("records") or [] if isinstance(row, Mapping)]
-        statuses = raw.get("source_statuses") or raw.get("page_statuses")
-        planned = raw.get("planned_sources") or raw.get("sources")
-        if not statuses or not planned:
-            raise ProductionWorkflowError("RANKING_EVIDENCE_SOURCE_STATUS_REQUIRED")
-        source_hash = _sha_file(self.task.ranking_evidence)
-        snapshot_id = "snapshot_%s_%s" % (self.run_id, source_hash[:16])
         root = self.work / "ranking_snapshots"
-        found = next(root.glob("**/%s" % snapshot_id), None) if root.exists() else None
-        if found:
-            manifest = _read_json(found / "manifest.json"); frozen = _read_json(found / "rankings.json")
+        if self.task.network_mode == "live":
+            result = self.snapshot_collector.collect(self.task, root) if self.snapshot_collector else None
+            if not isinstance(result, Mapping):
+                raise ProductionWorkflowError("LIVE_SNAPSHOT_RESULT_INVALID")
+            manifest, frozen, found = result.get("manifest"), result.get("records"), result.get("path")
+            source_hash = artifact_hash({"urls": self.task.source_urls, "pages_per_url": self.task.pages_per_url,
+                                         "manifest": manifest})
         else:
-            result = build_ranking_snapshot(records, root, planned_sources=planned,
-                source_statuses=statuses, snapshot_id=snapshot_id,
-                parser_version="collection.ranking", publish_authoritative_pointer=False)
-            manifest, frozen = result["manifest"], result["records"]
-            found = result["path"]
+            raw = self.task.load_ranking_evidence()
+            records = [dict(row) for row in raw.get("records") or [] if isinstance(row, Mapping)]
+            statuses = raw.get("source_statuses") or raw.get("page_statuses")
+            planned = raw.get("planned_sources") or raw.get("sources")
+            if not statuses or not planned:
+                raise ProductionWorkflowError("RANKING_EVIDENCE_SOURCE_STATUS_REQUIRED")
+            source_hash = _sha_file(self.task.ranking_evidence) if self.task.ranking_evidence else ""
+            snapshot_id = "snapshot_%s_%s" % (self.run_id, source_hash[:16])
+            found = next(root.glob("**/%s" % snapshot_id), None) if root.exists() else None
+            if found:
+                manifest = _read_json(found / "manifest.json"); frozen = _read_json(found / "rankings.json")
+            else:
+                result = build_ranking_snapshot(records, root, planned_sources=planned,
+                    source_statuses=statuses, snapshot_id=snapshot_id,
+                    parser_version="collection.ranking", publish_authoritative_pointer=False)
+                manifest, frozen = result["manifest"], result["records"]
+                found = result["path"]
+        if not isinstance(manifest, Mapping) or not isinstance(frozen, list) or not isinstance(found, (str, Path)):
+            raise ProductionWorkflowError("RANKING_SNAPSHOT_RESULT_INVALID")
         if str(manifest.get("snapshot_status")) != "AUTHORITATIVE":
             raise ProductionWorkflowError("RANKING_SNAPSHOT_NOT_AUTHORITATIVE")
         previous = self.history.latest_snapshot() if self.task.mode == "incremental" else None
@@ -254,8 +303,10 @@ class ProductionWorkflow:
         paths = write_detail_plan(plan, detail_root / "plans")
         network = [row.get("ranking_asin") for row in plan.get("records") or []
                    if row.get("detail_action") in NETWORK_ACTIONS]
-        if network:
+        if network and self.task.network_mode == "offline":
             raise ProductionWorkflowError("OFFLINE_NETWORK_ACTION_REQUIRED:%s" % ",".join(str(x) for x in network))
+        if network and self.detail_collector is None:
+            raise ProductionWorkflowError("LIVE_DETAIL_TRANSPORT_UNCONFIGURED:%s" % ",".join(str(x) for x in network))
         return self._store("detail-evidence", {"status": "READY", "plan_path": str(paths["json"].relative_to(self.run_dir)),
             "plan_hash": plan.get("plan_hash"), "seed_reparsed_asins": sorted({r.get("asin") for r in reparsed}),
             "snapshot_id": manifest.get("snapshot_id"), "input_artifact_hashes": {"ranking-authority": self._prior(context, "ranking-authority").get("artifact_file_hash")},
@@ -266,8 +317,11 @@ class ProductionWorkflow:
     def stage_offline_reparse(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         upstream = self._prior(context, "detail-evidence")
         plan = _read_json(self.run_dir / str(upstream.get("plan_path") or ""))
-        result = execute_detail_plan(plan, None, str(self.work / "details"), offline=True,
-                                     saved_html=self.task.detail_html_dirs, parser_version="v1")
+        execution = {"offline": self.task.network_mode == "offline",
+                     "saved_html": self.task.detail_html_dirs, "parser_version": "v1"}
+        if self.detail_collector is not None:
+            execution["collector"] = self.detail_collector
+        result = execute_detail_plan(plan, self.detail_session, str(self.work / "details"), **execution)
         detail_rows = _read_json(self.work / "details" / "details.json")
         self.history.save_details(detail_rows)
         pending = [row for row in result.get("records") or [] if str(row.get("status")) not in {"REUSED", "SUCCESS", "ALREADY_SUCCESS"}]
@@ -277,9 +331,11 @@ class ProductionWorkflow:
             "detail_execution": result, "input_artifact_hashes": {"detail-evidence": upstream.get("artifact_file_hash")},
             "counts": {"detail_cached": sum(1 for row in result.get("records") or [] if row.get("status") == "REUSED"),
                        "detail_offline_reparsed": len(upstream.get("seed_reparsed_asins") or []),
+                       "detail_requested": int(result.get("requested_count") or 0),
                        "detail_success": len(detail_rows), "detail_failed": len(pending)},
             "manifest_counts": {"detail_cached": sum(1 for row in result.get("records") or [] if row.get("status") == "REUSED"),
                                 "detail_offline_reparsed": len(upstream.get("seed_reparsed_asins") or []),
+                                "detail_requested": int(result.get("requested_count") or 0),
                                 "detail_success": len(detail_rows), "detail_failed": len(pending)}})
 
     def stage_normalize(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -365,13 +421,24 @@ class ProductionWorkflow:
         from ..commands.translation import FakeTranslationProvider
         translation_input = self._artifact_data(self._prior(context, "translation-input"))["translation_input"]
         preclean = self._artifact_data(self._prior(context, "preclean"))["preclean"]
-        service = TranslationService(FakeTranslationProvider(), TranslationCache(self.work / "translation_cache.json"),
+        provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
+        provider = self.translation_provider
+        if provider is None and provider_mode == "fake":
+            provider = FakeTranslationProvider()
+        if provider is None:
+            raise ProductionWorkflowError("QWEN_PROVIDER_UNCONFIGURED")
+        if provider_mode == "qwen-mt":
+            from ..translation.budget import BudgetedProvider
+            if not isinstance(provider, BudgetedProvider):
+                raise ProductionWorkflowError("QWEN_PROVIDER_MUST_BE_BUDGETED")
+        service = TranslationService(provider, TranslationCache(self.work / "translation_cache.json"),
                                      schema_version=TRANSLATION_SCHEMA_VERSION)
         translated = service.translate_records(records_for_preclean(translation_input))
         state = build_production_state(translation_input, preclean.get("translation_input_records") or [],
                                        translated.get("records") or {})
         return self._store("translation", {"status": "READY", "execution": translated, "state": state,
-            "provider_provenance": {"provider": "fake", "model": "fake-offline-v1", "verified": False,
+            "provider_provenance": {"provider": provider.name, "model": provider.model,
+                                    "verified": provider_mode == "qwen-mt",
                                     "request_count": int((translated.get("summary") or {}).get("total", 0))},
             "input_artifact_hashes": {"preclean": self._prior(context, "preclean").get("artifact_file_hash")},
             "counts": dict(translated.get("summary") or {})})
@@ -634,4 +701,5 @@ class ProductionWorkflow:
             "counts": {"workbooks": 1}})
 
 
-__all__ = ["ProductionWorkflow", "ProductionWorkflowError"]
+__all__ = ["ProductionWorkflow", "ProductionWorkflowError", "RankingSnapshotCollector",
+           "ExistingV1SnapshotCollector", "ExistingV1DetailCollector"]

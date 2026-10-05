@@ -21,7 +21,9 @@ class TaskConfig:
     task_id: str
     mode: str
     network_mode: str
-    ranking_evidence: Path
+    ranking_evidence: Path | None
+    source_urls: tuple[str, ...]
+    pages_per_url: int
     detail_html_dirs: tuple[Path, ...]
     history_dir: Path | None
     profile: str
@@ -47,9 +49,24 @@ class TaskConfig:
             raise TaskConfigError("TASK_CONFIG_NETWORK_MODE_INVALID")
         source = value.get("source") if isinstance(value.get("source"), Mapping) else value
         evidence = str(source.get("ranking_evidence") or value.get("ranking_evidence") or "").strip()
-        if not evidence:
+        ranking_evidence = ((root / evidence).resolve() if evidence and not Path(evidence).is_absolute()
+                            else Path(evidence) if evidence else None)
+        urls = source.get("source_urls") or source.get("urls") or value.get("source_urls") or []
+        if isinstance(urls, str):
+            urls = [urls]
+        if not isinstance(urls, (list, tuple)):
+            raise TaskConfigError("TASK_CONFIG_SOURCE_URLS_INVALID")
+        source_urls = tuple(str(url).strip() for url in urls if str(url).strip())
+        try:
+            pages_per_url = int(source.get("pages_per_url") or value.get("pages_per_url") or 1)
+        except (TypeError, ValueError) as exc:
+            raise TaskConfigError("TASK_CONFIG_PAGES_PER_URL_INVALID") from exc
+        if pages_per_url < 1:
+            raise TaskConfigError("TASK_CONFIG_PAGES_PER_URL_INVALID")
+        if network_mode == "offline" and ranking_evidence is None:
             raise TaskConfigError("TASK_CONFIG_RANKING_EVIDENCE_REQUIRED")
-        ranking_evidence = (root / evidence).resolve() if not Path(evidence).is_absolute() else Path(evidence)
+        if network_mode == "live" and not source_urls:
+            raise TaskConfigError("TASK_CONFIG_SOURCE_URLS_REQUIRED")
         html_values = source.get("detail_html_dirs") or value.get("detail_html_dirs") or []
         if isinstance(html_values, (str, Path)):
             html_values = [html_values]
@@ -73,13 +90,16 @@ class TaskConfig:
         if not isinstance(due, (list, tuple)):
             raise TaskConfigError("TASK_CONFIG_REFRESH_DUE_INVALID")
         refresh_due_asins = frozenset(str(asin).strip().upper() for asin in due if str(asin).strip())
-        return cls(task_id, mode, network_mode, ranking_evidence, dirs, history_dir,
-                   profile, dict(translation), refresh_due_asins, dict(value))
+        return cls(task_id, mode, network_mode, ranking_evidence, source_urls, pages_per_url,
+                   dirs, history_dir, profile, dict(translation), refresh_due_asins, dict(value))
 
     def evidence_fingerprints(self) -> dict[str, str]:
-        if not self.ranking_evidence.is_file():
+        if self.ranking_evidence is not None and not self.ranking_evidence.is_file():
             raise TaskConfigError("RANKING_EVIDENCE_MISSING:%s" % self.ranking_evidence)
-        result = {"ranking_evidence": _file_hash(self.ranking_evidence)}
+        result = ({"ranking_evidence": _file_hash(self.ranking_evidence)}
+                  if self.ranking_evidence is not None else
+                  {"live_source_plan": hashlib.sha256(json.dumps({"urls": self.source_urls,
+                      "pages_per_url": self.pages_per_url}, sort_keys=True).encode("utf-8")).hexdigest()})
         for index, root in enumerate(self.detail_html_dirs):
             if not root.is_dir():
                 raise TaskConfigError("DETAIL_HTML_DIR_MISSING:%s" % root)
@@ -94,11 +114,14 @@ class TaskConfig:
         return {"task_config": self.raw, "task_id": self.task_id, "mode": self.mode,
                 "network_mode": self.network_mode, "profile": self.profile,
                 "evidence_fingerprints": self.evidence_fingerprints(),
+                "source_urls": list(self.source_urls), "pages_per_url": self.pages_per_url,
                 "refresh_due_asins": sorted(self.refresh_due_asins),
                 "parser": {"ranking": "V1", "detail": "V1"},
                 "translation": dict(self.translation)}
 
     def load_ranking_evidence(self) -> dict[str, Any]:
+        if self.ranking_evidence is None:
+            raise TaskConfigError("RANKING_EVIDENCE_UNAVAILABLE_IN_LIVE_MODE")
         try:
             value = json.loads(self.ranking_evidence.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:

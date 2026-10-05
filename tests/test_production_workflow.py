@@ -1,11 +1,21 @@
 import json
+from datetime import datetime, timezone
 
 import pytest
 
 from amazon_es_bestseller.cli import main
+from amazon_es_bestseller.collection.detail import reparse_saved_details
+from amazon_es_bestseller.collection.planning import DetailState
+from amazon_es_bestseller.monitoring.snapshot import build_ranking_snapshot
 from amazon_es_bestseller.orchestration.production_run import ProductionRun
 from amazon_es_bestseller.orchestration.task_config import TaskConfig
-from amazon_es_bestseller.orchestration.workflow import ProductionWorkflow
+from amazon_es_bestseller.orchestration.workflow import (
+    ExistingV1DetailCollector,
+    ExistingV1SnapshotCollector,
+    ProductionWorkflow,
+)
+from amazon_es_bestseller.translation.budget import BudgetLedger, BudgetedProvider, VerifiedPriceCard
+from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
 
 
 ASIN = "B000000001"
@@ -153,3 +163,147 @@ def test_task_config_rejects_ready_payload_injection(tmp_path):
     raw = json.loads(config.read_text(encoding="utf-8")); raw["stages"] = {"preflight": {"status": "READY"}}
     with pytest.raises(Exception, match="STAGE_PAYLOADS_FORBIDDEN"):
         TaskConfig.from_mapping(raw, base_dir=tmp_path)
+
+
+def test_live_v1_adapter_is_explicit_and_fake_transport_exercises_source_flow(tmp_path, monkeypatch):
+    config_path = _write_fixture(tmp_path)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    raw["network_mode"] = "live"
+    raw["source"] = {"source_urls": [SOURCE_URL], "pages_per_url": 1, "detail_html_dirs": ["html"]}
+    task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+    evidence = json.loads((tmp_path / "ranking.json").read_text(encoding="utf-8"))
+
+    class FakeCollector:
+        calls = 0
+
+        def collect(self, supplied_task, output_root):
+            self.calls += 1
+            assert supplied_task.source_urls == (SOURCE_URL,)
+            return build_ranking_snapshot(evidence["records"], output_root,
+                                          planned_sources=evidence["planned_sources"],
+                                          source_statuses=evidence["source_statuses"],
+                                          snapshot_id="snapshot_fake_live", publish_authoritative_pointer=False)
+
+    collector = FakeCollector()
+    run_dir = tmp_path / "live"
+    result = ProductionRun(run_dir, run_id="live", config=task.runner_config(), offline=False).run(
+        ProductionWorkflow(task, run_dir, run_id="live", snapshot_collector=collector).handlers(),
+        profile="source-only")
+    assert result["status"] == "DRAFT_SOURCE_ONLY" and collector.calls == 1
+
+    observed = {}
+    monkeypatch.setattr("amazon_es_bestseller.monitoring.snapshot.collect_ranking_snapshot",
+                        lambda urls, session, output_root, **kwargs: observed.update(
+                            urls=tuple(urls), session=session, output_root=output_root, **kwargs) or {"ok": True})
+    session = object()
+    assert ExistingV1SnapshotCollector(session).collect(task, tmp_path / "adapter") == {"ok": True}
+    assert observed["urls"] == (SOURCE_URL,) and observed["session"] is session
+    assert observed["pages_per_url"] == 1 and observed["parser_version"] == "v1"
+
+
+def test_live_v1_detail_adapter_uses_fake_transport_only_when_plan_requires_fetch(tmp_path, monkeypatch):
+    config_path = _write_fixture(tmp_path)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    raw["network_mode"] = "live"
+    raw["source"] = {"source_urls": [SOURCE_URL], "pages_per_url": 1, "detail_html_dirs": []}
+    task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+    evidence = json.loads((tmp_path / "ranking.json").read_text(encoding="utf-8"))
+
+    class FakeSnapshotCollector:
+        def collect(self, supplied_task, output_root):
+            assert supplied_task is task
+            return build_ranking_snapshot(evidence["records"], output_root,
+                                          planned_sources=evidence["planned_sources"],
+                                          source_statuses=evidence["source_statuses"],
+                                          snapshot_id="snapshot_fake_detail", publish_authoritative_pointer=False)
+
+    class FakeDetailCollector:
+        calls = []
+
+        def __call__(self, asins, _session, _output_root, **kwargs):
+            self.calls.append((list(asins), dict(kwargs)))
+            return reparse_saved_details(tmp_path / "html", DetailState(tmp_path / "fake_detail_state.json"),
+                                         asins=asins, parser_version=kwargs["parser_version"])
+
+    detail_collector = FakeDetailCollector()
+    run_dir = tmp_path / "live-detail"
+    result = ProductionRun(run_dir, run_id="live-detail", config=task.runner_config(), offline=False).run(
+        ProductionWorkflow(task, run_dir, run_id="live-detail", snapshot_collector=FakeSnapshotCollector(),
+                           detail_collector=detail_collector).handlers(), profile="source-only")
+    assert result["status"] == "DRAFT_SOURCE_ONLY"
+    assert detail_collector.calls[0][0] == [ASIN]
+    assert detail_collector.calls[0][1]["parser_version"] == "v1"
+    metrics = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert metrics["detail_requested"] == 1 and metrics["detail_success"] == 1
+
+    observed = {}
+    monkeypatch.setattr("amazon_es_bestseller.collection.detail.collect_details",
+                        lambda asins, session, out_dir, **kwargs: observed.update(
+                            asins=asins, session=session, out_dir=out_dir, **kwargs) or [])
+    session = object()
+    ExistingV1DetailCollector(session)([ASIN], None, str(tmp_path / "adapter"), parser_version="v1")
+    assert observed["asins"] == [ASIN] and observed["session"] is session
+    assert observed["parser_version"] == "v1"
+
+
+def test_qwen_mode_requires_injected_budgeted_provider_without_real_transport(tmp_path):
+    config_path = _write_fixture(tmp_path)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    raw["network_mode"] = "live"
+    raw["source"] = {"source_urls": [SOURCE_URL], "pages_per_url": 1, "detail_html_dirs": ["html"]}
+    raw["translation"] = {"provider_mode": "qwen-mt"}
+    task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+    evidence = json.loads((tmp_path / "ranking.json").read_text(encoding="utf-8"))
+
+    class FakeSnapshotCollector:
+        def collect(self, _task, output_root):
+            return build_ranking_snapshot(evidence["records"], output_root,
+                                          planned_sources=evidence["planned_sources"],
+                                          source_statuses=evidence["source_statuses"],
+                                          snapshot_id="snapshot_fake_%s" % output_root.parent.parent.name,
+                                          publish_authoritative_pointer=False)
+
+    class FakeBudgetedQwen(TranslationProvider):
+        name = "qwen-mt"
+
+        def __init__(self):
+            self.calls = 0
+
+        @property
+        def model(self):
+            return "qwen-mt-fixture"
+
+        def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+            self.calls += 1
+            return ProviderResponse(text="离线预算测试", provider=self.name, model=self.model,
+                                    raw={"usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    raw_provider = FakeBudgetedQwen()
+    unbudgeted_dir = tmp_path / "unbudgeted"
+    with pytest.raises(Exception, match="QWEN_PROVIDER_MUST_BE_BUDGETED"):
+        ProductionRun(unbudgeted_dir, run_id="unbudgeted", config=task.runner_config(), offline=False).run(
+            ProductionWorkflow(task, unbudgeted_dir, run_id="unbudgeted",
+                               snapshot_collector=FakeSnapshotCollector(),
+                               translation_provider=raw_provider).handlers(), profile="full")
+    assert raw_provider.calls == 0
+    card = VerifiedPriceCard.from_mapping({
+        "provider": raw_provider.name, "model": raw_provider.model, "currency": "CNY",
+        "input_per_million_cny": "0.01", "output_per_million_cny": "0.01",
+        "verified_at": datetime.now(timezone.utc).isoformat(),
+        "source": "https://help.aliyun.com/pricing/qwen-mt",
+    }, provider=raw_provider.name, model=raw_provider.model)
+    ledger = BudgetLedger(tmp_path / "budget.json", limit_cny="5.00", price_card=card,
+                          max_output_tokens=32, prompt_overhead_tokens=16, max_unique_asins=1500)
+    provider = BudgetedProvider(raw_provider, ledger)
+    run_dir = tmp_path / "budgeted"
+    with pytest.raises(Exception, match="RELEASE_GATE_NOT_READY"):
+        ProductionRun(run_dir, run_id="budgeted", config=task.runner_config(), offline=False).run(
+            ProductionWorkflow(task, run_dir, run_id="budgeted", snapshot_collector=FakeSnapshotCollector(),
+                               translation_provider=provider).handlers(), profile="full")
+    translation = json.loads((run_dir / "artifacts" / "translation.json").read_text(encoding="utf-8"))
+    assert raw_provider.calls > 0
+    assert translation["provider_provenance"] == {
+        "provider": "qwen-mt", "model": "qwen-mt-fixture", "verified": True,
+        "request_count": translation["counts"]["total"],
+    }
+    assert ledger.snapshot()["selected_asins"] == [ASIN]
