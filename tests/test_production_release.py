@@ -127,3 +127,57 @@ def test_hash_alignment_provider_and_nonformal_controls_block(tmp_path):
     assert evaluate_release_gate({}, formal=False)["status"] == DRAFT
     with pytest.raises(ValueError, match="PRODUCTION_RELEASE_NOT_READY"):
         export_ready(valid_artifacts(), None, str(tmp_path / "out.xlsx"), debug=True)
+
+
+def test_field_closure_p1_blocks_even_when_all_other_bound_stages_pass():
+    artifacts = valid_artifacts()
+    artifacts["field_closure"] = seal_artifact("field_closure", {"check": "field_closure", "status": "PASS",
+        "summary": {"total_skus": 2}, "records": [{"asin": ASINS[0], "severity": "P1"}]})
+    assert "FIELD_CLOSURE_BLOCKED" in codes(evaluate_release_gate(artifacts))
+
+
+def test_bilingual_missing_extra_asin_and_url_image_mutations_block():
+    artifacts = valid_artifacts()
+    chinese = artifacts["chinese_output"]["payload"]
+    chinese["records"] = chinese["records"][:1]
+    artifacts["chinese_output"] = seal_artifact("chinese_output", chinese)
+    assert "ASIN_SET_OR_ORDER_MISMATCH" in codes(evaluate_release_gate(artifacts))
+
+    artifacts = valid_artifacts()
+    chinese = artifacts["chinese_output"]["payload"]
+    chinese["records"].append({"asin": "B099999999", "product_url": "https://www.amazon.es/dp/B099999999",
+                               "image_url": "https://images.amazon.es/extra.jpg"})
+    artifacts["chinese_output"] = seal_artifact("chinese_output", chinese)
+    assert "ASIN_SET_OR_ORDER_MISMATCH" in codes(evaluate_release_gate(artifacts))
+
+    artifacts = valid_artifacts()
+    spanish = artifacts["spanish_output"]["payload"]
+    spanish["records"][0]["product_url"] = "https://www.amazon.es/dp/B099999999"
+    spanish["records"][0]["image_url"] = "https://images.amazon.es/wrong.jpg"
+    artifacts["spanish_output"] = seal_artifact("spanish_output", spanish)
+    assert "URL_OR_IMAGE_MISMATCH" in codes(evaluate_release_gate(artifacts))
+
+
+def test_dictionary_rerender_version_drift_and_pending_repair_block():
+    artifacts = valid_artifacts()
+    dictionary = artifacts["dictionary_sync"]["payload"]
+    dictionary["rerender"] = {"dictionary_version": "2", "ready": False,
+                              "selective_repair": [{"asin": ASINS[0], "field_type": "title_zh"}]}
+    artifacts["dictionary_sync"] = seal_artifact("dictionary_sync", dictionary)
+    assert {"RERENDER_VERSION_DRIFT", "RERENDER_QA_INCOMPLETE"} <= codes(evaluate_release_gate(artifacts))
+
+
+def test_force_true_is_never_a_formal_release_bypass(tmp_path):
+    result = evaluate_release_gate(valid_artifacts(), force=True)
+    assert result["status"] == BLOCKED and "FORCE_BYPASS_FORBIDDEN" in codes(result)
+    with pytest.raises(ValueError, match="PRODUCTION_RELEASE_NOT_READY"):
+        export_ready(valid_artifacts(), None, str(tmp_path / "out.xlsx"), force=True)
+
+
+@pytest.mark.parametrize("stage", ["detail_identity", "offline_replay"])
+def test_detail_identity_and_replay_each_reject_a_sealed_nonpass_report(stage):
+    artifacts = valid_artifacts()
+    report = _report(artifacts["spanish_master"], stage)
+    report["status"] = "BLOCK"
+    artifacts[stage] = seal_artifact(stage, report)
+    assert "REPORT_NOT_PASS" in codes(evaluate_release_gate(artifacts))

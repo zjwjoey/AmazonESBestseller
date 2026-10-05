@@ -392,7 +392,7 @@ def _sf_record_binding(row: Mapping) -> dict:
     """Bind audit conclusions to exact stage data rather than ASIN/status alone."""
     source = {str(key): value for key, value in row.items() if key not in _BINDING_EXCLUDED}
     raw_evidence = {key: value for key, value in source.items()
-                    if key in _RAW_EVIDENCE_FIELDS or key.endswith("_raw")}
+                    if (key in _RAW_EVIDENCE_FIELDS or key.endswith("_raw")) and not _sf_empty(value)}
     return {
         "record_hash": _sf_hash(source),
         "raw_evidence_hash": _sf_hash(raw_evidence),

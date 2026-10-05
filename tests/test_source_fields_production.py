@@ -35,6 +35,11 @@ def row(**extra):
         "category_l2": "Cocina",
         "leaf_category": "Botellas",
         "category_provenance": {"source": "breadcrumb"},
+        # These are the actual detail/ranking parser metadata keys, rather
+        # than inferred defaults.  A missing key remains missing evidence.
+        "detail_schema_version": 2,
+        "detail_parser_version": "collection.detail_v1",
+        "ranking_parser_version": "collection.ranking_v2",
     }
     value.update(extra)
     return value
