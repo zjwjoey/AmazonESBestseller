@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -23,10 +24,12 @@ from ..monitoring.snapshot import build_ranking_snapshot
 from ..production.spanish_master import build_spanish_master
 from ..quality.source_fields import audit_source_fields
 from ..quality.source_gate import evaluate_source_gate
-from ..translation.production import build_production_input, build_production_state, records_for_preclean
+from ..translation.production import (build_production_input, build_production_state,
+                                      compute_release_status, records_for_preclean)
 from ..translation.preclean import audit_records
-from ..translation.dictionary_sync import dictionary_manifest, sync_evidence
+from ..translation.dictionary_sync import dictionary_manifest, normalize_context, sync_evidence
 from ..translation.rerender import rerender_affected_fields
+from ..translation.repair_queue import apply_repair, build_repair_queue
 from ..translation.schemas import TRANSLATION_SCHEMA_VERSION
 from ..translation.service import TranslationService
 from ..translation.cache import TranslationCache
@@ -343,14 +346,20 @@ class ProductionWorkflow:
             "counts": dict(audit.get("summary") or {})})
 
     def stage_dictionary(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        previous = None
-        manifest = dictionary_manifest(source_run_id=self.run_id, translation_schema_version=TRANSLATION_SCHEMA_VERSION,
-                                       previous=previous)
-        sync = sync_evidence([], qa_results={}, source_run_id=self.run_id,
-                             translation_schema_version=TRANSLATION_SCHEMA_VERSION, previous=manifest)
-        return self._store("dictionary", {"status": "READY", "dictionary_sync": sync,
+        """Prepare a dictionary baseline; promotion waits for translated QA facts."""
+        preclean = self._artifact_data(self._prior(context, "preclean"))["preclean"]
+        manifest = dictionary_manifest(source_run_id=self.run_id,
+                                       translation_schema_version=TRANSLATION_SCHEMA_VERSION)
+        candidates = [
+            {"asin": row.get("asin"), "field": field, "source_text": value.get("clean_text", ""),
+             "translate_allowed": bool(value.get("translate_allowed"))}
+            for row in preclean.get("translation_input_records") or []
+            for field, value in (row.get("fields") or {}).items() if isinstance(value, Mapping)
+        ]
+        return self._store("dictionary", {"status": "READY", "dictionary_manifest": manifest,
+            "candidate_input": candidates,
             "input_artifact_hashes": {"preclean": self._prior(context, "preclean").get("artifact_file_hash")},
-            "counts": dict(sync.get("counts") or {})})
+            "counts": {"candidate_fields": len(candidates)}})
 
     def stage_translation(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         from ..commands.translation import FakeTranslationProvider
@@ -367,21 +376,121 @@ class ProductionWorkflow:
             "input_artifact_hashes": {"preclean": self._prior(context, "preclean").get("artifact_file_hash")},
             "counts": dict(translated.get("summary") or {})})
 
+    @staticmethod
+    def _field_type(field: Mapping[str, Any]) -> str:
+        name = str(field.get("field") or "")
+        if name in {"category_l1", "category_l2", "category_l3", "leaf_category"}:
+            return "category"
+        if name == "selected_variation_raw":
+            return "packaging"
+        return "technical"
+
+    @staticmethod
+    def _translation_map(state: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        return {str(row.get("asin") or "").upper(): {
+            "asin": row.get("asin"), "source_record_hash": row.get("source_record_hash"),
+            "fields": {field.get("target_field"): deepcopy(field) for field in row.get("fields") or []}
+        } for row in state.get("records") or [] if row.get("asin")}
+
+    @staticmethod
+    def _replace_state_fields(state: Mapping[str, Any], changed: Mapping[str, Any]) -> dict[str, Any]:
+        """Merge only rerender/repair envelopes; source and good fields stay immutable."""
+        result = deepcopy(dict(state))
+        by_asin = {str(row.get("asin") or "").upper(): row for row in result.get("records") or []}
+        for asin, record in changed.items():
+            target = by_asin.get(str(asin).upper())
+            if not target:
+                continue
+            by_target = {field.get("target_field"): field for field in target.get("fields") or []}
+            for target_field, envelope in (record.get("fields") or {}).items():
+                current = by_target.get(target_field)
+                if not isinstance(current, Mapping) or not isinstance(envelope, Mapping):
+                    continue
+                if envelope.get("rerender_status") == "READY" or envelope.get("repair_status") == "READY":
+                    current.update(deepcopy(dict(envelope)))
+                    current["final_zh"] = current.get("translated_text") or current.get("final_zh")
+                    current["promotion_status"] = "PROMOTED"
+        releases = []
+        all_statuses = []
+        for record in result.get("records") or []:
+            fields = record.get("fields") or []
+            statuses = [field.get("promotion_status") for field in fields]
+            record["release_status"] = compute_release_status(statuses) if statuses else "BLOCKED"
+            all_statuses.extend(statuses)
+            releases.append({"asin": record.get("asin"), "source_record_hash": record.get("source_record_hash"),
+                             "release_status": record["release_status"],
+                             "fields": {field.get("target_field"): field.get("final_zh") for field in fields
+                                        if field.get("final_zh") is not None},
+                             "field_statuses": {field.get("target_field"): field.get("promotion_status") for field in fields}})
+        result["release_candidate"] = {"records": releases,
+            "release_status": compute_release_status(all_statuses) if all_statuses else "BLOCKED",
+            "release_status_reason": sorted({str(status) for status in all_statuses}),
+            "repair_queue_count": len(result.get("repair_queue") or [])}
+        return result
+
+    def _dictionary_evidence(self, state: Mapping[str, Any], *, dictionary_version: str) -> tuple[list[dict], dict[str, dict]]:
+        from ..quality.chinese import audit_field
+        evidence, qa_results = [], {}
+        for record in state.get("records") or []:
+            source_row = record.get("source_record") or {}
+            category = (source_row.get("leaf_category") or source_row.get("category_l3")
+                        or source_row.get("category_l2") or source_row.get("category_l1"))
+            for field in record.get("fields") or []:
+                target = str(field.get("final_zh") or "")
+                source = str(field.get("source_text") or "")
+                if not target or not source or field.get("promotion_status") != "PROMOTED":
+                    continue
+                field_type = self._field_type(field)
+                context = {"category": str(category or ""), "field": str(field.get("target_field") or "")}
+                context_key, reason = normalize_context(context)
+                evidence_id = "%s:%s" % (record.get("asin"), field.get("target_field"))
+                qa = audit_field(asin=str(record.get("asin") or ""), field=str(field.get("field") or ""),
+                                 source_es=source, translated_zh=target, source_hash=str(field.get("source_hash") or ""),
+                                 dictionary_version=dictionary_version,
+                                 brand=str(source_row.get("brand") or ""))
+                evidence_row = {"evidence_id": evidence_id, "asin": record.get("asin"),
+                    "source_record_hash": record.get("source_record_hash"), "source": source, "target": target,
+                    "source_hash": field.get("source_hash"), "field_type": field_type, "context": context,
+                    "affected_field": field.get("field"), "target_field": field.get("target_field")}
+                evidence.append(evidence_row)
+                qa_results[evidence_id] = {**qa, "qa_status": qa.get("status"), "target": target,
+                    "field_type": field_type, "context_key": context_key or "", "dictionary_version": dictionary_version,
+                    "schema_version": TRANSLATION_SCHEMA_VERSION, "context_error": reason}
+        return evidence, qa_results
+
     def stage_dictionary_rerender(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         master = self._master(context); translation = self._artifact_data(self._prior(context, "translation"))
-        dictionary = self._artifact_data(self._prior(context, "dictionary"))["dictionary_sync"]
-        records = {row.get("asin"): {"asin": row.get("asin"), "source_record_hash": row.get("source_record_hash"),
-                                      "fields": {field.get("target_field"): field for field in row.get("fields") or []}}
-                   for row in (translation.get("state") or {}).get("records") or []}
-        rerender = rerender_affected_fields(master.get("records") or [], records, dictionary.get("manifest") or {})
-        return self._store("dictionary-rerender", {"status": "READY", "rerender": rerender,
+        dictionary = self._artifact_data(self._prior(context, "dictionary"))
+        prior_manifest = dictionary["dictionary_manifest"]
+        state = translation["state"]
+        evidence, qa_results = self._dictionary_evidence(state, dictionary_version=str(prior_manifest.get("dictionary_version") or "0"))
+        sync = sync_evidence(evidence, qa_results=qa_results, source_run_id=self.run_id,
+                             translation_schema_version=TRANSLATION_SCHEMA_VERSION, previous=prior_manifest)
+        records = self._translation_map(state)
+        def rerender_qa(**kwargs):
+            from ..quality.chinese import audit_field
+            result = audit_field(asin=kwargs["asin"], field=kwargs["field"], source_es=kwargs["source_text"],
+                                 translated_zh=kwargs["translated_text"], source_hash=kwargs["source_hash"],
+                                 dictionary_version=kwargs["dictionary_version"])
+            return {**result, "target": kwargs["translated_text"], "target_field": kwargs["target_field"],
+                    "context_key": kwargs["context_key"], "schema_version": kwargs["schema_version"]}
+        rerender = rerender_affected_fields(master.get("records") or [], records, sync.get("manifest") or {},
+                                            qa_callback=rerender_qa)
+        updated_state = self._replace_state_fields(state, rerender.get("records") or {})
+        return self._store("dictionary-rerender", {"status": "READY", "dictionary_sync": sync,
+            "dictionary_qa": qa_results, "rerender": rerender, "translation_state": updated_state,
             "input_artifact_hashes": {"translation": self._prior(context, "translation").get("artifact_file_hash"),
                                         "dictionary": self._prior(context, "dictionary").get("artifact_file_hash")},
-            "counts": {"updates": len(rerender.get("updates") or []), "repair": len(rerender.get("selective_repair") or [])}})
+            "counts": {"evidence": len(evidence), "updates": len(rerender.get("updates") or []),
+                       "repair": len(rerender.get("selective_repair") or []),
+                       **dict(sync.get("counts") or {})}})
 
-    def _chinese_qa(self, context: Mapping[str, Any]) -> list[dict[str, Any]]:
+    def _chinese_qa(self, context: Mapping[str, Any], state: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
         from ..quality.chinese import audit_field
-        state = self._artifact_data(self._prior(context, "translation"))["state"]
+        if state is None:
+            state = self._artifact_data(self._prior(context, "dictionary-rerender")).get("translation_state")
+        if not isinstance(state, Mapping):
+            state = self._artifact_data(self._prior(context, "translation"))["state"]
         rows = []
         for record in state.get("records") or []:
             for field in record.get("fields") or []:
@@ -391,21 +500,45 @@ class ProductionWorkflow:
         return rows
 
     def stage_chinese_qa(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        rows = self._chinese_qa(context)
-        return self._store("chinese-qa", {"status": "READY", "fields": rows,
+        state = self._artifact_data(self._prior(context, "dictionary-rerender")).get("translation_state")
+        rows = self._chinese_qa(context, state)
+        return self._store("chinese-qa", {"status": "READY", "fields": rows, "translation_state": state,
             "input_artifact_hashes": {"dictionary-rerender": self._prior(context, "dictionary-rerender").get("artifact_file_hash")},
             "counts": {"fields": len(rows), "passed": sum(r.get("status") == "PASS" for r in rows)}})
 
     def stage_field_repair(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        state = self._artifact_data(self._prior(context, "translation"))["state"]
-        queue = list(state.get("repair_queue") or [])
-        return self._store("field-repair", {"status": "READY", "repair_queue": queue,
+        qa_stage = self._artifact_data(self._prior(context, "chinese-qa"))
+        state = qa_stage.get("translation_state") or {}
+        qa_rows = qa_stage.get("fields") or []
+        queue = build_repair_queue(qa_rows, max_attempts=2)
+        field_lookup = {(str(record.get("asin") or ""), str(field.get("field") or "")): field
+                        for record in state.get("records") or [] for field in record.get("fields") or []}
+        results, changed = [], self._translation_map(state)
+        for item in queue:
+            field = field_lookup.get((str(item.get("asin") or ""), str(item.get("field") or "")))
+            if not field or item.get("strategy") == "manual_review":
+                results.append({**item, "status": "MANUAL_REVIEW", "code": "NO_SAFE_AUTOMATIC_REPAIR"}); continue
+            candidate = str(field.get("final_zh") or field.get("candidate_text") or "")
+            outcome = apply_repair(item, source_hash=str(field.get("source_hash") or ""), candidate=candidate,
+                                   qa_result=next((row for row in qa_rows if row.get("asin") == item.get("asin") and row.get("field") == item.get("field")), {}),
+                                   provider="fake", model="fake-offline-v1")
+            results.append(outcome)
+            if outcome.get("status") == "PASS":
+                envelope = changed.get(str(item.get("asin") or "").upper(), {}).get("fields", {}).get(field.get("target_field"))
+                if envelope is not None:
+                    envelope.update(translated_text=outcome.get("repaired_translation"), candidate_text=outcome.get("repaired_translation"),
+                                    final_zh=outcome.get("repaired_translation"), repair_status="READY")
+        updated_state = self._replace_state_fields(state, changed)
+        return self._store("field-repair", {"status": "READY", "repair_queue": queue, "repair_results": results,
+            "translation_state": updated_state,
             "input_artifact_hashes": {"chinese-qa": self._prior(context, "chinese-qa").get("artifact_file_hash")},
-            "counts": {"queued": len(queue)}})
+            "counts": {"queued": len(queue), "attempted": sum(row.get("attempt", 0) > 0 for row in results),
+                       "repaired": sum(row.get("status") == "PASS" for row in results)}})
 
     def stage_re_qa(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        rows = self._chinese_qa(context)
-        return self._store("re-qa", {"status": "READY", "fields": rows,
+        state = self._artifact_data(self._prior(context, "field-repair")).get("translation_state")
+        rows = self._chinese_qa(context, state)
+        return self._store("re-qa", {"status": "READY", "fields": rows, "translation_state": state,
             "input_artifact_hashes": {"field-repair": self._prior(context, "field-repair").get("artifact_file_hash")},
             "counts": {"fields": len(rows), "passed": sum(r.get("status") == "PASS" for r in rows)}})
 
@@ -434,9 +567,9 @@ class ProductionWorkflow:
         source = self._artifact_data(self._prior(context, "source-audit"))
         master = self._master(context)
         translation = self._artifact_data(self._prior(context, "translation"))
-        dictionary = self._artifact_data(self._prior(context, "dictionary"))
         rerender = self._artifact_data(self._prior(context, "dictionary-rerender"))
         qa = self._artifact_data(self._prior(context, "re-qa"))
+        final_state = qa.get("translation_state") or rerender.get("translation_state") or translation["state"]
         closure = self._artifact_data(self._prior(context, "field-closure"))
         outcomes = (details.get("detail_execution") or {}).get("records") or []
         blocked = [row for row in outcomes if str(row.get("status")) not in {"REUSED", "SUCCESS", "ALREADY_SUCCESS"}]
@@ -456,7 +589,7 @@ class ProductionWorkflow:
         replay_report = bound_report("offline_replay", passed=not blocked, issues=blocked)
         chinese_rows = []
         translations_by_asin = {str(row.get("asin") or "").upper(): row
-                                for row in (translation.get("state") or {}).get("records") or []}
+                                for row in final_state.get("records") or []}
         for source_row in master.get("records") or []:
             row = dict(source_row)
             translated = translations_by_asin.get(str(row.get("asin") or "").upper(), {})
@@ -472,10 +605,10 @@ class ProductionWorkflow:
             "detail_identity": seal_artifact("detail_identity", detail_report),
             "offline_replay": seal_artifact("offline_replay", replay_report),
             "field_closure": seal_artifact("field_closure", closure["field_closure"]),
-            "translation": seal_artifact("translation", {"state": translation["state"],
+            "translation": seal_artifact("translation", {"state": final_state,
                 "execution": translation["execution"], "provider_provenance": translation["provider_provenance"]}),
             "dictionary_sync": seal_artifact("dictionary_sync", {"completed": True,
-                "manifest": dictionary["dictionary_sync"].get("manifest") or {}, "rerender": rerender["rerender"]}),
+                "manifest": rerender["dictionary_sync"].get("manifest") or {}, "rerender": rerender["rerender"]}),
             "chinese_qa": seal_artifact("chinese_qa", {"fields": qa["fields"]}),
             "chinese_gate": seal_artifact("chinese_gate", evaluate_chinese_gate(qa["fields"])),
             "spanish_output": seal_artifact("spanish_output", {"records": master.get("records") or []}),

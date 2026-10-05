@@ -137,8 +137,12 @@ def test_full_graph_calls_real_translation_qa_and_release_gate_but_fake_provider
         main(["--offline", "production-run", "--run-dir", str(run_dir), "--run-id", "full",
               "--config", str(config), "--profile", "full"])
     translation = json.loads((run_dir / "artifacts" / "translation.json").read_text(encoding="utf-8"))
+    dictionary = json.loads((run_dir / "artifacts" / "dictionary-rerender.json").read_text(encoding="utf-8"))
+    repair = json.loads((run_dir / "artifacts" / "field-repair.json").read_text(encoding="utf-8"))
     release = json.loads((run_dir / "artifacts" / "release.json").read_text(encoding="utf-8"))
     assert translation["provider_provenance"]["provider"] == "fake"
+    assert dictionary["counts"]["evidence"] >= 1
+    assert "repair_queue" in repair and "translation_state" in repair
     assert release["artifacts"]["translation"]["payload"]["state"]["records"]
     errors = (run_dir / "errors.jsonl").read_text(encoding="utf-8")
     assert "RELEASE_GATE_NOT_READY" in errors
