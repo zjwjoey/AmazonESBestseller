@@ -111,3 +111,31 @@ def test_persisted_unique_asin_scope_rejects_expansion(tmp_path):
     ledger.reserve(asin="B1", field="title", text="a")
     with pytest.raises(BudgetBlocked, match="BUDGET_UNIQUE_ASIN_CAP"):
         ledger.reserve(asin="B2", field="title", text="a")
+
+
+def test_request_id_is_single_flight_and_fingerprint_bound(tmp_path):
+    ledger = BudgetLedger(tmp_path / "ledger.json", limit_cny="5", price_card=_card(),
+                          max_output_tokens=1, prompt_overhead_tokens=1)
+    reservation = ledger.reserve(asin="B1", field="title", text="a", request_id="one")
+    with pytest.raises(BudgetBlocked, match="BUDGET_REQUEST_IN_FLIGHT"):
+        ledger.reserve(asin="B1", field="title", text="a", request_id="one")
+    with pytest.raises(BudgetBlocked, match="BUDGET_REQUEST_FINGERPRINT_MISMATCH"):
+        ledger.reserve(asin="B2", field="title", text="a", request_id="one")
+    ledger.settle(reservation, response_raw=None, success=False)
+    with pytest.raises(BudgetBlocked, match="BUDGET_REQUEST_ALREADY_SETTLED"):
+        ledger.reserve(asin="B1", field="title", text="a", request_id="one")
+
+
+def test_invalid_usage_and_spoofed_or_stale_price_are_fail_closed(tmp_path):
+    ledger = BudgetLedger(tmp_path / "ledger.json", limit_cny="5", price_card=_card(),
+                          max_output_tokens=1, prompt_overhead_tokens=1)
+    reservation = ledger.reserve(asin="B1", field="title", text="a")
+    event = ledger.settle(reservation, response_raw={"usage": {"prompt_tokens": -1, "completion_tokens": 1.5}}, success=True)
+    assert event["charge_status"] == "UNKNOWN_CONSERVATIVE"
+    reservation = ledger.reserve(asin="B2", field="title", text="a")
+    assert ledger.settle(reservation, response_raw={"usage": {"prompt_tokens": True, "completion_tokens": 1}}, success=True)["charge_status"] == "UNKNOWN_CONSERVATIVE"
+    base = {"provider": "qwen-mt", "model": "qwen-mt-flash", "currency": "CNY", "input_per_million_cny": "1", "output_per_million_cny": "1", "verified_at": "2026-01-01T00:00:00Z"}
+    with pytest.raises(BudgetBlocked, match="SOURCE"):
+        VerifiedPriceCard.from_mapping({**base, "source": "https://evilaliyun.com/x"}, provider="qwen-mt", model="qwen-mt-flash")
+    with pytest.raises(BudgetBlocked, match="UNVERIFIED"):
+        VerifiedPriceCard.from_mapping({**base, "source": "https://pricing.aliyun.com/x"}, provider="qwen-mt", model="qwen-mt-flash")

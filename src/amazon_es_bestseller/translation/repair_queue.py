@@ -5,6 +5,7 @@ from typing import Any, Iterable, Mapping
 from .production_contract import source_text
 from .schemas import TRANSLATION_SCHEMA_VERSION
 from .service import source_hash as hash_source
+from ..quality.chinese import audit_field
 
 _DICTIONARY_CODES = {"NUMERIC_MISMATCH", "UNIT_MISMATCH", "NEGATION_MISMATCH"}
 _PROVIDER_CODES = {"SPANISH_RESIDUAL", "PROTECTED_TOKEN_MISSING"}
@@ -38,8 +39,17 @@ def apply_repair(item: Mapping[str, Any], *, source_hash: str, candidate: str, q
         result.update(status="MANUAL_REVIEW", code="MAX_ATTEMPTS_REACHED"); return result
     result["attempt"] = int(result.get("attempt") or 0) + 1
     result.update(provider=provider, model=model)
+    # Do not promote based on a caller-crafted PASS object.  Re-run the
+    # canonical auditor over the candidate immediately before promotion.
+    fresh = audit_field(asin=str(result.get("asin") or ""), field=str(result.get("field") or ""),
+                        source_es=result.get("source"), translated_zh=str(candidate or ""),
+                        source_hash=current, dictionary_version=str(result.get("dictionary_version") or ""),
+                        brand=str(result.get("brand") or ""))
     candidate_hash = hash_source(str(candidate or ""))
-    exact = (str(qa_result.get("asin") or "") == str(result.get("asin") or "") and str(qa_result.get("field") or "") == str(result.get("field") or "") and str(qa_result.get("source_hash") or "") == current and str(qa_result.get("candidate_hash") or "") == candidate_hash and str(qa_result.get("dictionary_version") or "") == str(result.get("dictionary_version") or "") and str(qa_result.get("schema_version") or "") == str(result.get("schema_version") or ""))
-    if str(qa_result.get("status") or "") != "PASS" or not exact:
-        result.update(status="MANUAL_REVIEW", code="QA_BINDING_MISMATCH", qa=dict(qa_result)); return result
-    result.update(status="PASS", repaired_translation=str(candidate), qa=dict(qa_result)); return result
+    exact = (str(fresh.get("source_hash") or "") == current
+             and str(fresh.get("candidate_hash") or "") == candidate_hash
+             and str(fresh.get("dictionary_version") or "") == str(result.get("dictionary_version") or "")
+             and str(fresh.get("schema_version") or "") == str(result.get("schema_version") or ""))
+    if str(fresh.get("status") or "") != "PASS" or not exact:
+        result.update(status="MANUAL_REVIEW", code="QA_BINDING_MISMATCH", qa=dict(fresh)); return result
+    result.update(status="PASS", repaired_translation=str(candidate), qa=dict(fresh)); return result
