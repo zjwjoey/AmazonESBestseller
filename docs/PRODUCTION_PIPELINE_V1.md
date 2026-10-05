@@ -115,9 +115,11 @@ It is a plan, not evidence that 5,500 products were collected.
 The checked-in diagnostic sample
 `configs/tasks/amazon_es_bestseller_5500_202610_sample.json` names one
 existing reviewed primary URL, preserves its two-page rule, caps collection at
-two ranking requests and five detail requests, and uses the source-only
-profile. Its `sample.diagnostic` marker means its artifacts are never evidence
-that the 5,500-SKU task is complete or releaseable.
+two ranking requests and five selected detail ASINs, and uses the source-only
+profile. The raw ranking snapshot is retained, while downstream detail/master
+processing is limited to those five ASINs. Its `sample.diagnostic` marker
+means its artifacts are never evidence that the 5,500-SKU task is complete or
+releaseable.
 
 Before any Qwen call, finish a source-only run and create a small, reviewed
 batch bound to its immutable `artifacts/spanish-master.json`:

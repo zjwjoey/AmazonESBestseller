@@ -290,14 +290,26 @@ class ProductionWorkflow:
         existing = self.history.load_details()
         state = DetailState(detail_root / "state" / "details_state.json")
         state.update(existing)
-        wanted = [normalize_asin(row.get("asin") or row.get("ranking_asin")) for row in rankings]
+        working_rankings = rankings
+        sample_limit = self.task.diagnostic_sample_detail_limit
+        if sample_limit is not None:
+            selected: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for row in rankings:
+                asin = normalize_asin(row.get("asin") or row.get("ranking_asin"))
+                if asin and asin not in seen:
+                    seen.add(asin); selected.append(row)
+                if len(selected) >= sample_limit:
+                    break
+            working_rankings = selected
+        wanted = [normalize_asin(row.get("asin") or row.get("ranking_asin")) for row in working_rankings]
         # Reparse is the only legal way old local HTML becomes new detail
         # evidence; no filename or caller-supplied product dict is trusted.
         reparsed = reparse_saved_details(self.task.detail_html_dirs, state, asins=wanted, parser_version="v1")
         cache = _merge_by_asin(existing + reparsed)
         _atomic_json(detail_root / "details.json", cache)
         html_index = {path.stem.upper(): True for root in self.task.detail_html_dirs for path in root.glob("*.html")}
-        plan = build_detail_plan({**manifest, "records": rankings}, detail_cache=cache,
+        plan = build_detail_plan({**manifest, "records": working_rankings}, detail_cache=cache,
             saved_html=html_index, current_schema_version=CURRENT_DETAIL_SCHEMA_VERSION,
             target_parser_version="collection.detail_v1",
             refresh_policy=_TargetedRefreshPolicy(self.task.refresh_due_asins))
@@ -310,6 +322,9 @@ class ProductionWorkflow:
             raise ProductionWorkflowError("LIVE_DETAIL_TRANSPORT_UNCONFIGURED:%s" % ",".join(str(x) for x in network))
         return self._store("detail-evidence", {"status": "READY", "plan_path": str(paths["json"].relative_to(self.run_dir)),
             "plan_hash": plan.get("plan_hash"), "seed_reparsed_asins": sorted({r.get("asin") for r in reparsed}),
+            "working_ranking_asins": [normalize_asin(row.get("asin") or row.get("ranking_asin"))
+                                      for row in working_rankings],
+            "diagnostic_sample": sample_limit is not None,
             "snapshot_id": manifest.get("snapshot_id"), "input_artifact_hashes": {"ranking-authority": self._prior(context, "ranking-authority").get("artifact_file_hash")},
             "counts": {"detail_planned": len(plan.get("records") or []), "detail_offline_reparsed": len(reparsed),
                        "detail_network_required": len(network)},
@@ -341,6 +356,10 @@ class ProductionWorkflow:
 
     def stage_normalize(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         ranking_manifest, rankings = self._snapshot_bundle(context)
+        detail_stage = self._prior(context, "detail-evidence")
+        selected = {str(asin or "").upper() for asin in detail_stage.get("working_ranking_asins") or []}
+        if selected:
+            rankings = [row for row in rankings if normalize_asin(row.get("asin") or row.get("ranking_asin")) in selected]
         details = _read_json(self.run_dir / str(self._prior(context, "offline-reparse").get("details_path") or ""))
         products = merge_ranking_and_detail(rankings, details)
         for row in products:

@@ -28,6 +28,7 @@
   },
   "sample": {
     "diagnostic": true,
+    "max_detail_asins": 5,
     "purpose": "AccessGate-scoped V1 source-only smoke sample; not a 5500-SKU research run.",
     "formal_release_forbidden": true
   }

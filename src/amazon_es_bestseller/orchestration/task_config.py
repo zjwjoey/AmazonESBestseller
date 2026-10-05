@@ -32,6 +32,7 @@ class TaskConfig:
     translation: Mapping[str, Any]
     translation_selection_manifest: Path | None
     translation_selection_manifest_hash: str | None
+    diagnostic_sample_detail_limit: int | None
     refresh_due_asins: frozenset[str]
     raw: Mapping[str, Any]
 
@@ -105,6 +106,23 @@ class TaskConfig:
         profile = str(value.get("profile") or "production-research")
         if "v2-canary" in profile.casefold():
             raise TaskConfigError("TASK_CONFIG_CANARY_PROFILE_FORBIDDEN")
+        sample = value.get("sample")
+        sample_limit = None
+        if isinstance(sample, Mapping) and sample.get("diagnostic") is True:
+            try:
+                sample_limit = int(sample.get("max_detail_asins"))
+            except (TypeError, ValueError) as exc:
+                raise TaskConfigError("DIAGNOSTIC_SAMPLE_DETAIL_LIMIT_REQUIRED") from exc
+            if sample_limit < 1:
+                raise TaskConfigError("DIAGNOSTIC_SAMPLE_DETAIL_LIMIT_REQUIRED")
+            live_transport = value.get("live_transport")
+            budget = live_transport.get("request_budget") if isinstance(live_transport, Mapping) else None
+            try:
+                maximum = int(budget.get("max_detail_requests")) if isinstance(budget, Mapping) else 0
+            except (TypeError, ValueError):
+                maximum = 0
+            if not maximum or sample_limit > maximum:
+                raise TaskConfigError("DIAGNOSTIC_SAMPLE_DETAIL_LIMIT_EXCEEDS_TRANSPORT")
         detail = value.get("detail") if isinstance(value.get("detail"), Mapping) else {}
         due = detail.get("refresh_due_asins") or value.get("refresh_due_asins") or []
         if isinstance(due, str):
@@ -115,7 +133,7 @@ class TaskConfig:
         return cls(task_id, mode, network_mode, ranking_evidence, source_urls, pages_per_url,
                    reviewed_task_plan, reviewed_task_plan_hash, dirs, history_dir,
                    profile, dict(translation), selection_manifest, selection_manifest_hash,
-                   refresh_due_asins, dict(value))
+                   sample_limit, refresh_due_asins, dict(value))
 
     def evidence_fingerprints(self) -> dict[str, str]:
         if self.ranking_evidence is not None and not self.ranking_evidence.is_file():
@@ -143,6 +161,7 @@ class TaskConfig:
                 "source_urls": list(self.source_urls), "pages_per_url": self.pages_per_url,
                 "reviewed_task_plan_hash": self.reviewed_task_plan_hash or "",
                 "translation_selection_manifest_hash": self.translation_selection_manifest_hash or "",
+                "diagnostic_sample_detail_limit": self.diagnostic_sample_detail_limit or 0,
                 "refresh_due_asins": sorted(self.refresh_due_asins),
                 "parser": {"ranking": "V1", "detail": "V1"},
                 "translation": dict(self.translation)}

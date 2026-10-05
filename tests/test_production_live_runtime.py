@@ -158,6 +158,16 @@ def test_5500_scope_is_frozen_to_the_reviewed_15_category_source_plan():
     assert scope.source_counts == {"primary": 55, "reserve": 31}
 
 
+def test_checked_in_diagnostic_sample_is_limited_before_detail_planning():
+    root = Path(__file__).parents[1]
+    sample_path = root / "configs" / "tasks" / "amazon_es_bestseller_5500_202610_sample.json"
+    task = TaskConfig.from_mapping(json.loads(sample_path.read_text(encoding="utf-8")), base_dir=sample_path.parent)
+    scope = load_live_transport_scope(task, config_dir=sample_path.parent)
+    assert task.diagnostic_sample_detail_limit == 5
+    assert len(task.source_urls) * task.pages_per_url == scope.max_ranking_pages == 2
+    assert scope.max_detail_requests == 5
+
+
 def test_qwen_length_finish_reason_is_not_a_successful_translation():
     class LengthProvider(TranslationProvider):
         name = "qwen-mt"
