@@ -95,13 +95,19 @@ class QwenMTProvider(TranslationProvider):
             "target_lang": self._language_name(context.get("target_language"), "Chinese"),
         }
         if self.protocol == "openai_compatible":
-            return {"model": self._model, "messages": [
+            payload = {"model": self._model, "messages": [
                 {"role": "user", "content": text}],
                 "translation_options": translation_options}
+            if context.get("max_output_tokens") is not None:
+                payload["max_tokens"] = int(context["max_output_tokens"])
+            return payload
         if self.protocol == "dashscope":
-            return {"model": self._model,
+            payload = {"model": self._model,
                     "input": {"messages": [{"role": "user", "content": text}]},
                     "parameters": {"translation_options": translation_options}}
+            if context.get("max_output_tokens") is not None:
+                payload["parameters"]["max_tokens"] = int(context["max_output_tokens"])
+            return payload
         raise ValueError("unsupported Qwen protocol: %s" % self.protocol)
 
     @staticmethod
