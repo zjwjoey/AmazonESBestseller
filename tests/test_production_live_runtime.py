@@ -169,7 +169,9 @@ def test_delivery_stop_preserves_homepage_evidence_and_actual_navigation_count(t
             self._callbacks.append(callback)
 
         def content(self):
-            return "<html><body><div id='error'>Delivery location pending</div></body></html>"
+            return ("<html><body><button id='nav-global-location-popover-link'>"
+                    "Enviar a Estados Unidos</button><script>not-visible</script>"
+                    "<div id='error'>Delivery location pending</div></body></html>")
 
         def screenshot(self, *, type):
             assert type == "png"
@@ -190,7 +192,7 @@ def test_delivery_stop_preserves_homepage_evidence_and_actual_navigation_count(t
             self.page.url = url
             for callback in self.page._callbacks:
                 callback(self.page)
-            return 200
+            return 202
 
     def fake_delivery(session, _postal_code):
         session.goto("https://www.amazon.es/")

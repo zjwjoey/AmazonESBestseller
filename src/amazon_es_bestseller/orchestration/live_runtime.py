@@ -265,6 +265,7 @@ class ReviewedV1Transport:
     def _page_evidence(self) -> dict[str, Any]:
         """Read the current document only; no extra navigation or retry."""
         from ..access.detector import detect_access_status
+        from ..access.location import inspect_delivery_location
 
         page = getattr(self.session, "page", None)
         html = ""
@@ -282,15 +283,27 @@ class ReviewedV1Transport:
             screenshot_error = "%s: %s" % (type(exc).__name__, exc)
         else:
             screenshot_error = ""
-        text = re.sub(r"<[^>]+>", " ", html)
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "lxml")
+            for element in soup(("script", "style", "noscript", "template")):
+                element.decompose()
+            text = soup.get_text(" ", strip=True)
+        except Exception:
+            text = re.sub(r"<[^>]+>", " ", html)
         text = re.sub(r"\s+", " ", text).strip()
-        state = detect_access_status(self._last_http_status, html).value
+        state = detect_access_status(self._last_http_status, html)
+        # Match BrowserSession.ensure_spain_delivery: a rendered Amazon 202
+        # shell with a populated delivery header is normal evidence, not an
+        # access signal. The raw HTTP status remains preserved separately.
+        if state.value == "UNKNOWN" and self._last_http_status == 202 and inspect_delivery_location(html).text:
+            state = detect_access_status(200, html)
         return {
             "homepage_html": html,
             "screenshot_png": screenshot,
             "final_url": str(getattr(page, "url", "") or self._last_navigation_url),
             "http_status": self._last_http_status,
-            "access_state": state,
+            "access_state": state.value,
             "visible_text_excerpt": text[:2000],
             "html_capture_error": html_error,
             "screenshot_capture_error": screenshot_error,
