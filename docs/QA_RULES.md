@@ -2,6 +2,13 @@
 
 Last updated: 2026-08-27
 
+## Formal-release addendum (2026-10-05)
+
+PASS strings alone are insufficient. Formal QA requires exact ASIN scope and
+record evidence binding. Chinese QA is field-complete and candidate-bound; a
+pending rerender/selective repair, P0/P1 closure finding, changed URL/image or
+human note, debug/force flag, or stale evidence blocks READY.
+
 This document defines quality-assurance rules for collection, normalization, translation and Excel export.
 
 Primary rule: a non-empty field is not automatically a correct field.

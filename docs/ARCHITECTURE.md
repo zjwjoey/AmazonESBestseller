@@ -2,6 +2,14 @@
 
 Last updated: 2026-08-27
 
+## Production V1 boundary (2026-10-05)
+
+Formal flow is source audit → Spanish Master → bound authority/identity/replay
+evidence → translation/dictionary/rerender → Chinese QA → field closure →
+ReleaseGate → frozen workbook. A sealed artifact is transport integrity only;
+the gate recomputes raw-source and record bindings. V2 is an offline canary,
+not a V1 parser replacement. Current status: NOT_READY_FOR_MERGE.
+
 This document describes the intended architecture of the `AmazonESBestseller` project based on the current working implementation and verified outputs.
 
 The architecture should evolve incrementally from the existing working scripts.

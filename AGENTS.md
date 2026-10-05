@@ -2,6 +2,16 @@
 
 Last updated: 2026-08-26
 
+## Current release truth (2026-10-05)
+
+Production V1 is **NOT_READY_FOR_MERGE**. Keep V1 stable and V2 candidate-only;
+do not change the default parser after a canary test. No live Amazon collection
+or Provider translation was executed for this release. CI declares an offline
+3.10/3.11/3.12 matrix but that is not proof of a remote green run. The factual
+DoD matrix is `docs/PRODUCTION_PIPELINE_V1.md`. These rules do not authorize
+new sources, extra concurrency, proxy/CAPTCHA/stealth bypass, or force/debug
+bypass of formal release gates.
+
 ## 1. Purpose
 
 This file defines permanent development rules for AI coding agents working on `AmazonESBestseller`.

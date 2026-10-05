@@ -2,6 +2,14 @@
 
 Last updated: 2026-08-27
 
+## Production V1 provenance addendum
+
+Formal records carry source hash, detail/ranking schema versions, parser
+version, raw source evidence and ASIN identity. Stage reports bind those facts
+per ASIN; Chinese candidates/QA additionally bind field type, source, target,
+context, dictionary version and translation schema. This is offline-verified;
+live release evidence is not present.
+
 This document defines the canonical data model and the default Excel export contract for `AmazonESBestseller`.
 
 Field semantics in this document should not be changed silently.

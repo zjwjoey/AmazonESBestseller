@@ -2,6 +2,16 @@
 
 Last updated: 2026-08-27
 
+## October 2026 production-hardening addendum
+
+Current merge posture is **NOT_READY_FOR_MERGE**. Existing August collection
+outputs remain historical evidence, but no October Amazon or Provider run has
+been performed. See `PRODUCTION_PIPELINE_V1.md` for the 71-item factual matrix
+and `INCREMENTAL_REFRESH.md` for the offline-verified refresh behavior and
+the remaining live-evidence boundary. A fresh local full offline pytest run
+ended with exit code 0 on 2026-10-05. The reviewed source plan remains 15
+categories.
+
 Implementation update (2026-08-31): detail collection now writes an atomic
 per-ASIN terminal checkpoint under `checkpoints/<ASIN>.json`; state and run
 manifests also use atomic replacement. Quarantine entries are excluded only

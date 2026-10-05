@@ -1,5 +1,12 @@
 # AmazonESBestseller
 
+> October 2026 release status: **NOT_READY_FOR_MERGE**. Production V1 gates
+> and offline tests exist, but no current-release Amazon or Provider API run
+> has been executed. The hash-bound V1 orchestration slice has local offline
+> test evidence; it still requires separately approved live evidence. See
+> `docs/PRODUCTION_PIPELINE_V1.md`; historic 200/496-SKU outputs are not proof
+> of this release.
+
 Amazon.es 畅销商品采集与选品研究项目。
 
 目标是从 Amazon 西班牙站 Best Sellers 和商品详情页采集真实商品数据，形成可用于内部选品、类目研究、价格研究和后续 AI 分析的结构化数据集。

@@ -1,5 +1,13 @@
 # Translation V2
 
+## Production V1 status addendum
+
+Translation/dictionary/rerender are implemented and tested offline, but this
+release made **zero** Provider API calls. Provider 0 is not live-verified.
+Formal release requires real provider provenance plus field-level
+source/target/context/version/hash binding and Chinese QA; cached or sealed
+PASS data alone is insufficient.
+
 Translation V2 is an opt-in, field-level Spanish-to-Chinese pipeline. It is
 separate from the legacy `translate-ds` command and does not modify the old
 DeepSeek or deterministic translation modules.

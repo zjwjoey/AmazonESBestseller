@@ -2,6 +2,15 @@
 
 Last updated: 2026-08-27
 
+## October 2026 roadmap correction
+
+Historic 200-SKU/496-SKU demonstrations do not close the current release.
+The hash-bound orchestration adapters and current SourceGate/Master regressions
+have local offline test evidence. Before a real production release: obtain
+separately approved live Amazon and Provider evidence. Future requested scale
+for Qwen translation is <=1500 unique SKU and translation spend is <=CNY 5
+including retries; this is not a global collection ceiling.
+
 This document defines the recommended development sequence for the `AmazonESBestseller` project.
 
 The roadmap is intentionally conservative.
