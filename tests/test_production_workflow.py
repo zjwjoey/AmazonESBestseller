@@ -155,7 +155,7 @@ def test_refresh_due_is_targeted_and_offline_run_refuses_fetch(tmp_path):
               "--config", str(config), "--profile", "source-only"])
 
 
-def test_full_graph_calls_real_translation_qa_and_release_gate_but_fake_provider_cannot_release(tmp_path):
+def test_production_workflow_ready_end_to_end_offline_candidate_is_nonformal_with_fake_provider(tmp_path):
     config = _write_fixture(tmp_path)
     run_dir = tmp_path / "full"
     with pytest.raises(Exception, match="RELEASE_GATE_NOT_READY"):

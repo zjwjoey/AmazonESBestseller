@@ -1,6 +1,17 @@
+import json
+from pathlib import Path
+
 from amazon_es_bestseller.quality.chinese import audit_field
 from amazon_es_bestseller.translation.repair_queue import apply_repair, build_repair_queue
 from amazon_es_bestseller.translation.service import source_hash
+
+
+def test_real_corpus_sin_coleccion_wu_xilie_is_not_a_negation_mismatch():
+    fixture = Path(__file__).parent / "fixtures" / "local_translation_benchmark" / "negation_regressions.json"
+    case = json.loads(fixture.read_text(encoding="utf-8"))["cases"][0]
+    result = audit_field(asin=case["asin"], field=case["field"], source_es=case["source_text"],
+                         translated_zh=case["translated_text"], source_hash=source_hash(case["source_text"]))
+    assert "NEGATION_MISMATCH" not in {issue["code"] for issue in result["issues"]}
 
 
 def test_numeric_units_and_historical_product_type_regressions_fail_closed():

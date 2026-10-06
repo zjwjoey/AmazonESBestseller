@@ -1,0 +1,12 @@
+{
+  "provenance": "2026-10-05 local 5000-SKU ES/ZH no-image workbook benchmark; read-only sample",
+  "cases": [
+    {
+      "asin": "8470636626",
+      "field": "title_es_raw",
+      "source_text": "Tecnología e Ingenería I - 1º Bachillerato (SIN COLECCION)",
+      "translated_text": "技术与工程I - 高中一年级（无系列）",
+      "expected_absent_issue": "NEGATION_MISMATCH"
+    }
+  ]
+}
