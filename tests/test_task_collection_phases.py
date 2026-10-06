@@ -241,5 +241,29 @@ def test_formal_5500_rejects_all_and_hash_drift_before_worker(monkeypatch, tmp_p
         run_task(formal, str(tmp_path / "all"), phase="all", project_root=root)
     altered = dict(formal, target_unique=5400)
     with pytest.raises(ValueError, match="FORMAL_5500_PLAN_HASH_MISMATCH"):
-        run_task(altered, str(tmp_path / "bad"), phase="ranking", project_root=root)
+        run_task(altered, str(tmp_path / "bad"), phase="ranking", project_root=root,
+                 runtime_overrides={"postal_code": "28001"})
     assert called == []
+
+
+def test_formal_5500_runtime_overrides_follow_fingerprint_validation(monkeypatch, tmp_path):
+    root = Path(__file__).parents[1]
+    plan_path = root / "configs/tasks/amazon_es_bestseller_5500_202610_plan.json"
+    formal = json.loads(plan_path.read_text(encoding="utf-8"))
+    postal_codes = []
+
+    def empty_ranking_worker(category, plan, *_args, **_kwargs):
+        postal_codes.append(plan["postal_code"])
+        return {
+            "research_category": category["research_category"], "status": "RANKING_COMPLETE",
+            "rankings": [], "details": [], "completed_source_urls": [], "source_status": {},
+            "ranking_page_statuses": [], "raw_ranking_records": 0, "unique_asins": 0,
+            "detail_records": 0, "pending_detail_asins": [], "detail_requested_asins": [],
+        }
+
+    monkeypatch.setattr(task_module, "_run_category_live", empty_ranking_worker)
+    report = run_task(formal, str(tmp_path / "ranking"), phase="ranking",
+                      plan_path=plan_path, project_root=root,
+                      runtime_overrides={"postal_code": "28001"})
+    assert report["status"] == "QUOTA_UNIQUE_SHORTFALL"
+    assert postal_codes == ["28001"] * len(formal["categories"])

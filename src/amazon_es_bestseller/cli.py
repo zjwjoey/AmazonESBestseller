@@ -73,10 +73,14 @@ def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
     'Compatibility dispatch for the reviewed task-collection command.'
     from .commands.task_collection import run_task_collection
     report = run_task_collection(args, parser, project_root=Path(__file__).resolve().parents[2])
-    _safe_print('task-collect %s\uff1a%s\uff1b\u6700\u7ec8\u552f\u4e00 ASIN %d\uff1b\u62a5\u544a %s' %
-                (report['mode'], report['run_status'],
-                 report['final_unique_asins'],
-                 str(Path(args.out_dir) / 'run_report.json')))
+    phase = str(report.get('phase') or args.phase)
+    status = str(report.get('status') or report.get('run_status') or 'UNKNOWN')
+    asin_count = report.get('final_unique_asins')
+    if asin_count is None:
+        asin_count = report.get('candidate_count', report.get('unique_ranking_asins', 0))
+    _safe_print('task-collect %s/%s: %s; ASIN count %d; report %s' %
+                (report.get('mode', args.mode or 'default'), phase, status,
+                 int(asin_count or 0), str(Path(args.out_dir) / 'run_report.json')))
 
 
 def cmd_translation_production(args) -> None:

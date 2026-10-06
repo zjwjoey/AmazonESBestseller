@@ -500,10 +500,18 @@ def run_reviewed_task(plan: Mapping, out_dir: str, mode: str | None = None,
                       plan_path: str | Path | None = None,
                       project_root: str | Path | None = None,
                       worker: Callable | None = None, phase: str = "all",
-                      resume: bool = False) -> dict:
+                      resume: bool = False,
+                      runtime_overrides: Mapping | None = None) -> dict:
     """Run one reviewed plan without widening its scheduling or access policy."""
     phase = require_phase(phase)
     plan = validate_task_plan(plan, plan_path=plan_path, project_root=project_root)
+    runtime_overrides = dict(runtime_overrides or {})
+    unsupported_overrides = set(runtime_overrides) - {
+        "postal_code", "challenge_wait_seconds", "manual_assist",
+    }
+    if unsupported_overrides:
+        raise ValueError("TASK_RUNTIME_OVERRIDE_INVALID: %s" % ", ".join(sorted(unsupported_overrides)))
+    plan = {**plan, **runtime_overrides}
     if plan["task_id"] == "amazon_es_bestseller_5500_202610" and phase == "all":
         raise ValueError("FORMAL_5500_REQUIRES_EXPLICIT_PHASE")
     if (plan["task_id"] == "amazon_es_bestseller_5500_202610" and phase == "detail"
