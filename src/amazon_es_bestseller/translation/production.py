@@ -174,6 +174,12 @@ def build_release_translation_candidate(state: Mapping[str, Any], *,
     all_statuses: list[str] = []
     fallback_schema = str(translation_schema_version or
                           (state.get("input_manifest") or {}).get("translation_schema_version") or "")
+    # A release candidate records the dictionary that governs the *published*
+    # rendering, not the dictionary that happened to be installed when an
+    # envelope was first executed.  Historical envelope provenance remains in
+    # ``records[].fields[]`` unchanged.
+    effective_dictionary_version = str(dictionary_version or
+                                       state.get("release_dictionary_version") or "")
     for record in state.get("records") or []:
         if not isinstance(record, Mapping):
             continue
@@ -204,7 +210,9 @@ def build_release_translation_candidate(state: Mapping[str, Any], *,
                 "context": dict(envelope.get("context") or {
                     "field": field, "target_field": target_field,
                 }),
-                "dictionary_version": str(envelope.get("dictionary_version") or dictionary_version or ""),
+                "dictionary_version": str(effective_dictionary_version or
+                                           envelope.get("dictionary_version") or ""),
+                "execution_dictionary_version": str(envelope.get("dictionary_version") or ""),
                 "dictionary_hash": str(envelope.get("dictionary_hash") or ""),
                 "translation_schema_version": str(
                     envelope.get("translation_schema_version") or envelope.get("schema_version") or fallback_schema),

@@ -39,7 +39,7 @@ def valid_artifacts():
     rows, chinese = deepcopy(master["records"]), deepcopy(master["records"])
     for row in chinese:
         row["title_zh"] = "Chinese bottle"
-    translation_records, execution = [], []
+    translation_records, candidate_records, execution = [], [], []
     for row in rows:
         title_source = source_text(canonical_record(row)["title_es_raw"])
         field = {"asin": row["asin"], "field": "title_es_raw", "target_field": "title_zh",
@@ -48,14 +48,21 @@ def valid_artifacts():
                  "context": {"field": "title_es_raw", "target_field": "title_zh"},
                  "dictionary_version": "3", "translation_schema_version": "translation-v2.25"}
         field["candidate_hash"] = _candidate_hash(field)
-        translation_records.append({"asin": row["asin"], "release_status": "READY", "fields": [field]})
-        execution.append({"asin": row["asin"], "fields": {"title_zh": {"dictionary_version": "3"}}})
-    translation = {"state": {"input_manifest": {"dataset_hash": "input-hash", "record_count": 2}, "release_candidate": {"release_status": "READY"},
+        # Legacy state fields are execution provenance only.  Keep their
+        # values distinct from the formal candidate surface to prove release
+        # never uses them as a fallback.
+        translation_records.append({"asin": row["asin"], "release_status": "READY", "fields": [dict(field)]})
+        candidate_records.append({"asin": row["asin"], "release_status": "READY",
+                                  "field_candidates": [dict(field)]})
+        execution.append({"asin": row["asin"], "fields": {
+            "title_zh": {"dictionary_version": "2", "source_hash": field["source_hash"]}}})
+    translation = {"state": {"input_manifest": {"dataset_hash": "input-hash", "record_count": 2},
+                               "release_candidate": {"release_status": "READY", "records": candidate_records},
                                "records": translation_records}, "execution": {"records": execution},
                    "provider_provenance": {"provider": "qwen-mt", "model": "qwen-mt-flash", "request_count": 2, "verified": True}}
     dictionary = {"completed": True, "manifest": {"dictionary_version": 3, "dictionary_hash": "dict-hash", "translation_schema_version": "translation-v2.25", "promoted_dictionary": {}},
                   "rerender": {"dictionary_version": "3", "ready": True, "selective_repair": []}}
-    qa = {"fields": [dict(field, status="PASS") for record in translation_records for field in record["fields"]]}
+    qa = {"fields": [dict(field, status="PASS") for record in candidate_records for field in record["field_candidates"]]}
     return {"spanish_master": master,
             "ranking_authority": seal_artifact("ranking_authority", _report(master, "ranking_authority")),
             "source_audit": seal_artifact("source_audit", audit), "source_gate": seal_artifact("source_gate", evaluate_source_gate(audit)),
@@ -113,10 +120,11 @@ def test_chinese_qa_requires_complete_bound_candidate_source_target_and_field():
     artifacts = valid_artifacts(); qa = artifacts["chinese_qa"]["payload"]; qa["fields"][0]["target_value"] = "forged"
     artifacts["chinese_qa"] = seal_artifact("chinese_qa", qa)
     assert "CHINESE_QA_FIELD_BINDING_INVALID" in codes(evaluate_release_gate(artifacts))
-    artifacts = valid_artifacts(); tr = artifacts["translation"]["payload"]; tr["state"]["records"][0]["fields"][0]["source_hash"] = "replaced"
+    artifacts = valid_artifacts(); tr = artifacts["translation"]["payload"]
+    tr["state"]["records"][0]["fields"][0]["source_hash"] = "replaced"
     artifacts["translation"] = seal_artifact("translation", tr)
-    assert "TRANSLATION_CANDIDATE_BINDING_INVALID" in codes(evaluate_release_gate(artifacts))
-    artifacts = valid_artifacts(); field = artifacts["translation"]["payload"]["state"]["records"][0]["fields"][0]
+    assert evaluate_release_gate(artifacts)["status"] == READY
+    artifacts = valid_artifacts(); field = artifacts["translation"]["payload"]["state"]["release_candidate"]["records"][0]["field_candidates"][0]
     field["target_value"] = "forged candidate"; field["candidate_hash"] = _candidate_hash(field)
     artifacts["translation"] = seal_artifact("translation", artifacts["translation"]["payload"])
     assert "TRANSLATION_CANDIDATE_BINDING_INVALID" in codes(evaluate_release_gate(artifacts))
@@ -172,6 +180,19 @@ def test_dictionary_rerender_version_drift_and_pending_repair_block():
                               "selective_repair": [{"asin": ASINS[0], "field_type": "title_zh"}]}
     artifacts["dictionary_sync"] = seal_artifact("dictionary_sync", dictionary)
     assert {"RERENDER_VERSION_DRIFT", "RERENDER_QA_INCOMPLETE"} <= codes(evaluate_release_gate(artifacts))
+
+
+def test_final_dictionary_version_does_not_rewrite_historical_execution_provenance():
+    artifacts = valid_artifacts()
+    translation = artifacts["translation"]["payload"]
+    raw_versions = {field["dictionary_version"] for record in translation["execution"]["records"]
+                    for field in record["fields"].values()}
+    candidate_versions = {field["dictionary_version"]
+                          for record in translation["state"]["release_candidate"]["records"]
+                          for field in record["field_candidates"]}
+    assert raw_versions == {"2"}
+    assert candidate_versions == {"3"}
+    assert evaluate_release_gate(artifacts)["status"] == READY
 
 
 def test_force_true_is_never_a_formal_release_bypass(tmp_path):

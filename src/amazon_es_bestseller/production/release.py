@@ -205,24 +205,39 @@ def _translation_valid(payload: Mapping[str, Any], master_rows: list[dict[str, A
     manifest = state.get("input_manifest") or {}
     if not manifest.get("dataset_hash") or int(manifest.get("record_count") or 0) != len(expected_asins):
         _fail(findings, "translation", "TRANSLATION_MANIFEST_INVALID")
+    # ``records`` is immutable execution/provenance history.  The formal
+    # publication contract is deliberately a separate, canonical surface:
+    # release_candidate.records[].field_candidates[].  In particular, do not
+    # reach back to legacy field envelopes for target text or candidate hashes.
+    candidate_records = candidate.get("records")
+    if not isinstance(candidate_records, list):
+        _fail(findings, "translation", "TRANSLATION_CANDIDATE_BINDING_INVALID")
+        candidate_records = []
     field_asins = set()
-    for record in state.get("records") or []:
+    for record in candidate_records:
         if not isinstance(record, Mapping):
+            _fail(findings, "translation", "TRANSLATION_CANDIDATE_BINDING_INVALID")
             continue
         asin = normalize_asin(record.get("asin")); field_asins.add(asin)
         if record.get("release_status") != READY:
             _fail(findings, "translation", "TRANSLATION_RECORD_NOT_READY")
-        for field in record.get("fields") or []:
-            if not isinstance(field, Mapping) or field.get("promotion_status") != "PROMOTED" or field.get("source_hash") in (None, ""):
+        field_candidates = record.get("field_candidates")
+        if not isinstance(field_candidates, list):
+            _fail(findings, "translation", "TRANSLATION_CANDIDATE_BINDING_INVALID")
+            continue
+        for field in field_candidates:
+            if (not isinstance(field, Mapping) or field.get("promotion_status") != "PROMOTED"
+                    or field.get("source_hash") in (None, "")):
                 _fail(findings, "translation", "TRANSLATION_FIELD_INCOMPLETE")
     if field_asins != expected_asins:
         _fail(findings, "translation", "TRANSLATION_ASIN_SET_MISMATCH")
-    for record in state.get("records") or []:
+    for record in candidate_records:
         if not isinstance(record, Mapping):
             continue
         asin = normalize_asin(record.get("asin"))
-        for field in record.get("fields") or []:
+        for field in record.get("field_candidates") or []:
             if not isinstance(field, Mapping):
+                _fail(findings, "translation", "TRANSLATION_CANDIDATE_BINDING_INVALID")
                 continue
             field_type = str(field.get("field_type") or "")
             candidate = dict(field); candidate["asin"] = asin
@@ -257,7 +272,8 @@ def _translation_valid(payload: Mapping[str, Any], master_rows: list[dict[str, A
 def _dictionary_valid(payload: Mapping[str, Any], translation: Mapping[str, Any],
                       expected_asins: set[str], findings: list[dict[str, str]]) -> None:
     manifest = payload.get("manifest") if isinstance(payload.get("manifest"), Mapping) else payload
-    version = str(manifest.get("dictionary_version") or "")
+    version_value = manifest.get("dictionary_version")
+    version = "" if version_value in (None, "") else str(version_value)
     if not version or not manifest.get("dictionary_hash") or not manifest.get("translation_schema_version"):
         _fail(findings, "dictionary", "DICTIONARY_MANIFEST_INVALID")
         return
@@ -277,8 +293,13 @@ def _dictionary_valid(payload: Mapping[str, Any], translation: Mapping[str, Any]
             continue
         observed_asins.add(normalize_asin(record.get("asin")))
         for envelope in (record.get("fields") or {}).values():
-            if isinstance(envelope, Mapping) and str(envelope.get("dictionary_version") or "") != version:
-                _fail(findings, "dictionary", "DICTIONARY_VERSION_DRIFT")
+            # Raw execution is historical provenance.  It must be bound to a
+            # real dictionary and source hash, but it is valid for it to have
+            # been executed under Vn while the final candidate is released
+            # against Vn+1 after selective rerendering.
+            if isinstance(envelope, Mapping) and (not envelope.get("dictionary_version")
+                                                  or not envelope.get("source_hash")):
+                _fail(findings, "dictionary", "DICTIONARY_EXECUTION_PROVENANCE_INVALID")
     if records and observed_asins != expected_asins:
         _fail(findings, "dictionary", "DICTIONARY_EXECUTION_SCOPE_MISMATCH")
     rerender = payload.get("rerender") or {}
@@ -294,7 +315,8 @@ def _dictionary_valid(payload: Mapping[str, Any], translation: Mapping[str, Any]
 def _chinese_qa_valid(payload: Mapping[str, Any], candidates: Mapping[tuple[str, str], Mapping[str, Any]],
                       dictionary: Mapping[str, Any], findings: list[dict[str, str]]) -> None:
     manifest = dictionary.get("manifest") if isinstance(dictionary.get("manifest"), Mapping) else dictionary
-    dictionary_version = str(manifest.get("dictionary_version") or "")
+    version_value = manifest.get("dictionary_version")
+    dictionary_version = "" if version_value in (None, "") else str(version_value)
     translation_schema_version = str(manifest.get("translation_schema_version") or "")
     qa_rows = [canonical_qa_row(row) for row in _rows(payload.get("fields"))]
     seen: set[tuple[str, str]] = set()

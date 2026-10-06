@@ -32,8 +32,12 @@ def _pass(**kwargs):
 
 def test_rerender_updates_only_exact_affected_field_and_preserves_master_data():
     translations = _translations()
+    calls = []
+    def audited_pass(**kwargs):
+        calls.append((kwargs["asin"], kwargs["target_field"]))
+        return _pass(**kwargs)
     result = rerender_affected_fields([{"asin": "B000000001", "notes": "human"}], translations,
-                                      _manifest(), qa_callback=_pass)
+                                      _manifest(), qa_callback=audited_pass)
     field = result["records"]["B000000001"]["fields"]["product_details_zh"]
     assert result["ready"]
     assert field["translated_text"] == "滤芯"
@@ -41,6 +45,7 @@ def test_rerender_updates_only_exact_affected_field_and_preserves_master_data():
     assert field["dictionary_version"] == "3"
     assert result["records"]["B000000001"]["fields"]["title_zh"]["translated_text"] == "好字段"
     assert result["records"]["B000000001"]["human_note"] == "do not touch"
+    assert calls == [("B000000001", "product_details_zh")]
     assert translations == _translations()
 
 
