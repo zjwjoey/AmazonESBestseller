@@ -871,6 +871,11 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
         rec["ranking_product_url_normalized"] = context.get("ranking_product_url_normalized") or ""
         rec["ranking_link_asin"] = context.get("ranking_link_asin") or ""
         rec["ranking_link_identity_status"] = context.get("ranking_link_identity_status") or ""
+        rec["ranking_source_url"] = context.get("ranking_source_url") or ""
+        rec["ranking_page_number"] = context.get("ranking_page_number")
+        rec["bestseller_rank"] = context.get("bestseller_rank")
+        rec["source_role"] = context.get("source_role") or ""
+        rec.setdefault("variation_family_asins", [])
         rec["detail_status"] = "SUCCESS_WITH_IDENTITY_CHANGE" if mismatch else "SUCCESS"
         rec["identity_review_required"] = bool(mismatch)
         if mismatch:

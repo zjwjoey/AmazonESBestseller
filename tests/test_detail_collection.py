@@ -44,6 +44,9 @@ def test_collect_details_keeps_final_asin_mismatch_as_reviewable_evidence(tmp_pa
             "planned_request_url": "https://www.amazon.es/dp/B075JJRFVV",
             "preferred_request_url": "https://www.amazon.es/dp/B075JJRFVV",
             "request_source": "RANKING_RAW",
+            "ranking_source_url": "https://www.amazon.es/Best-Sellers/zgbs/1",
+            "ranking_page_number": 2,
+            "bestseller_rank": 51,
         }},
     )
     assert len(records) == 1
@@ -53,6 +56,8 @@ def test_collect_details_keeps_final_asin_mismatch_as_reviewable_evidence(tmp_pa
     assert records[0]["candidate_asin"] == "B078C6QR1C"
     assert records[0]["final_url_asin"] == "B075JJRFVV"
     assert records[0]["resolved_asin"] == "B075JJRFVV"
+    assert records[0]["ranking_page_number"] == 2
+    assert records[0]["bestseller_rank"] == 51
     assert (tmp_path / "html" / "B078C6QR1C.html").exists()
     assert not (tmp_path / "quarantine" / "B078C6QR1C").exists()
 
