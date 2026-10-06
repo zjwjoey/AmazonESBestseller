@@ -6,6 +6,7 @@ import pytest
 from amazon_es_bestseller.collection import task as task_module
 from amazon_es_bestseller.collection.task import _run_category_live, run_task
 from amazon_es_bestseller.orchestration.worker import run_category_live
+from amazon_es_bestseller.orchestration import scheduler as scheduler_module
 from amazon_es_bestseller.orchestration.scheduler import _freeze_ranking_snapshot
 from amazon_es_bestseller.quality.replay import audit_offline_replay
 from amazon_es_bestseller.collection.ranking import parse_bestsellers_page
@@ -251,6 +252,9 @@ def test_formal_5500_runtime_overrides_follow_fingerprint_validation(monkeypatch
     plan_path = root / "configs/tasks/amazon_es_bestseller_5500_202610_plan.json"
     formal = json.loads(plan_path.read_text(encoding="utf-8"))
     postal_codes = []
+    # Preserve the formal plan bytes/fingerprint, but do not make this offline
+    # regression test wait through the reviewed live-collection cooldown.
+    monkeypatch.setattr(scheduler_module, "cooldown_seconds", lambda *_args: 0)
 
     def empty_ranking_worker(category, plan, *_args, **_kwargs):
         postal_codes.append(plan["postal_code"])
