@@ -39,7 +39,8 @@ def run_task_collection(args: Any, parser: Any, *, project_root: Path) -> dict[s
     try:
         report = run_task(plan, args.out_dir, mode=args.mode,
                           headful=args.headful, profile_dir=args.profile_dir,
-                          plan_path=plan_path, project_root=project_root)
+                          plan_path=plan_path, project_root=project_root,
+                          phase=args.phase, resume=bool(args.resume))
     except ValueError as exc:
         parser.error(str(exc))
     return report

@@ -13,6 +13,7 @@ from typing import Mapping
 from urllib.parse import urlsplit
 
 from ..collection.quota import normalize_source_url, validate_research_categories
+from .phases import canonical_json_sha256
 
 
 def normalize_url(url: object) -> str:
@@ -21,6 +22,40 @@ def normalize_url(url: object) -> str:
 
 def default_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
+
+
+def canonical_plan_sha256(plan: Mapping) -> str:
+    """Fingerprint the parsed plan, not its incidental line endings."""
+    return canonical_json_sha256(dict(plan))
+
+
+def _formal_plan_registry(plan_path: str | Path | None, project_root: str | Path | None) -> dict:
+    root = Path(project_root).expanduser().resolve() if project_root else default_project_root()
+    preferred = (Path(plan_path).resolve().parent / "formal_plan_registry.json"
+                 if plan_path else root / "configs" / "tasks" / "formal_plan_registry.json")
+    registry_path = preferred if preferred.is_file() else root / "configs" / "tasks" / "formal_plan_registry.json"
+    if not registry_path.is_file():
+        return {}
+    try:
+        value = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("FORMAL_PLAN_REGISTRY_INVALID") from exc
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def validate_formal_plan_fingerprint(plan: Mapping, *, plan_path: str | Path | None = None,
+                                     project_root: str | Path | None = None) -> str:
+    """Fail before a browser can exist when the immutable 5500 plan drifts."""
+    task_id = str(plan.get("task_id") or "")
+    registry = _formal_plan_registry(plan_path, project_root)
+    entry = registry.get(task_id)
+    if not isinstance(entry, Mapping):
+        return canonical_plan_sha256(plan)
+    expected = str(entry.get("canonical_sha256") or "").strip().lower()
+    actual = canonical_plan_sha256(plan)
+    if not expected or actual != expected:
+        raise ValueError("FORMAL_5500_PLAN_HASH_MISMATCH")
+    return actual
 
 
 def resolve_task_path(value: str | Path, *, plan_path: str | Path | None = None,
@@ -42,6 +77,11 @@ def validate_task_plan(plan: Mapping, *, plan_path: str | Path | None = None,
     task_id = str(plan.get("task_id") or "").strip()
     if not task_id:
         raise ValueError("任务计划缺少 task_id")
+    # Formal-task drift is a hard pre-browser gate.  Check it before parsing
+    # any other operational field so a modified 5500 plan never reaches a
+    # scheduler or transport through a secondary validation error.
+    plan_hash = validate_formal_plan_fingerprint(plan, plan_path=plan_path,
+                                                  project_root=project_root)
     target = plan.get("target_unique")
     if target is None:
         raise ValueError("任务计划缺少 target_unique")
@@ -149,6 +189,7 @@ def validate_task_plan(plan: Mapping, *, plan_path: str | Path | None = None,
                                       "pages_per_url": category_pages})
     return {**dict(plan), "categories": normalized_categories,
             "target_unique": int(target), "pages_per_url": plan_pages,
+            "canonical_plan_sha256": plan_hash,
             "scheduler": {**scheduler, "mode": mode,
                           "max_parallel_categories": parallel,
                           "cooldown_after_category_seconds": cooldown,
@@ -186,6 +227,6 @@ def category_rank_filter(record: Mapping, category: Mapping, plan: Mapping) -> b
     return start <= rank <= end
 
 
-__all__ = ["category_rank_filter", "cooldown_seconds", "default_project_root",
+__all__ = ["canonical_plan_sha256", "category_rank_filter", "cooldown_seconds", "default_project_root",
            "needs_reserve_sources", "normalize_url", "resolve_task_path", "source_urls",
-           "validate_task_plan"]
+           "validate_formal_plan_fingerprint", "validate_task_plan"]

@@ -25,6 +25,8 @@ class TaskRuntimeState:
         self.claim_lock = threading.Lock()
         self.worker_ready_at = [float(value) for value in raw.get("worker_ready_at", [])]
         self.worker_ready_at = (self.worker_ready_at + [0.0] * slots)[:slots]
+        self.phase_fingerprints = dict(raw.get("phase_fingerprints") or {})
+        self.phase_status = dict(raw.get("phase_status") or {})
         self.prepare_resume()
 
     @classmethod
@@ -68,8 +70,32 @@ class TaskRuntimeState:
             "worker_ready_at": self.worker_ready_at, "active_workers": active_workers,
             "claimed_asins": sorted(self.claimed),
             "completed_source_urls": sorted(set(self.completed_source_urls)),
+            "phase_fingerprints": self.phase_fingerprints,
+            "phase_status": self.phase_status,
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         })
+
+    def bind_phase(self, phase: str, *, plan_sha256: str,
+                   candidate_manifest_sha256: str = "", code_head: str = "UNKNOWN") -> None:
+        """Persist and verify the immutable resume contract for one phase."""
+        current = self.phase_fingerprints.get(phase)
+        if isinstance(current, Mapping):
+            if str(current.get("plan_sha256") or "") != str(plan_sha256):
+                raise ValueError("PLAN_FINGERPRINT_MISMATCH")
+            if (phase == "detail" and
+                    str(current.get("candidate_manifest_sha256") or "") != str(candidate_manifest_sha256)):
+                raise ValueError("CANDIDATE_FINGERPRINT_MISMATCH")
+            previous_head = str(current.get("code_head") or "UNKNOWN")
+            current_head = str(code_head or "UNKNOWN")
+            if previous_head != "UNKNOWN" and current_head != "UNKNOWN" and previous_head != current_head:
+                raise ValueError("CODE_FINGERPRINT_MISMATCH")
+        self.phase_fingerprints[phase] = {
+            "phase": phase,
+            "plan_sha256": str(plan_sha256),
+            "candidate_manifest_sha256": str(candidate_manifest_sha256 or ""),
+            "code_head": str(code_head or "UNKNOWN"),
+            "schema_version": 1,
+        }
 
     def has_unfinished_reserve(self, group: str, category: Mapping) -> bool:
         current = self.category_states.get(group, {})
@@ -104,16 +130,26 @@ class CategoryRuntimeState:
         self.detail_map = {str(row.get("asin") or "").upper(): row for row in details
                            if row.get("asin")}
         self.source_status = dict(self.persisted.get("source_status") or {})
+        self.ranking_page_statuses = list(self.persisted.get("ranking_page_statuses") or [])
+        self.ranking_source_status = dict(self.persisted.get("ranking_source_status") or self.source_status)
+        self.detail_phase_status = str(self.persisted.get("detail_phase_status") or "")
         self.pending_detail_asins = {
             str(asin).strip().upper() for asin in self.persisted.get("pending_detail_asins") or []
             if str(asin).strip()
         }
 
-    def save(self, status: str, active_url: str = "") -> None:
+    def save(self, status: str, active_url: str = "", *, phase: str = "all") -> None:
+        if phase in {"ranking", "all"}:
+            self.ranking_source_status = dict(self.source_status)
+        if phase in {"detail", "all"}:
+            self.detail_phase_status = status
         self.repository.save_category(self.category_dir, {
             "schema_version": 1, "research_category": self.group, "worker_id": self.worker_id,
             "status": status, "active_source_url": active_url,
             "source_status": self.source_status,
+            "ranking_source_status": self.ranking_source_status,
+            "ranking_page_statuses": self.ranking_page_statuses,
+            "detail_phase_status": self.detail_phase_status,
             "raw_ranking_records": len(self.rankings),
             "unique_asins": len({str(row.get("asin") or "").upper() for row in self.rankings if row.get("asin")}),
             "detail_records": len(self.detail_map),

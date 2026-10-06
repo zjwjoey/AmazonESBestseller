@@ -242,6 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
     tc = sub.add_parser('task-collect', help='\u8054\u7f51\uff1a\u8fd0\u884c\u5ba1\u6838\u540e\u76845000 SKU\u4efb\u52a1')
     tc.add_argument('--plan', required=True, help='\u672c\u8f6e\u5ba1\u6838\u4efb\u52a1\u8ba1\u5212 JSON')
     tc.add_argument('--out-dir', required=True, help='\u672c\u8f6e\u72ec\u7acb\u8f93\u51fa\u76ee\u5f55')
+    tc.add_argument('--phase', choices=('ranking', 'detail', 'all'), default='all',
+                    help='ranking only / frozen detail only / legacy all')
+    tc.add_argument('--resume', action='store_true',
+                    help='resume the declared phase from its versioned checkpoint')
     tc.add_argument('--mode', choices=('parallel3', 'serial'), default=None,
                     help='parallel3=\u4e09\u7c7b\u76ee\u5e76\u884c\u4e3b\u6a21\u5757\uff1bserial=\u5355\u7c7b\u76ee\u5907\u7528\u6a21\u5757')
     tc.add_argument('--headful', action='store_true', help='\u6709\u5934\u6d4f\u89c8\u5668')

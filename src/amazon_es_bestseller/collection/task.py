@@ -59,11 +59,13 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
 def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
              headful: bool = False, profile_dir: str = "",
              plan_path: str | Path | None = None,
-             project_root: str | Path | None = None) -> dict:
+             project_root: str | Path | None = None, phase: str = "all",
+             resume: bool = False) -> dict:
     """Run through the extracted scheduler while retaining the old patch point."""
     return run_reviewed_task(plan, out_dir, mode=mode, headful=headful,
                              profile_dir=profile_dir, plan_path=plan_path,
-                             project_root=project_root, worker=_run_category_live)
+                             project_root=project_root, worker=_run_category_live,
+                             phase=phase, resume=resume)
 
 
 __all__ = ["_category_rank_filter", "_category_store", "_cooldown_seconds",

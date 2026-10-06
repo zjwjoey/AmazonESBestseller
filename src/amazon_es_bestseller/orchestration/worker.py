@@ -1,4 +1,4 @@
-"""One-category serial collection worker for reviewed task plans."""
+"""One-category worker for reviewed ranking and frozen-detail phases."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -12,6 +12,18 @@ from .plan import category_rank_filter, needs_reserve_sources, normalize_url, so
 from .state import CategoryRuntimeState
 
 
+def _candidate_asins(plan: Mapping, group: str) -> list[str]:
+    value = (plan.get("frozen_candidates_by_category") or {}).get(group, [])
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        asin = str(item.get("asin") if isinstance(item, Mapping) else item or "").strip().upper()
+        if asin and asin not in seen:
+            seen.add(asin)
+            result.append(asin)
+    return result
+
+
 def run_category_live(category: Mapping, plan: Mapping, output: Path,
                       worker_id: int, headful: bool, profile_dir: str,
                       claim_asins: Callable[[list[str]], list[str]],
@@ -19,12 +31,20 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
                       completed_urls: set[str],
                       stop_event: threading.Event | None = None,
                       challenge_pause: threading.Event | None = None) -> dict:
-    """Collect exactly one category serially, preserving its retry checkpoint."""
+    """Run exactly one serial category operation.
+
+    ``ranking`` performs no detail navigation.  ``detail`` has no ranking URL
+    loop and reads only the scheduler-supplied frozen candidate mapping.  The
+    legacy ``all`` path remains available for pre-5500 callers.
+    """
     from ..access.browser import BrowserSession
     from ..access.location import ensure_spain_delivery
     from ..collection.detail import collect_details
     from ..collection.ranking import collect_rankings
 
+    phase = str(plan.get("collection_phase") or "all").lower()
+    if phase not in {"ranking", "detail", "all"}:
+        raise ValueError("TASK_COLLECTION_PHASE_INVALID")
     group = str(category["research_category"])
     category_dir = output / "categories" / group
     category_dir.mkdir(parents=True, exist_ok=True)
@@ -33,10 +53,9 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
     detail_map = runtime.detail_map
     ranking_keys = {(row.get("ranking_source_url"), row.get("ranking_page_number"),
                     row.get("bestseller_rank"), str(row.get("asin") or "").upper())
-                   for row in rankings if isinstance(row, Mapping)}
+                    for row in rankings if isinstance(row, Mapping)}
     batch = str(plan.get("batch_id") or plan.get("task_id"))
     collected_at = datetime.now().isoformat(timespec="seconds")
-
     completed_for_category = set(completed_urls) | {
         url for url, status in runtime.source_status.items() if status in {"ranked", "completed"}
     }
@@ -61,14 +80,20 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
         if location is not None:
             print("[%s][槽位%d] 配送地点已确认" % (group, worker_id))
 
+        requested_asins: list[str] = []
+
         def collect_detail_batch(asins: list[str], active_url: str = "") -> None:
             if not asins:
                 return
+            allowed = set(_candidate_asins(plan, group)) if phase == "detail" else None
+            if allowed is not None and not set(asins).issubset(allowed):
+                raise ValueError("DETAIL_ASIN_OUTSIDE_FROZEN_CANDIDATES")
             claimed = claim_asins(asins)
             if not claimed:
                 return
+            requested_asins.extend(claimed)
             runtime.pending_detail_asins.update(claimed)
-            runtime.save("RUNNING", active_url)
+            runtime.save("RUNNING", active_url, phase=phase)
             try:
                 detail_dir = str(category_dir / "detail_cache")
                 if stop_event is None:
@@ -89,10 +114,30 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
                 release_asins(claimed)
                 raise
 
-        # Resume durable incomplete details before taking a new ranking source.
-        if runtime.pending_detail_asins:
+        if phase == "detail":
+            candidates = _candidate_asins(plan, group)
+            candidate_set = set(candidates)
+            runtime.pending_detail_asins.intersection_update(candidate_set)
+            runtime.pending_detail_asins.update(asin for asin in candidates if asin not in detail_map)
+            if runtime.pending_detail_asins:
+                collect_detail_batch([asin for asin in candidates if asin in runtime.pending_detail_asins])
+            final_status = "DETAIL_COMPLETE" if not runtime.pending_detail_asins else "DETAIL_INCOMPLETE"
+            runtime.save(final_status, "", phase="detail")
+            return {
+                "research_category": group, "status": final_status,
+                "rankings": [], "details": list(detail_map.values()),
+                "completed_source_urls": [], "source_status": runtime.source_status,
+                "ranking_page_statuses": runtime.ranking_page_statuses,
+                "raw_ranking_records": len(rankings),
+                "unique_asins": len({str(row.get("asin") or "").upper() for row in rankings if row.get("asin")}),
+                "detail_records": len(detail_map),
+                "pending_detail_asins": sorted(runtime.pending_detail_asins),
+                "detail_requested_asins": requested_asins,
+            }
+
+        if phase == "all" and runtime.pending_detail_asins:
             collect_detail_batch(sorted(runtime.pending_detail_asins))
-            runtime.save("RUNNING", "")
+            runtime.save("RUNNING", "", phase="all")
 
         for source in pending_sources:
             role = str(source.get("role") or "primary").lower()
@@ -102,53 +147,58 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
                 from ..access.detector import AccessStopError
                 raise AccessStopError("其他工作槽触发访问限制，停止新请求")
             url = normalize_url(source["source_url"])
-            runtime.save("RUNNING", url)
+            runtime.save("RUNNING", url, phase=phase)
             pages = int(source.get("pages_per_url", category.get("pages_per_url", plan.get("pages_per_url", 2))) or 2)
             if stop_event is None:
                 current = collect_rankings([url], session, str(category_dir), pages_per_url=pages)
             else:
                 current = collect_rankings([url], session, str(category_dir), pages_per_url=pages,
                                            should_stop=should_stop)
+            runtime.ranking_page_statuses.extend(list(getattr(current, "page_statuses", []) or []))
             filtered = []
             for record in current:
                 if not category_rank_filter(record, category, plan):
                     continue
                 row = dict(record)
                 row.update({"research_category": group, "collection_batch": batch,
-                            "collection_time": collected_at})
+                            "collection_time": collected_at, "source_role": role})
                 filtered.append(row)
                 key = (row.get("ranking_source_url"), row.get("ranking_page_number"),
                        row.get("bestseller_rank"), str(row.get("asin") or "").upper())
                 if key not in ranking_keys:
                     ranking_keys.add(key)
                     rankings.append(row)
-            candidates = []
-            seen = set(detail_map)
-            for row in filtered:
-                asin = str(row.get("asin") or "").upper()
-                if asin and asin not in seen:
-                    seen.add(asin)
-                    candidates.append(asin)
-            # Ranking proof is durable before its first associated detail request.
             runtime.source_status[url] = "ranked"
-            runtime.save("RUNNING", url)
-            if should_stop():
-                from ..access.detector import AccessStopError
-                raise AccessStopError("其他工作槽触发访问限制，停止新请求")
-            collect_detail_batch(candidates, url)
+            runtime.save("RUNNING", url, phase=phase)
+            if phase == "all":
+                if should_stop():
+                    from ..access.detector import AccessStopError
+                    raise AccessStopError("其他工作槽触发访问限制，停止新请求")
+                seen = set(detail_map)
+                candidates = []
+                for row in filtered:
+                    asin = str(row.get("asin") or "").upper()
+                    if asin and asin not in seen:
+                        seen.add(asin)
+                        candidates.append(asin)
+                collect_detail_batch(candidates, url)
             runtime.source_status[url] = "completed"
-            runtime.save("RUNNING", "")
+            runtime.save("RUNNING", "", phase=phase)
 
-        final_status = "COMPLETE" if not runtime.pending_detail_asins else "DETAIL_INCOMPLETE"
-        runtime.save(final_status, "")
+        final_status = ("RANKING_COMPLETE" if phase == "ranking" else
+                        "COMPLETE" if not runtime.pending_detail_asins else "DETAIL_INCOMPLETE")
+        runtime.save(final_status, "", phase=phase)
     return {
         "research_category": group, "status": final_status,
         "rankings": rankings, "details": list(detail_map.values()),
-        "completed_source_urls": list(runtime.source_status), "source_status": runtime.source_status,
+        "completed_source_urls": [url for url, status in runtime.source_status.items() if status == "completed"],
+        "source_status": runtime.source_status,
+        "ranking_page_statuses": runtime.ranking_page_statuses,
         "raw_ranking_records": len(rankings),
         "unique_asins": len({str(row.get("asin") or "").upper() for row in rankings if row.get("asin")}),
         "detail_records": len(detail_map),
         "pending_detail_asins": sorted(runtime.pending_detail_asins),
+        "detail_requested_asins": requested_asins,
     }
 
 
