@@ -54,6 +54,24 @@ def audit_detail_identity(
             variation_family_asins=_family(row),
         )
         status = str(row.get("identity_status") or result.get("identity_status") or "").upper()
+        detail_status = str(row.get("detail_status") or "").upper()
+        identity_event = str(row.get("identity_event") or "").upper()
+        if (detail_status == "REQUEST_URL_BINDING_MISMATCH" or
+                identity_event == "REQUEST_URL_BINDING_MISMATCH"):
+            issues.append(issue(
+                "detail_identity", QualityStatus.BLOCK, "P0", "REQUEST_URL_BINDING_MISMATCH",
+                asin=ranking or requested, source="detail",
+                message="详情请求 URL 与冻结候选计划绑定不一致；页面未被可信请求。",
+                evidence={"record": row, "resolver": result}))
+            continue
+        if (detail_status == "SUCCESS_WITH_IDENTITY_CHANGE" or
+                identity_event == "NAVIGATION_IDENTITY_CHANGED"):
+            issues.append(issue(
+                "detail_identity", QualityStatus.REVIEW, "P1", "NAVIGATION_IDENTITY_CHANGED",
+                asin=ranking or requested, source="detail",
+                message="冻结榜单链接落地到不同或未确认的商品身份；已保留详情证据，需人工复核。",
+                evidence={"record": row, "resolver": result}))
+            continue
         if status in _ACCEPTED:
             # A contradictory final URL is not masked by a matching parsed
             # field unless explicit variation-family evidence explains it.

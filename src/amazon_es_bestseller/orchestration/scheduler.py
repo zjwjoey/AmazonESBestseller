@@ -100,6 +100,22 @@ def _candidate_groups(rows: list[Mapping]) -> dict[str, list[str]]:
     return {group: list(dict.fromkeys(items)) for group, items in values.items()}
 
 
+def _candidate_row_groups(rows: list[Mapping]) -> dict[str, list[dict]]:
+    """Preserve frozen ranking URL evidence for the detail request contract."""
+    values: dict[str, list[dict]] = defaultdict(list)
+    seen: set[tuple[str, str]] = set()
+    for raw in rows:
+        if not isinstance(raw, Mapping):
+            continue
+        group = str(raw.get("research_category") or "").strip()
+        asin = str(raw.get("asin") or "").strip().upper()
+        key = (group, asin)
+        if group and asin and key not in seen:
+            seen.add(key)
+            values[group].append(dict(raw))
+    return dict(values)
+
+
 def _detail_reuse_groups(plan: Mapping, candidates: list[Mapping]) -> tuple[dict[str, list[dict]],
                                                                             dict[str, list[str]],
                                                                             dict[str, list[str]]]:
@@ -469,7 +485,11 @@ def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode:
                        candidate_manifest_sha256=candidate_hash,
                        code_head=git_head(project_root))
     by_group = _candidate_groups(candidates)
-    execution = {**plan, "frozen_candidates_by_category": by_group}
+    execution = {
+        **plan,
+        "frozen_candidates_by_category": by_group,
+        "frozen_candidate_rows_by_category": _candidate_row_groups(candidates),
+    }
     detail_plan: dict[str, Any] = {}
     detail_plan_path = str(ranking_report.get("detail_plan_path") or "")
     if detail_plan_path:

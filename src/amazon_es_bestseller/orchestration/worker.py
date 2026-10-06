@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from pathlib import Path
 import threading
 import time
@@ -10,6 +11,7 @@ from typing import Callable, Mapping
 from .checkpoint import TaskCheckpointRepository
 from .plan import category_rank_filter, needs_reserve_sources, normalize_url, source_urls
 from .state import CategoryRuntimeState
+from ..collection.detail_request_plan import build_detail_request_plan
 
 
 def _candidate_asins(plan: Mapping, group: str) -> list[str]:
@@ -21,6 +23,55 @@ def _candidate_asins(plan: Mapping, group: str) -> list[str]:
         if asin and asin not in seen:
             seen.add(asin)
             result.append(asin)
+    return result
+
+
+def _candidate_rows(plan: Mapping, group: str) -> dict[str, dict]:
+    """Keep the immutable candidate row available to the detail collector.
+
+    Older callers may supply ASIN-only frozen candidates.  Those deliberately
+    remain supported and receive the safe ASIN fallback request plan.
+    """
+    values = (plan.get("frozen_candidate_rows_by_category") or {}).get(group, [])
+    rows: dict[str, dict] = {}
+    for item in values:
+        if not isinstance(item, Mapping):
+            continue
+        asin = str(item.get("asin") or item.get("ranking_asin") or "").strip().upper()
+        if asin and asin not in rows:
+            rows[asin] = dict(item)
+    for asin in _candidate_asins(plan, group):
+        rows.setdefault(asin, {"asin": asin, "research_category": group})
+    return rows
+
+
+def _completed_detail_cache_records(category_dir: Path, candidate_asins: set[str]) -> list[dict]:
+    """Recover collector checkpoints after an interrupted batch.
+
+    ``collect_details`` persists every successful record before the batch-wide
+    ``details.json`` write.  Treat those checkpoints as durable cache evidence
+    so restarting a worker never revisits already successful product pages.
+    Older records did not know ranking URL provenance and are labelled
+    explicitly as legacy ASIN-fallback evidence rather than misrepresented.
+    """
+    result: list[dict] = []
+    root = category_dir / "detail_cache" / "checkpoints"
+    if not root.is_dir():
+        return result
+    for path in sorted(root.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        record = payload.get("record") if isinstance(payload, Mapping) else None
+        asin = str((record or {}).get("asin") or payload.get("asin") or "").strip().upper()
+        if (str(payload.get("status") or "").lower() != "success" or
+                not isinstance(record, Mapping) or asin not in candidate_asins):
+            continue
+        recovered = dict(record)
+        recovered.setdefault("request_source", "ASIN_FALLBACK_LEGACY")
+        recovered.setdefault("detail_status", "SUCCESS")
+        result.append(recovered)
     return result
 
 
@@ -82,6 +133,8 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
 
         requested_asins: list[str] = []
 
+        candidate_rows = _candidate_rows(plan, group) if phase == "detail" else {}
+
         def collect_detail_batch(asins: list[str], active_url: str = "") -> None:
             if not asins:
                 return
@@ -96,10 +149,29 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
             runtime.save("RUNNING", active_url, phase=phase)
             try:
                 detail_dir = str(category_dir / "detail_cache")
-                if stop_event is None:
-                    fresh = collect_details(claimed, session, detail_dir)
+                request_plans = {asin: build_detail_request_plan(candidate_rows.get(asin, {"asin": asin}))
+                                 for asin in claimed}
+                for asin, context in request_plans.items():
+                    context.setdefault("action", "FETCH_NEW")
+                    context.setdefault("attempt", 1)
+                if phase != "detail":
+                    # Legacy all-mode has no immutable candidate manifest.
+                    # Keep its historical collector call contract intact.
+                    fresh = (collect_details(claimed, session, detail_dir)
+                             if stop_event is None else
+                             collect_details(claimed, session, detail_dir, should_stop=should_stop))
+                elif stop_event is None:
+                    fresh = collect_details(
+                        claimed, session, detail_dir,
+                        request_urls={asin: context["preferred_request_url"] for asin, context in request_plans.items()},
+                        execution_context=request_plans,
+                    )
                 else:
-                    fresh = collect_details(claimed, session, detail_dir, should_stop=should_stop)
+                    fresh = collect_details(
+                        claimed, session, detail_dir, should_stop=should_stop,
+                        request_urls={asin: context["preferred_request_url"] for asin, context in request_plans.items()},
+                        execution_context=request_plans,
+                    )
                 successes = {str(row.get("asin") or "").upper() for row in fresh if row.get("asin")}
                 for row in fresh:
                     asin = str(row.get("asin") or "").upper()
@@ -117,6 +189,10 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
         if phase == "detail":
             candidates = _candidate_asins(plan, group)
             candidate_set = set(candidates)
+            for cached in _completed_detail_cache_records(category_dir, candidate_set):
+                asin = str(cached.get("asin") or "").upper()
+                if asin and asin not in detail_map:
+                    detail_map[asin] = cached
             # Ranking-phase reconciliation may preload valid historical detail
             # evidence and limit network work to its explicit reextract queue.
             for cached in (plan.get("detail_reuse_records_by_category") or {}).get(group, []):

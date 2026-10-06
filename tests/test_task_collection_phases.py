@@ -206,6 +206,74 @@ def test_detail_worker_does_not_run_ranking_and_resumes_only_pending(monkeypatch
     assert calls == [["A000000001", "B000000001"]]
 
 
+def test_detail_worker_passes_frozen_ranking_url_and_context_to_collector(monkeypatch, tmp_path):
+    class Session:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", Session)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery", lambda *_args: None)
+    captured = {}
+
+    def collector(values, *_args, **kwargs):
+        captured["values"] = values
+        captured["urls"] = kwargs["request_urls"]
+        captured["context"] = kwargs["execution_context"]
+        return [{"asin": values[0], "title_es_raw": "Producto"}]
+
+    monkeypatch.setattr("amazon_es_bestseller.collection.detail.collect_details", collector)
+    asin = "A000000001"
+    plan = {
+        "task_id": "x", "batch_id": "x", "collection_phase": "detail",
+        "frozen_candidates_by_category": {"A": [asin]},
+        "frozen_candidate_rows_by_category": {"A": [{
+            "asin": asin, "ranking_product_url_raw": "/Producto/dp/B000000099/ref=ranking",
+            "ranking_product_url_normalized": "https://www.amazon.es/dp/A000000001",
+            "ranking_link_asin": "B000000099", "ranking_link_identity_status": "LINK_ASIN_MISMATCH",
+            "ranking_source_url": "https://www.amazon.es/Best-Sellers/zgbs/123",
+            "ranking_page_number": 1, "bestseller_rank": 7,
+        }]},
+    }
+    result = run_category_live({"research_category": "A", "sources": []}, plan, tmp_path,
+                               1, False, "", lambda values: values, lambda _values: None, set())
+    assert result["status"] == "DETAIL_COMPLETE"
+    assert captured["values"] == [asin]
+    assert captured["urls"][asin] == "https://www.amazon.es/Producto/dp/B000000099/ref=ranking"
+    assert captured["context"][asin]["request_source"] == "RANKING_RAW"
+    assert captured["context"][asin]["ranking_link_asin"] == "B000000099"
+
+
+def test_detail_worker_reuses_checkpoint_success_without_re_request(monkeypatch, tmp_path):
+    class Session:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", Session)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery", lambda *_args: None)
+    monkeypatch.setattr("amazon_es_bestseller.collection.detail.collect_details",
+                        lambda *_args, **_kwargs: pytest.fail("cached success must not be re-requested"))
+    asin = "A000000001"
+    checkpoint = tmp_path / "categories" / "A" / "detail_cache" / "checkpoints" / f"{asin}.json"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_text(json.dumps({"asin": asin, "status": "success", "record": {
+        "asin": asin, "title_es_raw": "Producto", "detail_status": "SUCCESS",
+    }}), encoding="utf-8")
+    plan = {"task_id": "x", "batch_id": "x", "collection_phase": "detail",
+            "frozen_candidates_by_category": {"A": [asin]}}
+    result = run_category_live({"research_category": "A", "sources": []}, plan, tmp_path,
+                               1, False, "", lambda values: values, lambda _values: None, set())
+    assert result["status"] == "DETAIL_COMPLETE"
+    assert result["details"][0]["request_source"] == "ASIN_FALLBACK_LEGACY"
+
+
 def test_resume_rejects_plan_or_candidate_fingerprint_drift(monkeypatch, tmp_path):
     monkeypatch.setattr(task_module, "_run_category_live", lambda category, plan, *args, **kwargs: _ranking_result(category))
     plan = _plan()

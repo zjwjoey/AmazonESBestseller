@@ -200,7 +200,7 @@ def test_reparse_is_executed_offline_and_updates_state(tmp_path):
     assert json.loads((tmp_path / "checkpoints" / "B000000104.json").read_text())["action"] == "REPARSE_SAVED_HTML"
 
 
-def test_reparse_rejects_mislabeled_saved_html(tmp_path):
+def test_reparse_keeps_mislabeled_saved_html_as_identity_review_evidence(tmp_path):
     html_dir = tmp_path / "html"
     html_dir.mkdir()
     (html_dir / "B000000107.html").write_text(
@@ -213,9 +213,10 @@ def test_reparse_rejects_mislabeled_saved_html(tmp_path):
     result = execute_detail_plan(plan, None, str(tmp_path), offline=True, saved_html=html_dir)
 
     assert result["requested_count"] == 0
-    assert result["records"][0]["status"] == "PENDING"
-    assert json.loads((tmp_path / "details.json").read_text(encoding="utf-8")) == []
-    assert not (tmp_path / "checkpoints" / "B000000107.json").exists()
+    assert result["records"][0]["status"] == "SUCCESS"
+    detail = json.loads((tmp_path / "details.json").read_text(encoding="utf-8"))[0]
+    assert detail["detail_status"] == "SUCCESS_WITH_IDENTITY_CHANGE"
+    assert detail["identity_review_required"] is True
 
 
 def test_verify_identity_writes_review_queue_without_network(tmp_path):

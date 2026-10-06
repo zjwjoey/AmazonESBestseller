@@ -621,11 +621,6 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
             if asin in seen_asins:
                 continue
             identity = _resolve_page_identity(asin, html, meta.get("final_url") or "", rec)
-            if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
-                # The filename is only the requested identity, not proof of
-                # what the saved HTML contains. Do not let a stale or
-                # mislabelled page enter DetailState during offline reparse.
-                continue
             rec.update({"status_code": meta.get("status_code"),
                         "initial_access_state": meta.get("initial_access_state"),
                         "access_state": state_value.value,
@@ -636,7 +631,15 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                         "identity_status": ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
                                              else identity["identity_status"]),
                         "identity_status_code": identity["identity_status"],
-                        "identity_evidence": identity["identity_evidence"]})
+                        "identity_evidence": identity["identity_evidence"],
+                        "detail_status": ("SUCCESS_WITH_IDENTITY_CHANGE"
+                                          if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}
+                                          else "SUCCESS"),
+                        "identity_review_required": identity["identity_status"] in {
+                            "IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"},
+                        "identity_event": ("NAVIGATION_IDENTITY_CHANGED"
+                                           if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}
+                                           else "")})
             out.append(rec)
             seen_asins.add(asin)
     if out:
@@ -690,16 +693,15 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
             classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
             identity = _resolve_page_identity(
                 asin, html, status_meta.get("final_url") or "", parsed)
-            if (classification == "VALID_PRODUCT_PAGE"
-                    and identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}):
-                classification = "INVALID_OR_EMPTY"
-                parsed = None
             records.append({"asin": asin, "path": str(path), "classification": classification,
                             "initial_access_state": status_meta.get("initial_access_state"),
                             "access_state": access_state.value,
                             "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
                             "identity_status": identity["identity_status"],
                             "identity_evidence": identity["identity_evidence"],
+                            "identity_event": ("NAVIGATION_IDENTITY_CHANGED"
+                                               if classification == "VALID_PRODUCT_PAGE" and identity["identity_status"] in {
+                                                   "IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"} else ""),
                             "quarantined": bool(quarantine) and classification != "VALID_PRODUCT_PAGE",
                             "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
@@ -810,8 +812,12 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             if record.get(key) is not None:
                 enriched.setdefault(key, record[key])
         context = execution_context.get(asin) or {}
-        for key in ("snapshot_id", "ranking_asin", "ranking_product_url_raw",
-                    "action", "attempt"):
+        for key in ("snapshot_id", "candidate_asin", "ranking_asin",
+                    "ranking_product_url_raw", "ranking_product_url_normalized",
+                    "ranking_link_asin", "ranking_link_identity_status",
+                    "ranking_source_url", "ranking_page_number", "bestseller_rank",
+                    "source_role", "preferred_request_url", "planned_request_url",
+                    "request_source", "action", "attempt"):
             if context.get(key) is not None:
                 enriched.setdefault(key, context[key])
         enriched.setdefault("requested_asin", asin)
@@ -836,6 +842,39 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             if match:
                 enriched.setdefault("resolved_asin", match.group(1).upper())
         write_checkpoint(checkpoint_dir, asin, enriched)
+
+    def apply_identity_record(rec, asin, requested_url, final_url, identity, *, resumed=False):
+        """Persist navigation evidence without replacing candidate identity.
+
+        A ranking link may legitimately land on a related/changed product page.
+        That page remains useful Amazon evidence, but requires review rather
+        than being silently treated as a candidate-ASIN match.
+        """
+        context = execution_context.get(asin) or {}
+        mismatch = identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}
+        rec["asin"] = asin
+        rec["requested_asin"] = asin
+        rec["ranking_asin"] = context.get("ranking_asin") or asin
+        rec["requested_url"] = requested_url
+        rec["final_url"] = final_url
+        rec["resolved_asin"] = identity.get("resolved_asin") or asin
+        rec["identity_status"] = ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
+                                  else identity["identity_status"])
+        rec["identity_status_code"] = identity["identity_status"]
+        rec["identity_evidence"] = identity["identity_evidence"]
+        rec["request_source"] = context.get("request_source") or "ASIN_FALLBACK_LEGACY"
+        rec["planned_request_url"] = context.get("planned_request_url") or requested_url
+        rec["ranking_product_url_raw"] = context.get("ranking_product_url_raw") or ""
+        rec["ranking_product_url_normalized"] = context.get("ranking_product_url_normalized") or ""
+        rec["ranking_link_asin"] = context.get("ranking_link_asin") or ""
+        rec["ranking_link_identity_status"] = context.get("ranking_link_identity_status") or ""
+        rec["detail_status"] = "SUCCESS_WITH_IDENTITY_CHANGE" if mismatch else "SUCCESS"
+        rec["identity_review_required"] = bool(mismatch)
+        if mismatch:
+            rec["identity_event"] = "NAVIGATION_IDENTITY_CHANGED"
+        if resumed:
+            rec["resumed_from_html"] = True
+        return mismatch
 
     for asin in asins:
         if should_stop is not None and should_stop():
@@ -890,42 +929,39 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     progress(asin, "invalid")
                     continue
                 cached_identity = _resolve_page_identity(asin, html, cached_url, rec)
-                if cached_identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
-                    quarantine_invalid(asin, path, meta_path)
-                    checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
-                                      "error": "缓存详情页身份证据不一致或不足",
-                                      "final_url": cached_url,
-                                      "resolved_asin": cached_identity.get("resolved_asin"),
-                                      "identity_status": cached_identity.get("identity_status"),
-                                      "identity_evidence": cached_identity.get("identity_evidence"),
-                                      "observed_page_asins": _page_asin_evidence(html)})
-                    progress(asin, "asin_mismatch")
-                    continue
                 rec["status_code"] = meta.get("status_code")
                 rec["initial_access_state"] = meta.get("initial_access_state")
                 rec["access_state"] = parsed_state.value
                 rec["final_access_state"] = parsed_state.value
                 rec["http_status"] = meta.get("status_code")
                 rec["recovered_from_challenge"] = bool(meta.get("recovered_from_challenge"))
-                rec["resumed_from_html"] = True
-                rec["requested_asin"] = asin
-                rec["resolved_asin"] = cached_identity.get("resolved_asin") or asin
-                rec["identity_status"] = ("MATCH" if cached_identity["identity_status"] == "IDENTITY_MATCH"
-                                           else cached_identity["identity_status"])
-                rec["identity_status_code"] = cached_identity["identity_status"]
-                rec["identity_evidence"] = cached_identity["identity_evidence"]
-                rec["detail_status"] = "SUCCESS"
-                rec["requested_url"] = (execution_context.get(asin, {}).get("preferred_request_url")
-                                         or cached_url or ("https://www.amazon.es/dp/" + asin))
+                requested_url = (execution_context.get(asin, {}).get("preferred_request_url")
+                                 or cache_meta.get("requested_url")
+                                 or cached_url or ("https://www.amazon.es/dp/" + asin))
+                changed = apply_identity_record(rec, asin, requested_url, cached_url,
+                                                cached_identity, resumed=True)
                 details.append(rec)
                 checkpoint(asin, {"asin": asin, "status": "success",
-                                 "source": "cache", "record": rec})
-                progress(asin, "success")
+                                 "source": "cache", "record": rec,
+                                 "identity_event": ("NAVIGATION_IDENTITY_CHANGED" if changed else "")})
+                progress(asin, "success_with_identity_change" if changed else "success")
                 continue
         request_started = False
         try:
             requested_url = str(request_urls.get(asin) or
                                 ("https://www.amazon.es/dp/" + asin))
+            context = execution_context.get(asin) or {}
+            planned_url = str(context.get("planned_request_url") or context.get("preferred_request_url") or requested_url)
+            if requested_url != planned_url:
+                failed.append(asin)
+                checkpoint(asin, {"asin": asin, "status": "failed",
+                                  "detail_status": "REQUEST_URL_BINDING_MISMATCH",
+                                  "identity_event": "REQUEST_URL_BINDING_MISMATCH",
+                                  "error": "请求 URL 与冻结计划绑定不一致",
+                                  "requested_url": requested_url,
+                                  "planned_request_url": planned_url})
+                progress(asin, "request_url_binding_mismatch")
+                continue
             request_started = True
             status = session.goto(requested_url)
             session.wait_for_product_page()
@@ -981,38 +1017,18 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 progress(asin, "invalid")
                 continue
             identity = _resolve_page_identity(asin, html, final_url, rec)
-            if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
-                quarantine_invalid(asin, path, meta_path)
-                checkpoint(asin, {"asin": asin, "status": "asin_mismatch",
-                                  "http_status": status,
-                                  "initial_access_state": initial_state.value,
-                                  "final_access_state": state.value,
-                                  "error": "详情页身份证据不一致或不足", "final_url": final_url,
-                                  "resolved_asin": identity.get("resolved_asin"),
-                                  "identity_status": identity.get("identity_status"),
-                                  "identity_evidence": identity.get("identity_evidence"),
-                                  "observed_page_asins": _page_asin_evidence(html)})
-                progress(asin, "asin_mismatch")
-                continue
             rec["status_code"] = status
             rec["http_status"] = status
             rec["initial_access_state"] = initial_state.value
             rec["access_state"] = parsed_state.value
             rec["final_access_state"] = parsed_state.value
             rec["recovered_from_challenge"] = recovered
+            changed = apply_identity_record(rec, asin, requested_url, final_url, identity)
             details.append(rec)
-            rec["requested_asin"] = asin
-            rec["requested_url"] = requested_url
-            rec["final_url"] = final_url
-            rec["resolved_asin"] = identity.get("resolved_asin") or asin
-            rec["identity_status"] = ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
-                                       else identity["identity_status"])
-            rec["identity_status_code"] = identity["identity_status"]
-            rec["identity_evidence"] = identity["identity_evidence"]
-            rec["detail_status"] = "SUCCESS"
             checkpoint(asin, {"asin": asin, "status": "success",
-                             "source": "network", "record": rec})
-            progress(asin, "success")
+                             "source": "network", "record": rec,
+                             "identity_event": ("NAVIGATION_IDENTITY_CHANGED" if changed else "")})
+            progress(asin, "success_with_identity_change" if changed else "success")
             session.wait_between_requests()
         except AccessStopError:
             raise  # 访问受限：按策略停止，受限页证据已落盘

@@ -125,7 +125,7 @@ def test_invalid_recovered_html_is_quarantined(tmp_path):
     assert (tmp_path / "quarantine" / ASIN / (ASIN + ".html")).exists()
 
 
-def test_recovered_asin_mismatch_is_quarantined(tmp_path):
+def test_recovered_asin_mismatch_is_retained_as_navigation_review_evidence(tmp_path):
     other = "B000000001"
     html_dir = tmp_path / "html"
     html_dir.mkdir()
@@ -138,10 +138,13 @@ def test_recovered_asin_mismatch_is_quarantined(tmp_path):
         "final_url": "https://www.amazon.es/dp/%s" % ASIN,
     }), encoding="utf-8")
 
-    assert collect_details([ASIN], _RecoveringSession(200), str(tmp_path)) == []
-    assert (tmp_path / "quarantine" / ASIN / (ASIN + ".html")).exists()
+    records = collect_details([ASIN], _RecoveringSession(200), str(tmp_path))
+    assert records[0]["detail_status"] == "SUCCESS_WITH_IDENTITY_CHANGE"
+    assert records[0]["identity_review_required"] is True
+    assert not (tmp_path / "quarantine" / ASIN).exists()
     checkpoint = json.loads((tmp_path / "checkpoints" / (ASIN + ".json")).read_text(encoding="utf-8"))
-    assert checkpoint["observed_page_asins"] == [other]
+    assert checkpoint["status"] == "success"
+    assert checkpoint["record"]["resolved_asin"] == other
 
 
 def test_ranking_recovery_keeps_initial_status_and_final_state(tmp_path):

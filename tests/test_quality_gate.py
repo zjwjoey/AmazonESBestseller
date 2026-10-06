@@ -101,6 +101,22 @@ def test_detail_identity_and_structure_rules():
     assert audit_detail_structure([duplicate_position]).status == "BLOCK"
 
 
+def test_detail_identity_distinguishes_navigation_review_from_request_binding_error():
+    navigated = audit_detail_identity([detail(
+        identity_status="IDENTITY_MISMATCH",
+        detail_status="SUCCESS_WITH_IDENTITY_CHANGE",
+        identity_event="NAVIGATION_IDENTITY_CHANGED",
+    )])
+    assert navigated.status == "REVIEW"
+    assert navigated.issues[0].issue_code == "NAVIGATION_IDENTITY_CHANGED"
+    binding = audit_detail_identity([detail(
+        detail_status="REQUEST_URL_BINDING_MISMATCH",
+        identity_event="REQUEST_URL_BINDING_MISMATCH",
+    )])
+    assert binding.status == "BLOCK"
+    assert binding.issues[0].issue_code == "REQUEST_URL_BINDING_MISMATCH"
+
+
 def test_category_provenance_only_reviews_conflicts():
     result = audit_category_provenance(
         [ranking(ranking_category_path="Hogar > Cocina")],

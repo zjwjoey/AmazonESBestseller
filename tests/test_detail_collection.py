@@ -33,12 +33,44 @@ class FakeSession:
         return None
 
 
-def test_collect_details_isolates_final_asin_mismatch(tmp_path):
-    html = '<html><body><input id="ASIN" value="B075JJRFVV"></body></html>'
+def test_collect_details_keeps_final_asin_mismatch_as_reviewable_evidence(tmp_path, monkeypatch):
+    html = '<html><body><input id="ASIN" value="B075JJRFVV"><h1 id="productTitle">Other</h1></body></html>'
     session = FakeSession(200, html, "https://www.amazon.es/dp/B075JJRFVV")
-    assert collect_details(["B078C6QR1C"], session, str(tmp_path)) == []
-    assert not (tmp_path / "html" / "B078C6QR1C.html").exists()
-    assert (tmp_path / "quarantine" / "B078C6QR1C" / "B078C6QR1C.html").exists()
+    monkeypatch.setattr("amazon_es_bestseller.collection.detail.time.sleep", lambda _seconds: None)
+    records = collect_details(
+        ["B078C6QR1C"], session, str(tmp_path),
+        request_urls={"B078C6QR1C": "https://www.amazon.es/dp/B075JJRFVV"},
+        execution_context={"B078C6QR1C": {
+            "planned_request_url": "https://www.amazon.es/dp/B075JJRFVV",
+            "preferred_request_url": "https://www.amazon.es/dp/B075JJRFVV",
+            "request_source": "RANKING_RAW",
+        }},
+    )
+    assert len(records) == 1
+    assert records[0]["detail_status"] == "SUCCESS_WITH_IDENTITY_CHANGE"
+    assert records[0]["identity_event"] == "NAVIGATION_IDENTITY_CHANGED"
+    assert records[0]["identity_review_required"] is True
+    assert (tmp_path / "html" / "B078C6QR1C.html").exists()
+    assert not (tmp_path / "quarantine" / "B078C6QR1C").exists()
+
+
+def test_collect_details_blocks_request_url_binding_mismatch_before_navigation(tmp_path):
+    class NoNavigationSession(FakeSession):
+        def goto(self, _url):
+            raise AssertionError("binding mismatch must not navigate")
+
+    records = collect_details(
+        ["B078C6QR1C"], NoNavigationSession(), str(tmp_path),
+        request_urls={"B078C6QR1C": "https://www.amazon.es/dp/B078C6QR1C"},
+        execution_context={"B078C6QR1C": {
+            "planned_request_url": "https://www.amazon.es/dp/B075JJRFVV",
+            "preferred_request_url": "https://www.amazon.es/dp/B075JJRFVV",
+        }},
+    )
+    assert records == []
+    checkpoint = json.loads((tmp_path / "checkpoints" / "B078C6QR1C.json").read_text(encoding="utf-8"))
+    assert checkpoint["detail_status"] == "REQUEST_URL_BINDING_MISMATCH"
+    assert checkpoint["identity_event"] == "REQUEST_URL_BINDING_MISMATCH"
 
 
 def test_collect_details_rechecks_cached_blocked_page(tmp_path):
@@ -53,7 +85,7 @@ def test_collect_details_rechecks_cached_blocked_page(tmp_path):
         collect_details(["B078C6QR1C"], FakeSession(), str(tmp_path))
 
 
-def test_audit_saved_cache_rejects_mislabeled_product_page(tmp_path):
+def test_audit_saved_cache_retains_mislabeled_product_page_for_review(tmp_path):
     html_dir = tmp_path / "html"
     html_dir.mkdir()
     (html_dir / "B078C6QR1C.html").write_text(
@@ -62,7 +94,7 @@ def test_audit_saved_cache_rejects_mislabeled_product_page(tmp_path):
 
     result = audit_saved_detail_cache(html_dir)
 
-    assert result["summary"]["INVALID_OR_EMPTY"] == 1
+    assert result["summary"]["VALID_PRODUCT_PAGE"] == 1
     assert result["records"][0]["identity_status"] == "IDENTITY_MISMATCH"
 
 
