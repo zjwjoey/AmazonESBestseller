@@ -17,6 +17,10 @@ from ..models import normalize_asin
 from ..export.excel import HEAD_ES, HEAD_ZH, export_workbook
 from ..quality.source_fields import audit_source_fields
 from ..quality.source_gate import canonical_audit_hash, verify_source_gate
+from ..quality.chinese import canonical_qa_row, qa_payload_hash
+from ..translation.production_contract import (canonical_record, source_text, target_field_for,
+                                               translation_candidate_hash)
+from ..translation.service import source_hash
 from .spanish_master import verify_artifact_hash
 
 
@@ -185,8 +189,7 @@ def _source_gate_valid(master: Mapping[str, Any], rows: list[dict[str, Any]], au
 
 
 def _candidate_hash(field: Mapping[str, Any]) -> str:
-    return _hash({key: field.get(key) for key in ("asin", "field_type", "source_hash", "target_value", "context",
-                                                   "dictionary_version", "translation_schema_version")})
+    return translation_candidate_hash(field)
 
 
 def _translation_valid(payload: Mapping[str, Any], master_rows: list[dict[str, Any]],
@@ -223,7 +226,14 @@ def _translation_valid(payload: Mapping[str, Any], master_rows: list[dict[str, A
                 continue
             field_type = str(field.get("field_type") or "")
             candidate = dict(field); candidate["asin"] = asin
-            if (not asin or not field_type or candidate.get("source_hash") != master_by.get(asin, {}).get("source_hash")
+            source_field = str(candidate.get("field") or "")
+            canonical_source = canonical_record(master_by.get(asin, {}))
+            expected_source = source_text(canonical_source.get(source_field, ""))
+            expected_target = target_field_for(source_field)
+            if (not asin or not source_field or field_type != candidate.get("target_field")
+                    or candidate.get("target_field") != expected_target
+                    or candidate.get("source_text") != expected_source
+                    or candidate.get("source_hash") != source_hash(expected_source)
                     or not isinstance(candidate.get("context"), Mapping)
                     or candidate.get("target_value") in (None, "")
                     or not candidate.get("dictionary_version") or not candidate.get("translation_schema_version")
@@ -286,13 +296,16 @@ def _chinese_qa_valid(payload: Mapping[str, Any], candidates: Mapping[tuple[str,
     manifest = dictionary.get("manifest") if isinstance(dictionary.get("manifest"), Mapping) else dictionary
     dictionary_version = str(manifest.get("dictionary_version") or "")
     translation_schema_version = str(manifest.get("translation_schema_version") or "")
-    qa_rows = _rows(payload.get("fields"))
+    qa_rows = [canonical_qa_row(row) for row in _rows(payload.get("fields"))]
     seen: set[tuple[str, str]] = set()
     for row in qa_rows:
         asin, field_type = normalize_asin(row.get("asin")), str(row.get("field_type") or "")
         key = (asin, field_type)
         candidate = candidates.get(key)
         if (not candidate or key in seen or str(row.get("status") or "").upper() != "PASS"
+                or row.get("field") != candidate.get("field")
+                or row.get("target_field") != candidate.get("target_field")
+                or row.get("source_text") != candidate.get("source_text")
                 or row.get("source_hash") != candidate.get("source_hash")
                 or row.get("target_value") != candidate.get("target_value")
                 or row.get("context") != candidate.get("context")
@@ -307,8 +320,13 @@ def _chinese_qa_valid(payload: Mapping[str, Any], candidates: Mapping[tuple[str,
 
 
 def _chinese_gate_valid(gate: Mapping[str, Any], qa: Mapping[str, Any], candidate_count: int) -> bool:
-    return (gate.get("status") == "SKU_ZH_READY" and gate.get("produced_stage") == "chinese_gate"
-            and gate.get("qa_payload_hash") == _hash(qa) and int(gate.get("fields_checked") or 0) == candidate_count)
+    rows = [canonical_qa_row(row) for row in _rows(qa.get("fields"))]
+    return (gate.get("check") == "chinese_gate" and gate.get("status") == "SKU_ZH_READY"
+            and gate.get("produced_stage") == "chinese_gate" and gate.get("ready") is True
+            and gate.get("qa_payload_hash") == qa_payload_hash(rows)
+            and int(gate.get("fields_checked") or 0) == candidate_count
+            and int(gate.get("passed") or 0) == candidate_count
+            and not gate.get("review_required") and not gate.get("blocked"))
 
 
 def _field_closure_valid(report: Mapping[str, Any]) -> bool:

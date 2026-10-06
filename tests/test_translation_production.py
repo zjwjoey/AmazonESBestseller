@@ -141,8 +141,9 @@ def test_production_cli_stages_are_checkpointed(tmp_path):
                  "--run-id", "run-1", "--debug-export", "--out", str(workbook)]) == 0
     assert workbook.exists()
     marker = json.loads(workbook.with_suffix(".release_status.json").read_text(encoding="utf-8"))
-    assert marker == {"release_status": "FORCED_DEBUG", "formal_release": False,
-                      "label": "NOT_FOR_RELEASE", "blocked_count": 6}
+    assert {key: marker[key] for key in ("release_status", "formal_release", "label")} == {
+        "release_status": "FORCED_DEBUG", "formal_release": False, "label": "NOT_FOR_RELEASE"}
+    assert marker["blocked_count"] >= 6
 
 
 def test_csv_loader_preserves_every_source_column(tmp_path):

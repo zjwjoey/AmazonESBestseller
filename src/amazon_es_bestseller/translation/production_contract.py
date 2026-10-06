@@ -1,6 +1,7 @@
 """Canonical field contract at the Production Master/Translation boundary."""
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Mapping
 
@@ -35,6 +36,57 @@ PRODUCTION_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 PRODUCTION_TRANSLATION_FIELDS = tuple(PRODUCTION_FIELD_ALIASES)
+
+# This is the one canonical source-to-display mapping used by production
+# input, provider envelopes, QA and release.  Aliases remain accepted at the
+# boundary through ``PRODUCTION_FIELD_ALIASES`` only; downstream code must not
+# invent another target-field map.
+CANONICAL_FIELD_TARGETS: dict[str, str] = {
+    "title_es_raw": "title_zh",
+    "brand": "brand_zh",
+    "category_l1": "category_l1_zh",
+    "category_l2": "category_l2_zh",
+    "category_l3": "category_l3_zh",
+    "leaf_category": "leaf_category_zh",
+    "selected_variation_raw": "selected_variation_zh",
+    "specification_es": "specification_zh",
+    "product_details": "product_details_zh",
+    "feature_bullets": "feature_bullets_zh",
+    "product_description": "description_zh",
+}
+
+
+def canonical_source_field(field: Any) -> str:
+    """Resolve a compatibility alias once at the production boundary."""
+    name = str(field or "")
+    for canonical, aliases in PRODUCTION_FIELD_ALIASES.items():
+        if name == canonical or name in aliases:
+            return canonical
+    return name
+
+
+def target_field_for(field: Any) -> str:
+    """Return the frozen Chinese display field for a known source field."""
+    canonical = canonical_source_field(field)
+    return CANONICAL_FIELD_TARGETS.get(canonical, canonical)
+
+
+def translation_candidate_hash(candidate: Mapping[str, Any]) -> str:
+    """Hash the immutable field facts that a Chinese QA decision must bind."""
+    payload = {
+        "asin": str(candidate.get("asin") or "").upper(),
+        "field": canonical_source_field(candidate.get("field")),
+        "target_field": str(candidate.get("target_field") or ""),
+        "field_type": str(candidate.get("field_type") or ""),
+        "source_text": str(candidate.get("source_text") or ""),
+        "source_hash": str(candidate.get("source_hash") or ""),
+        "target_value": str(candidate.get("target_value") or ""),
+        "context": candidate.get("context") if isinstance(candidate.get("context"), Mapping) else {},
+        "dictionary_version": str(candidate.get("dictionary_version") or ""),
+        "translation_schema_version": str(candidate.get("translation_schema_version") or ""),
+    }
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
 
 RESEARCH_CSV_FIELDS = {
     "ASIN": "asin",

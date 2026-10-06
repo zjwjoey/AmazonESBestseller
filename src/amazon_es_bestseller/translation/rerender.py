@@ -102,4 +102,8 @@ def rerender_affected_fields(records: Iterable[Mapping[str, Any]],
     return {"dictionary_version": dictionary_version,
             "dictionary_hash": manifest.get("dictionary_hash"), "records": outputs,
             "updates": updates, "selective_repair": selective_repair,
-            "ready": not selective_repair and bool(updates)}
+            # A stable Vn -> Vn manifest is a verified no-op, not a failed
+            # rerender.  Only exact affected fields need a fresh QA callback.
+            "ready": not selective_repair,
+            "status": "NO_CHANGE" if not updates and not selective_repair else
+                      "READY" if not selective_repair else "REPAIR_REQUIRED"}

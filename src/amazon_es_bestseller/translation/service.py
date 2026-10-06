@@ -26,26 +26,12 @@ from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
 from .field_contract import canonical_translation_field_type, canonical_translation_unit_field
-
+from .production_contract import CANONICAL_FIELD_TARGETS, PRODUCTION_FIELD_ALIASES
 
 DEFAULT_FIELD_MAP = {
-    "title_es_raw": "title_zh", "title_es": "title_zh", "title": "title_zh",
-    "brand": "brand_zh", "brand_es": "brand_zh",
-    "feature_bullets_es": "feature_bullets_zh", "feature_bullets_raw": "feature_bullets_zh",
-    "features_es": "feature_bullets_zh",
-    "description_es": "description_zh", "product_description_es": "description_zh",
-    "product_description_raw": "description_zh",
-    "product_description": "description_zh",
-    "product_details": "product_details_zh",
-    "feature_bullets": "feature_bullets_zh",
-    "product_details_es": "product_details_zh", "detail_attributes_raw": "product_details_zh",
-    "selected_variation_raw": "selected_variation_zh", "selected_variant_es": "selected_variation_zh",
-    "variation_es": "selected_variation_zh",
-    "specification_es": "specification_zh", "category_l1": "category_l1_zh",
-    "category_l2": "category_l2_zh", "category_l3": "category_l3_zh",
-    "leaf_category": "leaf_category_zh", "category_l1_es": "category_l1_zh",
-    "category_l2_es": "category_l2_zh", "category_l3_es": "category_l3_zh",
-    "leaf_category_es": "leaf_category_zh",
+    alias: CANONICAL_FIELD_TARGETS[canonical]
+    for canonical, aliases in PRODUCTION_FIELD_ALIASES.items()
+    for alias in aliases
 }
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from .production_contract import source_text
+from .production_contract import translation_candidate_hash
 from .schemas import TRANSLATION_SCHEMA_VERSION
 from .service import source_hash as hash_source
 from ..quality.chinese import audit_field
@@ -25,7 +26,10 @@ def build_repair_queue(rows: Iterable[Mapping[str, Any]], *, max_attempts: int =
         if str(row.get("status")) == "PASS": continue
         issue = next(iter(row.get("issues") or ()), {"code": "MANUAL_REVIEW"})
         old = row.get("translated_zh")
-        queue.append({"asin": row.get("asin"), "field": row.get("field"), "source": row.get("source_es"), "old_translation": old, "oldtranslation": old, "code": str(issue.get("code") or "MANUAL_REVIEW"), "detail": row.get("issues") or [], "strategy": _strategy(row, str(issue.get("code") or "MANUAL_REVIEW")), "attempt": 0, "max_attempts": max_attempts, "provider": None, "model": None, "status": "PENDING", "source_hash": row.get("source_hash"), "candidate_hash": row.get("candidate_hash"), "dictionary_version": row.get("dictionary_version"), "schema_version": row.get("schema_version") or TRANSLATION_SCHEMA_VERSION})
+        queue.append({"asin": row.get("asin"), "field": row.get("field"), "target_field": row.get("target_field"),
+                      "field_type": row.get("field_type"), "context": row.get("context"),
+                      "source": row.get("source_text") if row.get("source_text") is not None else row.get("source_es"),
+                      "old_translation": old, "oldtranslation": old, "code": str(issue.get("code") or "MANUAL_REVIEW"), "detail": row.get("issues") or [], "strategy": _strategy(row, str(issue.get("code") or "MANUAL_REVIEW")), "attempt": 0, "max_attempts": max_attempts, "provider": None, "model": None, "status": "PENDING", "source_hash": row.get("source_hash"), "candidate_hash": row.get("candidate_hash"), "dictionary_version": row.get("dictionary_version"), "schema_version": row.get("translation_schema_version") or row.get("schema_version") or TRANSLATION_SCHEMA_VERSION})
     return queue
 
 
@@ -44,10 +48,11 @@ def apply_repair(item: Mapping[str, Any], *, source_hash: str, candidate: str, q
     fresh = audit_field(asin=str(result.get("asin") or ""), field=str(result.get("field") or ""),
                         source_es=result.get("source"), translated_zh=str(candidate or ""),
                         source_hash=current, dictionary_version=str(result.get("dictionary_version") or ""),
-                        brand=str(result.get("brand") or ""))
-    candidate_hash = hash_source(str(candidate or ""))
+                        brand=str(result.get("brand") or ""), target_field=str(result.get("target_field") or ""),
+                        field_type=str(result.get("field_type") or ""), context=result.get("context"),
+                        translation_schema_version=str(result.get("schema_version") or TRANSLATION_SCHEMA_VERSION))
     exact = (str(fresh.get("source_hash") or "") == current
-             and str(fresh.get("candidate_hash") or "") == candidate_hash
+             and str(fresh.get("candidate_hash") or "") == translation_candidate_hash(fresh)
              and str(fresh.get("dictionary_version") or "") == str(result.get("dictionary_version") or "")
              and str(fresh.get("schema_version") or "") == str(result.get("schema_version") or ""))
     if str(fresh.get("status") or "") != "PASS" or not exact:

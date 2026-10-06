@@ -7,8 +7,11 @@ from amazon_es_bestseller.production.release import (
     evaluate_release_gate, export_ready, seal_artifact,
 )
 from amazon_es_bestseller.production.spanish_master import build_spanish_master
+from amazon_es_bestseller.quality.chinese_gate import evaluate_chinese_gate
 from amazon_es_bestseller.quality.source_fields import audit_source_fields
 from amazon_es_bestseller.quality.source_gate import evaluate_source_gate
+from amazon_es_bestseller.translation.production_contract import canonical_record, source_text
+from amazon_es_bestseller.translation.service import source_hash
 
 ASINS = ("B012345678", "B012345679")
 
@@ -38,8 +41,12 @@ def valid_artifacts():
         row["title_zh"] = "Chinese bottle"
     translation_records, execution = [], []
     for row in rows:
-        field = {"asin": row["asin"], "field_type": "title_zh", "promotion_status": "PROMOTED", "source_hash": row["source_hash"],
-                 "target_value": "Chinese bottle", "context": {"scope": "title"}, "dictionary_version": "3", "translation_schema_version": "translation-v2.25"}
+        title_source = source_text(canonical_record(row)["title_es_raw"])
+        field = {"asin": row["asin"], "field": "title_es_raw", "target_field": "title_zh",
+                 "field_type": "title_zh", "promotion_status": "PROMOTED", "source_text": title_source,
+                 "source_hash": source_hash(title_source), "target_value": "Chinese bottle",
+                 "context": {"field": "title_es_raw", "target_field": "title_zh"},
+                 "dictionary_version": "3", "translation_schema_version": "translation-v2.25"}
         field["candidate_hash"] = _candidate_hash(field)
         translation_records.append({"asin": row["asin"], "release_status": "READY", "fields": [field]})
         execution.append({"asin": row["asin"], "fields": {"title_zh": {"dictionary_version": "3"}}})
@@ -57,7 +64,7 @@ def valid_artifacts():
             "field_closure": seal_artifact("field_closure", {"check": "field_closure", "status": "PASS", "summary": {"total_skus": 2}, "records": []}),
             "translation": seal_artifact("translation", translation), "dictionary_sync": seal_artifact("dictionary_sync", dictionary),
             "chinese_qa": seal_artifact("chinese_qa", qa),
-            "chinese_gate": seal_artifact("chinese_gate", {"status": "SKU_ZH_READY", "produced_stage": "chinese_gate", "qa_payload_hash": _hash(qa), "fields_checked": len(qa["fields"])}),
+            "chinese_gate": seal_artifact("chinese_gate", evaluate_chinese_gate(qa["fields"])),
             "spanish_output": seal_artifact("spanish_output", {"records": rows}), "chinese_output": seal_artifact("chinese_output", {"records": chinese})}
 
 

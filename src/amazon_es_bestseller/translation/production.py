@@ -14,9 +14,9 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
 from .production_contract import (
-    PRODUCTION_TRANSLATION_FIELDS, canonical_record, source_text,
+    PRODUCTION_TRANSLATION_FIELDS, canonical_record, canonical_source_field,
+    source_text, target_field_for, translation_candidate_hash,
 )
-from .service import DEFAULT_FIELD_MAP
 from .schemas import TRANSLATION_SCHEMA_VERSION
 
 
@@ -161,6 +161,71 @@ def release_gate(release_candidate: Mapping[str, Any]) -> tuple[bool, str]:
     return status == "READY", status
 
 
+def build_release_translation_candidate(state: Mapping[str, Any], *,
+                                        dictionary_version: str = "",
+                                        translation_schema_version: str = "") -> dict[str, Any]:
+    """Derive the only release-candidate shape from canonical field state.
+
+    ``target_value`` is deliberately copied from the field's already-selected
+    final value.  This function never translates, repairs, or falls back
+    across fields; it only records the evidence that QA and Release consume.
+    """
+    records: list[dict[str, Any]] = []
+    all_statuses: list[str] = []
+    fallback_schema = str(translation_schema_version or
+                          (state.get("input_manifest") or {}).get("translation_schema_version") or "")
+    for record in state.get("records") or []:
+        if not isinstance(record, Mapping):
+            continue
+        asin = str(record.get("asin") or "").upper()
+        candidates: list[dict[str, Any]] = []
+        statuses: list[str] = []
+        for envelope in record.get("fields") or []:
+            if not isinstance(envelope, Mapping):
+                continue
+            promotion = str(envelope.get("promotion_status") or "PENDING")
+            statuses.append(promotion)
+            all_statuses.append(promotion)
+            target_value = envelope.get("final_zh")
+            if promotion != "PROMOTED" or target_value in (None, ""):
+                continue
+            field = canonical_source_field(envelope.get("field"))
+            target_field = str(envelope.get("target_field") or target_field_for(field))
+            candidate = {
+                "asin": asin,
+                "field": field,
+                "target_field": target_field,
+                # ``field_type`` remains a compatibility alias for consumers
+                # that predate the explicit target_field contract.
+                "field_type": target_field,
+                "source_text": str(envelope.get("source_text") or ""),
+                "source_hash": str(envelope.get("source_hash") or ""),
+                "target_value": str(target_value),
+                "context": dict(envelope.get("context") or {
+                    "field": field, "target_field": target_field,
+                }),
+                "dictionary_version": str(envelope.get("dictionary_version") or dictionary_version or ""),
+                "dictionary_hash": str(envelope.get("dictionary_hash") or ""),
+                "translation_schema_version": str(
+                    envelope.get("translation_schema_version") or envelope.get("schema_version") or fallback_schema),
+                "promotion_status": promotion,
+            }
+            candidate["candidate_hash"] = translation_candidate_hash(candidate)
+            candidates.append(candidate)
+        records.append({"asin": asin, "source_record_hash": record.get("source_record_hash"),
+                        # Keep the historical display overlay while making
+                        # field_candidates the sole formal evidence surface.
+                        "fields": {item["target_field"]: item["target_value"] for item in candidates},
+                        "field_candidates": candidates,
+                        "release_status": compute_release_status(statuses),
+                        "field_statuses": {str(field.get("target_field") or ""): str(field.get("promotion_status") or "")
+                                           for field in record.get("fields") or [] if isinstance(field, Mapping)}})
+    return {"records": records,
+            "release_status": compute_release_status(all_statuses) if records else "BLOCKED",
+            "release_status_reason": sorted(set(all_statuses)),
+            "repair_queue_count": len(state.get("repair_queue") or [])}
+
+
 def build_production_input(records: Iterable[Mapping[str, Any]], *,
                            source_run_id: str = "", source_schema_version: str = "master-v1",
                            translation_schema_version: str = TRANSLATION_SCHEMA_VERSION,
@@ -230,7 +295,8 @@ def _is_policy_error(error: Any) -> bool:
 def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
                  preclean: Mapping[str, Any] | None,
                  result: Mapping[str, Any] | None) -> dict[str, Any]:
-    target = DEFAULT_FIELD_MAP.get(source_field, source_field)
+    source_field = canonical_source_field(source_field)
+    target = target_field_for(source_field)
     source_value = str(source.get("source_text") or "")
     base = {
         "asin": asin, "field": source_field, "target_field": target,
@@ -240,6 +306,8 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
         "resolution_method": None, "translated_text": "", "candidate_text": "",
         "qa_status": "pending", "qa_issues": [], "promotion_status": "PENDING",
         "final_zh": None, "last_error": None, "updated_at": _now(),
+        "field_type": target, "context": {"field": source_field, "target_field": target},
+        "dictionary_version": "", "dictionary_hash": "", "translation_schema_version": "",
     }
     if not source_value:
         base.update(translation_status="source_missing", qa_status="source_missing",
@@ -274,8 +342,9 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
     base.update({key: result.get(key) for key in (
         "translated_text", "candidate_text", "qa_status", "qa_issues", "last_error",
         "resolution_source", "provider", "provider_alias", "model", "attempt_count",
-        "batch_id", "schema_version", "prompt_version",
+        "batch_id", "schema_version", "prompt_version", "dictionary_version", "dictionary_hash",
     ) if key in result})
+    base["translation_schema_version"] = str(result.get("schema_version") or "")
     base["candidate_text"] = base.get("candidate_text") or base.get("translated_text") or ""
     base["resolution_method"] = result.get("resolution_source") or result.get("provider")
     status = str(result.get("translation_status") or "pending")
@@ -316,11 +385,10 @@ def build_production_state(production_input: Mapping[str, Any],
         translated_fields = translated_record.get("fields") or {}
         source_record = item.get("source_record") or {}
         field_states = []
-        release = {"asin": asin, "source_record_hash": item.get("source_record_hash"), "fields": {}}
         for source_field in PRODUCTION_TRANSLATION_FIELDS:
             source = (item.get("fields") or {}).get(source_field) or {"source_text": "", "source_hash": ""}
             clean = (preclean.get("fields") or {}).get(source_field) or {}
-            target = DEFAULT_FIELD_MAP.get(source_field, source_field)
+            target = target_field_for(source_field)
             result = translated_fields.get(target) or translated_fields.get(source_field)
             state = _field_state(asin=asin, source_field=source_field, source=source,
                                  preclean=clean, result=result)
@@ -328,8 +396,6 @@ def build_production_state(production_input: Mapping[str, Any],
             state["prompt_version"] = prompt_version
             field_states.append(state)
             field_counts[state["promotion_status"]] += 1
-            if state["final_zh"] is not None:
-                release["fields"][target] = state["final_zh"]
         statuses = {state["promotion_status"] for state in field_states}
         if "MANUAL_REVIEW" in statuses or "QA_BLOCKED" in statuses:
             release_status = "REVIEW_REQUIRED"
@@ -344,9 +410,6 @@ def build_production_state(production_input: Mapping[str, Any],
         states.append({"asin": asin, "source_record_hash": item.get("source_record_hash"),
                        "source_record": deepcopy(source_record), "fields": field_states,
                        "release_status": release_status})
-        release["release_status"] = release_status
-        release["field_statuses"] = {state["target_field"]: state["promotion_status"] for state in field_states}
-        release_records.append(release)
     summary = {
         "record_count": len(states),
         "unique_asin_count": len({row["asin"] for row in states}),
@@ -384,14 +447,15 @@ def build_production_state(production_input: Mapping[str, Any],
         item["resolution_method"] = field.get("resolution_method")
         item["provider"] = field.get("provider")
         item["batch_id"] = field.get("batch_id")
-    return {
+    state = {
         "state_version": PRODUCTION_STATE_VERSION,
         "created_at": _now(),
         "input_manifest": deepcopy(production_input.get("manifest") or {}),
         "summary": summary,
         "records": states,
         "repair_queue": repair_queue,
-        "release_candidate": {"records": release_records, "release_status": global_release_status,
-                              "release_status_reason": sorted(set(all_statuses)),
-                              "repair_queue_count": len(repair_queue)},
+        "release_candidate": {},
     }
+    state["release_candidate"] = build_release_translation_candidate(
+        state, translation_schema_version=str((production_input.get("manifest") or {}).get("translation_schema_version") or ""))
+    return state
