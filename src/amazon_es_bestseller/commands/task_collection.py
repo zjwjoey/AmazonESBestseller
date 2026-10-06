@@ -43,7 +43,9 @@ def run_task_collection(args: Any, parser: Any, *, project_root: Path) -> dict[s
                           plan_path=plan_path, project_root=project_root,
                           phase=args.phase, resume=bool(args.resume),
                           runtime_overrides=runtime_overrides,
-                          previous_details=getattr(args, "previous_details", "") or None)
+                          previous_details=getattr(args, "previous_details", "") or None,
+                          allow_approved_code_migration=bool(
+                              getattr(args, "allow_approved_code_migration", False)))
     except ValueError as exc:
         parser.error(str(exc))
     return report

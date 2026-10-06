@@ -137,6 +137,24 @@ def test_task_collect_cli_prints_ranking_phase_report_without_legacy_keys(
     assert "ASIN count 3" in output
 
 
+def test_task_collect_cli_forwards_explicit_code_migration_approval(monkeypatch, tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps({"task_id": "reviewed"}), encoding="utf-8")
+    observed = {}
+
+    def fake_run_task(_plan, _out_dir, **kwargs):
+        observed.update(kwargs)
+        return {"mode": "serial", "phase": "detail", "status": "COMPLETE",
+                "candidate_count": 1}
+
+    monkeypatch.setattr("amazon_es_bestseller.collection.task.run_task", fake_run_task)
+    assert cli.main([
+        "task-collect", "--plan", str(plan_path), "--out-dir", str(tmp_path / "run"),
+        "--phase", "detail", "--resume", "--allow-approved-code-migration",
+    ]) == 0
+    assert observed["allow_approved_code_migration"] is True
+
+
 def test_task_collect_retains_legacy_offline_rejection(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["--offline", "task-collect", "--plan", str(tmp_path / "missing.json"),

@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping
 from ..collection.quota import QuotaError, select_research_quota
 from ..monitoring.snapshot import build_ranking_snapshot
 from .checkpoint import TaskCheckpointRepository, read_json, write_json_atomic
+from .detail_code_migration import apply_approved_detail_code_migration
 from .detail_reconciliation import (NETWORK_ACTIONS, build_reconciliation,
                                      load_detail_records, write_reconciliation)
 from .manifest import merge_records, write_summary
@@ -479,14 +480,23 @@ def _require_detail_gate(output: Path, plan: Mapping) -> tuple[list[dict], str, 
 
 def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode: str,
                 headful: bool, profile_dir: str, plan_path: str | Path | None,
-                project_root: str | Path | None, worker: Callable) -> dict:
+                project_root: str | Path | None, worker: Callable,
+                allow_approved_code_migration: bool = False) -> dict:
     candidates, candidate_hash, ranking_report = _require_detail_gate(output, plan)
+    snapshot_path = _snapshot_path(output, ranking_report)
+    snapshot_manifest = _read_json(snapshot_path / "manifest.json", {}) if snapshot_path else {}
+    apply_approved_detail_code_migration(
+        output=output, runtime=runtime, plan=plan, candidates=candidates,
+        candidate_hash=candidate_hash, ranking_report=ranking_report,
+        snapshot_manifest=snapshot_manifest, current_code_head=git_head(project_root),
+        project_root=project_root,
+        allow_approved_code_migration=allow_approved_code_migration,
+    )
     runtime.bind_phase("detail", plan_sha256=plan["canonical_plan_sha256"],
                        candidate_manifest_sha256=candidate_hash,
                        code_head=git_head(project_root))
     by_group = _candidate_groups(candidates)
     snapshot_id = ""
-    snapshot_path = _snapshot_path(output, ranking_report)
     if snapshot_path is not None:
         snapshot_id = str(_read_json(snapshot_path / "manifest.json", {}).get("snapshot_id") or "")
     execution = {
@@ -622,7 +632,8 @@ def run_reviewed_task(plan: Mapping, out_dir: str, mode: str | None = None,
                       worker: Callable | None = None, phase: str = "all",
                       resume: bool = False,
                       runtime_overrides: Mapping | None = None,
-                      previous_details: str | Path | None = None) -> dict:
+                      previous_details: str | Path | None = None,
+                      allow_approved_code_migration: bool = False) -> dict:
     """Run one reviewed plan without widening its scheduling or access policy."""
     phase = require_phase(phase)
     plan = validate_task_plan(plan, plan_path=plan_path, project_root=project_root)
@@ -659,7 +670,8 @@ def run_reviewed_task(plan: Mapping, out_dir: str, mode: str | None = None,
     if phase == "detail":
         return _run_detail(plan, output, runtime, mode=mode, headful=headful,
                            profile_dir=profile_dir, plan_path=plan_path,
-                           project_root=project_root, worker=worker)
+                           project_root=project_root, worker=worker,
+                           allow_approved_code_migration=allow_approved_code_migration)
     return _run_all(plan, output, runtime, mode=mode, headful=headful,
                     profile_dir=profile_dir, worker=worker)
 

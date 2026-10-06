@@ -66,3 +66,29 @@ amazon-es task-collect `
 - 对正式 5500 运行 `--phase all` 会被拒绝：`FORMAL_5500_REQUIRES_EXPLICIT_PHASE`。
 
 本流程不包含翻译、Qwen 请求、代理轮换、验证码绕过或自动替换候选。
+
+### 已审核的 Detail 代码升级续采
+
+默认情况下，Detail checkpoint 的 `code_head` 与当前代码不同会以
+`CODE_FINGERPRINT_MISMATCH` 阻断。它不会因为分支祖先关系或提交信息而自动放行。
+
+只有仓库中 `configs/tasks/detail_code_migrations.json` 存在精确的、已审核的
+`detail` phase 迁移对，并且旧 checkpoint code SHA、固定 Detail Runtime SHA-256、plan SHA、
+candidate SHA、5500 唯一候选、`COMPLETE` Ranking 及 `AUTHORITATIVE` Snapshot 全部一致时，
+操作员才可显式使用：
+
+```powershell
+amazon-es task-collect `
+  --plan configs/tasks/amazon_es_bestseller_5500_202610_plan.json `
+  --out-dir outputs/amazon_es_bestseller_5500_202610_fresh2 `
+  --phase detail `
+  --resume `
+  --headful `
+  --allow-approved-code-migration
+```
+
+Detail Runtime SHA-256 仅哈希固定的生产 Detail 模块清单（规范化为 LF），不包含 registry、
+文档、测试或运行目录。因此普通审核/文档提交不会改变已审批的运行时身份；实际 Git HEAD
+仍会写入审计 artifact。迁移在创建任何 worker 或浏览器前写入不可静默覆盖的
+`detail_code_migration.json`，并在 phase fingerprint 中保存前一 code head、运行时指纹与
+artifact 引用。该选项不绕过 plan、candidate 或 code gate，也不允许 Ranking 或 `all` phase 迁移。

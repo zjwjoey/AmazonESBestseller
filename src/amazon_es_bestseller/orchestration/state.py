@@ -89,12 +89,20 @@ class TaskRuntimeState:
             current_head = str(code_head or "UNKNOWN")
             if previous_head != "UNKNOWN" and current_head != "UNKNOWN" and previous_head != current_head:
                 raise ValueError("CODE_FINGERPRINT_MISMATCH")
+        migration_metadata = {}
+        if isinstance(current, Mapping):
+            migration_metadata = {
+                key: current[key] for key in ("previous_code_head", "code_migration", "migration_count",
+                                               "detail_runtime_sha256")
+                if key in current
+            }
         self.phase_fingerprints[phase] = {
             "phase": phase,
             "plan_sha256": str(plan_sha256),
             "candidate_manifest_sha256": str(candidate_manifest_sha256 or ""),
             "code_head": str(code_head or "UNKNOWN"),
-            "schema_version": 1,
+            "schema_version": 2 if migration_metadata else 1,
+            **migration_metadata,
         }
 
     def has_unfinished_reserve(self, group: str, category: Mapping) -> bool:

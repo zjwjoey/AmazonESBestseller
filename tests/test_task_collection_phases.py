@@ -7,6 +7,7 @@ from amazon_es_bestseller.collection import task as task_module
 from amazon_es_bestseller.collection.task import _run_category_live, run_task
 from amazon_es_bestseller.orchestration.worker import run_category_live
 from amazon_es_bestseller.orchestration import scheduler as scheduler_module
+from amazon_es_bestseller.orchestration.checkpoint import TaskCheckpointRepository
 from amazon_es_bestseller.orchestration.scheduler import _freeze_ranking_snapshot
 from amazon_es_bestseller.quality.replay import audit_offline_replay
 from amazon_es_bestseller.collection.ranking import parse_bestsellers_page
@@ -329,6 +330,31 @@ def test_resume_rejects_plan_or_candidate_fingerprint_drift(monkeypatch, tmp_pat
     sidecar.write_text("0" * 64 + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="CANDIDATE_FINGERPRINT_MISMATCH"):
         run_task(plan, str(tmp_path / "run"), phase="detail")
+
+
+def test_detail_code_mismatch_blocks_before_any_worker_or_browser(monkeypatch, tmp_path):
+    monkeypatch.setattr(scheduler_module, "cooldown_seconds", lambda *_args: 0)
+    monkeypatch.setattr(task_module, "_run_category_live",
+                        lambda category, *_args, **_kwargs: _ranking_result(category))
+    plan, out = _plan(), tmp_path / "run"
+    run_task(plan, str(out), phase="ranking", project_root=tmp_path)
+    repository = TaskCheckpointRepository(out)
+    state = repository.load_run()
+    fingerprint = state["phase_fingerprints"]["ranking"]
+    state["phase_fingerprints"]["detail"] = {
+        "phase": "detail", "code_head": "a" * 40,
+        "plan_sha256": fingerprint["plan_sha256"],
+        "candidate_manifest_sha256": (out / "candidate_manifest.sha256").read_text(encoding="utf-8").strip(),
+        "schema_version": 1,
+    }
+    repository.save_run(state)
+    worker_calls = []
+    monkeypatch.setattr(task_module, "_run_category_live",
+                        lambda *_args, **_kwargs: worker_calls.append(True))
+    monkeypatch.setattr(scheduler_module, "git_head", lambda _root: "b" * 40)
+    with pytest.raises(ValueError, match="CODE_FINGERPRINT_MISMATCH"):
+        run_task(plan, str(out), phase="detail", resume=True, project_root=tmp_path)
+    assert worker_calls == []
 
 
 def test_ranking_shortfall_never_creates_candidates_or_details(monkeypatch, tmp_path):

@@ -262,6 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u505c\u6b62\u540e\u9700\u4eba\u5de5\u5904\u7406\u5e76\u91cd\u65b0\u542f\u52a8')
     tc.add_argument('--previous-details', default='',
                     help='\u4e0a\u4e00\u8f6e details.json\uff1b\u699c\u5355\u5feb\u7167\u540e\u81ea\u52a8\u5bf9\u8d26\u5e76\u751f\u6210\u8865\u91c7\u961f\u5217')
+    tc.add_argument('--allow-approved-code-migration', action='store_true',
+                    help='only permit an exact detail code migration approved in the repository registry')
     tc.set_defaults(func=lambda a, p=tc: cmd_task_collect(a, p))
 
     s = sub.add_parser('select-quota', help='\u79bb\u7ebf\uff1a\u6309\u5ba1\u6838\u7c7b\u76ee\u914d\u7f6e\u9009\u62e9 150/50 \u552f\u4e00 ASIN')

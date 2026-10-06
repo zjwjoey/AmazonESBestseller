@@ -1,0 +1,12 @@
+{
+  "amazon_es_bestseller_5500_202610": [
+    {
+      "phase": "detail",
+      "from_code_head": "70f01b76af73b8df373e1cd82b133204d6b426fb",
+      "target_detail_runtime_sha256": "e9146d6005c7b8aaaace3f1adad7be71655892fbf8f4848332ab8926003ceb16",
+      "reason": "DETAIL_REQUEST_CONTRACT_UPGRADE",
+      "plan_sha256": "958e7611c018b032cd402b3dba22b53d5195fda39a84d5a083583543fd8a9b03",
+      "candidate_manifest_sha256": "7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414"
+    }
+  ]
+}
