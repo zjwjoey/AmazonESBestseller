@@ -117,10 +117,31 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
         if phase == "detail":
             candidates = _candidate_asins(plan, group)
             candidate_set = set(candidates)
+            # Ranking-phase reconciliation may preload valid historical detail
+            # evidence and limit network work to its explicit reextract queue.
+            for cached in (plan.get("detail_reuse_records_by_category") or {}).get(group, []):
+                if not isinstance(cached, Mapping):
+                    continue
+                asin = str(cached.get("asin") or cached.get("ranking_asin") or "").strip().upper()
+                if asin in candidate_set and asin not in detail_map:
+                    detail_map[asin] = dict(cached)
+            queued = (plan.get("detail_fetch_asins_by_category") or {}).get(group)
+            blocked = {
+                str(asin).strip().upper()
+                for asin in (plan.get("detail_blocked_asins_by_category") or {}).get(group, [])
+                if str(asin).strip()
+            }
+            fetch_set = ({str(asin).strip().upper() for asin in queued}
+                         if queued is not None else candidate_set)
+            fetch_set &= candidate_set
             runtime.pending_detail_asins.intersection_update(candidate_set)
-            runtime.pending_detail_asins.update(asin for asin in candidates if asin not in detail_map)
+            runtime.pending_detail_asins.update(
+                asin for asin in candidates
+                if asin in fetch_set and asin not in detail_map)
+            runtime.pending_detail_asins.update(blocked & candidate_set)
             if runtime.pending_detail_asins:
-                collect_detail_batch([asin for asin in candidates if asin in runtime.pending_detail_asins])
+                collect_detail_batch([asin for asin in candidates
+                                      if asin in runtime.pending_detail_asins and asin in fetch_set])
             final_status = "DETAIL_COMPLETE" if not runtime.pending_detail_asins else "DETAIL_INCOMPLETE"
             runtime.save(final_status, "", phase="detail")
             return {

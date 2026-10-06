@@ -260,6 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u73b0\u5728\u7acb\u5373\u505c\u6b62\uff0c\u4e0d\u4f1a\u81ea\u52a8\u7b49\u5f85\u6062\u590d')
     tc.add_argument('--manual-assist', action='store_true',
                     help='\u517c\u5bb9\u53c2\u6570\uff1b\u6311\u6218\u9875\u505c\u6b62\u540e\u9700\u4eba\u5de5\u5904\u7406\u5e76\u91cd\u65b0\u542f\u52a8')
+    tc.add_argument('--previous-details', default='',
+                    help='\u4e0a\u4e00\u8f6e details.json\uff1b\u699c\u5355\u5feb\u7167\u540e\u81ea\u52a8\u5bf9\u8d26\u5e76\u751f\u6210\u8865\u91c7\u961f\u5217')
     tc.set_defaults(func=lambda a, p=tc: cmd_task_collect(a, p))
 
     s = sub.add_parser('select-quota', help='\u79bb\u7ebf\uff1a\u6309\u5ba1\u6838\u7c7b\u76ee\u914d\u7f6e\u9009\u62e9 150/50 \u552f\u4e00 ASIN')

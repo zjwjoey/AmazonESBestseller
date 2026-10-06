@@ -96,6 +96,64 @@ def test_detail_phase_only_consumes_frozen_candidates(monkeypatch, tmp_path):
     assert report["outside_candidate_requests"] == 0
 
 
+def test_ranking_phase_reconciles_previous_details_and_writes_reextract_queue(monkeypatch, tmp_path):
+    monkeypatch.setattr(task_module, "_run_category_live", lambda category, plan, *args, **kwargs:
+                        _ranking_result(category))
+    previous = tmp_path / "previous_details.json"
+    previous.write_text(json.dumps([{
+        "asin": "A000000001", "title_es_raw": "Producto",
+        "detail_schema_version": 2, "detail_parser_version": "collection.detail_v2",
+        "identity_status": "MATCH",
+    }]), encoding="utf-8")
+    out = tmp_path / "run"
+    report = run_task(_plan(), str(out), phase="ranking", previous_details=previous)
+
+    assert report["status"] == "COMPLETE"
+    assert report["detail_reuse_count"] == 1
+    assert report["detail_reextract_count"] == 1
+    reconciliation = json.loads((out / "detail_reconciliation.json").read_text(encoding="utf-8"))
+    assert reconciliation["candidate_count"] == 2
+    assert {row["ranking_asin"] for row in
+            json.loads((out / "detail_reextract_queue.json").read_text(encoding="utf-8"))["records"]} == {
+                "B000000001"}
+
+
+def test_detail_phase_reuses_reconciled_cache_and_fetches_only_queue(monkeypatch, tmp_path):
+    monkeypatch.setattr(task_module, "_run_category_live", lambda category, plan, *args, **kwargs:
+                        _ranking_result(category))
+    previous = tmp_path / "previous_details.json"
+    previous.write_text(json.dumps([{
+        "asin": "A000000001", "title_es_raw": "Producto",
+        "detail_schema_version": 2, "detail_parser_version": "collection.detail_v2",
+        "identity_status": "MATCH",
+    }]), encoding="utf-8")
+    out = tmp_path / "run"
+    run_task(_plan(), str(out), phase="ranking", previous_details=previous)
+    requested = []
+
+    def detail_worker(category, plan, *args, **kwargs):
+        group = category["research_category"]
+        fetch = list(plan["detail_fetch_asins_by_category"].get(group, []))
+        reuse = list(plan["detail_reuse_records_by_category"].get(group, []))
+        requested.extend(fetch)
+        return {
+            "research_category": group, "status": "DETAIL_COMPLETE",
+            "rankings": [], "details": reuse +
+                       [{"asin": asin, "title_es_raw": "Nuevo"} for asin in fetch],
+            "completed_source_urls": [], "source_status": {}, "ranking_page_statuses": [],
+            "raw_ranking_records": 1, "unique_asins": 1,
+            "detail_records": len(reuse) + len(fetch),
+            "pending_detail_asins": [], "detail_requested_asins": requested[-1:],
+        }
+
+    monkeypatch.setattr(task_module, "_run_category_live", detail_worker)
+    report = run_task(_plan(), str(out), phase="detail")
+    assert report["status"] == "COMPLETE"
+    assert requested == ["B000000001"]
+    assert report["detail_success"] == 2
+    assert report["detail_reextract_count"] == 1
+
+
 def test_ranking_worker_never_calls_detail(monkeypatch, tmp_path):
     class Session:
         def __init__(self, *args, **kwargs):

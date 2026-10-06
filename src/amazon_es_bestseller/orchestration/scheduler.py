@@ -14,6 +14,8 @@ from typing import Any, Callable, Mapping
 from ..collection.quota import QuotaError, select_research_quota
 from ..monitoring.snapshot import build_ranking_snapshot
 from .checkpoint import TaskCheckpointRepository, read_json, write_json_atomic
+from .detail_reconciliation import (NETWORK_ACTIONS, build_reconciliation,
+                                     load_detail_records, write_reconciliation)
 from .manifest import merge_records, write_summary
 from .phases import (PHASE_SCHEMA_VERSION, asins, canonical_json_sha256, git_head,
                      require_phase)
@@ -96,6 +98,35 @@ def _candidate_groups(rows: list[Mapping]) -> dict[str, list[str]]:
         if group and asin:
             values[group].append(asin)
     return {group: list(dict.fromkeys(items)) for group, items in values.items()}
+
+
+def _detail_reuse_groups(plan: Mapping, candidates: list[Mapping]) -> tuple[dict[str, list[dict]],
+                                                                            dict[str, list[str]],
+                                                                            dict[str, list[str]]]:
+    """Split a persisted detail reconciliation by research category."""
+    records = {str(row.get("ranking_asin") or row.get("asin") or "").strip().upper(): dict(row)
+               for row in (plan.get("records") or []) if isinstance(row, Mapping)}
+    reuse: dict[str, list[dict]] = defaultdict(list)
+    fetch: dict[str, list[str]] = defaultdict(list)
+    blocked: dict[str, list[str]] = defaultdict(list)
+    for candidate in candidates:
+        asin = str(candidate.get("asin") or "").strip().upper()
+        group = str(candidate.get("research_category") or "").strip()
+        item = records.get(asin)
+        action = str((item or {}).get("detail_action") or "FETCH_NEW")
+        if action == "REUSE_VALID_CACHE":
+            cached = (item or {}).get("existing_detail_record")
+            if isinstance(cached, Mapping):
+                reuse[group].append(dict(cached))
+            else:
+                # A reuse action without embedded evidence is unsafe; treat it
+                # as a network action instead of silently declaring success.
+                fetch[group].append(asin)
+        elif action in NETWORK_ACTIONS:
+            fetch[group].append(asin)
+        else:
+            blocked[group].append(asin)
+    return dict(reuse), dict(fetch), dict(blocked)
 
 
 def _write_frozen_candidates(output: Path, rows: list[dict]) -> str:
@@ -325,7 +356,8 @@ def _run_workers(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, phas
 
 def _run_ranking(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode: str,
                  headful: bool, profile_dir: str, plan_path: str | Path | None,
-                 project_root: str | Path | None, worker: Callable) -> dict:
+                 project_root: str | Path | None, worker: Callable,
+                 previous_details: str | Path | None = None) -> dict:
     plan_hash = plan["canonical_plan_sha256"]
     previous_report = _read_json(output / "ranking_run_report.json", {})
     if (isinstance(previous_report, Mapping) and previous_report and
@@ -372,6 +404,29 @@ def _run_ranking(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode
                 report.update({"candidate_count": len(asins(candidates)),
                                "candidate_manifest_sha256": candidate_hash,
                                "status": "COMPLETE"})
+                if previous_details:
+                    prior = load_detail_records(previous_details)
+                    detail_plan = build_reconciliation(
+                        candidates, prior,
+                        snapshot_id=str(snapshot["manifest"].get("snapshot_id") or ""),
+                    )
+                    paths = write_reconciliation(
+                        detail_plan, output,
+                        previous_details_path=previous_details,
+                    )
+                    actions = dict((detail_plan.get("summary") or {}).get("actions") or {})
+                    report.update({
+                        "previous_details_path": str(previous_details),
+                        "previous_detail_records": len(prior),
+                        "detail_reconciliation_path": str(paths["reconciliation"].relative_to(output)),
+                        "detail_plan_path": str(paths["json"].relative_to(output)),
+                        "detail_reextract_queue_path": str(paths["reextract_queue"].relative_to(output)),
+                        "detail_reuse_count": actions.get("REUSE_VALID_CACHE", 0),
+                        "detail_reextract_count": sum(actions.get(action, 0) for action in NETWORK_ACTIONS),
+                        "detail_manual_review_count": sum(
+                            value for action, value in actions.items()
+                            if action not in NETWORK_ACTIONS and action != "REUSE_VALID_CACHE"),
+                    })
         except QuotaError:
             report["status"] = "QUOTA_UNIQUE_SHORTFALL"
         except ValueError:
@@ -409,12 +464,25 @@ def _require_detail_gate(output: Path, plan: Mapping) -> tuple[list[dict], str, 
 def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode: str,
                 headful: bool, profile_dir: str, plan_path: str | Path | None,
                 project_root: str | Path | None, worker: Callable) -> dict:
-    candidates, candidate_hash, _ranking_report = _require_detail_gate(output, plan)
+    candidates, candidate_hash, ranking_report = _require_detail_gate(output, plan)
     runtime.bind_phase("detail", plan_sha256=plan["canonical_plan_sha256"],
                        candidate_manifest_sha256=candidate_hash,
                        code_head=git_head(project_root))
     by_group = _candidate_groups(candidates)
     execution = {**plan, "frozen_candidates_by_category": by_group}
+    detail_plan: dict[str, Any] = {}
+    detail_plan_path = str(ranking_report.get("detail_plan_path") or "")
+    if detail_plan_path:
+        candidate_plan_path = output / detail_plan_path
+        if candidate_plan_path.is_file():
+            detail_plan = _read_json(candidate_plan_path, {})
+    if detail_plan:
+        reuse, fetch, blocked = _detail_reuse_groups(detail_plan, candidates)
+        execution.update({
+            "detail_reuse_records_by_category": reuse,
+            "detail_fetch_asins_by_category": fetch,
+            "detail_blocked_asins_by_category": blocked,
+        })
     all_rankings = _read_json(output / "rankings.json", [])
     all_details = _read_json(output / "details.json", [])
     stop_all, incomplete, requested = _run_workers(
@@ -440,6 +508,14 @@ def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode:
         "status": status, "categories_incomplete": incomplete,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
+    if detail_plan:
+        summary = dict(detail_plan.get("summary") or {})
+        report.update({
+            "detail_plan_path": detail_plan_path,
+            "detail_reuse_count": summary.get("reuse_count", 0),
+            "detail_reextract_count": summary.get("reextract_count", 0),
+            "detail_manual_review_count": summary.get("manual_review_count", 0),
+        })
     write_json_atomic(output / "detail_run_report.json", report)
     write_json_atomic(output / "run_report.json", report)
     write_json_atomic(output / "final_manifest.json", candidates if status == "COMPLETE" else [])
@@ -501,7 +577,8 @@ def run_reviewed_task(plan: Mapping, out_dir: str, mode: str | None = None,
                       project_root: str | Path | None = None,
                       worker: Callable | None = None, phase: str = "all",
                       resume: bool = False,
-                      runtime_overrides: Mapping | None = None) -> dict:
+                      runtime_overrides: Mapping | None = None,
+                      previous_details: str | Path | None = None) -> dict:
     """Run one reviewed plan without widening its scheduling or access policy."""
     phase = require_phase(phase)
     plan = validate_task_plan(plan, plan_path=plan_path, project_root=project_root)
@@ -511,6 +588,8 @@ def run_reviewed_task(plan: Mapping, out_dir: str, mode: str | None = None,
     }
     if unsupported_overrides:
         raise ValueError("TASK_RUNTIME_OVERRIDE_INVALID: %s" % ", ".join(sorted(unsupported_overrides)))
+    if previous_details and not Path(previous_details).expanduser().is_file():
+        raise ValueError("PREVIOUS_DETAILS_NOT_FOUND: %s" % previous_details)
     plan = {**plan, **runtime_overrides}
     if plan["task_id"] == "amazon_es_bestseller_5500_202610" and phase == "all":
         raise ValueError("FORMAL_5500_REQUIRES_EXPLICIT_PHASE")
@@ -531,7 +610,8 @@ def run_reviewed_task(plan: Mapping, out_dir: str, mode: str | None = None,
     if phase == "ranking":
         return _run_ranking(plan, output, runtime, mode=mode, headful=headful,
                             profile_dir=profile_dir, plan_path=plan_path,
-                            project_root=project_root, worker=worker)
+                            project_root=project_root, worker=worker,
+                            previous_details=previous_details)
     if phase == "detail":
         return _run_detail(plan, output, runtime, mode=mode, headful=headful,
                            profile_dir=profile_dir, plan_path=plan_path,

@@ -42,7 +42,8 @@ def run_task_collection(args: Any, parser: Any, *, project_root: Path) -> dict[s
                           headful=args.headful, profile_dir=args.profile_dir,
                           plan_path=plan_path, project_root=project_root,
                           phase=args.phase, resume=bool(args.resume),
-                          runtime_overrides=runtime_overrides)
+                          runtime_overrides=runtime_overrides,
+                          previous_details=getattr(args, "previous_details", "") or None)
     except ValueError as exc:
         parser.error(str(exc))
     return report

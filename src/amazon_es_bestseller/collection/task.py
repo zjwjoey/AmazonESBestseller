@@ -60,13 +60,15 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
              headful: bool = False, profile_dir: str = "",
              plan_path: str | Path | None = None,
              project_root: str | Path | None = None, phase: str = "all",
-             resume: bool = False, runtime_overrides: Mapping | None = None) -> dict:
+             resume: bool = False, runtime_overrides: Mapping | None = None,
+             previous_details: str | Path | None = None) -> dict:
     """Run through the extracted scheduler while retaining the old patch point."""
     return run_reviewed_task(plan, out_dir, mode=mode, headful=headful,
                              profile_dir=profile_dir, plan_path=plan_path,
                              project_root=project_root, worker=_run_category_live,
                              phase=phase, resume=resume,
-                             runtime_overrides=runtime_overrides)
+                             runtime_overrides=runtime_overrides,
+                             previous_details=previous_details)
 
 
 __all__ = ["_category_rank_filter", "_category_store", "_cooldown_seconds",

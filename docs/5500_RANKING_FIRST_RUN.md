@@ -14,7 +14,8 @@
 amazon-es task-collect `
   --plan configs/tasks/amazon_es_bestseller_5500_202610_plan.json `
   --out-dir outputs/amazon_es_bestseller_5500_202610 `
-  --phase ranking
+  --phase ranking `
+  --previous-details outputs/amazon_es_bestseller_5000_202610/details.json
 ```
 
 此阶段仅请求已审核的榜单来源：每个研究类目内部仍串行，`parallel3`、冷却、Access Gate、保存的原始 HTML 和 checkpoint 均保持有效。它绝不调用详情采集。
@@ -25,6 +26,15 @@ amazon-es task-collect `
 - `candidate_manifest.json`：冻结的候选及其完整排名上下文；
 - `candidate_manifest.sha256`；
 - `ranking_run_report.json`。
+
+如提供 `--previous-details`，Ranking 完成冻结后还会离线对账上一轮详情：
+
+- `detail_reconciliation.json`：每个候选的复用、补采、身份复核或阻断动作；
+- `detail_reextract_queue.json`：只有需要网络补采的 ASIN；
+- `detail_backfill_queue.json`：所有非直接复用动作；
+- `detail_plan/detail_plan.json`：Detail Phase 使用的不可变计划。
+
+有效详情不会再次请求；下一阶段只请求补采队列中的 ASIN，并把历史有效详情合并进新的详情状态。
 
 如果无法精确选出 5,500 个全局唯一 ASIN，阶段以 `QUOTA_UNIQUE_SHORTFALL` 结束，且不会产生可用于详情阶段的候选清单。
 
