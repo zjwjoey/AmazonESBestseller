@@ -27,3 +27,20 @@ def test_local_benchmark_matches_asin_and_never_promotes_local_zh(tmp_path):
     assert summary["authority"] == "LOCAL_ZH_NOT_GOLD"
     assert (out / "summary.json").exists() and (out / "dictionary_candidates.json").exists()
     assert (out / "dictionary_statistics.json").read_text(encoding="utf-8").find('"promoted": 0') >= 0
+
+
+def test_local_benchmark_accepts_frozen_chinese_category_and_variation_headers(tmp_path):
+    es, zh, out = tmp_path / "es.csv", tmp_path / "zh.csv", tmp_path / "out"
+    _write_csv(
+        es,
+        ["ASIN", "\u4e00\u7ea7\u7c7b\u76ee", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53\uff08\u897f\u8bed\uff09"],
+        {"ASIN": "B000000001", "\u4e00\u7ea7\u7c7b\u76ee": "Juguetes", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53\uff08\u897f\u8bed\uff09": "Color rojo"},
+    )
+    _write_csv(
+        zh,
+        ["ASIN", "\u4e00\u7ea7\u7c7b\u76ee", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53"],
+        {"ASIN": "B000000001", "\u4e00\u7ea7\u7c7b\u76ee": "\u73a9\u5177", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53": "\u7ea2\u8272"},
+    )
+    _tool().benchmark(es, zh, out)
+    issue_codes = (out / "issue_summary.csv").read_text(encoding="utf-8-sig")
+    assert "EMPTY_TRANSLATION" not in issue_codes

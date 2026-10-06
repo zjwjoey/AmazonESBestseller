@@ -24,11 +24,11 @@ from amazon_es_bestseller.translation.service import source_hash
 
 TARGET_ALIASES = {
     "title_zh": ("title_zh", "\u5546\u54c1\u540d\u79f0\uff08\u4e2d\u6587\uff09"),
-    "category_l1_zh": ("category_l1_zh", "\u4e00\u7ea7\u7c7b\u76ee\uff08\u4e2d\u6587\uff09"),
-    "category_l2_zh": ("category_l2_zh", "\u4e8c\u7ea7\u7c7b\u76ee\uff08\u4e2d\u6587\uff09"),
-    "category_l3_zh": ("category_l3_zh", "\u4e09\u7ea7\u7c7b\u76ee\uff08\u4e2d\u6587\uff09"),
-    "leaf_category_zh": ("leaf_category_zh", "\u7ec6\u5206\u7c7b\u76ee\uff08\u4e2d\u6587\uff09"),
-    "selected_variation_zh": ("selected_variation_zh", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53\uff08\u4e2d\u6587\uff09"),
+    "category_l1_zh": ("category_l1_zh", "\u4e00\u7ea7\u7c7b\u76ee\uff08\u4e2d\u6587\uff09", "\u4e00\u7ea7\u7c7b\u76ee"),
+    "category_l2_zh": ("category_l2_zh", "\u4e8c\u7ea7\u7c7b\u76ee\uff08\u4e2d\u6587\uff09", "\u4e8c\u7ea7\u7c7b\u76ee"),
+    "category_l3_zh": ("category_l3_zh", "\u4e09\u7ea7\u7c7b\u76ee\uff08\u4e2d\u6587\uff09", "\u4e09\u7ea7\u7c7b\u76ee"),
+    "leaf_category_zh": ("leaf_category_zh", "\u7ec6\u5206\u7c7b\u76ee\uff08\u4e2d\u6587\uff09", "\u7ec6\u5206\u7c7b\u76ee"),
+    "selected_variation_zh": ("selected_variation_zh", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53\uff08\u4e2d\u6587\uff09", "\u5f53\u524d\u9009\u4e2d\u89c4\u683c / \u53d8\u4f53"),
     "specification_zh": ("specification_zh", "\u6838\u5fc3\u89c4\u683c\uff08\u4e2d\u6587\uff09"),
     "product_details_zh": ("product_details_zh", "\u5b8c\u6574\u5546\u54c1\u8be6\u60c5\uff08\u4e2d\u6587\uff09"),
     "feature_bullets_zh": ("feature_bullets_zh", "\u5546\u54c1\u5356\u70b9\uff08\u4e2d\u6587\uff09"),
