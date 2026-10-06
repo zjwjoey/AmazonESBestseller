@@ -28,3 +28,16 @@ def test_normalized_url_then_asin_fallback_are_deterministic():
     assert normal["preferred_request_url"] == "https://www.amazon.es/gp/product/B012345678"
     assert fallback["request_source"] == "ASIN_FALLBACK"
     assert fallback["preferred_request_url"] == "https://www.amazon.es/dp/B012345678"
+
+
+def test_selected_candidate_context_beats_a_better_ranked_secondary_context():
+    plan = build_detail_request_plan({
+        "asin": ASIN,
+        "ranking_product_url_raw": "/selected/dp/B012345678/ref=selected",
+        "bestseller_rank": 99,
+        "ranking_contexts": [{
+            "ranking_product_url_raw": "/other/dp/B012345678/ref=other",
+            "bestseller_rank": 1,
+        }],
+    })
+    assert plan["preferred_request_url"] == "https://www.amazon.es/selected/dp/B012345678/ref=selected"

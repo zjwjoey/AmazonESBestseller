@@ -74,12 +74,16 @@ def build_detail_request_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
     product target before requesting it.
     """
     candidate_asin = _asin(candidate.get("asin") or candidate.get("ranking_asin"))
+    # The selected candidate row is the selection decision recorded in the
+    # frozen manifest.  It wins whenever it has a viable URL.  Only when it
+    # has none do we deterministically examine its other ranking appearances.
+    selected_context = dict(candidate)
     contexts = [dict(item) for item in candidate.get("ranking_contexts") or []
                 if isinstance(item, Mapping)]
-    contexts.append(dict(candidate))
     contexts.sort(key=_context_sort_key)
+    ordered_contexts = [selected_context] + contexts
     chosen: dict[str, Any] = {}
-    for item in contexts:
+    for item in ordered_contexts:
         raw = _normalised_product_url(item.get("ranking_product_url_raw"))
         if raw:
             chosen = item

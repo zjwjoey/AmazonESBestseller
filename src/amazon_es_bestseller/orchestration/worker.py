@@ -75,6 +75,23 @@ def _completed_detail_cache_records(category_dir: Path, candidate_asins: set[str
     return result
 
 
+def _prior_detail_attempts(category_dir: Path) -> dict[str, dict]:
+    """Read failed/mismatch checkpoint provenance without deleting evidence."""
+    result: dict[str, dict] = {}
+    root = category_dir / "detail_cache" / "checkpoints"
+    if not root.is_dir():
+        return result
+    for path in sorted(root.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        asin = str(payload.get("asin") or "").strip().upper()
+        if asin:
+            result[asin] = payload
+    return result
+
+
 def run_category_live(category: Mapping, plan: Mapping, output: Path,
                       worker_id: int, headful: bool, profile_dir: str,
                       claim_asins: Callable[[list[str]], list[str]],
@@ -134,6 +151,7 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
         requested_asins: list[str] = []
 
         candidate_rows = _candidate_rows(plan, group) if phase == "detail" else {}
+        prior_attempts = _prior_detail_attempts(category_dir) if phase == "detail" else {}
 
         def collect_detail_batch(asins: list[str], active_url: str = "") -> None:
             if not asins:
@@ -152,8 +170,20 @@ def run_category_live(category: Mapping, plan: Mapping, output: Path,
                 request_plans = {asin: build_detail_request_plan(candidate_rows.get(asin, {"asin": asin}))
                                  for asin in claimed}
                 for asin, context in request_plans.items():
-                    context.setdefault("action", "FETCH_NEW")
-                    context.setdefault("attempt", 1)
+                    prior = prior_attempts.get(asin, {})
+                    previous_status = str(prior.get("status") or "").lower()
+                    if previous_status == "asin_mismatch":
+                        action = "REEXTRACT_WITH_RANKING_URL"
+                    elif previous_status in {"failed", "invalid"}:
+                        action = "RETRY_WITH_RANKING_URL"
+                    else:
+                        action = "FETCH_NEW"
+                    context.update({
+                        "snapshot_id": str(plan.get("ranking_snapshot_id") or ""),
+                        "action": action,
+                        "attempt": int(prior.get("attempt_count") or 0) + 1,
+                        "previous_status": previous_status,
+                    })
                 if phase != "detail":
                     # Legacy all-mode has no immutable candidate manifest.
                     # Keep its historical collector call contract intact.

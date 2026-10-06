@@ -50,6 +50,9 @@ def test_collect_details_keeps_final_asin_mismatch_as_reviewable_evidence(tmp_pa
     assert records[0]["detail_status"] == "SUCCESS_WITH_IDENTITY_CHANGE"
     assert records[0]["identity_event"] == "NAVIGATION_IDENTITY_CHANGED"
     assert records[0]["identity_review_required"] is True
+    assert records[0]["candidate_asin"] == "B078C6QR1C"
+    assert records[0]["final_url_asin"] == "B075JJRFVV"
+    assert records[0]["resolved_asin"] == "B075JJRFVV"
     assert (tmp_path / "html" / "B078C6QR1C.html").exists()
     assert not (tmp_path / "quarantine" / "B078C6QR1C").exists()
 

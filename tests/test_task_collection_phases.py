@@ -229,6 +229,7 @@ def test_detail_worker_passes_frozen_ranking_url_and_context_to_collector(monkey
     asin = "A000000001"
     plan = {
         "task_id": "x", "batch_id": "x", "collection_phase": "detail",
+        "ranking_snapshot_id": "snapshot-1",
         "frozen_candidates_by_category": {"A": [asin]},
         "frozen_candidate_rows_by_category": {"A": [{
             "asin": asin, "ranking_product_url_raw": "/Producto/dp/B000000099/ref=ranking",
@@ -245,6 +246,9 @@ def test_detail_worker_passes_frozen_ranking_url_and_context_to_collector(monkey
     assert captured["urls"][asin] == "https://www.amazon.es/Producto/dp/B000000099/ref=ranking"
     assert captured["context"][asin]["request_source"] == "RANKING_RAW"
     assert captured["context"][asin]["ranking_link_asin"] == "B000000099"
+    assert captured["context"][asin]["candidate_asin"] == asin
+    assert captured["context"][asin]["snapshot_id"] == "snapshot-1"
+    assert captured["context"][asin]["action"] == "FETCH_NEW"
 
 
 def test_detail_worker_reuses_checkpoint_success_without_re_request(monkeypatch, tmp_path):
@@ -272,6 +276,45 @@ def test_detail_worker_reuses_checkpoint_success_without_re_request(monkeypatch,
                                1, False, "", lambda values: values, lambda _values: None, set())
     assert result["status"] == "DETAIL_COMPLETE"
     assert result["details"][0]["request_source"] == "ASIN_FALLBACK_LEGACY"
+
+
+def test_detail_worker_retries_old_mismatch_and_network_failure_with_ranking_url(monkeypatch, tmp_path):
+    class Session:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", Session)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery", lambda *_args: None)
+    captured = {}
+    monkeypatch.setattr("amazon_es_bestseller.collection.detail.collect_details",
+                        lambda values, *_args, **kwargs: captured.update(kwargs) or
+                        [{"asin": asin, "title_es_raw": "Producto"} for asin in values])
+    mismatch, failed = "A000000001", "B000000001"
+    root = tmp_path / "categories" / "A" / "detail_cache" / "checkpoints"
+    root.mkdir(parents=True)
+    (root / f"{mismatch}.json").write_text(json.dumps({
+        "asin": mismatch, "status": "asin_mismatch", "attempt_count": 2}), encoding="utf-8")
+    (root / f"{failed}.json").write_text(json.dumps({
+        "asin": failed, "status": "failed", "attempt_count": 3}), encoding="utf-8")
+    plan = {"task_id": "x", "batch_id": "x", "collection_phase": "detail",
+            "frozen_candidates_by_category": {"A": [mismatch, failed]},
+            "frozen_candidate_rows_by_category": {"A": [
+                {"asin": mismatch, "ranking_product_url_raw": f"/x/dp/{mismatch}"},
+                {"asin": failed, "ranking_product_url_raw": f"/x/dp/{failed}"},
+            ]}}
+    run_category_live({"research_category": "A", "sources": []}, plan, tmp_path,
+                      1, False, "", lambda values: values, lambda _values: None, set())
+    contexts = captured["execution_context"]
+    assert contexts[mismatch]["action"] == "REEXTRACT_WITH_RANKING_URL"
+    assert contexts[mismatch]["attempt"] == 3
+    assert contexts[failed]["action"] == "RETRY_WITH_RANKING_URL"
+    assert contexts[failed]["attempt"] == 4
+    assert captured["request_urls"][mismatch].endswith("/dp/A000000001")
+    assert captured["request_urls"][failed].endswith("/dp/B000000001")
 
 
 def test_resume_rejects_plan_or_candidate_fingerprint_drift(monkeypatch, tmp_path):

@@ -485,10 +485,15 @@ def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode:
                        candidate_manifest_sha256=candidate_hash,
                        code_head=git_head(project_root))
     by_group = _candidate_groups(candidates)
+    snapshot_id = ""
+    snapshot_path = _snapshot_path(output, ranking_report)
+    if snapshot_path is not None:
+        snapshot_id = str(_read_json(snapshot_path / "manifest.json", {}).get("snapshot_id") or "")
     execution = {
         **plan,
         "frozen_candidates_by_category": by_group,
         "frozen_candidate_rows_by_category": _candidate_row_groups(candidates),
+        "ranking_snapshot_id": snapshot_id,
     }
     detail_plan: dict[str, Any] = {}
     detail_plan_path = str(ranking_report.get("detail_plan_path") or "")
@@ -514,6 +519,20 @@ def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode:
         raise ValueError("DETAIL_ASIN_OUTSIDE_FROZEN_CANDIDATES")
     successful = asins(all_details) & candidate_asins
     pending = sorted(candidate_asins - successful)
+    candidate_details = [row for row in all_details
+                         if isinstance(row, Mapping) and str(row.get("asin") or "").upper() in candidate_asins]
+    request_source_counts: dict[str, int] = defaultdict(int)
+    identity_counts: dict[str, int] = defaultdict(int)
+    for row in candidate_details:
+        request_source_counts[str(row.get("request_source") or "ASIN_FALLBACK_LEGACY")] += 1
+        if str(row.get("identity_event") or "").upper() == "NAVIGATION_IDENTITY_CHANGED":
+            identity_counts["navigation_identity_changed"] += 1
+        elif str(row.get("identity_status") or "").upper() in {"PARENT_ASIN_MATCH", "VARIATION_RELATED"}:
+            identity_counts[str(row.get("identity_status") or "").lower()] += 1
+        elif str(row.get("identity_status") or "").upper() in {"IDENTITY_UNCONFIRMED", "UNCONFIRMED"}:
+            identity_counts["identity_unconfirmed"] += 1
+        else:
+            identity_counts["exact_identity_matches"] += 1
     status = "ACCESS_STOP" if stop_all else "DETAIL_INCOMPLETE" if (incomplete or pending) else "COMPLETE"
     selected = defaultdict(list)
     for row in candidates:
@@ -525,6 +544,11 @@ def _run_detail(plan: Mapping, output: Path, runtime: TaskRuntimeState, *, mode:
         "candidate_count": len(candidate_asins), "candidate_manifest_sha256": candidate_hash,
         "detail_success": len(successful), "detail_failed": len(pending), "detail_pending": pending,
         "outside_candidate_requests": 0, "access_stop": bool(stop_all),
+        "request_source_counts": dict(sorted(request_source_counts.items())),
+        "exact_identity_matches": identity_counts["exact_identity_matches"],
+        "navigation_identity_changed": identity_counts["navigation_identity_changed"],
+        "variation_related": identity_counts["variation_related"],
+        "identity_unconfirmed": identity_counts["identity_unconfirmed"],
         "status": status, "categories_incomplete": incomplete,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }

@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
-from ..identity import resolve_identity
+from ..identity import asin_from_url, resolve_identity
 from ..models import AccessState
 from .checkpoints import write_checkpoint
 
@@ -577,7 +577,7 @@ def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | 
     parsed = page_asins[0] if len(page_asins) == 1 else ""
     record = record or {}
     return resolve_identity(
-        ranking_asin=asin, requested_asin=asin, final_url_asin=final_url,
+        ranking_asin=asin, requested_asin=asin, final_url_asin=asin_from_url(final_url),
         embedded_asins=page_asins, parsed_detail_asin=parsed,
         parent_asin=record.get("parent_asin") or record.get("parent_asin_raw"),
         variation_family_asins=record.get("variation_family_asins") or record.get("variation_asins") or [],
@@ -817,7 +817,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     "ranking_link_asin", "ranking_link_identity_status",
                     "ranking_source_url", "ranking_page_number", "bestseller_rank",
                     "source_role", "preferred_request_url", "planned_request_url",
-                    "request_source", "action", "attempt"):
+                    "request_source", "action", "attempt", "previous_status"):
             if context.get(key) is not None:
                 enriched.setdefault(key, context[key])
         enriched.setdefault("requested_asin", asin)
@@ -853,11 +853,14 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
         context = execution_context.get(asin) or {}
         mismatch = identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}
         rec["asin"] = asin
+        rec["candidate_asin"] = context.get("candidate_asin") or asin
         rec["requested_asin"] = asin
         rec["ranking_asin"] = context.get("ranking_asin") or asin
         rec["requested_url"] = requested_url
         rec["final_url"] = final_url
+        rec["final_url_asin"] = asin_from_url(final_url)
         rec["resolved_asin"] = identity.get("resolved_asin") or asin
+        rec["canonical_asin"] = rec.get("canonical_asin") or rec["resolved_asin"]
         rec["identity_status"] = ("MATCH" if identity["identity_status"] == "IDENTITY_MATCH"
                                   else identity["identity_status"])
         rec["identity_status_code"] = identity["identity_status"]
