@@ -24,6 +24,8 @@ from ..monitoring.snapshot import build_ranking_snapshot
 from ..production.spanish_master import build_spanish_master
 from ..quality.source_fields import audit_source_fields
 from ..quality.source_gate import evaluate_source_gate
+from ..quality.detail_identity import audit_detail_identity
+from ..quality.replay import audit_offline_replay
 from ..translation.production import (build_production_input, build_production_state,
                                       build_release_translation_candidate, compute_release_status,
                                       records_for_preclean)
@@ -218,7 +220,10 @@ class ProductionWorkflow:
             # hand in the same reviewed V1 session used by the collector.
             raise ProductionWorkflowError("LIVE_TRANSPORT_UNCONFIGURED")
         provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
-        if self.task.network_mode == "offline" and provider_mode != "fake":
+        # ``qwen-mt-fixture`` is an injected, test-only offline seam.  It has
+        # reviewed Qwen provenance so the formal contract can be exercised,
+        # but no production CLI constructs it and it performs no network I/O.
+        if self.task.network_mode == "offline" and provider_mode not in {"fake", "qwen-mt-fixture"}:
             raise ProductionWorkflowError("OFFLINE_PROVIDER_MUST_BE_FAKE")
         return self._store("preflight", {"status": "READY", "offline": self.task.network_mode == "offline",
             "parser": {"ranking": "V1", "detail": "V1"}, "evidence_fingerprints": evidence,
@@ -249,9 +254,13 @@ class ProductionWorkflow:
             if found:
                 manifest = _read_json(found / "manifest.json"); frozen = _read_json(found / "rankings.json")
             else:
+                html_files = raw.get("html_files")
+                if html_files is not None and not isinstance(html_files, Mapping):
+                    raise ProductionWorkflowError("RANKING_EVIDENCE_HTML_FILES_INVALID")
                 result = build_ranking_snapshot(records, root, planned_sources=planned,
                     source_statuses=statuses, snapshot_id=snapshot_id,
-                    parser_version="collection.ranking", publish_authoritative_pointer=False)
+                    parser_version="collection.ranking", html_files=html_files,
+                    publish_authoritative_pointer=False)
                 manifest, frozen = result["manifest"], result["records"]
                 found = result["path"]
         if not isinstance(manifest, Mapping) or not isinstance(frozen, list) or not isinstance(found, (str, Path)):
@@ -395,45 +404,8 @@ class ProductionWorkflow:
         master = build_spanish_master(products, source["audit"], source["source_gate"],
                                       existing_master=self.history.load_master(), run_id=self.run_id,
                                       refresh_strategy="preserve_prior")
-        # These reports are produced before release from the capabilities that
-        # own the checked evidence.  They bind the immutable Master only after
-        # checking actual snapshot/detail results; release merely consumes them.
-        from ..production.release import STAGE_EVIDENCE_VERSION, build_stage_evidence
-        ranking = self._artifact_data(self._prior(context, "ranking-authority"))
-        replay = self._artifact_data(self._prior(context, "offline-reparse"))
-        expected_asins = {str(row.get("asin") or "").upper() for row in master.get("records") or []}
-        ranking_rows = {str(row.get("asin") or row.get("ranking_asin") or "").upper()
-                        for row in (ranking.get("snapshot") or {}).get("records") or []}
-        execution = (replay.get("detail_execution") or {}).get("records") or []
-        detail_status = {str(row.get("asin") or row.get("ranking_asin") or "").upper(): str(row.get("status") or "")
-                         for row in execution if isinstance(row, Mapping)}
-
-        def owned_report(check: str, issues: list[dict[str, Any]]) -> dict[str, Any]:
-            evidence = build_stage_evidence(master, check)
-            passed = not issues
-            return {"check": check, "status": "PASS" if passed else "BLOCK", "produced_stage": check,
-                    "report_schema_version": STAGE_EVIDENCE_VERSION, "evidence_ref": evidence,
-                    "summary": {"records_checked": evidence["record_count"]},
-                    "records": [{"asin": asin, "status": "PASS" if passed else "BLOCK", "record_hash": record_hash}
-                                for asin, record_hash in evidence["record_hashes"].items()],
-                    "issues": issues, "report_produced_by": "spanish-master"}
-
-        ranking_issues = []
-        if (ranking.get("snapshot_manifest") or {}).get("snapshot_status") != "AUTHORITATIVE":
-            ranking_issues.append({"code": "RANKING_SNAPSHOT_NOT_AUTHORITATIVE"})
-        missing_ranking = sorted(expected_asins - ranking_rows)
-        if missing_ranking:
-            ranking_issues.append({"code": "RANKING_ASIN_SCOPE_MISMATCH", "asins": missing_ranking})
-        detail_issues = [{"code": "DETAIL_EXECUTION_NOT_SUCCESS", "asin": asin,
-                          "status": detail_status.get(asin, "MISSING")}
-                         for asin in sorted(expected_asins)
-                         if detail_status.get(asin) not in {"REUSED", "SUCCESS", "ALREADY_SUCCESS"}]
-        reports = {"ranking_authority": owned_report("ranking_authority", ranking_issues),
-                   "detail_identity": owned_report("detail_identity", detail_issues),
-                   "offline_replay": owned_report("offline_replay", detail_issues)}
         self.history.save_master(master)
         return self._store("spanish-master", {"status": "READY", "master": master,
-            "stage_reports": reports,
             "input_artifact_hashes": {"source-audit": self._prior(context, "source-audit").get("artifact_file_hash")},
             "counts": {"records": len(master.get("records") or [])}})
 
@@ -497,14 +469,107 @@ class ProductionWorkflow:
             raise ProductionWorkflowError("TRANSLATION_BATCH_MASTER_MISSING")
         return master
 
+    @staticmethod
+    def _stage_report(master: Mapping[str, Any], check: str, result: Mapping[str, Any], *,
+                      produced_by: str) -> dict[str, Any]:
+        """Bind a real offline quality result to exactly one release master."""
+        from ..production.release import STAGE_EVIDENCE_VERSION, build_stage_evidence
+
+        evidence = build_stage_evidence(master, check)
+        issues = [dict(row) for row in result.get("issues") or [] if isinstance(row, Mapping)]
+        quality_status = str(result.get("status") or "BLOCK").upper()
+        hard_issue = any(str(row.get("severity") or "").upper() in {"P0", "P1"}
+                         for row in issues)
+        passed = quality_status in {"PASS", "WARN"} and not hard_issue
+        status = "PASS" if passed else ("REVIEW_REQUIRED" if quality_status == "REVIEW" else "BLOCK")
+        return {
+            "check": check,
+            "status": status,
+            "produced_stage": check,
+            "report_schema_version": STAGE_EVIDENCE_VERSION,
+            "evidence_ref": evidence,
+            "summary": {"records_checked": evidence["record_count"],
+                        "quality_summary": dict(result.get("summary") or {})},
+            "records": [{"asin": asin, "status": "PASS" if passed else status,
+                         "record_hash": record_hash}
+                        for asin, record_hash in evidence["record_hashes"].items()],
+            "issues": issues,
+            "report_produced_by": produced_by,
+        }
+
+    def _translation_batch_reports(self, context: Mapping[str, Any], batch: Mapping[str, Any]) -> dict[str, dict]:
+        """Re-audit only selected records; no report is inherited from the full master.
+
+        This intentionally consumes immutable ranking/detail/HTML evidence.  It
+        performs no collection, request, or parser shortcut based on a detail
+        executor status.
+        """
+        master = batch["translation_batch_master"]
+        selected = {normalize_asin(row.get("asin")) for row in master.get("records") or []}
+        selected.discard("")
+        ranking = self._artifact_data(self._prior(context, "ranking-authority"))
+        snapshot = ranking.get("snapshot") or {}
+        ranking_rows = [dict(row) for row in snapshot.get("records") or []
+                        if normalize_asin(row.get("asin") or row.get("ranking_asin")) in selected]
+        detail_stage = self._artifact_data(self._prior(context, "offline-reparse"))
+        details_path = self.run_dir / str(detail_stage.get("details_path") or "")
+        detail_rows = [dict(row) for row in _read_json(details_path)
+                       if isinstance(row, Mapping)
+                       and normalize_asin(row.get("asin") or row.get("requested_asin")) in selected]
+        present_ranking = {normalize_asin(row.get("asin") or row.get("ranking_asin")) for row in ranking_rows}
+        ranking_issues = []
+        if str((ranking.get("snapshot_manifest") or {}).get("snapshot_status") or "") != "AUTHORITATIVE":
+            ranking_issues.append({"severity": "P1", "code": "RANKING_SNAPSHOT_NOT_AUTHORITATIVE"})
+        missing_ranking = sorted(selected - present_ranking)
+        if missing_ranking:
+            ranking_issues.append({"severity": "P1", "code": "RANKING_ASIN_SCOPE_MISMATCH",
+                                   "asins": missing_ranking})
+        ranking_result = {"status": "PASS" if not ranking_issues else "BLOCK",
+                          "issues": ranking_issues,
+                          "summary": {"records_checked": len(present_ranking)}}
+
+        identity_result = audit_detail_identity(detail_rows, ranking_rows, asins=selected)
+        identity = identity_result.to_dict() if hasattr(identity_result, "to_dict") else dict(identity_result)
+        present_details = {normalize_asin(row.get("asin") or row.get("requested_asin")) for row in detail_rows}
+        missing_details = sorted(selected - present_details)
+        if missing_details:
+            identity.setdefault("issues", []).append({
+                "stage": "detail_identity", "check": "detail_identity", "status": "BLOCK",
+                "severity": "P1", "issue_code": "DETAIL_IDENTITY_SCOPE_MISMATCH",
+                "code": "DETAIL_IDENTITY_SCOPE_MISMATCH", "asins": missing_details,
+            })
+            identity["status"] = "BLOCK"
+
+        snapshot_root = self.run_dir / str(snapshot.get("snapshot_path") or "")
+        replay_result = audit_offline_replay(
+            ranking_rows, detail_rows,
+            ranking_html_dirs=(snapshot_root / "html",),
+            detail_html_dirs=self.task.detail_html_dirs,
+            run_dir=snapshot_root,
+            asins=selected,
+        )
+        replay = replay_result.to_dict() if hasattr(replay_result, "to_dict") else dict(replay_result)
+        return {
+            "ranking_authority": self._stage_report(master, "ranking_authority", ranking_result,
+                                                      produced_by="translation-input"),
+            "detail_identity": self._stage_report(master, "detail_identity", identity,
+                                                    produced_by="translation-input"),
+            "offline_replay": self._stage_report(master, "offline_replay", replay,
+                                                   produced_by="translation-input"),
+        }
+
     def stage_translation_input(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         batch = self._translation_batch(context)
         master = batch["translation_batch_master"]
         value = build_production_input(master.get("records") or [], source_run_id=self.run_id,
                                        source_schema_version=str(master.get("master_schema_version") or "master-v1"),
                                        translation_schema_version=TRANSLATION_SCHEMA_VERSION, run_id=self.run_id)
-        return self._store("translation-input", {"status": "READY", "translation_input": value, **batch,
-            "input_artifact_hashes": {"spanish-master": self._prior(context, "spanish-master").get("artifact_file_hash")},
+        reports = self._translation_batch_reports(context, batch)
+        return self._store("translation-input", {"status": "READY", "translation_input": value,
+            "translation_batch_reports": reports, **batch,
+            "input_artifact_hashes": {"spanish-master": self._prior(context, "spanish-master").get("artifact_file_hash"),
+                                        "ranking-authority": self._prior(context, "ranking-authority").get("artifact_file_hash"),
+                                        "offline-reparse": self._prior(context, "offline-reparse").get("artifact_file_hash")},
             "counts": {"records": len(value.get("records") or []),
                        "selected_asins": len(value.get("records") or [])}})
 
@@ -545,6 +610,9 @@ class ProductionWorkflow:
             from ..translation.budget import BudgetedProvider
             if not isinstance(provider, BudgetedProvider):
                 raise ProductionWorkflowError("QWEN_PROVIDER_MUST_BE_BUDGETED")
+        if provider_mode == "qwen-mt-fixture":
+            if str(getattr(provider, "name", "")) != "qwen-mt" or str(getattr(provider, "model", "")) != "qwen-mt-fixture":
+                raise ProductionWorkflowError("QWEN_FIXTURE_PROVIDER_IDENTITY_INVALID")
         dictionary = self._artifact_data(self._prior(context, "dictionary"))
         dictionary_manifest = dictionary.get("dictionary_manifest") or {}
         service = TranslationService(provider, TranslationCache(self.work / "translation_cache.json"),
@@ -555,7 +623,7 @@ class ProductionWorkflow:
                                        translated.get("records") or {})
         return self._store("translation", {"status": "READY", "execution": translated, "state": state,
             "provider_provenance": {"provider": provider.name, "model": provider.model,
-                                    "verified": provider_mode == "qwen-mt",
+                                    "verified": provider_mode in {"qwen-mt", "qwen-mt-fixture"},
                                     "request_count": int((translated.get("summary") or {}).get("total", 0))},
             "input_artifact_hashes": {"preclean": self._prior(context, "preclean").get("artifact_file_hash"),
                                         "dictionary": self._prior(context, "dictionary").get("artifact_file_hash")},
@@ -578,7 +646,8 @@ class ProductionWorkflow:
         } for row in state.get("records") or [] if row.get("asin")}
 
     @staticmethod
-    def _replace_state_fields(state: Mapping[str, Any], changed: Mapping[str, Any]) -> dict[str, Any]:
+    def _replace_state_fields(state: Mapping[str, Any], changed: Mapping[str, Any], *,
+                              effective_dictionary_version: str = "") -> dict[str, Any]:
         """Merge only rerender/repair envelopes; source and good fields stay immutable."""
         result = deepcopy(dict(state))
         by_asin = {str(row.get("asin") or "").upper(): row for row in result.get("records") or []}
@@ -595,7 +664,10 @@ class ProductionWorkflow:
                     current.update(deepcopy(dict(envelope)))
                     current["final_zh"] = current.get("translated_text") or current.get("final_zh")
                     current["promotion_status"] = "PROMOTED"
-        result["release_candidate"] = build_release_translation_candidate(result)
+        if effective_dictionary_version:
+            result["release_dictionary_version"] = str(effective_dictionary_version)
+        result["release_candidate"] = build_release_translation_candidate(
+            result, dictionary_version=str(result.get("release_dictionary_version") or ""))
         by_asin = {str(row.get("asin") or "").upper(): row
                    for row in result["release_candidate"].get("records") or []}
         for record in result.get("records") or []:
@@ -657,7 +729,13 @@ class ProductionWorkflow:
             return {**result, "target": kwargs["translated_text"], "context_key": kwargs["context_key"]}
         rerender = rerender_affected_fields(master.get("records") or [], records, sync.get("manifest") or {},
                                             qa_callback=rerender_qa)
-        updated_state = self._replace_state_fields(state, rerender.get("records") or {})
+        final_manifest_version = (sync.get("manifest") or {}).get("dictionary_version")
+        effective_dictionary_version = (
+            "" if final_manifest_version in (None, "") else str(final_manifest_version)
+        )
+        updated_state = self._replace_state_fields(
+            state, rerender.get("records") or {},
+            effective_dictionary_version=effective_dictionary_version)
         return self._store("dictionary-rerender", {"status": "READY", "dictionary_sync": sync,
             "dictionary_qa": qa_results, "rerender": rerender, "translation_state": updated_state,
             "input_artifact_hashes": {"translation": self._prior(context, "translation").get("artifact_file_hash"),
@@ -673,11 +751,19 @@ class ProductionWorkflow:
         if not isinstance(state, Mapping):
             state = self._artifact_data(self._prior(context, "translation"))["state"]
         rows = []
+        effective_dictionary_version = str(state.get("release_dictionary_version") or "")
         for record in state.get("records") or []:
             for field in record.get("fields") or []:
+                # Source-missing and non-promoted envelopes are execution
+                # state, not publishable candidates.  Chinese QA is bound to
+                # exactly the final candidate surface instead of manufacturing
+                # blocked pseudo-fields for absent source evidence.
+                if field.get("promotion_status") != "PROMOTED" or not field.get("final_zh"):
+                    continue
                 rows.append(audit_field(asin=record.get("asin", ""), field=field.get("field", ""),
                     source_es=field.get("source_text", ""), translated_zh=field.get("final_zh") or "",
-                    source_hash=field.get("source_hash", ""), dictionary_version=str(field.get("dictionary_version") or ""),
+                    source_hash=field.get("source_hash", ""), dictionary_version=(
+                        effective_dictionary_version or str(field.get("dictionary_version") or "")),
                     target_field=str(field.get("target_field") or ""), field_type=str(field.get("target_field") or ""),
                     context=field.get("context") if isinstance(field.get("context"), Mapping) else None,
                     translation_schema_version=str(field.get("translation_schema_version") or field.get("schema_version") or TRANSLATION_SCHEMA_VERSION)))
@@ -771,7 +857,16 @@ class ProductionWorkflow:
         selected = {str(row.get("asin") or "").upper() for row in master.get("records") or []}
         rankings = [row for row in rankings if str(row.get("asin") or "").upper() in selected]
         details = [row for row in self.history.load_details() if str(row.get("asin") or "").upper() in selected]
-        report = audit_field_closure_quality(master.get("records"), details, rankings)
+        state = self._artifact_data(self._prior(context, "re-qa")).get("translation_state") or {}
+        translated = {str(row.get("asin") or "").upper(): row for row in state.get("records") or []}
+        closure_rows = []
+        for source_row in master.get("records") or []:
+            row = deepcopy(dict(source_row))
+            for field in (translated.get(str(row.get("asin") or "").upper(), {}).get("fields") or []):
+                if field.get("promotion_status") == "PROMOTED" and field.get("final_zh"):
+                    row[str(field.get("target_field") or "")] = field.get("final_zh")
+            closure_rows.append(row)
+        report = audit_field_closure_quality(closure_rows, details, rankings)
         closure = report.to_dict() if hasattr(report, "to_dict") else dict(report)
         return self._store("field-closure", {"status": "READY", "field_closure": closure,
             "input_artifact_hashes": {"re-qa": self._prior(context, "re-qa").get("artifact_file_hash")},
@@ -803,12 +898,22 @@ class ProductionWorkflow:
         def missing_report(check: str) -> dict[str, Any]:
             return {"check": check, "status": "BLOCK", "produced_stage": "",
                     "issues": [{"code": "UPSTREAM_STAGE_REPORT_MISSING"}]}
-        report_source = self._artifact_data(self._prior(context, "spanish-master")).get("stage_reports") or {}
+        report_source = translation_input.get("translation_batch_reports") or {}
         authority_report = report_source.get("ranking_authority") or missing_report("ranking_authority")
         detail_report = report_source.get("detail_identity") or missing_report("detail_identity")
         replay_report = report_source.get("offline_replay") or missing_report("offline_replay")
         final_state = deepcopy(final_state)
-        final_state["release_candidate"] = build_release_translation_candidate(final_state)
+        manifest_dictionary_version = (
+            ((rerender.get("dictionary_sync") or {}).get("manifest") or {}).get("dictionary_version")
+        )
+        final_dictionary_version = (
+            str(manifest_dictionary_version)
+            if manifest_dictionary_version not in (None, "")
+            else str(final_state.get("release_dictionary_version") or "")
+        )
+        final_state["release_dictionary_version"] = final_dictionary_version
+        final_state["release_candidate"] = build_release_translation_candidate(
+            final_state, dictionary_version=final_dictionary_version)
         chinese_rows = []
         translations_by_asin = {str(row.get("asin") or "").upper(): row
                                 for row in final_state.get("records") or []}
@@ -851,6 +956,7 @@ class ProductionWorkflow:
         from ..production.release import export_ready
         release = self._artifact_data(self._prior(context, "release"))
         output = self.run_dir / "output" / "selection.xlsx"
+        output.parent.mkdir(parents=True, exist_ok=True)
         result = export_ready(release["artifacts"],
                               lambda rows, *, output_path: export_workbook(rows, out_path=output_path),
                               str(output))

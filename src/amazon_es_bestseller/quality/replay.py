@@ -44,6 +44,18 @@ def _status_rows(run_dir: str | Path | None) -> list[dict[str, Any]]:
                 return []
             if isinstance(value, list):
                 return [dict(row) for row in value if isinstance(row, Mapping)]
+    # Ranking snapshots retain the original page statuses in their immutable
+    # manifest.  Reading that evidence is still entirely offline and avoids
+    # fabricating a one-page/default URL association during replay.
+    manifest_path = root / "manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        statuses = manifest.get("page_statuses") or manifest.get("source_statuses")
+        if isinstance(statuses, list):
+            return [dict(row) for row in statuses if isinstance(row, Mapping)]
     return []
 
 
@@ -138,6 +150,11 @@ def audit_offline_replay(
         replayed_rankings += 1
         for row in parsed:
             asin = normalize_asin(row.get("asin"))
+            # A translation batch may select a strict subset of a saved page.
+            # The HTML is still replayed as one page, but records outside the
+            # explicitly audited ASIN scope must not become false mismatches.
+            if asins and asin not in asins:
+                continue
             expected = expected_by_key.get((page_url, page_number, asin))
             if expected is None:
                 candidates = expected_by_asin.get(asin, [])

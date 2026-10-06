@@ -5,6 +5,7 @@ import pytest
 
 from amazon_es_bestseller.cli import main
 from amazon_es_bestseller.collection.detail import reparse_saved_details
+from amazon_es_bestseller.collection.ranking import parse_bestsellers_page
 from amazon_es_bestseller.collection.planning import DetailState
 from amazon_es_bestseller.monitoring.snapshot import build_ranking_snapshot
 from amazon_es_bestseller.orchestration.production_run import ProductionRun
@@ -22,26 +23,51 @@ from amazon_es_bestseller.quality.chinese import audit_field
 
 
 ASIN = "B000000001"
+ASINS = (ASIN, "B000000002", "B000000003")
 SOURCE_URL = "https://www.amazon.es/Best-Sellers/zgbs/123"
 
 
-def _write_fixture(root, *, rank=1, mode="initial"):
+class ReviewedOfflineFixtureProvider(TranslationProvider):
+    """Test-only provider: reviewed provenance, but no transport implementation."""
+
+    name = "qwen-mt"
+
+    def __init__(self):
+        self.calls = 0
+
+    @property
+    def model(self):
+        return "qwen-mt-fixture"
+
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls += 1
+        translated = "不锈钢水瓶 500 ml" if field == "title_es_raw" else "厨房"
+        return ProviderResponse(text=translated, provider=self.name, model=self.model,
+                                raw={"fixture": True, "network": False})
+
+
+def _write_fixture(root, *, rank=1, mode="initial", asins=(ASIN,)):
     html = root / "html"; html.mkdir(exist_ok=True)
-    (html / (ASIN + ".html")).write_text(
-        "<html><body><input id='ASIN' value='%s'><h1 id='productTitle'>Botella de acero 500 ml</h1>"
-        "<span class='a-price'><span class='a-offscreen'>12,00€</span></span></body></html>" % ASIN,
-        encoding="utf-8")
+    cards = []
+    for index, asin in enumerate(asins, rank):
+        (html / (asin + ".html")).write_text(
+            "<html><body><input id='ASIN' value='%s'><h1 id='productTitle'>Botella de acero 500 ml</h1>"
+            "<span class='a-price'><span class='a-offscreen'>12,00€</span></span></body></html>" % asin,
+            encoding="utf-8")
+        cards.append("<div id='gridItemRoot'><span class='a-badge-text'>#%d</span>"
+                     "<a href='/dp/%s'>Botella de acero 500 ml</a></div>" % (index, asin))
+    ranking_html = ("<html><body><div id='zg_browseRoot'>"
+                    "<a href='/zgbs/1'>Hogar</a><a href='/zgbs/12'>Cocina</a>"
+                    "<a href='/zgbs/123'>Botellas</a><a href='/zgbs/1234'>Termos</a>"
+                    "</div>%s</body></html>") % "".join(cards)
+    records = parse_bestsellers_page(ranking_html, SOURCE_URL, "")
     evidence = {
         "planned_sources": [{"source_url": SOURCE_URL, "page_number": 1}],
         "source_statuses": [{"source_url": SOURCE_URL, "page_number": 1,
                              "status": "NORMAL", "access_state": "NORMAL",
-                             "parse_status": "PARSE_OK", "parsed_record_count": 1}],
-        "records": [{"asin": ASIN, "ranking_asin": ASIN, "bestseller_rank": rank,
-                     "ranking_source_url": SOURCE_URL, "ranking_page_number": 1,
-                     "ranking_product_url_raw": "/dp/%s" % ASIN,
-                     "ranking_product_url_normalized": "https://www.amazon.es/dp/%s" % ASIN,
-                     "ranking_link_asin": ASIN, "ranking_link_identity_status": "MATCH",
-                     "leaf_category": "Cocina", "browse_node_id": "123"}],
+                             "parse_status": "PARSE_OK", "parsed_record_count": len(records)}],
+        "html_files": {"ranking_000.html": ranking_html},
+        "records": records,
     }
     (root / "ranking.json").write_text(json.dumps(evidence), encoding="utf-8")
     config = {"task_id": "offline-v1-fixture", "mode": mode, "network_mode": "offline",
@@ -73,11 +99,8 @@ def test_offline_source_only_executes_real_v1_snapshot_reparse_audit_and_master(
     master = json.loads((tmp_path / "history" / "spanish_master.json").read_text(encoding="utf-8"))
     assert master["records"][0]["asin"] == ASIN
     assert master["records"][0]["title_es_raw"] == "Botella de acero 500 ml"
-    reports = json.loads((run_dir / "artifacts" / "spanish-master.json").read_text(encoding="utf-8"))["stage_reports"]
-    for check in ("ranking_authority", "detail_identity", "offline_replay"):
-        assert reports[check]["status"] == "PASS"
-        assert reports[check]["produced_stage"] == check
-        assert reports[check]["report_produced_by"] == "spanish-master"
+    master_artifact = json.loads((run_dir / "artifacts" / "spanish-master.json").read_text(encoding="utf-8"))
+    assert "stage_reports" not in master_artifact
     metrics = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert metrics["ranking_records"] == 1 and metrics["detail_offline_reparsed"] == 1
     assert metrics["detail_requested"] == 0
@@ -179,9 +202,107 @@ def test_production_workflow_ready_end_to_end_offline_candidate_is_nonformal_wit
     for check in ("ranking_authority", "detail_identity", "offline_replay"):
         report = release["artifacts"][check]["payload"]
         assert report["status"] == "PASS" and report["produced_stage"] == check
+        assert report["report_produced_by"] == "translation-input"
     assert release["artifacts"]["translation"]["payload"]["state"]["records"]
     errors = (run_dir / "errors.jsonl").read_text(encoding="utf-8")
     assert "RELEASE_GATE_NOT_READY" in errors
+
+
+def test_formal_ready_offline_fixture_provider_uses_selected_batch_reports_and_exports_excel(tmp_path):
+    """Exercise the real ProductionWorkflow, not a hand-built release blob."""
+    config_path = _write_fixture(tmp_path, asins=ASINS)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    raw["translation"] = {"provider_mode": "qwen-mt-fixture"}
+    config_path.write_text(json.dumps(raw), encoding="utf-8")
+    source_task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+    run_dir = tmp_path / "formal"
+    source_result = ProductionRun(run_dir, run_id="formal", config=source_task.runner_config(), offline=True).run(
+        ProductionWorkflow(source_task, run_dir, run_id="formal").handlers(), profile="source-only")
+    assert source_result["status"] == "DRAFT_SOURCE_ONLY"
+
+    selection = create_selection_manifest(
+        master_artifact_path=run_dir / "artifacts" / "spanish-master.json",
+        selected_asins=list(ASINS[:2]), selection_id="formal-subset")
+    write_selection_manifest(tmp_path / "selection.json", selection)
+    raw["translation"]["selection_manifest"] = "selection.json"
+    task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+
+    provider = ReviewedOfflineFixtureProvider()
+    result = ProductionRun(run_dir, run_id="formal", config=task.runner_config(), offline=True).run(
+        ProductionWorkflow(task, run_dir, run_id="formal", translation_provider=provider).handlers(),
+        from_stage="translation-input", profile="full")
+    assert result["status"] == "READY" and result["formal_release"] is True
+    assert provider.calls > 0
+    translation = json.loads((run_dir / "artifacts" / "translation.json").read_text(encoding="utf-8"))
+    rerender = json.loads((run_dir / "artifacts" / "dictionary-rerender.json").read_text(encoding="utf-8"))
+    release = json.loads((run_dir / "artifacts" / "release.json").read_text(encoding="utf-8"))
+    raw_versions = {
+        str(field["dictionary_version"])
+        for record in translation["state"]["records"]
+        for field in record["fields"]
+        if field.get("source_text")
+    }
+    final_translation_state = release["artifacts"]["translation"]["payload"]["state"]
+    final_versions = {
+        str(candidate["dictionary_version"])
+        for record in final_translation_state["release_candidate"]["records"]
+        for candidate in record["field_candidates"]
+    }
+    assert raw_versions == {"0"}
+    assert rerender["dictionary_sync"]["manifest"]["dictionary_version"] == 1
+    assert rerender["rerender"]["updates"]
+    assert final_versions == {"1"}
+    run_manifest = json.loads((run_dir / "runmanifest.json").read_text(encoding="utf-8"))
+    assert run_manifest["stages"]["release"]["payload"]["release_decision"]["ready"]
+    reports = json.loads((run_dir / "artifacts" / "translation-input.json").read_text(encoding="utf-8"))["translation_batch_reports"]
+    for check in ("ranking_authority", "detail_identity", "offline_replay"):
+        assert reports[check]["status"] == "PASS"
+        assert reports[check]["summary"]["records_checked"] == 2
+        assert {row["asin"] for row in reports[check]["records"]} == set(ASINS[:2])
+    assert (run_dir / "output" / "selection.xlsx").exists()
+
+
+def test_formal_ready_offline_fixture_provider_with_dictionary_no_change(tmp_path):
+    config_path = _write_fixture(tmp_path)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    raw["translation"] = {"provider_mode": "qwen-mt-fixture"}
+    config_path.write_text(json.dumps(raw), encoding="utf-8")
+    task = TaskConfig.from_mapping(raw, base_dir=tmp_path)
+    run_dir = tmp_path / "formal-no-change"
+    provider = ReviewedOfflineFixtureProvider()
+    result = ProductionRun(run_dir, run_id="formal-no-change", config=task.runner_config(), offline=True).run(
+        ProductionWorkflow(task, run_dir, run_id="formal-no-change", translation_provider=provider).handlers(),
+        profile="full")
+    assert result["status"] == "READY" and provider.calls > 0
+    rerender = json.loads((run_dir / "artifacts" / "dictionary-rerender.json").read_text(encoding="utf-8"))
+    assert rerender["rerender"]["status"] == "NO_CHANGE"
+    assert rerender["dictionary_sync"]["change_log"] == []
+
+
+def test_batch_reports_block_real_identity_mismatch_and_missing_replay_html(tmp_path):
+    config_path = _write_fixture(tmp_path)
+    evidence_path = tmp_path / "ranking.json"
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence.pop("html_files")
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    task = TaskConfig.from_mapping(json.loads(config_path.read_text(encoding="utf-8")), base_dir=tmp_path)
+    run_dir = tmp_path / "blocked-reports"
+    ProductionRun(run_dir, run_id="blocked-reports", config=task.runner_config(), offline=True).run(
+        ProductionWorkflow(task, run_dir, run_id="blocked-reports").handlers(), profile="source-only")
+    detail_path = run_dir / "work" / "details" / "details.json"
+    details = json.loads(detail_path.read_text(encoding="utf-8"))
+    details[0]["final_url"] = "https://www.amazon.es/dp/B099999999"
+    detail_path.write_text(json.dumps(details), encoding="utf-8")
+
+    with pytest.raises(Exception, match="RELEASE_GATE_NOT_READY"):
+        ProductionRun(run_dir, run_id="blocked-reports", config=task.runner_config(), offline=True).run(
+            ProductionWorkflow(task, run_dir, run_id="blocked-reports").handlers(),
+            from_stage="translation-input", profile="full")
+    reports = json.loads((run_dir / "artifacts" / "translation-input.json").read_text(encoding="utf-8"))["translation_batch_reports"]
+    assert reports["detail_identity"]["status"] == "BLOCK"
+    assert any(row.get("issue_code") == "IDENTITY_MISMATCH" for row in reports["detail_identity"]["issues"])
+    assert reports["offline_replay"]["status"] == "BLOCK"
+    assert any(row.get("issue_code") == "REPLAY_EVIDENCE_MISSING" for row in reports["offline_replay"]["issues"])
 
 
 def test_task_config_rejects_ready_payload_injection(tmp_path):
