@@ -836,7 +836,9 @@ class ProductionWorkflow:
             "spanish_output": seal_artifact("spanish_output", {"records": master.get("records") or []}),
             "chinese_output": seal_artifact("chinese_output", {"records": chinese_rows}),
         }
-        return self._store("release", {"status": "READY", "artifacts": artifacts,
+        # A READY release artifact is a candidate for the sole formal gate in
+        # ProductionRun; this producer never self-certifies a formal release.
+        return self._store("release", {"status": "READY", "formal_release": False, "artifacts": artifacts,
             "input_artifact_hashes": {"field-closure": self._prior(context, "field-closure").get("artifact_file_hash"),
                                         "translation-input": self._prior(context, "translation-input").get("artifact_file_hash"),
                                         "spanish-master": self._prior(context, "spanish-master").get("artifact_file_hash")},

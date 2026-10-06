@@ -67,11 +67,17 @@ def test_offline_source_only_executes_real_v1_snapshot_reparse_audit_and_master(
 
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["status"] == "DRAFT_SOURCE_ONLY"
+    assert summary["formal_release"] is False
     assert (run_dir / "artifacts" / "spanish-master.json").exists()
     assert (run_dir / "work" / "details" / "plans" / "detail_plan.json").exists()
     master = json.loads((tmp_path / "history" / "spanish_master.json").read_text(encoding="utf-8"))
     assert master["records"][0]["asin"] == ASIN
     assert master["records"][0]["title_es_raw"] == "Botella de acero 500 ml"
+    reports = json.loads((run_dir / "artifacts" / "spanish-master.json").read_text(encoding="utf-8"))["stage_reports"]
+    for check in ("ranking_authority", "detail_identity", "offline_replay"):
+        assert reports[check]["status"] == "PASS"
+        assert reports[check]["produced_stage"] == check
+        assert reports[check]["report_produced_by"] == "spanish-master"
     metrics = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert metrics["ranking_records"] == 1 and metrics["detail_offline_reparsed"] == 1
     assert metrics["detail_requested"] == 0
@@ -156,12 +162,23 @@ def test_full_graph_calls_real_translation_qa_and_release_gate_but_fake_provider
         main(["--offline", "production-run", "--run-dir", str(run_dir), "--run-id", "full",
               "--config", str(config), "--profile", "full"])
     translation = json.loads((run_dir / "artifacts" / "translation.json").read_text(encoding="utf-8"))
+    dictionary_input = json.loads((run_dir / "artifacts" / "dictionary.json").read_text(encoding="utf-8"))
     dictionary = json.loads((run_dir / "artifacts" / "dictionary-rerender.json").read_text(encoding="utf-8"))
     repair = json.loads((run_dir / "artifacts" / "field-repair.json").read_text(encoding="utf-8"))
     release = json.loads((run_dir / "artifacts" / "release.json").read_text(encoding="utf-8"))
     assert translation["provider_provenance"]["provider"] == "fake"
     assert dictionary["counts"]["evidence"] >= 1
     assert "repair_queue" in repair and "translation_state" in repair
+    assert release["status"] == "READY" and release["formal_release"] is False
+    assert translation["state"]["release_candidate"]["release_status"] == "READY"
+    manifest = dictionary_input["dictionary_manifest"]
+    execution_fields = [field for record in translation["execution"]["records"].values()
+                        for field in record["fields"].values()]
+    assert execution_fields and {field["dictionary_version"] for field in execution_fields} == {
+        str(manifest["dictionary_version"])}
+    for check in ("ranking_authority", "detail_identity", "offline_replay"):
+        report = release["artifacts"][check]["payload"]
+        assert report["status"] == "PASS" and report["produced_stage"] == check
     assert release["artifacts"]["translation"]["payload"]["state"]["records"]
     errors = (run_dir / "errors.jsonl").read_text(encoding="utf-8")
     assert "RELEASE_GATE_NOT_READY" in errors
