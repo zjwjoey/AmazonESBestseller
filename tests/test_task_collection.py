@@ -107,7 +107,9 @@ def test_task_collect_cli_dispatches_to_existing_scheduler_with_runtime_override
         "challenge_wait_seconds": 12.0, "manual_assist": True,
     }
     assert observed["mode"] == "serial"
-    assert observed["project_root"].name == "production-v1-complete"
+    expected_project_root = Path(cli.__file__).resolve().parents[2]
+    assert observed["project_root"] == expected_project_root
+    assert (observed["project_root"] / "pyproject.toml").is_file()
     assert "task-collect serial" in capsys.readouterr().out
 
 
