@@ -459,3 +459,35 @@ The remaining items in the preceding section are historical at this point:
 the P0 and P1 bullets are resolved by this slice; structured follow-up repair,
 closure/export/release wiring, legacy formal reuse, Provider-3 validation,
 SourceGate readiness, and the owner-policy decision remain pending.
+
+## Full offline regression checkpoint (2026-10-07)
+
+- One complete offline run on `44a3c8ad372232842e4eb91f97e87c2bed6c4787`
+  used the local `--basetemp`, `-o addopts=''`, `-q -rs`, and a single
+  foreground pytest process. Immutable runtime evidence is at
+  `outputs/production_closure_20261007T200000Z_full_offline_regression/`;
+  it contains stdout/stderr, the final pytest footer, and `PROCESS_EXIT=1`.
+- Result: **1093 passed, 1 failed, 6 skipped** in `441.44s`. The only failure
+  is `tests/test_dictionary_service_cache_isolation.py::test_service_does_not_reuse_old_dictionary_version_field_or_tm_cache`.
+  Its old assertion requires a second provider call after a dictionary hash
+  change; current no-repeat behavior correctly makes zero calls and returns a
+  review-required candidate. This is a test/contract reconciliation item, not
+  evidence that the run is green.
+- Existing focused evidence was read, not rerun: the final
+  `claim-focused5.log` has **93 passed** dots and exit success from that run.
+  `ruff check src tests`, `python -m compileall -q src tests`, and
+  `git diff --check` all passed after the full-suite run. No new tools were
+  added in this slice, so there is no newly added tool file to lint separately.
+- Independent review found two remaining P1 correctness gaps in the durable
+  claim implementation: structured `failed`, empty-success, and pending
+  response branches must settle their per-item memory record with terminal or
+  uncertain detail (including `last_error`), and a losing scalar ASIN that
+  joins an already settled TM result must settle its own field binding instead
+  of returning cached data while its field claim remains pending. These remain
+  explicitly unimplemented pending a new minimal task. Stale hard-kill lock
+  recovery also remains out of scope unless safe owner-PID/lease evidence is
+  designed; no lock is blindly deleted.
+
+This full offline test does not alter release semantics: SourceGate is not
+`READY`; owner decisions, structured downstream repair/closure/export/release
+wiring, formal legacy policy, and Provider-3/API validation remain incomplete.
