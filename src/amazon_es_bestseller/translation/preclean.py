@@ -120,15 +120,29 @@ def _collapse_repeated(text: str) -> tuple[str, bool]:
     return stripped, False
 
 
+def is_real_html_tag(match: re.Match[str]) -> bool:
+    """Return whether a syntactic tag is a known HTML element, not product text."""
+    name_match = _HTML_TAG_NAME_RE.match(match.group(0))
+    name = name_match.group(1).casefold() if name_match else ""
+    return name in _HTML_ELEMENT_NAMES
+
+
+def find_real_html_tag(value: Any) -> tuple[str, re.Match[str] | None]:
+    """Find actual markup after entity decoding, preserving literal `<M>` tokens."""
+    text = html.unescape(str(value or ""))
+    for match in HTML_TAG_RE.finditer(text):
+        if is_real_html_tag(match):
+            return text, match
+    return text, None
+
+
 def _strip_real_html_tags(text: str) -> tuple[str, int]:
     """Remove known HTML tags without treating literal product tokens as tags."""
     removed = 0
 
     def replace(match: re.Match[str]) -> str:
         nonlocal removed
-        name_match = _HTML_TAG_NAME_RE.match(match.group(0))
-        name = name_match.group(1).casefold() if name_match else ""
-        if name in _HTML_ELEMENT_NAMES:
+        if is_real_html_tag(match):
             removed += 1
             return " "
         return match.group(0)

@@ -122,6 +122,7 @@ from datetime import date as _date
 
 from ..identity import asin_from_url as _asin_from_url, resolve_identity as _resolve_identity
 from ..normalization.dates import parse_es_date as _parse_es_date
+from ..translation.preclean import find_real_html_tag
 
 PASS = "PASS"
 WARN = "WARN"
@@ -136,8 +137,9 @@ SOURCE_READY = "SOURCE_READY"
 _TEXT_JUNK = re.compile(rf"(?:{_HTML_TAG}|\b(?:javascript|cookie|captcha|robot\s*check|add to cart|selecciona|privacy|css)\b|[{{}}]\s*[\"'][\w-]+[\"']\s*:)", re.I)
 _BAD_TEXT = re.compile(r"(?:�{2,}|Ã[\x80-\xBF]|Â[\x80-\xBF]|[\x00-\x08\x0b\x0c\x0e-\x1f])")
 _REPEATED_TEXT = re.compile(r"(.{8,}?)(?:\s*\1){2,}", re.S)
-_STRICT_HTML_TAG = re.compile(r"</?\s*(?:script|style|div|span|iframe|object|embed)\b[^>]*>", re.I)
-_STRICT_UI_TEXT = re.compile(r"\b(?:javascript|cookie|captcha|robot\s*check|add\s+to\s+cart|privacy)\b", re.I)
+_STRICT_UI_TEXT = re.compile(
+    r"\b(?:javascript|captcha|robot\s*check|add\s+to\s+cart|privacy|"
+    r"(?:accept|manage|configure)\s+(?:all\s+)?cookies?|cookies?\s+(?:policy|settings|preferences))\b", re.I)
 _EXPLICIT_BAD_TEXT = re.compile(r"\ufffd|\?{2,}|[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _UNIT = re.compile(
     r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(?P<unit>m(?:3|³)\s*/\s*h|cm(?:3|³)|cc|mililitros?|litros?|gramos?|"
@@ -468,8 +470,8 @@ def _units_for_unit_audit(label, value) -> set[str]:
     return units
 
 
-def _category_leaf_supported(provenance, values) -> bool:
-    """Require ranking-path evidence before accepting a leaf equal to L3."""
+def _category_leaf_supported(row, provenance, values) -> bool:
+    """Require provenance to bind to an actual context on this exact record."""
     if not isinstance(provenance, Mapping) or str(provenance.get("source") or "") != "ranking_context":
         return False
     l1, l2, l3, leaf = values
@@ -482,7 +484,27 @@ def _category_leaf_supported(provenance, values) -> bool:
         return False
     path = str(provenance.get("ranking_source_category_path") or "")
     parts = [part.strip() for part in path.split(">") if part.strip()]
-    return len(parts) >= 3 and parts[-1] == leaf
+    if len(parts) < 3 or parts[-1] != leaf:
+        return False
+    contexts = row.get("ranking_contexts") or []
+    if not isinstance(contexts, list):
+        return False
+    expected_hash = str(provenance.get("ranking_context_hash") or "")
+    expected_url = str(provenance.get("ranking_source_url") or "")
+    expected_page = provenance.get("ranking_page_number")
+    if not expected_hash or not expected_url or expected_page in (None, ""):
+        return False
+    for context in contexts:
+        if not isinstance(context, Mapping) or _sf_hash(dict(context)) != expected_hash:
+            continue
+        if (str(context.get("ranking_source_url") or context.get("source_url") or "") != expected_url
+                or context.get("ranking_page_number", context.get("page_number")) != expected_page
+                or str(context.get("ranking_source_category_path") or "") != path):
+            continue
+        if (context.get("category_l1") == l1 and context.get("category_l2") == l2
+                and context.get("category_l3") == l3 and context.get("leaf_category") == leaf):
+            return True
+    return False
 
 
 def _text_locator(text: str, match: re.Match[str], kind: str) -> dict:
@@ -506,8 +528,12 @@ def _has_visible_attribute_duplicate(row) -> bool:
 
 def _text_semantic_finding(row, field: str, text: str):
     """Flag only strict UI/corruption; ordinary product repetition is reviewable."""
-    for pattern, kind in ((_STRICT_HTML_TAG, "html_script"), (_STRICT_UI_TEXT, "explicit_ui"),
-                          (_EXPLICIT_BAD_TEXT, "mojibake")):
+    decoded_text, html_tag = find_real_html_tag(text)
+    if html_tag:
+        return ("MISPLACED", REVIEW_REQUIRED, "P1",
+                "strict HTML/UI/control or damaged text is not product evidence",
+                _text_locator(decoded_text, html_tag, "html_tag"))
+    for pattern, kind in ((_STRICT_UI_TEXT, "explicit_ui"), (_EXPLICIT_BAD_TEXT, "mojibake")):
         match = pattern.search(text)
         if match:
             return ("MISPLACED", REVIEW_REQUIRED, "P1",
@@ -548,7 +574,7 @@ def _sf_semantics(row, asin, issues, fields):
     # A three-segment Amazon path legitimately has ``leaf == L3``.  Accept it
     # only when the exact ranking category path/provenance says the same;
     # otherwise it remains a likely fill-down error.
-    leaf_l3_without_evidence = bool(l3 and l3 == leaf and not _category_leaf_supported(provenance, values))
+    leaf_l3_without_evidence = bool(l3 and l3 == leaf and not _category_leaf_supported(row, provenance, values))
     if copied_hierarchy or leaf_l3_without_evidence:
         _sf_issue(issues, fields, asin, "CATEGORY_COPIED", MAPPING_MISSED, "P1", "category levels must not be copied to fill blanks", "category_l2")
     if any(re.search(r"(?:€|\bEUR\b|\d+[,.]\d{2})", value, re.I) for value in values):
@@ -618,7 +644,8 @@ def _sf_rankings(rows, issues, fields):
             slots[slot].add(asin)
             slot_count[slot] += 1
             pages[(str(source), page)].add(rank)
-            if not ctx.get("leaf_category") and not ctx.get("browse_node_id"):
+            has_path = bool([part.strip() for part in str(ctx.get("ranking_source_category_path") or "").split(">") if part.strip()])
+            if not ctx.get("leaf_category") and not ctx.get("browse_node_id") and not has_path:
                 _sf_issue(issues, fields, asin, "RANK_CATEGORY_EVIDENCE_MISSING", SOURCE_MISSING, "P2", "ranking lacks category/node", "ranking_contexts")
         if row.get("detail_bsr") not in (None, "") and row.get("bestseller_rank") == row.get("detail_bsr"):
             _sf_issue(issues, fields, asin, "RANK_BSR_MIXED", BLOCKED, "P1", "detail BSR cannot populate bestseller rank", "bestseller_rank")

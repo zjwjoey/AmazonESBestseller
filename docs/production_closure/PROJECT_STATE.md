@@ -210,3 +210,27 @@ to use for review.
   contexts and strengthen tag-aware strict-text detection while preserving
   literal `<M>` / `<USB-C>` product text. No historical or new SourceGate was
   promoted or marked ready.
+
+## P1 provenance and strict-text follow-up
+
+- Category provenance now passes `leaf_category == category_l3` only when its
+  stored canonical context hash, URL, page, category path, and hierarchy all
+  match an actual `ranking_contexts` entry on the same record. Missing contexts
+  or a forged hash remain `CATEGORY_COPIED`; no other product or ranking list
+  can supply the evidence. A top-level ranking context with a non-empty source
+  path is valid even without a browse node.
+- Source-field strict text detection now shares the translation pre-cleaner’s
+  known-element tag rule. Escaped real `<a>` / `<p>` markup is reviewable,
+  while ordinary product wording such as `Molde para cookie de Navidad` and
+  literal `<M>` / `<USB-C>` tokens are preserved. This changes audit detection
+  only; it does not repair raw evidence.
+- A historical reviewed `SOURCE_READY` audit is insufficient for promotion if
+  the current closure audit is REVIEW/BLOCK: the candidate status is explicitly
+  `CANDIDATE_CLOSURE_GATE_BLOCKED`. No promotion API, translation, or export
+  was invoked.
+- The runtime extraction issue register remains referenced only at
+  `outputs/production_closure_issue_register_20261007T074352Z`; this slice
+  does not change collector behavior or its raw errors.
+- The requested rank-matrix/subset diagnostic is intentionally deferred to a
+  separate small slice to avoid combining rank scope semantics with these P1
+  evidence and text-boundary changes.

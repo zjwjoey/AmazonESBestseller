@@ -28,6 +28,17 @@ def _audit(asins):
     }
 
 
+def _ready_audit(asins):
+    return {
+        "check": "source_fields",
+        "status": "PASS",
+        "summary": {"record_count": len(asins), "issue_count": 0},
+        "issues": [], "field_audits": [],
+        "sku_status": {asin: "SOURCE_READY" for asin in asins},
+        "record_bindings": {asin: [{"record_hash": "evidence-" + asin}] for asin in asins},
+    }
+
+
 def _detail(asin, **changes):
     detail = {
         "asin": asin,
@@ -208,6 +219,18 @@ def test_candidate_review_queue_includes_current_closure_field_audits():
     )
     assert any(item.get("origin") == "closure_field_audit" and item.get("field") == "title_es_raw"
                for item in result["source_review_queue"])
+
+
+def test_historical_ready_audit_cannot_promote_when_current_closure_is_review_required():
+    asin = "B000000011"
+    result = build_spanish_source_candidate(
+        [_ranking(asin)], [_detail(asin, title_es_raw="Antes <script>x</script>")], [_ranking(asin)],
+        _ready_audit([asin]), expected_candidate_hash=candidate_manifest_hash([_ranking(asin)]),
+    )
+
+    assert result["source_gate"]["ready"] is True
+    assert result["closure_source_gate"]["ready"] is False
+    assert result["status"] == "CANDIDATE_CLOSURE_GATE_BLOCKED"
 
 
 def test_owner_exclusion_scope_is_hash_bound_and_does_not_mutate_parent_records(tmp_path):

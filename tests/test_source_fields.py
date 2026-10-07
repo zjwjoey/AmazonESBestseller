@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from amazon_es_bestseller.quality.source_fields import audit_source_fields, source_gate
 
 
@@ -6,6 +9,10 @@ def _row(**extra):
            "bestseller_rank": 3, "current_price": "10,00", "rating": "4.2"}
     row.update(extra)
     return row
+
+
+def _canonical_hash(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
 
 
 def test_source_audit_blocks_identity_url_and_rank_bsr_mixing():
@@ -55,9 +62,20 @@ def test_source_audit_checks_compact_specification_even_when_attributes_exist():
 
 
 def test_source_audit_accepts_leaf_equal_l3_only_with_matching_ranking_provenance():
+    context = {
+        "ranking_source_url": "https://www.amazon.es/Best-Sellers/zgbs/123",
+        "ranking_page_number": 1,
+        "bestseller_rank": 3,
+        "category_l1": "Hogar", "category_l2": "Cocina", "category_l3": "Botes",
+        "leaf_category": "Botes", "browse_node_id": "123",
+        "ranking_source_category_path": "Hogar > Cocina > Botes",
+    }
     supported = _row(
         category_l1="Hogar", category_l2="Cocina", category_l3="Botes", leaf_category="Botes",
+        ranking_contexts=[context],
         category_provenance={
+            "source": "ranking_context", "ranking_context_hash": _canonical_hash(context),
+            "ranking_source_url": context["ranking_source_url"], "ranking_page_number": 1,
             "source": "ranking_context", "ranking_source_category_path": "Hogar > Cocina > Botes",
             "levels": {"category_l1": "Hogar", "category_l2": "Cocina", "category_l3": "Botes"},
             "leaf_category": "Botes",
@@ -65,10 +83,23 @@ def test_source_audit_accepts_leaf_equal_l3_only_with_matching_ranking_provenanc
     )
     missing_provenance = dict(supported, category_provenance=None)
     forged_duplicate = dict(supported, category_l2="Botes")
+    missing_context = dict(supported, ranking_contexts=[])
+    forged_context_hash = dict(supported, category_provenance=dict(supported["category_provenance"], ranking_context_hash="0" * 64))
     assert "CATEGORY_COPIED" not in {item["issue_code"] for item in audit_source_fields([supported])["issues"]}
     missing_codes = {item["issue_code"] for item in audit_source_fields([missing_provenance])["issues"]}
     assert {"CATEGORY_PROVENANCE_MISSING", "CATEGORY_COPIED"} <= missing_codes
     assert "CATEGORY_COPIED" in {item["issue_code"] for item in audit_source_fields([forged_duplicate])["issues"]}
+    assert "CATEGORY_COPIED" in {item["issue_code"] for item in audit_source_fields([missing_context])["issues"]}
+    assert "CATEGORY_COPIED" in {item["issue_code"] for item in audit_source_fields([forged_context_hash])["issues"]}
+
+
+def test_source_audit_allows_top_level_ranking_path_without_browse_node():
+    report = audit_source_fields([_row(ranking_contexts=[{
+        "ranking_source_url": "https://www.amazon.es/Best-Sellers/zgbs/123",
+        "ranking_page_number": 1, "bestseller_rank": 3,
+        "ranking_source_category_path": "Hogar",
+    }])])
+    assert "RANK_CATEGORY_EVIDENCE_MISSING" not in {item["issue_code"] for item in report["issues"]}
 
 
 def test_source_audit_uses_specific_unit_labels_and_reviews_ambiguous_size_or_count():
@@ -130,8 +161,17 @@ def test_source_audit_strict_text_findings_have_locators_and_brand_kg_is_not_spe
     misplaced = [item for item in report["issues"] if item["issue_code"] == "MISPLACED"]
     assert len(misplaced) == 3
     assert all(item["field"] == "title_es_raw" for item in misplaced)
-    assert {item["evidence"]["match_kind"] for item in misplaced} == {"html_script", "mojibake"}
+    assert {item["evidence"]["match_kind"] for item in misplaced} == {"html_tag", "mojibake"}
     assert all(item["evidence"].get("offset") is not None and item["evidence"].get("snippet_hash") for item in misplaced)
+
+
+def test_source_audit_uses_tag_aware_text_detection_without_rejecting_cookie_products_or_literals():
+    safe = audit_source_fields([_row(title_es_raw="Molde para cookie de Navidad <M> y <USB-C>")])
+    markup = audit_source_fields([_row(title_es_raw="&lt;a href='x'&gt;Oferta&lt;/a&gt;&lt;p&gt;texto&lt;/p&gt;")])
+    assert "MISPLACED" not in {item["issue_code"] for item in safe["issues"]}
+    html = [item for item in markup["issues"] if item["issue_code"] == "MISPLACED"]
+    assert len(html) == 1
+    assert html[0]["evidence"]["match_kind"] == "html_tag"
 
 
 def test_source_audit_recognizes_explicit_domain_unit_labels_and_battery_components():

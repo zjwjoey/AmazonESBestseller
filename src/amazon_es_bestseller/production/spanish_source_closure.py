@@ -353,9 +353,14 @@ def build_spanish_source_candidate(
             queue.append(item)
     binding_scope = sorted(scope)
     queue.sort(key=lambda item: (str(item.get("asin") or ""), str(item.get("field") or ""), str(item.get("classification") or item.get("issue") or "")))
+    candidate_status = (
+        "CANDIDATE_SOURCE_GATE_BLOCKED" if not source_gate["ready"]
+        else "CANDIDATE_CLOSURE_GATE_BLOCKED" if not closure_gate["ready"]
+        else "CANDIDATE_UNPROMOTED"
+    )
     return {
         "schema_version": SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION,
-        "status": "CANDIDATE_SOURCE_GATE_BLOCKED" if not source_gate["ready"] else "CANDIDATE_UNPROMOTED",
+        "status": candidate_status,
         "candidate_manifest_hash": actual_hash,
         "binding_scope": {"count": len(binding_scope), "asins": binding_scope, "exact_match": True},
         "source_gate": source_gate,
