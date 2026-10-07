@@ -176,3 +176,37 @@ to use for review.
   BLOCK/REVIEW disposition, and excludes P2 from the blocking total. The
   pre-existing reviewed input is copied separately as
   `historical_source_audit.json`; it is history only.
+
+## Unit-semantics diagnostic and owner exclusion scope
+
+- The audit accepts only explicit, domain-bound unit meanings for airflow
+  (`m³/h`), drill capacity (length), hand-gripper resistance (title-bound),
+  `cc/cm³` capacity, and battery count plus voltage. It never rewrites raw
+  label/value evidence.
+- Contradictory labels such as battery-capacity with volts, weight-capacity
+  with litres, liquid-volume with kilograms, and voltage with watts are kept
+  as `SOURCE_SEMANTIC_CONFLICT` review findings. Generic `Tamaño` or
+  unit-count measurements pass only when the exact numeric/unit measure is
+  independently present in the title or selected variation; otherwise they
+  remain review findings.
+- Programmatic diagnostic queue (not a formal Gate rerun):
+  `outputs/production_closure_20261007T000000Z_unit_semantics_5480/remaining_unknown_conflict_queue.json`.
+  It is bound to the r3 5,480-record dataset hash
+  `4ff1b2388db3f7c19271a02551e2c55e011888df3887760d1c0efefda1d5bd46`
+  and preserves issue severity, source hash, and evidence locator. It has
+  `385` P1 REVIEW entries: `59` `SOURCE_SEMANTIC_CONFLICT` and `326`
+  `UNIT_SEMANTICS_AMBIGUOUS`.
+- Separate derived owner scope:
+  `outputs/production_closure_20261007T000000Z_owner_scope_5478/owner_exclusions.json`.
+  It is hash-bound to the same 5,480-record parent and contains only
+  `B07F6LYVT6` and `B077H1MZ35`; effective scope is `5478`, no replacements
+  are added, and raw damaged special-function evidence remains in the parent.
+- The runtime extraction issue register is referenced, not modified, at
+  `outputs/production_closure_issue_register_20261007T074352Z`. It remains a
+  future collector-improvement input; this audit work neither repairs nor
+  hides upstream extraction errors.
+- Independently reported P1 follow-ups are recorded but **not executed** in
+  this slice: verify category leaf provenance against the actual ranking
+  contexts and strengthen tag-aware strict-text detection while preserving
+  literal `<M>` / `<USB-C>` product text. No historical or new SourceGate was
+  promoted or marked ready.

@@ -4,6 +4,8 @@ import json
 from amazon_es_bestseller.production.spanish_source_closure import (
     build_spanish_source_candidate,
     candidate_manifest_hash,
+    derive_owner_excluded_scope,
+    write_owner_excluded_scope,
     write_spanish_source_candidate,
 )
 
@@ -206,3 +208,36 @@ def test_candidate_review_queue_includes_current_closure_field_audits():
     )
     assert any(item.get("origin") == "closure_field_audit" and item.get("field") == "title_es_raw"
                for item in result["source_review_queue"])
+
+
+def test_owner_exclusion_scope_is_hash_bound_and_does_not_mutate_parent_records(tmp_path):
+    records = [
+        {"asin": "B07F6LYVT6", "attributes": [{"label_raw": "Funci\u00f3n especial", "value_raw": "port??til"}]},
+        {"asin": "B077H1MZ35", "attributes": [{"label_raw": "Funci\u00f3n especial", "value_raw": "apagado_autom??tico"}]},
+        {"asin": "B000000010", "attributes": []},
+    ]
+    parent_hash = _hash(records)
+    scope = derive_owner_excluded_scope(records, parent_dataset_canonical_hash=parent_hash)
+
+    assert scope["parent_scope"] == {"record_count": 3, "dataset_canonical_hash": parent_hash}
+    assert scope["effective_scope"]["record_count"] == 1
+    assert scope["effective_scope"]["asins"] == ["B000000010"]
+    assert {item["asin"] for item in scope["owner_exclusions"]} == {"B07F6LYVT6", "B077H1MZ35"}
+    assert all(item["raw_evidence_preserved"] for item in scope["owner_exclusions"])
+    assert records[0]["attributes"][0]["value_raw"] == "port??til"
+
+    manifest = write_owner_excluded_scope(tmp_path / "scope", scope)
+    assert manifest["parent_scope"]["dataset_canonical_hash"] == parent_hash
+    assert (tmp_path / "scope" / "owner_exclusions.json").is_file()
+
+
+def test_owner_exclusion_scope_rejects_an_unbound_parent_hash():
+    records = [
+        {"asin": "B07F6LYVT6"}, {"asin": "B077H1MZ35"}, {"asin": "B000000010"},
+    ]
+    try:
+        derive_owner_excluded_scope(records, parent_dataset_canonical_hash="0" * 64)
+    except ValueError as exc:
+        assert "parent dataset canonical hash" in str(exc)
+    else:  # pragma: no cover - makes failed binding validation explicit
+        raise AssertionError("expected parent hash validation")

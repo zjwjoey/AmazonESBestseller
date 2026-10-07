@@ -26,6 +26,11 @@ from ..quality.source_gate import canonical_audit_hash, evaluate_source_gate
 
 
 SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION = "spanish-source-closure-v1"
+OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION = "owner-exclusion-scope-v1"
+_OWNER_EXCLUSIONS = {
+    "B07F6LYVT6": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
+    "B077H1MZ35": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
+}
 _CJK_RE = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 _MOJIBAKE_RE = re.compile(r"\ufffd|(?:Ã.|Â.)")
 _NON_BRAND_BYLINE_RE = re.compile(
@@ -455,4 +460,67 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
     return manifest
 
 
-__all__ = ["SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION", "build_spanish_source_candidate", "candidate_manifest_hash", "write_spanish_source_candidate"]
+def derive_owner_excluded_scope(parent_records: Iterable[Mapping], *, parent_dataset_canonical_hash: str) -> dict:
+    """Derive a non-destructive owner-excluded ASIN scope from a frozen parent.
+
+    This does not modify raw records or fill replacement products.  The parent
+    data set remains the immutable 5,480-record evidence set; consumers must
+    opt into the returned effective 5,478-ASIN scope.
+    """
+    records = [dict(record) for record in parent_records if isinstance(record, Mapping)]
+    actual_hash = _hash(records)
+    if parent_dataset_canonical_hash != actual_hash:
+        raise ValueError("parent dataset canonical hash does not match supplied records")
+    asins = [normalize_asin(record.get("asin")) for record in records]
+    if not all(asins) or len(asins) != len(set(asins)):
+        raise ValueError("parent records must contain one valid unique ASIN per record")
+    missing = sorted(set(_OWNER_EXCLUSIONS) - set(asins))
+    if missing:
+        raise ValueError(f"owner exclusion ASINs are absent from parent scope: {missing}")
+    effective_asins = sorted(set(asins) - set(_OWNER_EXCLUSIONS))
+    return {
+        "schema_version": OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION,
+        "parent_scope": {
+            "record_count": len(asins),
+            "dataset_canonical_hash": parent_dataset_canonical_hash,
+        },
+        "owner_exclusions": [
+            {"asin": asin, "reason": reason, "raw_evidence_preserved": True}
+            for asin, reason in sorted(_OWNER_EXCLUSIONS.items())
+        ],
+        "effective_scope": {
+            "record_count": len(effective_asins),
+            "asins": effective_asins,
+            "canonical_asin_hash": _hash(effective_asins),
+            "replacement_products_added": 0,
+        },
+    }
+
+
+def write_owner_excluded_scope(output_dir: str | Path, scope: Mapping) -> dict:
+    """Write a new immutable owner-exclusion scope artifact."""
+    directory = Path(output_dir)
+    if directory.exists():
+        raise FileExistsError(f"immutable output already exists: {directory}")
+    directory.mkdir(parents=True)
+    payload = dict(scope)
+    artifact = directory / "owner_exclusions.json"
+    artifact.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest = {
+        "schema_version": OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION,
+        "parent_scope": payload.get("parent_scope"),
+        "effective_scope": {
+            key: (payload.get("effective_scope") or {}).get(key)
+            for key in ("record_count", "canonical_asin_hash", "replacement_products_added")
+        },
+        "artifacts": {artifact.name: _artifact_hash(artifact)},
+    }
+    (directory / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
+
+
+__all__ = [
+    "SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION", "OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION",
+    "build_spanish_source_candidate", "candidate_manifest_hash", "write_spanish_source_candidate",
+    "derive_owner_excluded_scope", "write_owner_excluded_scope",
+]
