@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from amazon_es_bestseller.production.spanish_source_closure import (  # noqa: E402
     _hash,
     build_current_source_gate_candidate,
+    load_builder_unresolved_decision_artifact,
     write_spanish_source_candidate,
 )
 
@@ -24,7 +25,8 @@ def main() -> int:
     parser.add_argument("--production-root", required=True, type=Path)
     parser.add_argument("--parent-root", required=True, type=Path)
     parser.add_argument("--owner-scope", required=True, type=Path)
-    parser.add_argument("--builder-queue", type=Path)
+    parser.add_argument("--builder-queue", required=True, type=Path)
+    parser.add_argument("--builder-manifest", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=False)
@@ -53,7 +55,11 @@ def main() -> int:
         parent = load("PARENT", args.parent_root / "spanish_master_5480.json")["records"]
         scope = load("OWNER_SCOPE", args.owner_scope / "owner_exclusions.json")
         history = load("HISTORICAL_AUDIT", args.parent_root / "historical_source_audit.json")
-        builder_queue = load("BUILDER_QUEUE", args.builder_queue) if args.builder_queue else None
+        stage("BUILDER_ARTIFACT_VERIFY_START", queue=str(args.builder_queue), manifest=str(args.builder_manifest))
+        builder_artifact = load_builder_unresolved_decision_artifact(args.builder_queue, args.builder_manifest)
+        stage("BUILDER_ARTIFACT_VERIFY_DONE", domain=builder_artifact["artifact_domain"],
+              queue_hash=builder_artifact["queue_canonical_hash"], queue_sha256=builder_artifact["queue_sha256"],
+              manifest_hash=builder_artifact["manifest_canonical_hash"])
         stage("HASH_START")
         hashes = {"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(rankings)}
         stage("HASH_DONE", hashes=hashes)
@@ -61,8 +67,7 @@ def main() -> int:
         result = build_current_source_gate_candidate(
             candidates, details, rankings, parent, scope, expected_input_hashes=hashes,
             historical_source_audit=history, cache_root=args.production_root, progress=stage,
-            builder_unresolved_decisions=builder_queue,
-            builder_parent_canonical_hash=_hash(parent) if builder_queue is not None else None,
+            builder_decision_artifact=builder_artifact,
         )
         try:
             git_sha = subprocess.check_output(

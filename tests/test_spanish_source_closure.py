@@ -7,6 +7,7 @@ from amazon_es_bestseller.production.spanish_source_closure import (
     candidate_manifest_hash,
     build_current_source_gate_candidate,
     derive_owner_excluded_scope,
+    load_builder_unresolved_decision_artifact,
     rank_matrix_diagnostics,
     write_owner_excluded_scope,
     write_spanish_source_candidate,
@@ -77,6 +78,39 @@ def _ranking(asin, rank=1, **changes):
     }
     record.update(changes)
     return record
+
+
+def _builder_artifact(parents, queue=None):
+    parent_hash = _hash(parents)
+    if queue is None:
+        asin = parents[-1]["asin"]
+        queue = [{
+            "asin": asin, "field": "parent_asin", "classification": "EVIDENCE_UNAVAILABLE",
+            "status": "REVIEW_REQUIRED", "reason": "unconfirmed self-parent cleared; canonical parent blank",
+            "evidence_locator": {"asin": asin, "field": "parent_asin", "source": "parent_asin"},
+        }]
+    return {
+        "artifact_domain": "spanish-source-builder-unresolved-decisions-v1",
+        "parent_dataset_canonical_hash": parent_hash,
+        "queue_canonical_hash": _hash(queue),
+        "queue_sha256": "test-only-not-file-backed",
+        "manifest_canonical_hash": "test-manifest",
+        "decisions": queue,
+    }
+
+
+def _write_builder_files(tmp_path, queue, parent_hash):
+    queue_path = tmp_path / "builder_unresolved_decisions.json"
+    manifest_path = tmp_path / "builder_unresolved_decisions.manifest.json"
+    queue_path.write_text(json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest = {
+        "artifact_domain": "spanish-source-builder-unresolved-decisions-v1",
+        "parent_dataset_canonical_hash": parent_hash,
+        "expected_queue_canonical_hash": _hash(queue),
+        "expected_queue_sha256": hashlib.sha256(queue_path.read_bytes()).hexdigest(),
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return queue_path, manifest_path
 
 
 def test_candidate_keeps_source_gate_blocked_and_ranking_contexts():
@@ -297,6 +331,7 @@ def test_current_gate_rebuilds_only_owner_approved_optional_derived_details():
     result = build_current_source_gate_candidate(
         candidates, details, candidates, parents, owner_scope,
         expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=_builder_artifact(parents),
     )
 
     records = {record["asin"]: record for record in result["records"]}
@@ -331,18 +366,21 @@ def test_current_gate_rejects_changed_raw_inputs_and_uses_current_audit_not_hist
     result = build_current_source_gate_candidate(
         candidates, details, candidates, parents, owner_scope,
         expected_input_hashes=input_hashes, historical_source_audit=_audit(asins),
+        builder_decision_artifact=_builder_artifact(parents),
     )
 
     assert result["binding_scope"]["asins"] == ["B000000012"]
     assert result["current_source_gate"]["ready"] is True
     assert result["status"] == "CANDIDATE_CURRENT_GATE_READY"
     assert result["promotion_state"] == {"candidate": True, "reviewed_master": False, "eligible": True}
+    assert result["builder_unresolved_decisions"]["reports"][0]["decision"] == "SOURCE_MISSING_P2_REPORT"
     changed = list(details)
     changed[2] = dict(changed[2], title_es_raw="changed raw source")
     try:
         build_current_source_gate_candidate(
             candidates, changed, candidates, parents, owner_scope,
             expected_input_hashes=input_hashes,
+            builder_decision_artifact=_builder_artifact(parents),
         )
     except ValueError as exc:
         assert "input hash mismatch" in str(exc)
@@ -362,6 +400,7 @@ def test_current_gate_stays_blocked_for_current_review_even_if_history_is_ready(
         candidates, details, candidates, parents, owner_scope,
         expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
         historical_source_audit=_ready_audit(asins),
+        builder_decision_artifact=_builder_artifact(parents),
     )
 
     assert result["historical_source_audit"]["status"] == "PASS"
@@ -387,13 +426,175 @@ def test_current_gate_inherits_hash_bound_unresolved_cjk_decision_as_review():
     result = build_current_source_gate_candidate(
         candidates, details, candidates, parents, scope,
         expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
-        builder_unresolved_decisions=queue,
-        builder_parent_canonical_hash=_hash(parents),
+        builder_decision_artifact=_builder_artifact(parents, queue),
     )
     assert result["current_source_gate"]["ready"] is False
     assert result["current_source_audit"]["sku_status"]["B000000015"] == "REVIEW_REQUIRED"
     assert any(item["issue_code"] == "MULTILINGUAL_ATTRIBUTE_REVIEW" for item in result["current_source_audit"]["issues"])
     assert result["builder_unresolved_decisions"]["queue_hash"] == _hash(queue)
+
+
+def test_builder_artifact_rejects_missing_empty_tampered_and_deleted_cjk_queue(tmp_path):
+    queue = [{
+        "asin": "B000000015", "field": "attributes", "classification": "MULTILINGUAL_ATTRIBUTE_REVIEW",
+        "status": "REVIEW_REQUIRED", "reason": "CJK requires review",
+        "evidence_locator": {"asin": "B000000015", "field": "attributes", "label_raw": "Nombre", "value_raw": "中文"},
+    }]
+    parent_hash = "a" * 64
+    queue_path, manifest_path = _write_builder_files(tmp_path, queue, parent_hash)
+    artifact = load_builder_unresolved_decision_artifact(queue_path, manifest_path)
+    assert artifact["queue_canonical_hash"] == _hash(queue)
+    original_manifest = manifest_path.read_text(encoding="utf-8")
+    bad_domain = json.loads(original_manifest)
+    bad_domain["artifact_domain"] = "untrusted-domain"
+    manifest_path.write_text(json.dumps(bad_domain), encoding="utf-8")
+    try:
+        load_builder_unresolved_decision_artifact(queue_path, manifest_path)
+    except ValueError as exc:
+        assert "domain" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("wrong builder artifact domain must be rejected")
+    manifest_path.write_text(original_manifest, encoding="utf-8")
+    empty_path = tmp_path / "empty.json"
+    empty_path.write_text("[]", encoding="utf-8")
+    try:
+        load_builder_unresolved_decision_artifact(empty_path, manifest_path)
+    except ValueError as exc:
+        assert "non-empty" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("empty CJK queue must be rejected")
+    queue_path.write_text(json.dumps(queue + [{"asin": "B000000016"}]), encoding="utf-8")
+    try:
+        load_builder_unresolved_decision_artifact(queue_path, manifest_path)
+    except ValueError as exc:
+        assert "hash" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("tampered CJK queue must be rejected")
+    queue_path.unlink()
+    try:
+        load_builder_unresolved_decision_artifact(queue_path, manifest_path)
+    except ValueError as exc:
+        assert "required" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("deleted CJK queue must be rejected")
+
+
+def test_current_gate_requires_verified_nonempty_builder_artifact():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000016"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)]) for item in candidates]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    try:
+        build_current_source_gate_candidate(
+            candidates, details, candidates, parents, scope,
+            expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        )
+    except ValueError as exc:
+        assert "artifact is required" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("builder artifact must be required")
+
+
+def test_current_gate_locator_loss_is_p1_evidence_lost_without_approved_chain():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000017"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[]) for item in candidates]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    queue = [{
+        "asin": "B000000017", "field": "attributes", "classification": "MULTILINGUAL_ATTRIBUTE_REVIEW",
+        "status": "REVIEW_REQUIRED", "reason": "CJK requires review",
+        "evidence_locator": {"asin": "B000000017", "field": "attributes", "label_raw": "Nombre", "value_raw": "中文"},
+    }]
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=_builder_artifact(parents, queue),
+    )
+    issue = next(item for item in result["current_source_audit"]["issues"] if item["issue_code"] == "EVIDENCE_LOST")
+    assert issue["severity"] == "P1"
+    assert result["current_source_gate"]["ready"] is False
+    assert not result["builder_unresolved_decisions"]["resolved"]
+    altered_parents = json.loads(json.dumps(parents, ensure_ascii=False))
+    altered_parents[-1]["attributes"] = [{"label_raw": "Nombre", "value_raw": "文中"}]
+    altered_scope = derive_owner_excluded_scope(altered_parents, parent_dataset_canonical_hash=_hash(altered_parents))
+    altered = build_current_source_gate_candidate(
+        candidates, details, candidates, altered_parents, altered_scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=_builder_artifact(altered_parents, queue),
+    )
+    assert any(item["issue_code"] == "EVIDENCE_LOST" for item in altered["current_source_audit"]["issues"])
+
+
+def test_current_gate_allows_only_hash_bound_owner_optional_repair_chain():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B08BYLMK7C"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[]) for item in candidates]
+    parents[-1]["attributes"] = [{"label_raw": "Tipo de altavoz", "value_raw": "Port�til"}]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    queue = [{
+        "asin": "B08BYLMK7C", "field": "speaker_type", "classification": "EVIDENCE_UNAVAILABLE",
+        "status": "REVIEW_REQUIRED", "reason": "owner-approved-optional-exclusion",
+        "evidence_locator": {"asin": "B08BYLMK7C", "field": "speaker_type", "source": "detail_attributes",
+                             "label_raw": "Tipo de altavoz", "value_raw": "Port�til", "position": 0},
+    }]
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=_builder_artifact(parents, queue),
+    )
+    resolved = result["builder_unresolved_decisions"]["resolved"]
+    assert len(resolved) == 1
+    assert resolved[0]["repair_chain"]["policy"] == "owner-approved-optional-attribute-exclusion-v1"
+    assert not any(item["issue_code"] == "EVIDENCE_UNAVAILABLE" for item in result["current_source_audit"]["issues"])
+
+
+def test_current_gate_unknown_non_cjk_evidence_unavailable_is_p1_not_nonblocking_report():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000018"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[]) for item in candidates]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    queue = [{
+        "asin": "B000000018", "field": "manufacturer", "classification": "EVIDENCE_UNAVAILABLE",
+        "status": "REVIEW_REQUIRED", "reason": "manufacturer source was not preserved",
+        "evidence_locator": {"asin": "B000000018", "field": "manufacturer", "source": "detail_attributes"},
+    }]
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=_builder_artifact(parents, queue),
+    )
+    assert any(item["issue_code"] == "EVIDENCE_UNAVAILABLE" and item["severity"] == "P1"
+               for item in result["current_source_audit"]["issues"])
+    assert not result["builder_unresolved_decisions"]["reports"]
+
+
+def test_current_gate_accepts_valid_multilingual_only_with_language_and_isbn_source():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000019"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[]) for item in candidates]
+    parents[-1]["attributes"] = [
+        {"label_raw": "Idioma", "value_raw": "Japonés"},
+        {"label_raw": "ISBN", "value_raw": "9780000000000"},
+        {"label_raw": "Nombre", "value_raw": "中文"},
+    ]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    queue = [{
+        "asin": "B000000019", "field": "attributes", "classification": "VALID_MULTILINGUAL_EVIDENCE",
+        "status": "PASS", "reason": "Japanese language plus ISBN are explicit source evidence",
+        "evidence_locator": {"asin": "B000000019", "field": "attributes", "label_raw": "Nombre", "value_raw": "中文"},
+    }]
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=_builder_artifact(parents, queue),
+    )
+    assert result["builder_unresolved_decisions"]["reports"][0]["decision"] == "VALID_MULTILINGUAL_EVIDENCE"
+    assert not result["builder_unresolved_decisions"]["inherited"]
 
 
 def test_rank_matrix_distinguishes_real_gaps_from_owner_scope_exclusions():

@@ -29,6 +29,7 @@ from ..translation.full_detail import render_details_es
 SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION = "spanish-source-closure-v1"
 OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION = "owner-exclusion-scope-v1"
 CURRENT_SOURCE_GATE_SCHEMA_VERSION = "current-source-gate-v1"
+BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN = "spanish-source-builder-unresolved-decisions-v1"
 _OWNER_EXCLUSIONS = {
     "B07F6LYVT6": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
     "B077H1MZ35": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
@@ -205,6 +206,17 @@ def _owner_optional_exclusion_records(parent_records: Iterable[Mapping], *, pare
         record_for_hash = {key: value for key, value in record.items()
                            if key not in {"source_record_hash", "owner_optional_exclusion"}}
         source_record_hash = _hash(record_for_hash)
+        excluded_locator_hashes = [_hash(_locator(asin, decision["field"], attr, position))
+                                   for position, attr in enumerate(raw_attributes)
+                                   if _label(attr.get("label_raw")) in labels]
+        repair_chain = {
+            "policy": "owner-approved-optional-attribute-exclusion-v1",
+            "owner_decision": decision["owner_decision"],
+            "old_source_hash": parent_record_hash,
+            "locator_hashes": excluded_locator_hashes,
+            "new_record_hash": source_record_hash,
+        }
+        evidence["repair_chain"] = repair_chain
         record["source_record_hash"] = source_record_hash
         repair_log.append({
             "asin": asin,
@@ -213,6 +225,7 @@ def _owner_optional_exclusion_records(parent_records: Iterable[Mapping], *, pare
             "parent_dataset_canonical_hash": parent_dataset_hash,
             "parent_record_hash": parent_record_hash,
             "source_record_hash": source_record_hash,
+            "repair_chain": repair_chain,
             "excluded_attribute_count": len(excluded),
         })
         records.append(record)
@@ -643,8 +656,114 @@ def rank_matrix_diagnostics(rankings: Iterable[Mapping], *, exact_scope: set[str
             "out_of_exact_scope": excluded, "issues": issues}
 
 
-def _merge_builder_unresolved_decisions(audit: Mapping, records: Iterable[Mapping], decisions: Iterable[Mapping], *, parent_hash: str) -> tuple[dict, dict]:
-    """Carry only still-current unresolved builder facts into the current audit."""
+def load_builder_unresolved_decision_artifact(queue_path: str | Path, manifest_path: str | Path) -> dict:
+    """Load a builder queue only when its immutable manifest binds its bytes.
+
+    The runner owns these two paths.  A caller cannot substitute a new expected
+    queue hash because it is read from the reviewed manifest, not from CLI data.
+    """
+    queue_file, manifest_file = Path(queue_path), Path(manifest_path)
+    if not queue_file.is_file() or not manifest_file.is_file():
+        raise ValueError("builder unresolved decision queue and immutable manifest are required")
+    try:
+        queue = json.loads(queue_file.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("builder unresolved decision artifact is unreadable") from exc
+    if not isinstance(queue, list) or not queue or not all(isinstance(item, Mapping) for item in queue):
+        raise ValueError("builder unresolved decision queue must be a non-empty list of records")
+    if not isinstance(manifest, Mapping):
+        raise ValueError("builder unresolved decision manifest must be an object")
+    if manifest.get("artifact_domain") != BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN:
+        raise ValueError("builder unresolved decision manifest domain is not trusted")
+    expected_canonical_hash = _text(manifest.get("expected_queue_canonical_hash"))
+    expected_byte_hash = _text(manifest.get("expected_queue_sha256"))
+    if not expected_canonical_hash and not expected_byte_hash:
+        raise ValueError("builder unresolved decision manifest has no expected queue hash")
+    if expected_canonical_hash and expected_canonical_hash != _hash(queue):
+        raise ValueError("builder unresolved decision queue canonical hash does not match immutable manifest")
+    actual_byte_hash = _file_sha256(queue_file)
+    if expected_byte_hash and expected_byte_hash != actual_byte_hash:
+        raise ValueError("builder unresolved decision queue byte hash does not match immutable manifest")
+    parent_hash = _text(manifest.get("parent_dataset_canonical_hash"))
+    if not parent_hash:
+        raise ValueError("builder unresolved decision manifest has no parent canonical hash")
+    return {
+        "artifact_domain": BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN,
+        "parent_dataset_canonical_hash": parent_hash,
+        "queue_canonical_hash": _hash(queue),
+        "queue_sha256": actual_byte_hash,
+        "manifest_canonical_hash": _hash(manifest),
+        "decisions": [dict(item) for item in queue],
+    }
+
+
+def _validated_builder_decision_artifact(artifact: Mapping | None, *, parent_hash: str) -> tuple[list[dict], dict]:
+    if not isinstance(artifact, Mapping):
+        raise ValueError("verified builder unresolved decision artifact is required")
+    if artifact.get("artifact_domain") != BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN:
+        raise ValueError("builder unresolved decision artifact domain is not trusted")
+    if _text(artifact.get("parent_dataset_canonical_hash")) != parent_hash:
+        raise ValueError("builder unresolved decision artifact parent hash does not match supplied parent records")
+    decisions = artifact.get("decisions")
+    if not isinstance(decisions, list) or not decisions or not all(isinstance(item, Mapping) for item in decisions):
+        raise ValueError("builder unresolved decision queue must be a verified non-empty list")
+    queue = [dict(item) for item in decisions]
+    if _text(artifact.get("queue_canonical_hash")) != _hash(queue):
+        raise ValueError("builder unresolved decision artifact queue hash does not match decisions")
+    return queue, {
+        "artifact_domain": BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN,
+        "parent_canonical_hash": parent_hash,
+        "queue_hash": _hash(queue),
+        "queue_sha256": _text(artifact.get("queue_sha256")),
+        "manifest_canonical_hash": _text(artifact.get("manifest_canonical_hash")),
+    }
+
+
+def _locator_present(record: Mapping, locator: Mapping) -> bool:
+    expected = (str(locator.get("label_raw") or ""), str(locator.get("value_raw") or ""))
+    return expected in [(str(attr.get("label_raw") or ""), str(attr.get("value_raw") or ""))
+                        for attr in (record.get("attributes") or []) if isinstance(attr, Mapping)]
+
+
+def _approved_optional_repair_chain(record: Mapping, item: Mapping, *, parent_hash: str) -> Mapping | None:
+    """Return the sole approved repair evidence, never infer repair from absence."""
+    asin = normalize_asin(record.get("asin"))
+    policy = _OWNER_OPTIONAL_ATTRIBUTE_EXCLUSIONS.get(asin)
+    evidence = record.get("owner_optional_exclusion")
+    if not policy or not isinstance(evidence, Mapping) or item.get("field") != policy["field"]:
+        return None
+    chain = evidence.get("repair_chain")
+    locator = item.get("evidence_locator") or {}
+    if not isinstance(chain, Mapping) or not isinstance(locator, Mapping):
+        return None
+    required = {
+        "policy": "owner-approved-optional-attribute-exclusion-v1",
+        "owner_decision": policy["owner_decision"],
+        "old_source_hash": evidence.get("parent_record_hash"),
+        "new_record_hash": record.get("source_record_hash"),
+    }
+    if evidence.get("parent_dataset_canonical_hash") != parent_hash or any(chain.get(key) != value for key, value in required.items()):
+        return None
+    hashes = chain.get("locator_hashes")
+    if not isinstance(hashes, list) or _hash(dict(locator)) not in hashes:
+        return None
+    return chain
+
+
+def _builder_issue(item: Mapping, *, issue_code: str, message: str, locator: Mapping, parent_hash: str) -> dict:
+    return {
+        "asin": normalize_asin(item.get("asin")), "field": item.get("field") or "attributes",
+        "stage": "builder_unresolved", "check": "source_fields", "severity": "P1", "status": "REVIEW",
+        "issue_code": issue_code, "field_classification": "REVIEW_REQUIRED", "message": message,
+        "source_file": "builder_unresolved_decisions",
+        "evidence": {"locator": dict(locator), "parent_canonical_hash": parent_hash},
+    }
+
+
+def _merge_builder_unresolved_decisions(audit: Mapping, records: Iterable[Mapping], decisions: Iterable[Mapping], *, parent_hash: str,
+                                        artifact_state: Mapping) -> tuple[dict, dict]:
+    """Carry current builder facts forward under explicit repair/report policy."""
     merged = deepcopy(dict(audit))
     record_map = {normalize_asin(row.get("asin")): row for row in records if isinstance(row, Mapping)}
     queue = [dict(item) for item in decisions if isinstance(item, Mapping)]
@@ -656,26 +775,36 @@ def _merge_builder_unresolved_decisions(audit: Mapping, records: Iterable[Mappin
             continue
         classification = str(item.get("classification") or "")
         locator = item.get("evidence_locator") or {}
-        if classification == "MULTILINGUAL_ATTRIBUTE_REVIEW":
-            labels = [(str(attr.get("label_raw") or ""), str(attr.get("value_raw") or ""))
-                      for attr in (record_map[asin].get("attributes") or []) if isinstance(attr, Mapping)]
-            expected = (str(locator.get("label_raw") or ""), str(locator.get("value_raw") or ""))
-            if expected not in labels:
-                resolved.append({**item, "decision": "REPAIR_CHAIN_RESOLVED"})
-                continue
-            issue = {"asin": asin, "field": "attributes", "stage": "builder_unresolved", "check": "source_fields",
-                     "severity": "P1", "status": "REVIEW", "issue_code": classification,
-                     "field_classification": "REVIEW_REQUIRED", "message": item.get("reason") or classification,
-                     "source_file": "builder_unresolved_decisions", "evidence": {"locator": locator, "parent_canonical_hash": parent_hash}}
+        record = record_map[asin]
+        locator = locator if isinstance(locator, Mapping) else {}
+        present = _locator_present(record, locator)
+        repair_chain = _approved_optional_repair_chain(record, item, parent_hash=parent_hash)
+        if classification == "MULTILINGUAL_ATTRIBUTE_REVIEW" and present:
+            issue = _builder_issue(item, issue_code=classification, message=item.get("reason") or classification,
+                                  locator=locator, parent_hash=parent_hash)
             merged.setdefault("issues", []).append(issue)
             merged.setdefault("field_audits", []).append({"asin": asin, "field": "attributes", "classification": "REVIEW_REQUIRED", "severity": "P1", "message": issue["message"], "evidence": issue["evidence"]})
             merged.setdefault("sku_status", {})[asin] = "REVIEW_REQUIRED"
             inherited.append(issue)
+        elif classification == "VALID_MULTILINGUAL_EVIDENCE" and present and _has_multilingual_support(record):
+            reports.append({**item, "decision": "VALID_MULTILINGUAL_EVIDENCE"})
+        elif repair_chain:
+            resolved.append({**item, "decision": "REPAIR_CHAIN_RESOLVED", "repair_chain": dict(repair_chain)})
+        elif classification == "EVIDENCE_UNAVAILABLE" and item.get("field") in {"parent_asin", "brand"} and not _text(record.get(item.get("field"))):
+            reports.append({**item, "decision": "SOURCE_MISSING_P2_REPORT", "severity": "P2",
+                            "field_classification": "SOURCE_MISSING"})
         else:
-            reports.append({**item, "decision": "OPTIONAL_OR_NONBLOCKING_REPORT"})
+            code = "EVIDENCE_LOST" if classification == "MULTILINGUAL_ATTRIBUTE_REVIEW" else classification or "UNCLASSIFIED_BUILDER_DECISION"
+            issue = _builder_issue(item, issue_code=code,
+                                  message="source locator is no longer available without an approved repair chain" if code == "EVIDENCE_LOST" else (item.get("reason") or code),
+                                  locator=locator, parent_hash=parent_hash)
+            merged.setdefault("issues", []).append(issue)
+            merged.setdefault("field_audits", []).append({"asin": asin, "field": item.get("field") or "attributes", "classification": "REVIEW_REQUIRED", "severity": "P1", "message": issue["message"], "evidence": issue["evidence"]})
+            merged.setdefault("sku_status", {})[asin] = "REVIEW_REQUIRED"
+            inherited.append(issue)
     merged["summary"] = {**dict(merged.get("summary") or {}), "issue_count": len(merged.get("issues") or [])}
     merged["status"] = "BLOCK" if "BLOCKED" in (merged.get("sku_status") or {}).values() else "REVIEW" if "REVIEW_REQUIRED" in (merged.get("sku_status") or {}).values() else "PASS"
-    return merged, {"parent_canonical_hash": parent_hash, "queue_hash": _hash(queue), "inherited": inherited, "resolved": resolved, "reports": reports}
+    return merged, {**dict(artifact_state), "inherited": inherited, "resolved": resolved, "reports": reports}
 
 
 def build_current_source_gate_candidate(
@@ -683,8 +812,7 @@ def build_current_source_gate_candidate(
     parent_records: Iterable[Mapping], owner_scope: Mapping, *, expected_input_hashes: Mapping,
     historical_source_audit: Mapping | None = None, cache_root: str | Path | None = None,
     snapshot_provenance: Mapping | None = None, progress=None,
-    builder_unresolved_decisions: Iterable[Mapping] | None = None,
-    builder_parent_canonical_hash: str | None = None,
+    builder_decision_artifact: Mapping | None = None,
 ) -> dict:
     """Revalidate a hash-bound owner subset; history is retained but not authoritative."""
     emit = progress or (lambda *_args, **_kwargs: None)
@@ -741,13 +869,11 @@ def build_current_source_gate_candidate(
                 raise ValueError(f"unconfirmed self-parent was retained for {asin}")
     emit("CURRENT_AUDIT_START", records=len(records))
     current_audit = audit_source_fields(records, ranking_matrix=ranking_rows, progress=emit)
-    builder_state = {"parent_canonical_hash": None, "queue_hash": _hash([]), "inherited": [], "resolved": [], "reports": []}
-    if builder_unresolved_decisions is not None:
-        parent_hash = str(parent.get("dataset_canonical_hash") or "")
-        if str(builder_parent_canonical_hash or "") != parent_hash:
-            raise ValueError("builder unresolved decisions parent hash does not match supplied parent records")
-        current_audit, builder_state = _merge_builder_unresolved_decisions(
-            current_audit, records, builder_unresolved_decisions, parent_hash=parent_hash)
+    parent_hash = str(parent.get("dataset_canonical_hash") or "")
+    builder_queue, builder_state = _validated_builder_decision_artifact(
+        builder_decision_artifact, parent_hash=parent_hash)
+    current_audit, builder_state = _merge_builder_unresolved_decisions(
+        current_audit, records, builder_queue, parent_hash=parent_hash, artifact_state=builder_state)
     emit("CURRENT_AUDIT_DONE", issues=len(current_audit.get("issues") or []))
     current_gate = evaluate_source_gate(current_audit)
     rank_diagnostic = rank_matrix_diagnostics(ranking_rows, exact_scope=expected_scope, owner_scope=owner_scope)
@@ -781,5 +907,5 @@ __all__ = [
     "SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION", "OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION", "CURRENT_SOURCE_GATE_SCHEMA_VERSION",
     "build_spanish_source_candidate", "candidate_manifest_hash", "write_spanish_source_candidate",
     "derive_owner_excluded_scope", "write_owner_excluded_scope", "rank_matrix_diagnostics",
-    "build_current_source_gate_candidate",
+    "build_current_source_gate_candidate", "load_builder_unresolved_decision_artifact",
 ]
