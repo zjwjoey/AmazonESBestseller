@@ -354,15 +354,149 @@ def execute_formal_structured_translation(
                                   "qa_status": "review_required", "qa_issues": [{"code": item.get("block_code") or "SOURCE_REVIEW_REQUIRED"}],
                                   "provider": None, "model": None, "resolution_source": "source_blocked",
                                   "attempt_count": 0, "last_error": None})
-            output_fields[field] = {"field_hash": field_fact.get("field_hash"), "items": items,
+            output_fields[field] = {"field": field, "target_field": field_fact.get("target_field"),
+                                    "source_record_hash": record.get("source_record_hash"),
+                                    "field_hash": field_fact.get("field_hash"), "items": items,
                                     "excluded_raw_trace": field_fact.get("excluded_raw_trace") or []}
         records[asin] = {"asin": asin, "source_record_hash": record.get("source_record_hash"), "fields": output_fields}
     return {"records": records, "summary": {"records": len(records), "provider_calls": provider_calls},
-            "binding": deepcopy(formal.get("binding") or {})}
+            "binding": deepcopy(formal.get("binding") or {}),
+            "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
+            "input_hash": _hash(formal.get("records") or [])}
 
 
-def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
-                                        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+def _item_source_text(item: Mapping[str, Any]) -> str:
+    """Return the complete item fact used by its structured source hash."""
+    fact = {key: item.get(key) for key in (
+        "schema_version", "asin", "field", "item_id", "section", "position",
+        "label_raw", "value_raw",
+    )}
+    return json.dumps(fact, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _field_source_text(field: str, field_fact: Mapping[str, Any]) -> str:
+    """Keep field QA bound to all label/value facts, never a value-only proxy."""
+    payload = {
+        "schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
+        "field": field,
+        "target_field": field_fact.get("target_field"),
+        "items": [_item_source_text(item) for item in field_fact.get("items") or []],
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _require_unique(values: Iterable[str], code: str) -> None:
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            raise ValueError(code)
+        seen.add(value)
+
+
+def _assert_bound_execution(
+        formal: Mapping, execution: Mapping, verified_master: Mapping, source_audit: Mapping,
+        source_gate: Mapping, review_snapshot: Mapping, *, prompt_version: str,
+        dictionary_manifest: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], Mapping[str, Any]]]:
+    """Validate results against independently rebuilt formal source facts."""
+    validate_formal_structured_translation_input(
+        formal, verified_master, source_audit, source_gate, review_snapshot,
+        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest)
+    if dict(execution.get("binding") or {}) != dict(formal.get("binding") or {}):
+        raise ValueError("STRUCTURED_EXECUTION_BINDING_MISMATCH")
+    if str(execution.get("translation_schema_version") or "") != STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION:
+        raise ValueError("STRUCTURED_EXECUTION_SCHEMA_MISMATCH")
+    if str(execution.get("input_hash") or "") != _hash(formal.get("records") or []):
+        raise ValueError("STRUCTURED_EXECUTION_INPUT_BINDING_MISMATCH")
+    source_records = list(formal.get("records") or [])
+    expected_asins = [str(row.get("asin") or "").upper() for row in source_records]
+    _require_unique(expected_asins, "STRUCTURED_FORMAL_DUPLICATE_ASIN")
+    actual_records = execution.get("records") or {}
+    if not isinstance(actual_records, Mapping):
+        raise ValueError("STRUCTURED_EXECUTION_RECORDS_INVALID")
+    actual_asins = [str(asin or "").upper() for asin in actual_records]
+    _require_unique(actual_asins, "STRUCTURED_EXECUTION_DUPLICATE_ASIN")
+    if actual_asins != expected_asins:
+        raise ValueError("STRUCTURED_EXECUTION_ASIN_ORDER_OR_SET_MISMATCH")
+    pairs: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    for source_record in source_records:
+        asin = str(source_record.get("asin") or "").upper()
+        rendered_record = actual_records.get(asin)
+        if not isinstance(rendered_record, Mapping):
+            raise ValueError("STRUCTURED_EXECUTION_ASIN_SET_MISMATCH")
+        if (str(rendered_record.get("asin") or "").upper() != asin
+                or str(rendered_record.get("source_record_hash") or "")
+                != str(source_record.get("source_record_hash") or "")):
+            raise ValueError("STRUCTURED_EXECUTION_RECORD_BINDING_MISMATCH")
+        source_fields = source_record.get("fields") or {}
+        result_fields = rendered_record.get("fields") or {}
+        if list(result_fields) != list(source_fields):
+            raise ValueError("STRUCTURED_EXECUTION_FIELD_ORDER_OR_SET_MISMATCH")
+        for field, field_fact in source_fields.items():
+            result_field = result_fields.get(field)
+            expected_target = target_field_for(canonical_source_field(field))
+            if (not isinstance(result_field, Mapping)
+                    or str(field_fact.get("target_field") or "") != expected_target
+                    or str(result_field.get("field") or "") != field
+                    or str(result_field.get("target_field") or "") != expected_target
+                    or str(result_field.get("source_record_hash") or "")
+                    != str(source_record.get("source_record_hash") or "")
+                    or str(result_field.get("field_hash") or "") != str(field_fact.get("field_hash") or "")):
+                raise ValueError("STRUCTURED_EXECUTION_FIELD_BINDING_MISMATCH")
+            source_items = list(field_fact.get("items") or [])
+            result_items = list(result_field.get("items") or [])
+            if len(result_items) != len(source_items):
+                raise ValueError("STRUCTURED_EXECUTION_ITEM_COVERAGE_INCOMPLETE")
+            if not all(isinstance(item, Mapping) for item in result_items):
+                raise ValueError("STRUCTURED_EXECUTION_ITEM_INVALID")
+            _require_unique([str(item.get("item_id") or "") for item in result_items],
+                            "STRUCTURED_EXECUTION_DUPLICATE_ITEM_ID")
+            for source_item, result_item in zip(source_items, result_items):
+                source_fact = {key: source_item.get(key) for key in source_item}
+                result_source_fact = {key: result_item.get(key) for key in source_item}
+                if (source_fact != result_source_fact
+                        or str(source_item.get("source_hash") or "") != source_hash(_item_source_text(source_item))
+                        or str(result_item.get("source_hash") or "") != str(source_item.get("source_hash") or "")):
+                    raise ValueError("STRUCTURED_EXECUTION_ITEM_BINDING_MISMATCH")
+        pairs.append((source_record, rendered_record))
+    return pairs
+
+
+def _label_translation_state(*, asin: str, item: Mapping[str, Any], dictionary_version: str) -> dict[str, Any]:
+    """Only an explicit deterministic label mapping may enter Chinese display."""
+    from ..quality.chinese import audit_field, canonical_qa_row
+    from .full_detail import LABEL_ES_ZH
+    from .protection import protect, restore
+
+    label = str(item.get("label_raw") or "")
+    protected = protect(label)
+    candidate = LABEL_ES_ZH.get(label.casefold(), "")
+    restored, restore_issues = restore(protected, candidate)
+    context = {"item_id": item.get("item_id"), "position": item.get("position"),
+               "kind": "attribute_label", "item_source_hash": item.get("source_hash")}
+    if not candidate:
+        qa = canonical_qa_row({"asin": asin, "field": "product_details_label",
+                               "target_field": "product_details_label_zh", "field_type": "attribute_label",
+                               "source_text": label, "source_hash": source_hash(label), "translated_text": "",
+                               "context": context, "dictionary_version": dictionary_version,
+                               "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
+                               "status": "MANUAL_REVIEW",
+                               "issues": [{"code": "STRUCTURED_LABEL_TRANSLATION_UNAVAILABLE"}]})
+    else:
+        qa = audit_field(asin=asin, field="product_details_label", source_es=label,
+                         translated_zh=restored, source_hash=source_hash(label),
+                         dictionary_version=dictionary_version, target_field="product_details_label_zh",
+                         field_type="attribute_label", context=context,
+                         translation_schema_version=STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
+        if restore_issues:
+            qa = canonical_qa_row({**qa, "status": "MANUAL_REVIEW", "issues": restore_issues})
+    return {"label_raw": label, "label_zh": restored if candidate else "", "label_status": qa["status"],
+            "label_qa": qa, "label_protection": {"text": protected.text, "tokens": dict(protected.tokens)}}
+
+
+def build_structured_production_overlay(
+        formal: Mapping, execution: Mapping, *, verified_master: Mapping, source_audit: Mapping,
+        source_gate: Mapping, review_snapshot: Mapping, prompt_version: str,
+        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Build a non-release Chinese overlay from complete structured item facts.
 
     This is deliberately an adapter, not a second translation path: every
@@ -374,33 +508,24 @@ def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
     from ..quality.chinese import audit_field, canonical_qa_row
     from .full_detail import LABEL_ES_ZH
     from .repair_queue import build_repair_queue
-    from .service import source_hash
 
-    if dict(execution.get("binding") or {}) != dict(formal.get("binding") or {}):
-        raise ValueError("STRUCTURED_EXECUTION_BINDING_MISMATCH")
-    expected = {str(row.get("asin") or ""): row for row in formal.get("records") or []}
-    actual = {str(asin): row for asin, row in (execution.get("records") or {}).items()}
-    if set(expected) != set(actual):
-        raise ValueError("STRUCTURED_EXECUTION_ASIN_SET_MISMATCH")
+    bound_pairs = _assert_bound_execution(
+        formal, execution, verified_master, source_audit, source_gate, review_snapshot,
+        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest)
     dictionary_version = str(dictionary_manifest.get("dictionary_version") or "")
     dictionary_hash = str(dictionary_manifest.get("dictionary_hash") or "")
     qa_rows, repair_rows, overlay_records, state_records, dictionary_impacts = [], [], [], [], []
-    for asin, source_record in expected.items():
-        rendered_record = actual[asin]
+    for source_record, rendered_record in bound_pairs:
+        asin = str(source_record.get("asin") or "").upper()
         overlay, field_states = {"asin": asin}, []
         for field, field_fact in (source_record.get("fields") or {}).items():
             result_fact = (rendered_record.get("fields") or {}).get(field) or {}
-            if result_fact.get("field_hash") != field_fact.get("field_hash"):
-                raise ValueError("STRUCTURED_EXECUTION_FIELD_HASH_MISMATCH")
             source_items = list(field_fact.get("items") or [])
             result_items = list(result_fact.get("items") or [])
-            result_by_id = {str(item.get("item_id") or ""): item for item in result_items}
-            if set(str(item.get("item_id") or "") for item in source_items) != set(result_by_id):
-                raise ValueError("STRUCTURED_EXECUTION_ITEM_COVERAGE_INCOMPLETE")
             item_states, display_parts, all_pass = [], [], True
             for position, item in enumerate(source_items):
                 item_id = str(item.get("item_id") or "")
-                result = result_by_id[item_id]
+                result = result_items[position]
                 raw = str(item.get("value_raw") or "")
                 item_source_hash = str(item.get("source_hash") or source_hash(raw))
                 qa_source_hash = source_hash(raw)
@@ -416,7 +541,9 @@ def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
                                  translation_schema_version=STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
                 current_pass = (provider_status in {"success", "cached"}
                                 and str(qa.get("status")) == "PASS")
-                item_state = {**deepcopy(item), "translated_text": candidate,
+                item_source_text = _item_source_text(item)
+                item_state = {**deepcopy(item), "source_text": item_source_text,
+                              "source_hash": source_hash(item_source_text), "translated_text": candidate,
                               "provider_status": provider_status, "qa": qa,
                               "promotion_status": "PROMOTED" if current_pass else "QA_BLOCKED",
                               "provider": result.get("provider"), "provider_alias": result.get("provider_alias"),
@@ -425,6 +552,16 @@ def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
                               "dictionary_version": dictionary_version,
                               "dictionary_hash": dictionary_hash,
                               "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION}
+                if field == "product_details":
+                    label_state = _label_translation_state(asin=asin, item=item,
+                                                           dictionary_version=dictionary_version)
+                    item_state.update(label_state)
+                    qa_rows.append(label_state["label_qa"])
+                    if label_state["label_status"] != "PASS":
+                        current_pass = False
+                        item_state["promotion_status"] = "QA_BLOCKED"
+                        repair_rows.append({**label_state["label_qa"], "item_id": item_id + ":label",
+                                            "position": position, "provider_status": "deterministic"})
                 item_states.append(item_state)
                 if not current_pass:
                     if str(qa.get("status")) == "PASS":
@@ -446,10 +583,15 @@ def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
                     display_parts.append("%s��%s" % (LABEL_ES_ZH.get(label.casefold(), label), candidate))
                 else:
                     display_parts.append(candidate)
-            target = "product_details_zh" if field == "product_details" else "feature_bullets_zh"
+            target = str(field_fact.get("target_field") or "")
             final = "\n".join(display_parts) if all_pass else ""
+            full_source_text = _field_source_text(field, field_fact)
             field_states.append({"asin": asin, "field": field, "target_field": target,
-                                 "items": item_states, "field_hash": field_fact.get("field_hash"),
+                                  "items": item_states, "field_hash": field_fact.get("field_hash"),
+                                  "source_text": full_source_text,
+                                  "source_hash": source_hash(full_source_text),
+                                  "structured_source_hash": field_fact.get("field_hash"),
+                                  "translated_text": final,
                                  "promotion_status": "PROMOTED" if all_pass else "QA_BLOCKED",
                                  "final_zh": final, "dictionary_version": dictionary_version,
                                  "dictionary_hash": dictionary_hash,
@@ -466,7 +608,7 @@ def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
         if item["strategy"] in {"auto_repair", "provider_retry"}:
             item["strategy"] = "manual_review"
         item["auto_provider_repair"] = False
-    return {"status": "NONFORMAL_STRUCTURED_OVERLAY", "records": state_records,
+    return {"status": "NONFORMAL_STRUCTURED_OVERLAY", "formal_release": False, "records": state_records,
             "chinese_qa": qa_rows, "repair_queue": queue,
             "chinese_master_overlay": overlay_records,
             "dictionary_rerender_status": "NOT_IMPLEMENTED_ITEM_IMPACT_ONLY",

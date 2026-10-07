@@ -643,7 +643,12 @@ class ProductionWorkflow:
                     translation_payload["translation_batch_source_gate"], review, service,
                     prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest)
                 structured_state = build_structured_production_overlay(
-                    formal, structured, dictionary_manifest=dictionary_manifest)
+                    formal, structured,
+                    verified_master=translation_payload["translation_batch_master"],
+                    source_audit=translation_payload["translation_batch_source_audit"],
+                    source_gate=translation_payload["translation_batch_source_gate"],
+                    review_snapshot=review, prompt_version=service.prompt_version,
+                    dictionary_manifest=dictionary_manifest)
             except ValueError as exc:
                 raise ProductionWorkflowError("STRUCTURED_FORMAL_INPUT_INVALID:%s" % exc) from exc
             return self._store("translation", {"status": "READY", "execution": structured,
