@@ -30,6 +30,7 @@ SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION = "spanish-source-closure-v1"
 OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION = "owner-exclusion-scope-v1"
 CURRENT_SOURCE_GATE_SCHEMA_VERSION = "current-source-gate-v1"
 BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN = "spanish-source-builder-unresolved-decisions-v1"
+BUILDER_UNRESOLVED_DECISION_RULES_VERSION = "builder-unresolved-decisions-v1"
 _OWNER_EXCLUSIONS = {
     "B07F6LYVT6": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
     "B077H1MZ35": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
@@ -429,6 +430,10 @@ def build_spanish_source_candidate(
     closure_audit = audit_source_fields(records)
     source_gate = evaluate_source_gate(source_audit)
     closure_gate = evaluate_source_gate(closure_audit)
+    # Only decisions produced while rebuilding the frozen source records are
+    # suitable for the current-gate consumer.  Do not turn the broad closure
+    # or historical audit queue into an implicit repair authority.
+    builder_unresolved_decisions = [dict(item) for item in queue]
     for field_audit in closure_audit.get("field_audits") or []:
         if not isinstance(field_audit, Mapping) or field_audit.get("classification") in {"PASS", "WARN"}:
             continue
@@ -447,6 +452,7 @@ def build_spanish_source_candidate(
             queue.append(item)
     binding_scope = sorted(scope)
     queue.sort(key=lambda item: (str(item.get("asin") or ""), str(item.get("field") or ""), str(item.get("classification") or item.get("issue") or "")))
+    builder_unresolved_decisions.sort(key=lambda item: (str(item.get("asin") or ""), str(item.get("field") or ""), str(item.get("classification") or item.get("issue") or "")))
     candidate_status = (
         "CANDIDATE_SOURCE_GATE_BLOCKED" if not source_gate["ready"]
         else "CANDIDATE_CLOSURE_GATE_BLOCKED" if not closure_gate["ready"]
@@ -465,6 +471,7 @@ def build_spanish_source_candidate(
         "snapshot_provenance": dict(snapshot_provenance or {}),
         "records": records,
         "source_review_queue": queue,
+        "builder_unresolved_decisions": builder_unresolved_decisions,
     }
 
 
@@ -512,7 +519,32 @@ def _audit_markdown(result: Mapping) -> str:
     return "\n".join(lines)
 
 
-def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> dict:
+def _write_builder_unresolved_decision_artifact(directory: Path, result: Mapping, metadata: Mapping) -> dict:
+    queue = [dict(item) for item in result.get("builder_unresolved_decisions") or [] if isinstance(item, Mapping)]
+    if not queue:
+        raise ValueError("builder unresolved decision queue is empty; immutable artifact is required")
+    raw_input_sha256 = metadata.get("raw_input_sha256")
+    code_sha = _text(metadata.get("code_sha"))
+    if not isinstance(raw_input_sha256, Mapping) or not raw_input_sha256 or not code_sha:
+        raise ValueError("builder unresolved decision metadata requires raw input hashes and code SHA")
+    queue_path = directory / "builder_unresolved_decisions.json"
+    queue_path.write_text(json.dumps(queue, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    parent_hash = _hash(list(result.get("records") or []))
+    manifest = {
+        "artifact_domain": BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN,
+        "rules_version": BUILDER_UNRESOLVED_DECISION_RULES_VERSION,
+        "parent_dataset_canonical_hash": parent_hash,
+        "expected_queue_canonical_hash": _hash(queue),
+        "expected_queue_sha256": _artifact_hash(queue_path),
+        "raw_input_sha256": dict(raw_input_sha256),
+        "code_sha": code_sha,
+    }
+    manifest_path = directory / "builder_unresolved_decisions.manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return {**manifest, "queue_path": queue_path.name, "manifest_path": manifest_path.name}
+
+
+def write_spanish_source_candidate(output_dir: str | Path, result: Mapping, *, builder_artifact_metadata: Mapping | None = None) -> dict:
     """Write a new immutable closure directory and return its manifest."""
     directory = Path(output_dir)
     if directory.exists():
@@ -520,7 +552,13 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
     directory.mkdir(parents=True)
     records = list(result.get("records") or [])
     master_path = directory / "spanish_master_5480.json"
-    master_path.write_text(json.dumps({key: value for key, value in result.items() if key != "source_review_queue"}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    master_payload = {key: value for key, value in result.items() if key != "source_review_queue"}
+    # Builder outputs carry a large decision list separately.  Current-gate
+    # outputs instead carry the consumer's mapping (inherited/resolved/report
+    # state), which is required audit evidence and must remain persisted.
+    if isinstance(master_payload.get("builder_unresolved_decisions"), list):
+        master_payload.pop("builder_unresolved_decisions")
+    master_path.write_text(json.dumps(master_payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     csv_path = directory / "spanish_master_5480.csv"
     columns = ["asin", "parent_asin", "parent_asin_status", "title_es_raw", "brand", "manufacturer", "speaker_type", "current_price", "original_price", "discount_rate", "bestseller_rank", "detail_bsr_raw", "research_category", "collection_batch", "collection_time", "attributes", "feature_bullets_raw", "ranking_contexts"]
     with csv_path.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -550,6 +588,10 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
     (directory / "audit.md").write_text(_audit_markdown(result), encoding="utf-8")
     queue_path = directory / "source_review_queue.json"
     queue_path.write_text(json.dumps(result.get("source_review_queue") or [], ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    builder_artifact = _write_builder_unresolved_decision_artifact(directory, result, builder_artifact_metadata) if builder_artifact_metadata is not None else None
+    artifact_names = ["spanish_master_5480.json", "spanish_master_5480.csv", "audit.json", "audit.md", "source_review_queue.json", "historical_source_audit.json"]
+    if builder_artifact is not None:
+        artifact_names.extend(["builder_unresolved_decisions.json", "builder_unresolved_decisions.manifest.json"])
     manifest = {
         "schema_version": SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION,
         "status": result.get("status"),
@@ -557,8 +599,10 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
         "frozen_candidate_manifest_canonical_hash": result.get("candidate_manifest_hash"),
         "binding_scope": result.get("binding_scope"), "source_gate": result.get("source_gate"),
         "code_versions": result.get("code_versions") or {},
-        "artifacts": {name: _artifact_hash(directory / name) for name in ("spanish_master_5480.json", "spanish_master_5480.csv", "audit.json", "audit.md", "source_review_queue.json", "historical_source_audit.json")},
+        "artifacts": {name: _artifact_hash(directory / name) for name in artifact_names},
     }
+    if builder_artifact is not None:
+        manifest["builder_unresolved_decision_artifact"] = builder_artifact
     (directory / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest
 
@@ -598,6 +642,40 @@ def derive_owner_excluded_scope(parent_records: Iterable[Mapping], *, parent_dat
             "replacement_products_added": 0,
         },
     }
+
+
+def derive_owner_excluded_scope_with_parent_chain(
+    parent_records: Iterable[Mapping], *, frozen_parent_records: Iterable[Mapping], frozen_parent_manifest: Mapping,
+) -> dict:
+    """Derive the 5,478 scope only after validating the immutable r3 parent.
+
+    A normalization rebuild may change record content and therefore the parent
+    hash, but it may not replace or reorder the frozen 5,480-ASIN population.
+    """
+    old_records = [dict(record) for record in frozen_parent_records if isinstance(record, Mapping)]
+    new_records = [dict(record) for record in parent_records if isinstance(record, Mapping)]
+    expected_old_hash = _text(frozen_parent_manifest.get("dataset_canonical_hash"))
+    if not expected_old_hash or _hash(old_records) != expected_old_hash:
+        raise ValueError("frozen r3 parent dataset hash does not match its manifest")
+    manifest_scope = [normalize_asin(asin) for asin in (frozen_parent_manifest.get("binding_scope") or {}).get("asins") or []]
+    old_asins = [normalize_asin(record.get("asin")) for record in old_records]
+    new_asins = [normalize_asin(record.get("asin")) for record in new_records]
+    if (not all(old_asins) or not all(new_asins) or len(old_asins) != 5480 or len(new_asins) != 5480
+            or len(set(old_asins)) != 5480 or len(set(new_asins)) != 5480
+            or len(manifest_scope) != 5480 or set(manifest_scope) != set(old_asins)
+            or set(new_asins) != set(old_asins)):
+        raise ValueError("derived owner scope must retain the frozen r3 5,480-ASIN population")
+    new_hash = _hash(new_records)
+    scope = derive_owner_excluded_scope(new_records, parent_dataset_canonical_hash=new_hash)
+    scope["parent_chain"] = {
+        "schema_version": "owner-scope-parent-chain-v1",
+        "old_parent_dataset_canonical_hash": expected_old_hash,
+        "new_parent_dataset_canonical_hash": new_hash,
+        "frozen_asin_set_canonical_hash": _hash(sorted(old_asins)),
+        "new_asin_set_canonical_hash": _hash(sorted(new_asins)),
+        "relation": "canonical-normalization-rebuild",
+    }
+    return scope
 
 
 def write_owner_excluded_scope(output_dir: str | Path, scope: Mapping) -> dict:
@@ -905,7 +983,8 @@ def build_current_source_gate_candidate(
 
 __all__ = [
     "SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION", "OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION", "CURRENT_SOURCE_GATE_SCHEMA_VERSION",
+    "BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN", "BUILDER_UNRESOLVED_DECISION_RULES_VERSION",
     "build_spanish_source_candidate", "candidate_manifest_hash", "write_spanish_source_candidate",
-    "derive_owner_excluded_scope", "write_owner_excluded_scope", "rank_matrix_diagnostics",
+    "derive_owner_excluded_scope", "derive_owner_excluded_scope_with_parent_chain", "write_owner_excluded_scope", "rank_matrix_diagnostics",
     "build_current_source_gate_candidate", "load_builder_unresolved_decision_artifact",
 ]

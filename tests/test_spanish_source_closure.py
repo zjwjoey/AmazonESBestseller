@@ -2,11 +2,14 @@ import hashlib
 import json
 
 from amazon_es_bestseller.production.spanish_source_closure import (
+    BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN,
+    BUILDER_UNRESOLVED_DECISION_RULES_VERSION,
     _hash as production_hash,
     build_spanish_source_candidate,
     candidate_manifest_hash,
     build_current_source_gate_candidate,
     derive_owner_excluded_scope,
+    derive_owner_excluded_scope_with_parent_chain,
     load_builder_unresolved_decision_artifact,
     rank_matrix_diagnostics,
     write_owner_excluded_scope,
@@ -250,6 +253,91 @@ def test_written_manifest_separates_dataset_and_frozen_manifest_hashes(tmp_path)
     assert manifest["frozen_candidate_manifest_canonical_hash"] == candidate_manifest_hash(candidates)
     assert (tmp_path / "closure" / "historical_source_audit.json").is_file()
     assert "P2 findings are reported" in (tmp_path / "closure" / "audit.md").read_text(encoding="utf-8")
+
+
+def test_builder_writer_produces_verified_queue_for_current_gate_without_mutating_raw_inputs(tmp_path):
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000020"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    details[-1]["parent_asin"] = asins[-1]
+    details_before = json.loads(json.dumps(details, ensure_ascii=False))
+    audit = _audit(asins)
+    result = build_spanish_source_candidate(
+        candidates, details, candidates, audit, expected_candidate_hash=_hash(candidates),
+    )
+    manifest = write_spanish_source_candidate(
+        tmp_path / "builder", result,
+        builder_artifact_metadata={"raw_input_sha256": {"details": "d" * 64}, "code_sha": "c" * 40},
+    )
+    artifact_info = manifest["builder_unresolved_decision_artifact"]
+    assert artifact_info["artifact_domain"] == BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN
+    assert artifact_info["rules_version"] == BUILDER_UNRESOLVED_DECISION_RULES_VERSION
+    artifact = load_builder_unresolved_decision_artifact(
+        tmp_path / "builder" / artifact_info["queue_path"], tmp_path / "builder" / artifact_info["manifest_path"],
+    )
+    scope = derive_owner_excluded_scope(result["records"], parent_dataset_canonical_hash=_hash(result["records"]))
+    current = build_current_source_gate_candidate(
+        candidates, details, candidates, result["records"], scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_decision_artifact=artifact,
+    )
+    assert artifact["queue_canonical_hash"] == _hash(result["builder_unresolved_decisions"])
+    assert current["builder_unresolved_decisions"]["parent_canonical_hash"] == _hash(result["records"])
+    write_spanish_source_candidate(tmp_path / "current", current)
+    persisted_current = json.loads((tmp_path / "current" / "spanish_master_5480.json").read_text(encoding="utf-8"))
+    assert persisted_current["builder_unresolved_decisions"] == current["builder_unresolved_decisions"]
+    assert details == details_before
+
+
+def test_builder_artifact_rejects_parent_content_change_and_is_noop_hash_stable(tmp_path):
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000021"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    details[-1]["parent_asin"] = asins[-1]
+    result = build_spanish_source_candidate(candidates, details, candidates, _audit(asins), expected_candidate_hash=_hash(candidates))
+    metadata = {"raw_input_sha256": {"details": "d" * 64}, "code_sha": "c" * 40}
+    first = write_spanish_source_candidate(tmp_path / "first", result, builder_artifact_metadata=metadata)
+    second = write_spanish_source_candidate(tmp_path / "second", result, builder_artifact_metadata=metadata)
+    assert first["builder_unresolved_decision_artifact"]["expected_queue_canonical_hash"] == second["builder_unresolved_decision_artifact"]["expected_queue_canonical_hash"]
+    assert first["builder_unresolved_decision_artifact"]["expected_queue_sha256"] == second["builder_unresolved_decision_artifact"]["expected_queue_sha256"]
+    artifact_info = first["builder_unresolved_decision_artifact"]
+    artifact = load_builder_unresolved_decision_artifact(
+        tmp_path / "first" / artifact_info["queue_path"], tmp_path / "first" / artifact_info["manifest_path"],
+    )
+    changed_parents = json.loads(json.dumps(result["records"], ensure_ascii=False))
+    changed_parents[-1]["title_es_raw"] = "changed canonical parent"
+    changed_scope = derive_owner_excluded_scope(changed_parents, parent_dataset_canonical_hash=_hash(changed_parents))
+    try:
+        build_current_source_gate_candidate(
+            candidates, details, candidates, changed_parents, changed_scope,
+            expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+            builder_decision_artifact=artifact,
+        )
+    except ValueError as exc:
+        assert "parent hash" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("changed parent content must invalidate builder artifact")
+
+
+def test_owner_scope_parent_chain_requires_frozen_r3_hash_and_asin_population():
+    frozen = [{"asin": "B07F6LYVT6"}, {"asin": "B077H1MZ35"}]
+    frozen.extend({"asin": f"B{index:09d}"} for index in range(1, 5479))
+    manifest = {"dataset_canonical_hash": _hash(frozen), "binding_scope": {"asins": [row["asin"] for row in frozen]}}
+    rebuilt = json.loads(json.dumps(frozen))
+    rebuilt[-1]["canonical_rebuild_marker"] = "current"
+    scope = derive_owner_excluded_scope_with_parent_chain(
+        rebuilt, frozen_parent_records=frozen, frozen_parent_manifest=manifest,
+    )
+    assert scope["effective_scope"]["record_count"] == 5478
+    assert scope["parent_chain"]["old_parent_dataset_canonical_hash"] == manifest["dataset_canonical_hash"]
+    assert scope["parent_chain"]["new_parent_dataset_canonical_hash"] == _hash(rebuilt)
+    bad_manifest = dict(manifest, dataset_canonical_hash="0" * 64)
+    try:
+        derive_owner_excluded_scope_with_parent_chain(rebuilt, frozen_parent_records=frozen, frozen_parent_manifest=bad_manifest)
+    except ValueError as exc:
+        assert "r3 parent dataset hash" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("r3 hash mismatch must not be ignored")
 
 
 def test_candidate_review_queue_includes_current_closure_field_audits():
