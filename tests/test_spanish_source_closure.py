@@ -436,10 +436,10 @@ def test_current_gate_inherits_hash_bound_unresolved_cjk_decision_as_review():
 
 def test_builder_artifact_rejects_missing_empty_tampered_and_deleted_cjk_queue(tmp_path):
     queue = [{
-        "asin": "B000000015", "field": "attributes", "classification": "MULTILINGUAL_ATTRIBUTE_REVIEW",
+        "asin": f"B000000{index:03d}", "field": "attributes", "classification": "MULTILINGUAL_ATTRIBUTE_REVIEW",
         "status": "REVIEW_REQUIRED", "reason": "CJK requires review",
-        "evidence_locator": {"asin": "B000000015", "field": "attributes", "label_raw": "Nombre", "value_raw": "中文"},
-    }]
+        "evidence_locator": {"asin": f"B000000{index:03d}", "field": "attributes", "label_raw": "Nombre", "value_raw": "中文"},
+    } for index in range(1, 18)]
     parent_hash = "a" * 64
     queue_path, manifest_path = _write_builder_files(tmp_path, queue, parent_hash)
     artifact = load_builder_unresolved_decision_artifact(queue_path, manifest_path)
