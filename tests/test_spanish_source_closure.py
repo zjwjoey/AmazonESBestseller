@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from amazon_es_bestseller.production.spanish_source_closure import (
+    _hash as production_hash,
     build_spanish_source_candidate,
     candidate_manifest_hash,
     build_current_source_gate_candidate,
@@ -88,7 +89,6 @@ def test_candidate_keeps_source_gate_blocked_and_ranking_contexts():
         _audit([asin]),
         expected_candidate_hash=candidate_manifest_hash(candidates),
     )
-
     record = result["records"][0]
     assert result["status"] == "CANDIDATE_SOURCE_GATE_BLOCKED"
     assert result["source_gate"]["ready"] is False
@@ -97,6 +97,11 @@ def test_candidate_keeps_source_gate_blocked_and_ranking_contexts():
     assert record["bestseller_rank"] == 1
     assert record["detail_bsr_raw"] == "n.º 1 en Prueba"
     assert record["metadata"]["collection_batch"] == "batch-1"
+
+
+def test_iterencode_hash_is_byte_identical_to_legacy_canonical_dumps():
+    value = {"z": [1, 1.5, "\u00f1", {"b": True, "a": None}], "a": {"nested": ["\u6d4b\u8bd5", 0.0]}}
+    assert production_hash(value) == _hash(value)
 
 
 def test_candidate_isolates_damaged_optional_values_and_preserves_raw():

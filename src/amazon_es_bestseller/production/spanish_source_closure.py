@@ -45,7 +45,13 @@ def _canonical(value: Any) -> str:
 
 
 def _hash(value: Any) -> str:
-    return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+    # ``iterencode`` emits exactly the same JSON chunks as ``dumps`` with the
+    # same encoder options, without first allocating one large canonical string.
+    digest = hashlib.sha256()
+    encoder = json.JSONEncoder(ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    for chunk in encoder.iterencode(value):
+        digest.update(chunk.encode("utf-8"))
+    return digest.hexdigest()
 
 
 def candidate_manifest_hash(manifest: Iterable[Mapping]) -> str:
@@ -566,17 +572,21 @@ def build_current_source_gate_candidate(
     candidate_manifest: Iterable[Mapping], details: Iterable[Mapping], rankings: Iterable[Mapping],
     parent_records: Iterable[Mapping], owner_scope: Mapping, *, expected_input_hashes: Mapping,
     historical_source_audit: Mapping | None = None, cache_root: str | Path | None = None,
-    snapshot_provenance: Mapping | None = None,
+    snapshot_provenance: Mapping | None = None, progress=None,
 ) -> dict:
     """Revalidate a hash-bound owner subset; history is retained but not authoritative."""
-    candidates = [dict(item) for item in candidate_manifest if isinstance(item, Mapping)]
-    detail_rows = [dict(item) for item in details if isinstance(item, Mapping)]
-    ranking_rows = [dict(item) for item in rankings if isinstance(item, Mapping)]
-    parents = [dict(item) for item in parent_records if isinstance(item, Mapping)]
+    emit = progress or (lambda *_args, **_kwargs: None)
+    emit("CURRENT_GATE_VALIDATE_START")
+    candidates = [item for item in candidate_manifest if isinstance(item, Mapping)]
+    detail_rows = [item for item in details if isinstance(item, Mapping)]
+    ranking_rows = [item for item in rankings if isinstance(item, Mapping)]
+    parents = [item for item in parent_records if isinstance(item, Mapping)]
+    emit("CURRENT_GATE_HASH_START")
     observed_hashes = {"candidate_manifest": _hash(candidates), "details": _hash(detail_rows), "rankings": _hash(ranking_rows)}
     for name, observed in observed_hashes.items():
         if str(expected_input_hashes.get(name) or "") != observed:
             raise ValueError(f"input hash mismatch for {name}")
+    emit("CURRENT_GATE_HASH_DONE")
     parent = owner_scope.get("parent_scope") or {}
     if parent.get("dataset_canonical_hash") != _hash(parents):
         raise ValueError("owner scope parent hash does not match supplied parent records")
@@ -602,7 +612,9 @@ def build_current_source_gate_candidate(
     records = [dict(record) for record in parents if normalize_asin(record.get("asin")) in expected_scope]
     if {normalize_asin(record.get("asin")) for record in records} != expected_scope:
         raise ValueError("owner scope does not select an exact parent record set")
-    for record in records:
+    for index, record in enumerate(records, start=1):
+        if index % 100 == 0:
+            emit("CURRENT_GATE_VALIDATE_PROGRESS", records=index)
         asin = normalize_asin(record.get("asin"))
         if not record.get("ranking_contexts") or not all(_hash(dict(ctx)) in ranking_contexts[asin]
                                                           for ctx in record.get("ranking_contexts") if isinstance(ctx, Mapping)):
@@ -611,7 +623,9 @@ def build_current_source_gate_candidate(
         if normalize_asin(detail.get("parent_asin")) == asin and not _confirmed_self_parent(detail, asin, Path(cache_root) if cache_root else None):
             if _text(record.get("parent_asin")):
                 raise ValueError(f"unconfirmed self-parent was retained for {asin}")
-    current_audit = audit_source_fields(records)
+    emit("CURRENT_AUDIT_START", records=len(records))
+    current_audit = audit_source_fields(records, progress=emit)
+    emit("CURRENT_AUDIT_DONE", issues=len(current_audit.get("issues") or []))
     current_gate = evaluate_source_gate(current_audit)
     rank_diagnostic = rank_matrix_diagnostics(ranking_rows, exact_scope=expected_scope, owner_scope=owner_scope)
     queue = [dict(item, origin="current_field_audit") for item in current_audit.get("field_audits") or []

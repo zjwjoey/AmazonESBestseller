@@ -241,4 +241,18 @@ to use for review.
 - `CANDIDATE_CURRENT_GATE_READY` is still a candidate, never a reviewed Master; any current P0/P1/REVIEW yields `CANDIDATE_CURRENT_GATE_BLOCKED`.
 - Complete rank-matrix diagnostics mark owner/exact-scope omissions as `OUT_OF_EXACT_SCOPE` with their exclusion reference, while real matrix gaps remain REVIEW. No rank changes.
 - Generic unit PASS evidence now includes the exact numeric/unit signature, corroborating source field/hash, attribute label/value hash, and same-ASIN binding. Changed title/variation evidence no longer supports the old explanation.
-- The attempted full 5,478 local diagnostic emitted no artifact under the current process resource limit; it remains `NOT_EXECUTED`, not asserted READY, and needs a higher-memory rerun.
+- Logged diagnostic output: `outputs/production_closure_20261007T130000Z_current_gate_probe/candidate`.
+  It completed `WRITE_DONE` with shell exit `0` and no stderr. The exact owner
+  scope is `5478`; current input canonical hashes are candidate
+  `7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414`,
+  details `d6710b46d9c2511882675c201291ed7afc6f79e963d9f2a3ced47a4d21ad6116`,
+  and rankings `519ce391cbfdd61b2b124f2e6efc2cacfd7b91fdfee20e88456bf102f6eabebd`.
+- It is `CANDIDATE_CURRENT_GATE_BLOCKED`: current audit has `616` issues,
+  `197` P1 BLOCK findings, and `419` reviews. SKU status is `133` BLOCKED,
+  `352` REVIEW_REQUIRED, and `4993` SOURCE_READY. Blocks are `196`
+  `SPEC_UNIT_TYPE_MISMATCH` plus one `FIELD_MISPLACED`; reviews retain `326`
+  `UNIT_SEMANTICS_AMBIGUOUS`, `59` `SOURCE_SEMANTIC_CONFLICT`, `19` real
+  `RANK_GAP`, `12` repetition, and `3` misplaced-text findings.
+- Instrumentation uses same-parameter `JSONEncoder.iterencode` canonical
+  hashes, avoids unnecessary shallow copies, and flushes builder/audit progress
+  every 100 records. Fixture tests verify hash equality and audit behavior.

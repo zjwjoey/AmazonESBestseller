@@ -691,14 +691,18 @@ def _sf_record_binding(row: Mapping) -> dict:
     }
 
 
-def audit_source_fields(products: Iterable[Mapping]) -> dict:
+def audit_source_fields(products: Iterable[Mapping], *, progress=None) -> dict:
     """Perform the production source audit without network access or mutation."""
-    rows = [dict(row) for row in (products or ()) if isinstance(row, Mapping)]
+    emit = progress or (lambda *_args, **_kwargs: None)
+    # The audit does not mutate source rows; keep only one shallow container.
+    rows = [row for row in (products or ()) if isinstance(row, Mapping)]
     issues, fields = [], []
     if not rows:
         _sf_issue(issues, fields, "", "EMPTY_SOURCE_INPUT", REVIEW_REQUIRED, "P1",
                   "no product records were supplied for source audit", "asin")
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        if index % 100 == 0:
+            emit("SOURCE_AUDIT_PROGRESS", records=index)
         asin = normalize_asin(row.get("asin"))
         _sf_identity(row, asin, issues, fields)
         if not is_valid_asin(asin):
