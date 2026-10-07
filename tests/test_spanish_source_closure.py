@@ -370,6 +370,32 @@ def test_current_gate_stays_blocked_for_current_review_even_if_history_is_ready(
     assert result["promotion_state"]["eligible"] is False
 
 
+def test_current_gate_inherits_hash_bound_unresolved_cjk_decision_as_review():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000015"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[])
+               for item in candidates]
+    parents[-1]["attributes"] = [{"label_raw": "Nombre", "value_raw": "日本語"}]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    queue = [{
+        "asin": "B000000015", "field": "attributes",
+        "classification": "MULTILINGUAL_ATTRIBUTE_REVIEW", "status": "REVIEW_REQUIRED",
+        "reason": "CJK attribute retained as raw evidence; source language support was not established",
+        "evidence_locator": {"asin": "B000000015", "field": "attributes", "label_raw": "Nombre", "value_raw": "日本語"},
+    }]
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        builder_unresolved_decisions=queue,
+        builder_parent_canonical_hash=_hash(parents),
+    )
+    assert result["current_source_gate"]["ready"] is False
+    assert result["current_source_audit"]["sku_status"]["B000000015"] == "REVIEW_REQUIRED"
+    assert any(item["issue_code"] == "MULTILINGUAL_ATTRIBUTE_REVIEW" for item in result["current_source_audit"]["issues"])
+    assert result["builder_unresolved_decisions"]["queue_hash"] == _hash(queue)
+
+
 def test_rank_matrix_distinguishes_real_gaps_from_owner_scope_exclusions():
     all_asins = ["B07F6LYVT6", "B077H1MZ35", "B000000014"]
     owner_scope = derive_owner_excluded_scope(

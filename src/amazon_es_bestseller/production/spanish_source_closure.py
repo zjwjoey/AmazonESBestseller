@@ -643,11 +643,48 @@ def rank_matrix_diagnostics(rankings: Iterable[Mapping], *, exact_scope: set[str
             "out_of_exact_scope": excluded, "issues": issues}
 
 
+def _merge_builder_unresolved_decisions(audit: Mapping, records: Iterable[Mapping], decisions: Iterable[Mapping], *, parent_hash: str) -> tuple[dict, dict]:
+    """Carry only still-current unresolved builder facts into the current audit."""
+    merged = deepcopy(dict(audit))
+    record_map = {normalize_asin(row.get("asin")): row for row in records if isinstance(row, Mapping)}
+    queue = [dict(item) for item in decisions if isinstance(item, Mapping)]
+    inherited, resolved, reports = [], [], []
+    for item in queue:
+        asin = normalize_asin(item.get("asin"))
+        if asin not in record_map:
+            reports.append({**item, "decision": "OUT_OF_EXACT_SCOPE"})
+            continue
+        classification = str(item.get("classification") or "")
+        locator = item.get("evidence_locator") or {}
+        if classification == "MULTILINGUAL_ATTRIBUTE_REVIEW":
+            labels = [(str(attr.get("label_raw") or ""), str(attr.get("value_raw") or ""))
+                      for attr in (record_map[asin].get("attributes") or []) if isinstance(attr, Mapping)]
+            expected = (str(locator.get("label_raw") or ""), str(locator.get("value_raw") or ""))
+            if expected not in labels:
+                resolved.append({**item, "decision": "REPAIR_CHAIN_RESOLVED"})
+                continue
+            issue = {"asin": asin, "field": "attributes", "stage": "builder_unresolved", "check": "source_fields",
+                     "severity": "P1", "status": "REVIEW", "issue_code": classification,
+                     "field_classification": "REVIEW_REQUIRED", "message": item.get("reason") or classification,
+                     "source_file": "builder_unresolved_decisions", "evidence": {"locator": locator, "parent_canonical_hash": parent_hash}}
+            merged.setdefault("issues", []).append(issue)
+            merged.setdefault("field_audits", []).append({"asin": asin, "field": "attributes", "classification": "REVIEW_REQUIRED", "severity": "P1", "message": issue["message"], "evidence": issue["evidence"]})
+            merged.setdefault("sku_status", {})[asin] = "REVIEW_REQUIRED"
+            inherited.append(issue)
+        else:
+            reports.append({**item, "decision": "OPTIONAL_OR_NONBLOCKING_REPORT"})
+    merged["summary"] = {**dict(merged.get("summary") or {}), "issue_count": len(merged.get("issues") or [])}
+    merged["status"] = "BLOCK" if "BLOCKED" in (merged.get("sku_status") or {}).values() else "REVIEW" if "REVIEW_REQUIRED" in (merged.get("sku_status") or {}).values() else "PASS"
+    return merged, {"parent_canonical_hash": parent_hash, "queue_hash": _hash(queue), "inherited": inherited, "resolved": resolved, "reports": reports}
+
+
 def build_current_source_gate_candidate(
     candidate_manifest: Iterable[Mapping], details: Iterable[Mapping], rankings: Iterable[Mapping],
     parent_records: Iterable[Mapping], owner_scope: Mapping, *, expected_input_hashes: Mapping,
     historical_source_audit: Mapping | None = None, cache_root: str | Path | None = None,
     snapshot_provenance: Mapping | None = None, progress=None,
+    builder_unresolved_decisions: Iterable[Mapping] | None = None,
+    builder_parent_canonical_hash: str | None = None,
 ) -> dict:
     """Revalidate a hash-bound owner subset; history is retained but not authoritative."""
     emit = progress or (lambda *_args, **_kwargs: None)
@@ -704,6 +741,13 @@ def build_current_source_gate_candidate(
                 raise ValueError(f"unconfirmed self-parent was retained for {asin}")
     emit("CURRENT_AUDIT_START", records=len(records))
     current_audit = audit_source_fields(records, ranking_matrix=ranking_rows, progress=emit)
+    builder_state = {"parent_canonical_hash": None, "queue_hash": _hash([]), "inherited": [], "resolved": [], "reports": []}
+    if builder_unresolved_decisions is not None:
+        parent_hash = str(parent.get("dataset_canonical_hash") or "")
+        if str(builder_parent_canonical_hash or "") != parent_hash:
+            raise ValueError("builder unresolved decisions parent hash does not match supplied parent records")
+        current_audit, builder_state = _merge_builder_unresolved_decisions(
+            current_audit, records, builder_unresolved_decisions, parent_hash=parent_hash)
     emit("CURRENT_AUDIT_DONE", issues=len(current_audit.get("issues") or []))
     current_gate = evaluate_source_gate(current_audit)
     rank_diagnostic = rank_matrix_diagnostics(ranking_rows, exact_scope=expected_scope, owner_scope=owner_scope)
@@ -728,6 +772,7 @@ def build_current_source_gate_candidate(
         "records": records,
         "owner_optional_exclusion_repair_log": owner_optional_repair_log,
         "source_review_queue": queue,
+        "builder_unresolved_decisions": builder_state,
     }
     return result
 

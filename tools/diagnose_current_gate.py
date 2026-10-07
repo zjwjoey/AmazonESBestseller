@@ -24,6 +24,7 @@ def main() -> int:
     parser.add_argument("--production-root", required=True, type=Path)
     parser.add_argument("--parent-root", required=True, type=Path)
     parser.add_argument("--owner-scope", required=True, type=Path)
+    parser.add_argument("--builder-queue", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=False)
@@ -52,6 +53,7 @@ def main() -> int:
         parent = load("PARENT", args.parent_root / "spanish_master_5480.json")["records"]
         scope = load("OWNER_SCOPE", args.owner_scope / "owner_exclusions.json")
         history = load("HISTORICAL_AUDIT", args.parent_root / "historical_source_audit.json")
+        builder_queue = load("BUILDER_QUEUE", args.builder_queue) if args.builder_queue else None
         stage("HASH_START")
         hashes = {"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(rankings)}
         stage("HASH_DONE", hashes=hashes)
@@ -59,6 +61,8 @@ def main() -> int:
         result = build_current_source_gate_candidate(
             candidates, details, rankings, parent, scope, expected_input_hashes=hashes,
             historical_source_audit=history, cache_root=args.production_root, progress=stage,
+            builder_unresolved_decisions=builder_queue,
+            builder_parent_canonical_hash=_hash(parent) if builder_queue is not None else None,
         )
         try:
             git_sha = subprocess.check_output(
