@@ -491,3 +491,24 @@ SourceGate readiness, and the owner-policy decision remain pending.
 This full offline test does not alter release semantics: SourceGate is not
 `READY`; owner decisions, structured downstream repair/closure/export/release
 wiring, formal legacy policy, and Provider-3/API validation remain incomplete.
+
+## Durable settlement follow-up (2026-10-07)
+
+- Structured item attempts now settle their memory record immediately for
+  success, QA-failed empty response, provider failure, and provider-pending
+  outcomes. The persisted envelope retains candidate text, terminal/uncertain
+  status, QA detail, and `last_error`; resume reads that evidence and makes no
+  automatic provider retry.
+- When a scalar ASIN loses a shared TM claim but waits for a terminal memory
+  result, it now immediately settles its own field cache binding before
+  returning the cached result. Disk state and return state therefore agree.
+- The normal claim-lock write/fsync path now releases its lock file on ordinary
+  exceptions. Hard-kill stale-lock recovery is deliberately still fail-closed:
+  no lock is removed without future safe owner-PID/lease evidence.
+- The dictionary isolation regression now verifies the approved no-repeat
+  contract end-to-end: changed dictionary hash gives a distinct derived key,
+  makes zero provider calls, preserves the old raw candidate, and returns
+  `pending`/`review_required` rather than treating stale output as PASS.
+- Focused offline cache/service/pool/structured-contract/dictionary-isolation
+  tests passed, as did `ruff check src tests`, compileall, and diff check. No
+  full suite or real provider/API run was performed after this small patch.

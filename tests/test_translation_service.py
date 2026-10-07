@@ -42,6 +42,13 @@ class EmptyProvider(FakeProvider):
         return ProviderResponse(provider=self.name, model=self.model, status="success", text="")
 
 
+class PendingProvider(FakeProvider):
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        self.calls.append((asin, field, text))
+        return ProviderResponse(provider=self.name, model=self.model,
+                                status="pending", error="synthetic-pending")
+
+
 class MissingProtectedTokenThenLiteralProvider(FakeProvider):
     def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         self.calls.append((asin, field, text))
@@ -364,6 +371,11 @@ def test_two_services_same_tm_unit_make_one_provider_call(tmp_path):
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(run, ["B00000001", "B00000002"]))
     assert len(provider.calls) == 1
+    verifier = TranslationService(FakeProvider(), TranslationCache(cache_path))
+    loser_key = verifier._field_cache_key("B00000002", "title_es_raw", source_hash("Unidad TM concurrente"))
+    loser = TranslationCache(cache_path).get(loser_key)
+    assert loser["translation_status"] == "cached"
+    assert loser["source_hash"] == source_hash("Unidad TM concurrente")
 
 
 def test_structured_first_item_settles_before_second_item_crash(tmp_path):
@@ -403,6 +415,46 @@ def test_structured_cross_namespace_memory_success_becomes_review_without_call(t
     assert not resumed_provider.calls
     assert item["translation_status"] == "pending"
     assert {issue["code"] for issue in item["qa_issues"]} == {"CACHE_NAMESPACE_REVIEW_REQUIRED"}
+
+
+def test_structured_failed_item_settles_error_and_does_not_repeat(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    first = FakeProvider(fail_fields={"feature_bullets_raw"})
+    TranslationService(first, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000001", "feature_bullets_raw": ["Fallo durable"]}
+    ])
+    key = TranslationService(FakeProvider(), TranslationCache(cache_path))._memory_key(
+        "Fallo durable", "feature_bullets")
+    persisted = TranslationCache(cache_path).get_memory(key)
+    assert persisted["translation_status"] == "failed"
+    assert persisted["last_error"] == "synthetic"
+    resumed = FakeProvider()
+    TranslationService(resumed, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000001", "feature_bullets_raw": ["Fallo durable"]}
+    ])
+    assert not resumed.calls
+
+
+def test_structured_empty_and_pending_items_settle_before_resume(tmp_path):
+    for provider_cls, text, expected in (
+        (EmptyProvider, "Vacio durable", "qa_failed"),
+        (PendingProvider, "Pendiente durable", "pending"),
+    ):
+        cache_path = tmp_path / (expected + ".json")
+        first = provider_cls()
+        TranslationService(first, TranslationCache(cache_path)).translate_records([
+            {"asin": "B00000001", "feature_bullets_raw": [text]}
+        ])
+        key = TranslationService(FakeProvider(), TranslationCache(cache_path))._memory_key(text, "feature_bullets")
+        persisted = TranslationCache(cache_path).get_memory(key)
+        assert persisted["translation_status"] == expected
+        if expected == "pending":
+            assert persisted["last_error"] == "synthetic-pending"
+        resumed = FakeProvider()
+        TranslationService(resumed, TranslationCache(cache_path)).translate_records([
+            {"asin": "B00000001", "feature_bullets_raw": [text]}
+        ])
+        assert not resumed.calls
 
 
 def test_service_dry_run_never_calls_provider(tmp_path):

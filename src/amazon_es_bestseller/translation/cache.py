@@ -49,6 +49,14 @@ class TranslationCache:
                 if time.monotonic() >= deadline:
                     raise TimeoutError("translation cache claim lock timed out: %s" % lock_path)
                 time.sleep(0.02)
+            except Exception:
+                if descriptor is not None:
+                    os.close(descriptor)
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+                raise
         try:
             yield
         finally:

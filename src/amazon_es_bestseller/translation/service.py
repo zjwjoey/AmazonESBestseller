@@ -319,6 +319,7 @@ class TranslationService:
                 memory = None
             item_issues = []
             item_candidate_text = ""
+            provider_memory_claimed = False
             if memory:
                 item_status = memory.get("translation_status", "success")
                 item_issues = list(memory.get("qa_issues") or [])
@@ -369,6 +370,7 @@ class TranslationService:
                         memory_key, self._pending_memory(asin=asin, source_field=source_field),
                         replace_terminal=(repair_partial or repair_failed))
                     if claimed:
+                        provider_memory_claimed = True
                         response = self.provider.translate(
                             protected.text, asin=asin, field=source_field,
                             source_language=self.source_language, target_language=self.target_language,
@@ -422,7 +424,6 @@ class TranslationService:
                             "translated_at": self._now(),
                         }
                         self._memory_put(memory_key, memory_payload)
-                        self.cache.settle_memory(memory_key, memory_payload)
                     elif response.status == "success":
                         item_status = "qa_failed"
                         statuses.append("qa_failed")
@@ -447,6 +448,18 @@ class TranslationService:
                         rendered_value = ""
                         if response.error:
                             errors.append(str(response.error))
+                    if provider_memory_claimed:
+                        self.cache.settle_memory(memory_key, {
+                            "candidate_text": item_candidate_text,
+                            "translated_text": rendered_value,
+                            "translation_status": item_status,
+                            "qa_status": ("pass" if item_status == "success" else
+                                          "qa_failed" if item_status == "qa_failed" else "review_required"),
+                            "qa_issues": list(item_issues),
+                            "provider": item_provider, "provider_alias": item_alias,
+                            "model": item_model, "last_error": response.error,
+                            "translated_at": self._now(),
+                        })
             item_providers.append(item_provider)
             item_models.append(item_model)
             item_aliases.append(item_alias)
@@ -812,6 +825,7 @@ class TranslationService:
                                   "attempt_count": 0, "last_error": settled_memory.get("last_error"),
                                   "qa_issues": list(settled_memory.get("qa_issues") or []),
                                   "translated_at": self._now()}
+                        self.cache.settle(key, result)
                         output_fields[target] = result
                         continue
                     result = self._pending_field(asin=asin, source_field=source_field,
