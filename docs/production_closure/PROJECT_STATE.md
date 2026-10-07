@@ -512,3 +512,24 @@ wiring, formal legacy policy, and Provider-3/API validation remain incomplete.
 - Focused offline cache/service/pool/structured-contract/dictionary-isolation
   tests passed, as did `ruff check src tests`, compileall, and diff check. No
   full suite or real provider/API run was performed after this small patch.
+
+## Structured translation overlay slice (2026-10-07)
+
+- Formal structured service output now projects into a non-release production
+  state: item-level Chinese QA, a field/item repair queue, and a Chinese Master
+  overlay candidate. It preserves each structured item's ASIN, field, item ID,
+  source hash, order, raw label/value, provider result, and dictionary/schema
+  provenance.
+- An identity item is preserved only from the bound structured source and is
+  still required to have a current PASS QA row. A non-PASS, pending, unknown,
+  or failed item keeps its entire display field out of the overlay; no partial
+  field is presented as final Chinese display data. Feature-bullet boundaries
+  remain item/order-preserving.
+- The repair queue is item-granular, retains `max_attempts=2`, and explicitly
+  sets `auto_provider_repair=false`. Dictionary version changes have an
+  item-impact locator only; rerender is `NOT_IMPLEMENTED_ITEM_IMPACT_ONLY`.
+- This does not run repair, ReleaseGate, field-closure re-audit, or Excel.
+  SourceGate remains `BLOCKED`, and no production readiness is asserted.
+- Focused offline verification: `tests/test_translation_structured_contract.py`
+  passed (`10 passed`); targeted ruff and diff checks passed. No full suite,
+  network, provider API, raw-output rewrite, or Excel export was run.

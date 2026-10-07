@@ -9,6 +9,7 @@ from amazon_es_bestseller.translation.structured_contract import (
     bind_formal_structured_translation_input,
     validate_formal_structured_translation_input,
     execute_formal_structured_translation,
+    build_structured_production_overlay,
 )
 from amazon_es_bestseller.production.spanish_master import build_spanish_master
 from amazon_es_bestseller.quality.source_fields import audit_source_fields
@@ -106,9 +107,10 @@ def test_missing_review_evidence_keeps_ordinary_items_out_of_tasks():
     assert next(item for item in details["items"] if item["item_id"] == "attr-color")["admission"] == "REVIEW_EVIDENCE_MISSING"
 
 
-def _ready_bound_input():
-    record = _record()
-    record["feature_bullets_raw"] = []
+def _ready_bound_input(record=None):
+    if record is None:
+        record = _record()
+        record["feature_bullets_raw"] = []
     record.update({"product_url": "https://www.amazon.es/dp/B000000101", "rating": 4.5,
                    "detail_schema_version": "2", "ranking_schema_version": "ranking-v1",
                    "parser_version": "fixture-v1", "raw_source": {"fixture": True}})
@@ -181,6 +183,63 @@ def test_formal_execution_uses_service_item_path_and_never_sends_excluded_or_ide
     assert second["summary"]["provider_calls"] == 0
 
 
+def test_structured_overlay_keeps_failed_item_out_of_master_and_queues_it(tmp_path):
+    formal, master, audit, gate, review = _ready_bound_input()
+    provider = _CaptureProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"),
+                                 prompt_version="structured-test-v1",
+                                 dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"})
+    execution = execute_formal_structured_translation(
+        formal, master, audit, gate, review, service, prompt_version="structured-test-v1",
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"},
+    )
+    state = build_structured_production_overlay(
+        formal, execution, dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"},
+    )
+    details = state["records"][0]["fields"][0]
+    assert details["promotion_status"] == "QA_BLOCKED"
+    assert "product_details_zh" not in state["chinese_master_overlay"][0]
+    assert {item["item_id"] for item in details["items"]} == {
+        item["item_id"] for item in formal["records"][0]["fields"]["product_details"]["items"]
+    }
+    assert any(item["item_id"] == "attr-cjk" and item["auto_provider_repair"] is False
+               for item in state["repair_queue"])
+    assert all(item["strategy"] not in {"auto_repair", "provider_retry"} for item in state["repair_queue"])
+    assert all(item["dictionary_version"] == "1" for item in state["dictionary_rerender_item_impact"])
+    assert details["items"][0]["provider"] == "qwen-mt"
+    assert details["items"][0]["model"] == "qwen-mt-fixture"
+
+
+def test_structured_overlay_promotes_only_a_complete_legal_field_and_preserves_bullets(tmp_path):
+    record = _record()
+    record["eligibleattributes"] = record["eligibleattributes"][1:3]
+    record["canonicalstructuredsource"] = list(record["eligibleattributes"])
+    formal, master, audit, gate, review = _ready_bound_input(record)
+    provider = _CaptureProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"),
+                                 prompt_version="structured-test-v1",
+                                 dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"})
+    execution = execute_formal_structured_translation(
+        formal, master, audit, gate, review, service, prompt_version="structured-test-v1",
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"},
+    )
+    state = build_structured_production_overlay(
+        formal, execution, dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"},
+    )
+    overlay = state["chinese_master_overlay"][0]
+    rendered_bullets = execution["records"]["B000000101"]["fields"]["feature_bullets"]["items"]
+    assert overlay["feature_bullets_zh"].split("\n") == [item["translated_text"] for item in rendered_bullets]
+    assert overlay["product_details_zh"]
+    assert state["repair_queue"] == []
+    assert all(row["status"] == "PASS" for row in state["chinese_qa"])
+    tampered = dict(execution)
+    tampered["binding"] = {"tampered": True}
+    with pytest.raises(ValueError, match="STRUCTURED_EXECUTION_BINDING_MISMATCH"):
+        build_structured_production_overlay(
+            formal, tampered, dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"},
+        )
+
+
 def test_workflow_translation_stage_consumes_formal_structured_input(tmp_path):
     _, master, audit, gate, review = _ready_bound_input()
     provider = _CaptureProvider()
@@ -200,5 +259,6 @@ def test_workflow_translation_stage_consumes_formal_structured_input(tmp_path):
                                          "dictionary": {"payload": dictionary_payload}}}}
     result = workflow.stage_translation(context)
     assert result["execution"]["records"]["B000000101"]["fields"]["product_details"]["excluded_raw_trace"]
-    assert result["structured_followup_status"] == "NOT_EXECUTED"
+    assert result["structured_followup_status"] == "RELEASE_AND_EXCEL_NOT_EXECUTED"
+    assert result["state"]["status"] == "NONFORMAL_STRUCTURED_OVERLAY"
     assert provider.calls and all("Owner raw only" not in call[2] for call in provider.calls)

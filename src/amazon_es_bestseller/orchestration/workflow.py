@@ -38,6 +38,7 @@ from ..translation.service import TranslationService
 from ..translation.cache import TranslationCache
 from ..translation.structured_contract import (
     bind_formal_structured_translation_input,
+    build_structured_production_overlay,
     execute_formal_structured_translation,
 )
 
@@ -641,14 +642,13 @@ class ProductionWorkflow:
                     translation_payload["translation_batch_source_audit"],
                     translation_payload["translation_batch_source_gate"], review, service,
                     prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest)
+                structured_state = build_structured_production_overlay(
+                    formal, structured, dictionary_manifest=dictionary_manifest)
             except ValueError as exc:
                 raise ProductionWorkflowError("STRUCTURED_FORMAL_INPUT_INVALID:%s" % exc) from exc
-            # This vertical slice deliberately stops before the legacy flat
-            # state/rerender/release stages; they cannot reinterpret these
-            # item-level facts as display strings.
             return self._store("translation", {"status": "READY", "execution": structured,
-                "structured_formal_input": formal, "state": {"structured_only": True, "records": []},
-                "structured_followup_status": "NOT_EXECUTED",
+                "structured_formal_input": formal, "state": structured_state,
+                "structured_followup_status": "RELEASE_AND_EXCEL_NOT_EXECUTED",
                 "provider_provenance": {"provider": provider.name, "model": provider.model,
                                         "verified": provider_mode in {"qwen-mt", "qwen-mt-fixture"},
                                         "request_count": structured["summary"]["provider_calls"]},

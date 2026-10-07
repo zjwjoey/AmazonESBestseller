@@ -340,18 +340,138 @@ def execute_formal_structured_translation(
                     items.append({**item, "translated_text": result.get("translated_text", ""),
                                   "candidate_text": result.get("candidate_text", ""),
                                   "translation_status": result.get("translation_status"),
-                                  "qa_status": result.get("qa_status"), "qa_issues": result.get("qa_issues") or []})
+                                  "qa_status": result.get("qa_status"), "qa_issues": result.get("qa_issues") or [],
+                                  "provider": result.get("provider"), "provider_alias": result.get("provider_alias"),
+                                  "model": result.get("model"), "resolution_source": result.get("resolution_source"),
+                                  "attempt_count": result.get("attempt_count"), "last_error": result.get("last_error")})
                 elif item.get("admission") == "PRESERVED_IDENTITY":
                     items.append({**item, "translated_text": item.get("value_raw"), "candidate_text": item.get("value_raw"),
-                                  "translation_status": "success", "qa_status": "pass", "qa_issues": []})
+                                  "translation_status": "success", "qa_status": "pass", "qa_issues": [],
+                                  "provider": "deterministic", "model": "identity-v1",
+                                  "resolution_source": "identity", "attempt_count": 0, "last_error": None})
                 else:
                     items.append({**item, "translated_text": "", "candidate_text": "", "translation_status": "review_required",
-                                  "qa_status": "review_required", "qa_issues": [{"code": item.get("block_code") or "SOURCE_REVIEW_REQUIRED"}]})
+                                  "qa_status": "review_required", "qa_issues": [{"code": item.get("block_code") or "SOURCE_REVIEW_REQUIRED"}],
+                                  "provider": None, "model": None, "resolution_source": "source_blocked",
+                                  "attempt_count": 0, "last_error": None})
             output_fields[field] = {"field_hash": field_fact.get("field_hash"), "items": items,
                                     "excluded_raw_trace": field_fact.get("excluded_raw_trace") or []}
         records[asin] = {"asin": asin, "source_record_hash": record.get("source_record_hash"), "fields": output_fields}
     return {"records": records, "summary": {"records": len(records), "provider_calls": provider_calls},
             "binding": deepcopy(formal.get("binding") or {})}
+
+
+def build_structured_production_overlay(formal: Mapping, execution: Mapping, *,
+                                        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a non-release Chinese overlay from complete structured item facts.
+
+    This is deliberately an adapter, not a second translation path: every
+    display candidate is an existing item result and is admitted only after
+    item-level canonical Chinese QA passes.  A single non-pass keeps the whole
+    display field out of the overlay while retaining all item evidence in the
+    repair queue.
+    """
+    from ..quality.chinese import audit_field, canonical_qa_row
+    from .full_detail import LABEL_ES_ZH
+    from .repair_queue import build_repair_queue
+    from .service import source_hash
+
+    if dict(execution.get("binding") or {}) != dict(formal.get("binding") or {}):
+        raise ValueError("STRUCTURED_EXECUTION_BINDING_MISMATCH")
+    expected = {str(row.get("asin") or ""): row for row in formal.get("records") or []}
+    actual = {str(asin): row for asin, row in (execution.get("records") or {}).items()}
+    if set(expected) != set(actual):
+        raise ValueError("STRUCTURED_EXECUTION_ASIN_SET_MISMATCH")
+    dictionary_version = str(dictionary_manifest.get("dictionary_version") or "")
+    dictionary_hash = str(dictionary_manifest.get("dictionary_hash") or "")
+    qa_rows, repair_rows, overlay_records, state_records, dictionary_impacts = [], [], [], [], []
+    for asin, source_record in expected.items():
+        rendered_record = actual[asin]
+        overlay, field_states = {"asin": asin}, []
+        for field, field_fact in (source_record.get("fields") or {}).items():
+            result_fact = (rendered_record.get("fields") or {}).get(field) or {}
+            if result_fact.get("field_hash") != field_fact.get("field_hash"):
+                raise ValueError("STRUCTURED_EXECUTION_FIELD_HASH_MISMATCH")
+            source_items = list(field_fact.get("items") or [])
+            result_items = list(result_fact.get("items") or [])
+            result_by_id = {str(item.get("item_id") or ""): item for item in result_items}
+            if set(str(item.get("item_id") or "") for item in source_items) != set(result_by_id):
+                raise ValueError("STRUCTURED_EXECUTION_ITEM_COVERAGE_INCOMPLETE")
+            item_states, display_parts, all_pass = [], [], True
+            for position, item in enumerate(source_items):
+                item_id = str(item.get("item_id") or "")
+                result = result_by_id[item_id]
+                raw = str(item.get("value_raw") or "")
+                item_source_hash = str(item.get("source_hash") or source_hash(raw))
+                qa_source_hash = source_hash(raw)
+                candidate = str(result.get("translated_text") or "")
+                provider_status = str(result.get("translation_status") or "pending")
+                identity = item.get("admission") == "PRESERVED_IDENTITY"
+                if identity:
+                    candidate = raw
+                qa = audit_field(asin=asin, field=field, source_es=raw, translated_zh=candidate,
+                                 source_hash=qa_source_hash, dictionary_version=dictionary_version,
+                                 target_field=field + "_zh", field_type=field,
+                                 context={"item_id": item_id, "position": position, "field": field},
+                                 translation_schema_version=STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
+                current_pass = (provider_status in {"success", "cached"}
+                                and str(qa.get("status")) == "PASS")
+                item_state = {**deepcopy(item), "translated_text": candidate,
+                              "provider_status": provider_status, "qa": qa,
+                              "promotion_status": "PROMOTED" if current_pass else "QA_BLOCKED",
+                              "provider": result.get("provider"), "provider_alias": result.get("provider_alias"),
+                              "model": result.get("model"), "resolution_source": result.get("resolution_source"),
+                              "attempt_count": result.get("attempt_count"), "last_error": result.get("last_error"),
+                              "dictionary_version": dictionary_version,
+                              "dictionary_hash": dictionary_hash,
+                              "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION}
+                item_states.append(item_state)
+                if not current_pass:
+                    if str(qa.get("status")) == "PASS":
+                        qa = canonical_qa_row({**qa, "status": "MANUAL_REVIEW", "issues": [{
+                            "code": "STRUCTURED_PROVIDER_STATUS_NOT_PROMOTABLE",
+                            "provider_status": provider_status,
+                        }]})
+                        item_state["qa"] = qa
+                    all_pass = False
+                    repair_rows.append({**qa, "item_id": item_id, "position": position,
+                                        "provider_status": provider_status,
+                                        "candidate_text": str(result.get("candidate_text") or candidate)})
+                qa_rows.append(qa)
+                dictionary_impacts.append({"asin": asin, "field": field, "item_id": item_id,
+                                           "source_hash": item_source_hash, "dictionary_version": dictionary_version,
+                                           "dictionary_hash": dictionary_hash})
+                if field == "product_details":
+                    label = str(item.get("label_raw") or "")
+                    display_parts.append("%s��%s" % (LABEL_ES_ZH.get(label.casefold(), label), candidate))
+                else:
+                    display_parts.append(candidate)
+            target = "product_details_zh" if field == "product_details" else "feature_bullets_zh"
+            final = "\n".join(display_parts) if all_pass else ""
+            field_states.append({"asin": asin, "field": field, "target_field": target,
+                                 "items": item_states, "field_hash": field_fact.get("field_hash"),
+                                 "promotion_status": "PROMOTED" if all_pass else "QA_BLOCKED",
+                                 "final_zh": final, "dictionary_version": dictionary_version,
+                                 "dictionary_hash": dictionary_hash,
+                                 "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION})
+            if all_pass:
+                overlay[target] = final
+        state_records.append({"asin": asin, "source_record_hash": source_record.get("source_record_hash"),
+                              "fields": field_states})
+        overlay_records.append(overlay)
+    queue = build_repair_queue(repair_rows, max_attempts=2)
+    for item, source in zip(queue, repair_rows):
+        item["item_id"] = source["item_id"]
+        item["position"] = source["position"]
+        if item["strategy"] in {"auto_repair", "provider_retry"}:
+            item["strategy"] = "manual_review"
+        item["auto_provider_repair"] = False
+    return {"status": "NONFORMAL_STRUCTURED_OVERLAY", "records": state_records,
+            "chinese_qa": qa_rows, "repair_queue": queue,
+            "chinese_master_overlay": overlay_records,
+            "dictionary_rerender_status": "NOT_IMPLEMENTED_ITEM_IMPACT_ONLY",
+            "dictionary_rerender_item_impact": dictionary_impacts,
+            "dictionary_version": dictionary_version, "dictionary_hash": dictionary_hash}
 
 
 def dispatch_structured_translation_tasks(*_args: Any, **_kwargs: Any) -> None:
@@ -362,4 +482,5 @@ def dispatch_structured_translation_tasks(*_args: Any, **_kwargs: Any) -> None:
 __all__ = ["STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION", "STRUCTURED_TRANSLATION_CACHE_NAMESPACE",
            "build_structured_translation_draft", "formalize_structured_translation_input",
            "bind_formal_structured_translation_input", "validate_formal_structured_translation_input",
-           "execute_formal_structured_translation", "dispatch_structured_translation_tasks"]
+           "execute_formal_structured_translation", "build_structured_production_overlay",
+           "dispatch_structured_translation_tasks"]
