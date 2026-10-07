@@ -755,6 +755,25 @@ class ProductionWorkflow:
         dictionary = self._artifact_data(self._prior(context, "dictionary"))
         prior_manifest = dictionary["dictionary_manifest"]
         state = translation["state"]
+        if state.get("status") == "NONFORMAL_STRUCTURED_OVERLAY":
+            from ..translation.structured_contract import (
+                STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION, apply_structured_dictionary_rerender,
+                build_structured_dictionary_evidence,
+            )
+
+            evidence, qa_results = build_structured_dictionary_evidence(state)
+            sync = sync_evidence(evidence, qa_results=qa_results, source_run_id=self.run_id,
+                                 translation_schema_version=STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
+                                 previous=prior_manifest)
+            rerender = apply_structured_dictionary_rerender(state, sync.get("manifest") or {})
+            return self._store("dictionary-rerender", {"status": "READY", "structured_dictionary_rerender": True,
+                "dictionary_sync": sync, "dictionary_qa": qa_results, "rerender": rerender,
+                "translation_state": rerender["state"],
+                "input_artifact_hashes": {"translation": self._prior(context, "translation").get("artifact_file_hash"),
+                                            "dictionary": self._prior(context, "dictionary").get("artifact_file_hash")},
+                "counts": {"evidence": len(evidence), "updates": len(rerender.get("updates") or []),
+                           "repair": len(rerender.get("selective_repair") or []),
+                           **dict(sync.get("counts") or {})}})
         evidence, qa_results = self._dictionary_evidence(state, dictionary_version=str(prior_manifest.get("dictionary_version") or "0"))
         sync = sync_evidence(evidence, qa_results=qa_results, source_run_id=self.run_id,
                              translation_schema_version=TRANSLATION_SCHEMA_VERSION, previous=prior_manifest)

@@ -616,6 +616,146 @@ def build_structured_production_overlay(
             "dictionary_version": dictionary_version, "dictionary_hash": dictionary_hash}
 
 
+def build_structured_dictionary_evidence(state: Mapping) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Expose only current PASS structured-detail facts to DictionarySync."""
+    from ..quality.chinese import canonical_qa_row
+    from .dictionary_sync import normalize_context
+
+    evidence, qa_results = [], {}
+    for record in state.get("records") or []:
+        asin = str(record.get("asin") or "").upper()
+        for field in record.get("fields") or []:
+            if str(field.get("field") or "") != "product_details":
+                continue
+            for item in field.get("items") or []:
+                effective = item.get("effective_render") if isinstance(item.get("effective_render"), Mapping) else {}
+                qa = effective.get("qa") if effective else item.get("qa")
+                target = str((effective or item).get("translated_text") or "")
+                label = str(item.get("label_raw") or "")
+                if (item.get("promotion_status") != "PROMOTED" or not target
+                        or not isinstance(qa, Mapping) or str(qa.get("status") or "") != "PASS"
+                        or item.get("admission") == "PRESERVED_IDENTITY"):
+                    continue
+                normalized_label = label.casefold()
+                field_type = ("color" if normalized_label == "color" else
+                              "material" if normalized_label in {"material", "materiales"} else
+                              "unit" if normalized_label in {"unidad", "unidades"} else "attribute")
+                context = {"attribute_label": label, "field": "product_details"}
+                context_key, reason = normalize_context(context)
+                evidence_id = "%s:product_details:%s" % (asin, item.get("item_id"))
+                source = str(item.get("value_raw") or "")
+                source_hash_value = source_hash(source)
+                row = {"evidence_id": evidence_id, "asin": asin,
+                       "source_record_hash": record.get("source_record_hash"), "source": source,
+                       "target": target, "source_hash": source_hash_value,
+                       "item_source_hash": str(item.get("source_hash") or ""),
+                       "field_type": field_type, "context": context,
+                       "affected_field": "product_details", "target_field": field.get("target_field"),
+                       "item_id": item.get("item_id")}
+                evidence.append(row)
+                qa_row = canonical_qa_row({**qa, "qa_status": qa.get("status"),
+                    "asin": asin, "field": "product_details", "target_field": field.get("target_field"),
+                    "source_text": source, "translated_text": target, "target": target,
+                    "field_type": field_type, "context": context, "context_key": context_key or "",
+                    "dictionary_version": str((effective or item).get("dictionary_version") or ""),
+                    "schema_version": str((effective or item).get("translation_schema_version") or ""),
+                    "source_hash": source_hash_value, "context_error": reason})
+                qa_results[evidence_id] = {**qa_row, "qa_status": qa_row.get("status"), "target": target,
+                                           "context_key": context_key or ""}
+    return evidence, qa_results
+
+
+def apply_structured_dictionary_rerender(state: Mapping, manifest: Mapping) -> dict[str, Any]:
+    """Apply exact dictionary promotions without re-sending provider content."""
+    from ..quality.chinese import audit_field
+    from .full_detail import LABEL_ES_ZH
+    from .repair_queue import build_repair_queue
+    from .rerender import rerender_structured_items
+
+    change_log = list(manifest.get("change_log") or [])
+    if not change_log:
+        return {"state": deepcopy(dict(state)), "updates": [], "selective_repair": [],
+                "status": "NO_CHANGE", "ready": True,
+                "dictionary_version": manifest.get("dictionary_version"),
+                "dictionary_hash": manifest.get("dictionary_hash")}
+
+    def rerender_qa(*, asin: str, field: str, item: Mapping, candidate: str,
+                    dictionary_version: str, dictionary_hash: str) -> dict[str, Any]:
+        raw = str(item.get("value_raw") or "")
+        return audit_field(asin=asin, field=field, source_es=raw, translated_zh=candidate,
+                           source_hash=source_hash(raw), dictionary_version=dictionary_version,
+                           target_field="product_details_zh", field_type=field,
+                           context={"item_id": item.get("item_id"), "label_raw": item.get("label_raw")},
+                           translation_schema_version=STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
+
+    rerender = rerender_structured_items(state, manifest, qa_callback=rerender_qa)
+    result = rerender["state"]
+    blocked = {(str(row.get("asin") or "").upper(), str(row.get("field") or ""),
+                str(row.get("item_id") or "")): row for row in rerender["selective_repair"]
+               if str(row.get("reason") or "") == "RERENDER_QA_NOT_PASS"}
+    impacted = {(str(row.get("asin") or "").upper(), str(row.get("field") or ""))
+                for row in [*rerender["updates"], *blocked.values()]}
+    prior_overlays = {str(row.get("asin") or "").upper(): deepcopy(dict(row))
+                      for row in result.get("chinese_master_overlay") or [] if isinstance(row, Mapping)}
+    qa_rows, overlay_records = [], []
+    for record in result.get("records") or []:
+        asin = str(record.get("asin") or "").upper()
+        overlay = prior_overlays.get(asin, {"asin": record.get("asin")})
+        for field in record.get("fields") or []:
+            if (asin, str(field.get("field") or "")) not in impacted:
+                continue
+            parts, all_pass = [], True
+            for item in field.get("items") or []:
+                key = (str(record.get("asin") or "").upper(), str(field.get("field") or ""),
+                       str(item.get("item_id") or ""))
+                effect = item.get("effective_render") if isinstance(item.get("effective_render"), Mapping) else {}
+                if key in blocked:
+                    item["rerender_status"] = "QA_BLOCKED"
+                    item["rerender_qa"] = blocked[key].get("qa") or {}
+                candidate = str((effect or item).get("translated_text") or "")
+                qa = effect.get("qa") if effect else item.get("qa")
+                item_pass = (item.get("promotion_status") == "PROMOTED" and candidate
+                             and isinstance(qa, Mapping) and qa.get("status") == "PASS"
+                             and (field.get("field") != "product_details" or item.get("label_status") == "PASS")
+                             and item.get("rerender_status") != "QA_BLOCKED")
+                if not item_pass:
+                    all_pass = False
+                if field.get("field") == "product_details":
+                    label = str(item.get("label_raw") or "")
+                    parts.append("%s: %s" % (item.get("label_zh") or LABEL_ES_ZH.get(label.casefold(), label), candidate))
+                else:
+                    parts.append(candidate)
+                if isinstance(qa, Mapping):
+                    qa_rows.append(deepcopy(dict(qa)))
+            target = str(field.get("target_field") or "")
+            field["final_zh"] = "\n".join(parts) if all_pass else ""
+            field["promotion_status"] = "PROMOTED" if all_pass else "QA_BLOCKED"
+            if all_pass:
+                overlay[target] = field["final_zh"]
+            else:
+                overlay.pop(target, None)
+        overlay_records.append(overlay)
+    repair_rows = []
+    for row in rerender["selective_repair"]:
+        qa = row.get("qa") if isinstance(row.get("qa"), Mapping) else {}
+        repair_rows.append({**qa, "asin": row.get("asin"), "field": row.get("field"),
+                            "target_field": "product_details_zh", "item_id": row.get("item_id"),
+                            "issues": qa.get("issues") or [{"code": row.get("reason")}],
+                            "status": qa.get("status") or "MANUAL_REVIEW"})
+    queue = build_repair_queue(repair_rows, max_attempts=2)
+    for item, source in zip(queue, repair_rows):
+        item.update(item_id=source["item_id"], auto_provider_repair=False, strategy="manual_review")
+    result["chinese_qa"] = qa_rows
+    result["repair_queue"] = queue
+    result["chinese_master_overlay"] = overlay_records
+    result["dictionary_rerender_status"] = rerender["status"]
+    result["dictionary_rerender_item_impact"] = [*(result.get("dictionary_rerender_item_impact") or []),
+                                                    *rerender["updates"], *rerender["selective_repair"]]
+    result["effective_dictionary_version"] = rerender["dictionary_version"]
+    result["effective_dictionary_hash"] = rerender["dictionary_hash"]
+    return {**rerender, "state": result, "repair_queue": queue}
+
+
 def dispatch_structured_translation_tasks(*_args: Any, **_kwargs: Any) -> None:
     """Retired: formal structured work must use ``TranslationService`` only."""
     raise RuntimeError("STRUCTURED_CALLBACK_DISPATCH_RETIRED")
@@ -625,4 +765,5 @@ __all__ = ["STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION", "STRUCTURED_TRANSLATIO
            "build_structured_translation_draft", "formalize_structured_translation_input",
            "bind_formal_structured_translation_input", "validate_formal_structured_translation_input",
            "execute_formal_structured_translation", "build_structured_production_overlay",
+           "build_structured_dictionary_evidence", "apply_structured_dictionary_rerender",
            "dispatch_structured_translation_tasks"]

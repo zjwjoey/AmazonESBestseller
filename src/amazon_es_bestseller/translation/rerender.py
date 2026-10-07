@@ -107,3 +107,75 @@ def rerender_affected_fields(records: Iterable[Mapping[str, Any]],
             "ready": not selective_repair,
             "status": "NO_CHANGE" if not updates and not selective_repair else
                       "READY" if not selective_repair else "REPAIR_REQUIRED"}
+
+
+def rerender_structured_items(state: Mapping[str, Any], manifest: Mapping[str, Any], *,
+                              qa_callback: Callable[..., Mapping[str, Any]]) -> dict[str, Any]:
+    """Re-render only exact, deterministic structured-detail items offline.
+
+    ``translated_text`` remains the immutable provider/original result.  A
+    successful dictionary update is recorded separately as an effective render
+    so an old provider candidate can never be rewritten as dictionary output.
+    """
+    result = deepcopy(dict(state))
+    dictionary_version = str(manifest.get("dictionary_version") or "")
+    dictionary_hash = str(manifest.get("dictionary_hash") or "")
+    updates: list[dict[str, Any]] = []
+    selective_repair: list[dict[str, Any]] = []
+    records = {str(row.get("asin") or "").upper(): row for row in result.get("records") or []}
+    for promotion in manifest.get("promotions") or []:
+        if str(promotion.get("status") or "PROMOTED") != "PROMOTED":
+            continue
+        for evidence in promotion.get("evidence") or []:
+            asin = str(evidence.get("asin") or "").upper()
+            field_name = str(evidence.get("affected_field") or "")
+            item_id = str(evidence.get("item_id") or "")
+            item_ref = {"asin": asin, "field": field_name, "item_id": item_id,
+                        "dictionary_version": dictionary_version, "dictionary_hash": dictionary_hash}
+            record = records.get(asin)
+            field = next((row for row in (record or {}).get("fields") or []
+                          if str(row.get("field") or "") == field_name), None)
+            item = next((row for row in (field or {}).get("items") or []
+                         if str(row.get("item_id") or "") == item_id), None)
+            if not record or not field or not item:
+                selective_repair.append({**item_ref, "reason": "AFFECTED_ITEM_NOT_FOUND"})
+                continue
+            if str(record.get("source_record_hash") or "") != str(evidence.get("source_record_hash") or ""):
+                selective_repair.append({**item_ref, "reason": "SOURCE_RECORD_CHANGED"})
+                continue
+            if str(item.get("asin") or "").upper() != asin:
+                selective_repair.append({**item_ref, "reason": "ITEM_IDENTITY_CHANGED"})
+                continue
+            if str(field.get("target_field") or "") != str(evidence.get("target_field") or ""):
+                selective_repair.append({**item_ref, "reason": "TARGET_FIELD_CHANGED"})
+                continue
+            source = str(item.get("value_raw") or "")
+            if (str(evidence.get("source_hash") or "") != source_hash(source)
+                    or str(item.get("source_hash") or "") != str(evidence.get("item_source_hash") or "")
+                    or normalize_key(source) != str(promotion.get("source_normalized") or "")):
+                selective_repair.append({**item_ref, "reason": "SOURCE_ITEM_CHANGED"})
+                continue
+            if field_name != "product_details" or item.get("admission") != "TRANSLATION_TASK":
+                selective_repair.append({**item_ref, "reason": "NON_DETERMINISTIC_STRUCTURED_ITEM"})
+                continue
+            candidate = str(promotion.get("target") or evidence.get("target") or "")
+            qa = qa_callback(asin=asin, field=field_name, item=item, candidate=candidate,
+                             dictionary_version=dictionary_version, dictionary_hash=dictionary_hash)
+            if not isinstance(qa, Mapping) or str(qa.get("status") or "") != "PASS":
+                selective_repair.append({**item_ref, "reason": "RERENDER_QA_NOT_PASS",
+                                         "qa": dict(qa) if isinstance(qa, Mapping) else {}})
+                continue
+            item["effective_render"] = {
+                "translated_text": candidate,
+                "qa": dict(qa),
+                "dictionary_version": dictionary_version,
+                "dictionary_hash": dictionary_hash,
+                "resolution_source": "dictionary_rerender",
+                "rerender_status": "READY",
+            }
+            updates.append({**item_ref, "status": "READY", "source_hash": item.get("source_hash")})
+    return {"dictionary_version": dictionary_version, "dictionary_hash": dictionary_hash,
+            "state": result, "updates": updates, "selective_repair": selective_repair,
+            "ready": not selective_repair,
+            "status": "NO_CHANGE" if not updates and not selective_repair else
+                      "READY" if not selective_repair else "REPAIR_REQUIRED"}
