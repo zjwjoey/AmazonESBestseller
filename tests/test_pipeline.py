@@ -135,6 +135,13 @@ def test_enrich_no_discount_when_original_not_greater():
     assert p["original_price"] is None
 
 
+def test_enrich_derives_discount_from_spanish_thousands_price():
+    d = dict(DETAIL[0], current_price_raw="899,00 €", original_price_raw="1.499,00 €")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["original_price"] == 1499.0
+    assert p["discount_rate"] == round((1499.0 - 899.0) / 1499.0, 4)
+
+
 def test_enrich_brand_falls_back_to_reliable_marca_attribute():
     d = dict(DETAIL[0], brand_raw="", attributes=[
         {"section": "product_overview", "label_raw": "Marca", "value_raw": "De'Longhi"}

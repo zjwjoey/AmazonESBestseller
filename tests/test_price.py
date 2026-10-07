@@ -10,6 +10,12 @@ def test_parse_price_spanish_euro():
     assert parse_price("12.5") == 12.5
 
 
+def test_parse_price_spanish_thousands_and_rejects_ambiguous_three_decimals():
+    assert parse_price("1.499,00 €") == 1499.0
+    assert parse_price("1.499") is None
+    assert parse_price("1,499") is None
+
+
 def test_parse_price_must_be_positive():
     assert parse_price("0,00") is None
     assert parse_price("-5") is None

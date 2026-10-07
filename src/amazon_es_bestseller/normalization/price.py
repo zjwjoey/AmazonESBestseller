@@ -13,6 +13,9 @@ from .text import dec_comma
 CURRENCY = "EUR"
 
 _CURRENCY_NOISE = re.compile(r"[€\s]")
+_SPANISH_GROUPED_PRICE = re.compile(r"^\d{1,3}(?:\.\d{3})+,\d{1,2}$")
+_SPANISH_DECIMAL_PRICE = re.compile(r"^\d+(?:,\d{1,2})?$")
+_DOT_DECIMAL_PRICE = re.compile(r"^\d+(?:\.\d{1,2})?$")
 
 
 def parse_price(s) -> Optional[float]:
@@ -22,7 +25,15 @@ def parse_price(s) -> Optional[float]:
     t = _CURRENCY_NOISE.sub("", str(s).strip().upper()).replace("EUR", "").strip()
     if not t:
         return None
-    t = dec_comma(t)
+    # Amazon.es uses a dot for thousands and a comma for decimals.  Convert
+    # only that unambiguous shape; do not globally remove dots, because a
+    # bare ``1.499`` could mean either a decimal or a grouped integer.
+    if _SPANISH_GROUPED_PRICE.fullmatch(t):
+        t = t.replace(".", "").replace(",", ".")
+    elif _SPANISH_DECIMAL_PRICE.fullmatch(t):
+        t = dec_comma(t)
+    elif not _DOT_DECIMAL_PRICE.fullmatch(t):
+        return None
     try:
         f = float(t)
     except (ValueError, TypeError):

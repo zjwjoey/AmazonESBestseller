@@ -87,3 +87,23 @@ blockers:
 - `B08BYLMK7C`: damaged speaker-type values `Port�til`; no replacement source.
 
 This isolation has not been implemented in the current patch.
+
+## Follow-on locale-price patch
+
+- Fixed Spanish grouped-price parsing for the explicit `1.499,00 €` form.
+  The parser removes dots only when the complete token is unambiguously
+  Spanish grouped-thousands plus comma-decimal notation; bare three-decimal
+  forms such as `1.499` and `1,499` remain rejected as ambiguous.
+- Root cause evidence: `B0DRFZ8C31` has raw current `899,00 €` and raw
+  original `1.499,00 €`. The old parser returned `None` for the original.
+- In the same `5480` record-binding scope, the previous `3093` result was a
+  parser defect, not a scope difference. The fixed in-memory normalization
+  yields `3094` raw legal `original > current` records and `3094` matching
+  canonical discounts, with zero invalid `original <= current` conflicts.
+- Focused verification: `tests/test_price.py` and `tests/test_pipeline.py`
+  passed (`32` tests). No full source audit was run.
+
+The current self-parent clearing remains unchanged. Any later builder work
+that needs to retain a self-parent must bind the decision to saved-cache HTML
+and parser-produced variation evidence; an ordinary dict/status remains
+insufficient.
