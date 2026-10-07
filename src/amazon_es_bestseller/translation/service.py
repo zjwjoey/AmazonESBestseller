@@ -589,7 +589,7 @@ class TranslationService:
             if cached and cached.get("translation_status") == "partial" and not repair_partial:
                 output_fields[target] = cached
                 continue
-            if cached and cached.get("translation_status") == "failed" and not repair_failed:
+            if cached and cached.get("translation_status") in {"failed", "qa_failed"} and not repair_failed:
                 output_fields[target] = cached
                 continue
             if cached and cached.get("translation_status") in {"success", "cached"}:

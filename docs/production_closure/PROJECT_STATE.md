@@ -268,6 +268,11 @@ to use for review.
 - Production-state construction keeps a QA-failed field out of the release
   candidate as `QA_BLOCKED` and retains its original `candidate_text` in the
   derived repair queue.  No source Spanish evidence is changed.
+- Per-field cache resume now treats `qa_failed` the same as existing failed
+  evidence when `repair_failed=False`.  This also covers legacy entries-only
+  caches without a translation-memory row, so an unchanged source hash cannot
+  silently resend an already QA-failed field.  No closure workflow sets
+  `repair_failed=True` automatically.
 - Existing `ProviderPool` transport behavior was inspected but not changed:
   it may fail over only rate-limit/degraded transport failures.  QA failures
   arrive as successful provider responses and do not trigger pool failover.

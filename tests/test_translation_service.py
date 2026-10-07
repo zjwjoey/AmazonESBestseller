@@ -6,7 +6,7 @@ from amazon_es_bestseller.translation.cache import TranslationCache
 from amazon_es_bestseller.translation.pool import ProviderPool
 from amazon_es_bestseller.translation.preclean import audit_records
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
-from amazon_es_bestseller.translation.service import TranslationService
+from amazon_es_bestseller.translation.service import TranslationService, source_hash
 
 
 class FakeProvider(TranslationProvider):
@@ -150,6 +150,34 @@ def test_structured_missing_protected_token_is_preserved_for_repair_without_prov
     assert field["items"][0]["candidate_text"] == "中文"
     assert {issue["code"] for issue in field["qa_issues"]} == {"PROTECTED_TOKEN_MISSING"}
     assert len(provider.calls) == 1
+
+
+def test_entries_only_qa_failed_field_cache_resumes_without_provider_call(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    provider = MissingProtectedTokenThenLiteralProvider()
+    service = TranslationService(provider, TranslationCache(cache_path))
+    text = "Parasol Protección UPF50+"
+    key = service.cache.key("B00000001", "title_es_raw", source_hash(text),
+                            provider.name, provider.model, service.schema_version,
+                            service.prompt_version, service.dictionary_version)
+    # Simulate an older cache with only per-field entries: there is no
+    # translation-memory record available to conceal a field-cache regression.
+    service.cache.put(key, {
+        "asin": "B00000001", "field": "title_es_raw", "target_field": "title_zh",
+        "source_text": text, "source_hash": source_hash(text), "candidate_text": "中文",
+        "translated_text": "中文", "translation_status": "qa_failed", "qa_status": "qa_failed",
+        "qa_issues": [{"code": "PROTECTED_TOKEN_MISSING"}],
+    })
+    service.cache.save()
+
+    resumed_provider = MissingProtectedTokenThenLiteralProvider()
+    result = TranslationService(resumed_provider, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000001", "title_es_raw": text}
+    ])
+    field = result["records"]["B00000001"]["fields"]["title_zh"]
+    assert not resumed_provider.calls
+    assert field["translation_status"] == "qa_failed"
+    assert field["candidate_text"] == "中文"
 
 
 def test_service_dry_run_never_calls_provider(tmp_path):
