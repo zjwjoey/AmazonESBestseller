@@ -277,3 +277,22 @@ to use for review.
   reuse in a new service instance, candidate retention in the repair queue,
   and the existing no-failover QA behavior.  No Qwen/API/network request and
   no production translation input was created.
+
+## Current-gate approved optional-field isolation
+
+- The current-gate derived view now applies three owner-approved optional-field
+  exclusions only: `B08BYLMK7C` speaker type (both visible label variants),
+  `B017WK9SSK` manufacturer, and `B015YK51H2` brand.  It preserves
+  `attributes` and `rawattributes_raw` as immutable raw evidence, derives
+  `eligibleattributes`, and rebuilds only `product_details_es` from eligible
+  attributes.  The parent r3 artifact is not rewritten.
+- Each derived change records the frozen parent dataset hash, original record
+  hash, new derived source-record hash, owner decision, and excluded-attribute
+  count in `owner_optional_exclusion_repair_log`.  No unapproved damaged
+  attribute is automatically removed.
+- Numeric canonical brands remain blocked unless the same ASIN has an explicit
+  `Marca`/`Brand` attribute with the exact canonical value.  This resolves
+  the supported `3M` case without allowing unsupported values such as `48mm`.
+- Targeted fixtures and read-only validation against the three r3 records
+  passed.  No current-gate rerun, promotion, translation, raw source edit, or
+  change to the remaining review backlog occurred.

@@ -165,6 +165,23 @@ def test_source_audit_strict_text_findings_have_locators_and_brand_kg_is_not_spe
     assert all(item["evidence"].get("offset") is not None and item["evidence"].get("snippet_hash") for item in misplaced)
 
 
+def test_source_audit_accepts_numeric_brand_only_with_explicit_same_asin_marca_evidence():
+    report = audit_source_fields([_row(
+        asin="B07B3P9S7S", brand="3M",
+        attributes=[{"label_raw": "Marca", "value_raw": "3M"}],
+    ), _row(
+        asin="B07B3P9S7T", brand="48mm",
+        attributes=[{"label_raw": "Material", "value_raw": "Acero"}],
+    )])
+    misplaced = [item for item in report["issues"]
+                 if item["issue_code"] == "FIELD_MISPLACED" and item["field"] == "brand"]
+    assert [item["asin"] for item in misplaced] == ["B07B3P9S7T"]
+    brand_pass = [item for item in report["field_audits"]
+                  if item["asin"] == "B07B3P9S7S" and item["field"] == "brand"]
+    assert any(item["classification"] == "PASS" and item["evidence"]["source"] == "attributes:Marca/Brand"
+               for item in brand_pass)
+
+
 def test_source_audit_uses_tag_aware_text_detection_without_rejecting_cookie_products_or_literals():
     safe = audit_source_fields([_row(title_es_raw="Molde para cookie de Navidad <M> y <USB-C>")])
     markup = audit_source_fields([_row(title_es_raw="&lt;a href='x'&gt;Oferta&lt;/a&gt;&lt;p&gt;texto&lt;/p&gt;")])

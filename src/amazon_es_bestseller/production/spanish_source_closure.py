@@ -23,6 +23,7 @@ from ..normalization.brand import clean_brand, normalize_brand_case
 from ..pipeline import normalize_product
 from ..quality.source_fields import audit_source_fields
 from ..quality.source_gate import canonical_audit_hash, evaluate_source_gate
+from ..translation.full_detail import render_details_es
 
 
 SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION = "spanish-source-closure-v1"
@@ -32,6 +33,24 @@ _OWNER_EXCLUSIONS = {
     "B07F6LYVT6": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
     "B077H1MZ35": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
 }
+_OWNER_OPTIONAL_ATTRIBUTE_EXCLUSIONS = {
+    "B08BYLMK7C": {
+        "field": "speaker_type",
+        "labels": {"tipo de altavoz", "tipo de altavoces", "speaker type"},
+        "owner_decision": "owner-approved-optional-speaker-type-exclusion-v1",
+    },
+    "B017WK9SSK": {
+        "field": "manufacturer",
+        "labels": {"fabricante", "manufacturer"},
+        "owner_decision": "owner-approved-optional-manufacturer-exclusion-v1",
+    },
+    "B015YK51H2": {
+        "field": "brand",
+        "labels": {"marca", "brand"},
+        "owner_decision": "owner-approved-optional-brand-exclusion-v1",
+    },
+}
+OWNER_OPTIONAL_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION = "owner-optional-attribute-exclusion-v1"
 _CJK_RE = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 _MOJIBAKE_RE = re.compile(r"\ufffd|(?:Ã.|Â.)")
 _NON_BRAND_BYLINE_RE = re.compile(
@@ -143,6 +162,61 @@ def _optional_attribute(detail: Mapping, asin: str, field: str, labels: set[str]
             return ""
         return raw
     return ""
+
+
+def _owner_optional_exclusion_records(parent_records: Iterable[Mapping], *, parent_dataset_hash: str) -> tuple[list[dict], list[dict]]:
+    """Derive a narrow, hash-bound display view without mutating raw evidence."""
+    records: list[dict] = []
+    repair_log: list[dict] = []
+    for parent_record in parent_records:
+        record = deepcopy(dict(parent_record))
+        asin = normalize_asin(record.get("asin"))
+        decision = _OWNER_OPTIONAL_ATTRIBUTE_EXCLUSIONS.get(asin)
+        if not decision:
+            records.append(record)
+            continue
+        raw_attributes = record.get("rawattributes_raw")
+        if not isinstance(raw_attributes, list):
+            raw_attributes = record.get("attributes") or []
+        raw_attributes = [dict(attr) for attr in raw_attributes if isinstance(attr, Mapping)]
+        labels = set(decision["labels"])
+        excluded = [attr for attr in raw_attributes if _label(attr.get("label_raw")) in labels]
+        if not excluded:
+            records.append(record)
+            continue
+        eligible = [attr for attr in raw_attributes if _label(attr.get("label_raw")) not in labels]
+        parent_record_hash = _hash(parent_record)
+        record["rawattributes_raw"] = deepcopy(raw_attributes)
+        record["eligibleattributes"] = deepcopy(eligible)
+        # Only this display/translation-derived field is rebuilt. ``attributes``
+        # remains raw evidence so no source fact is deleted or overwritten.
+        record["product_details_es"] = render_details_es(eligible)
+        evidence = {
+            "schema_version": OWNER_OPTIONAL_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION,
+            "owner_decision": decision["owner_decision"],
+            "field": decision["field"],
+            "parent_dataset_canonical_hash": parent_dataset_hash,
+            "parent_record_hash": parent_record_hash,
+            "raw_attributes_hash": _hash(raw_attributes),
+            "eligible_attributes_hash": _hash(eligible),
+            "excluded_attributes": deepcopy(excluded),
+        }
+        record["owner_optional_exclusion"] = evidence
+        record_for_hash = {key: value for key, value in record.items()
+                           if key not in {"source_record_hash", "owner_optional_exclusion"}}
+        source_record_hash = _hash(record_for_hash)
+        record["source_record_hash"] = source_record_hash
+        repair_log.append({
+            "asin": asin,
+            "field": decision["field"],
+            "owner_decision": decision["owner_decision"],
+            "parent_dataset_canonical_hash": parent_dataset_hash,
+            "parent_record_hash": parent_record_hash,
+            "source_record_hash": source_record_hash,
+            "excluded_attribute_count": len(excluded),
+        })
+        records.append(record)
+    return records, repair_log
 
 
 def _has_multilingual_support(detail: Mapping) -> bool:
@@ -609,7 +683,11 @@ def build_current_source_gate_candidate(
         asin = normalize_asin(ranking.get("asin"))
         if asin in expected_scope:
             ranking_contexts[asin].add(_hash(dict(ranking)))
-    records = [dict(record) for record in parents if normalize_asin(record.get("asin")) in expected_scope]
+    selected_parent_records = [record for record in parents if normalize_asin(record.get("asin")) in expected_scope]
+    records, owner_optional_repair_log = _owner_optional_exclusion_records(
+        selected_parent_records,
+        parent_dataset_hash=str(parent.get("dataset_canonical_hash") or ""),
+    )
     if {normalize_asin(record.get("asin")) for record in records} != expected_scope:
         raise ValueError("owner scope does not select an exact parent record set")
     for index, record in enumerate(records, start=1):
@@ -647,6 +725,7 @@ def build_current_source_gate_candidate(
         "status": "CANDIDATE_CURRENT_GATE_READY" if current_gate["ready"] else "CANDIDATE_CURRENT_GATE_BLOCKED",
         "snapshot_provenance": dict(snapshot_provenance or {}),
         "records": records,
+        "owner_optional_exclusion_repair_log": owner_optional_repair_log,
         "source_review_queue": queue,
     }
     return result

@@ -273,6 +273,54 @@ def test_owner_exclusion_scope_rejects_an_unbound_parent_hash():
         raise AssertionError("expected parent hash validation")
 
 
+def test_current_gate_rebuilds_only_owner_approved_optional_derived_details():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B08BYLMK7C", "B017WK9SSK", "B015YK51H2"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[], product_details_es="")
+               for item in candidates]
+    parents[2].update(attributes=[
+        {"label_raw": "Tipo de altavoz", "value_raw": "Port\ufffdtil"},
+        {"label_raw": "Tipo de altavoces", "value_raw": "Port\ufffdtil"},
+        {"label_raw": "Material", "value_raw": "Pl\u00e1stico"},
+    ], product_details_es="Tipo de altavoz: Port\ufffdtil\nTipo de altavoces: Port\ufffdtil\nMaterial: Pl\u00e1stico")
+    parents[3].update(attributes=[
+        {"label_raw": "Fabricante", "value_raw": "Tulip\ufffdn negro"},
+        {"label_raw": "Color", "value_raw": "blanco"},
+    ], product_details_es="Fabricante: Tulip\ufffdn negro\nColor: blanco")
+    parents[4].update(attributes=[
+        {"label_raw": "Marca", "value_raw": "Bons\ufffdi"},
+        {"label_raw": "Altura", "value_raw": "15 cm"},
+    ], product_details_es="Marca: Bons\ufffdi\nAltura: 15 cm")
+    before = json.loads(json.dumps(parents, ensure_ascii=False))
+    owner_scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, owner_scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+    )
+
+    records = {record["asin"]: record for record in result["records"]}
+    for asin, field in (("B08BYLMK7C", "speaker_type"),
+                        ("B017WK9SSK", "manufacturer"),
+                        ("B015YK51H2", "brand")):
+        record = records[asin]
+        original = next(row for row in before if row["asin"] == asin)
+        assert record["attributes"] == original["attributes"]
+        assert record["rawattributes_raw"] == original["attributes"]
+        assert record["owner_optional_exclusion"]["field"] == field
+        assert record["owner_optional_exclusion"]["parent_record_hash"] == _hash(original)
+        assert record["source_record_hash"]
+    assert "Port\ufffdtil" not in records["B08BYLMK7C"]["product_details_es"]
+    assert "Tipo de altavoz" not in records["B08BYLMK7C"]["product_details_es"]
+    assert "Material: Pl\u00e1stico" in records["B08BYLMK7C"]["product_details_es"]
+    assert "Tulip\ufffdn negro" not in records["B017WK9SSK"]["product_details_es"]
+    assert "Color: blanco" in records["B017WK9SSK"]["product_details_es"]
+    assert "Bons\ufffdi" not in records["B015YK51H2"]["product_details_es"]
+    assert "Altura: 15 cm" in records["B015YK51H2"]["product_details_es"]
+    assert len(result["owner_optional_exclusion_repair_log"]) == 3
+    assert parents == before
+
+
 def test_current_gate_rejects_changed_raw_inputs_and_uses_current_audit_not_historical_block():
     asins = ["B07F6LYVT6", "B077H1MZ35", "B000000012"]
     candidates = [_ranking(asin) for asin in asins]

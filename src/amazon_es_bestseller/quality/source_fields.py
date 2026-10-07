@@ -537,6 +537,22 @@ def _has_visible_attribute_duplicate(row) -> bool:
     return False
 
 
+def _explicit_same_asin_brand_evidence(row, brand: str) -> dict | None:
+    """Require an explicit Marca/Brand attribute before accepting numeric brands."""
+    expected = _semantic_text(brand)
+    if not expected:
+        return None
+    for label, value, field in _structured_attribute_pairs(row):
+        if _semantic_text(label) in {"marca", "brand"} and _semantic_text(value) == expected:
+            return {
+                "source": "attributes:Marca/Brand",
+                "label_raw": label,
+                "value_raw": value,
+                "same_asin_record_binding": _sf_record_binding(row)["record_hash"],
+            }
+    return None
+
+
 def _text_semantic_finding(row, field: str, text: str):
     """Flag only strict UI/corruption; ordinary product repetition is reviewable."""
     decoded_text, html_tag = find_real_html_tag(text)
@@ -571,7 +587,12 @@ def _sf_semantics(row, asin, issues, fields):
     if "http://" in title or "https://" in title:
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "title contains URL", "title_es_raw")
     if brand and (brand == spec or re.search(r"\b\d+(?:[,.]\d+)?\s*(?:ml|l|g|kg|cm|mm|m|w|v|€|eur)\b", brand, re.I)):
-        _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "brand contains spec or price", "brand")
+        explicit_brand = _explicit_same_asin_brand_evidence(row, brand)
+        if explicit_brand:
+            _sf_field(fields, asin, "brand", PASS, "INFO",
+                      "numeric brand is backed by explicit same-ASIN Marca/Brand evidence", explicit_brand)
+        else:
+            _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "brand contains spec or price", "brand")
     if title and spec and title.casefold() == spec.casefold():
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "spec duplicates title", "specification")
     for field in ("category_l1", "category_l2", "category_l3", "leaf_category"):
