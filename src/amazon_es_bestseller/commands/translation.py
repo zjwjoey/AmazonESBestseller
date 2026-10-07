@@ -46,7 +46,8 @@ class FakeTranslationProvider(TranslationProvider):
         # Preserve numbers/unit evidence, but make the synthetic nature explicit.
         if re.search('[A-Za-z\xc1\xc9\xcd\xd3\xda\xdc\xd1\xe1\xe9\xed\xf3\xfa\xfc\xf1]', value):
             tokens = ' '.join(re.findall('\\d+(?:[.,]\\d+)?\\s*[A-Za-z%]+', value))
-            value = ('\u79bb\u7ebf\u6a21\u62df\u8bd1\u6587 ' + tokens).strip()
+            placeholders = ' '.join(re.findall(r'__T\d{4}__', value))
+            value = ('\u79bb\u7ebf\u6a21\u62df\u8bd1\u6587 ' + tokens + ' ' + placeholders).strip()
         return ProviderResponse(text=value, provider=self.name, model=self.model,
                                 status='success', attempts=0,
                                 raw={'offline': True, 'asin': asin, 'field': field})
