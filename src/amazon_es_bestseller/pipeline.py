@@ -96,11 +96,35 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
 
     # Parent ASIN is only useful when it identifies a confirmed variation
     # family.  A child ASIN copied into its own parent slot is not evidence of
-    # a family; drop it unless an explicit confirmed status is present.
+    # a family; a status string alone cannot make it one.
+    # Preserve the observed parent value before canonicalizing it.  In
+    # particular, legacy detail records can contain a self-parent value that
+    # is evidence of what was parsed, but not evidence of a variation family.
+    if "parent_asin_raw" not in out:
+        out["parent_asin_raw"] = out.get("parent_asin") or ""
     parent = normalize_asin(out.get("parent_asin"))
     parent_status = str(out.get("parent_asin_status") or "").strip().casefold()
-    if parent == asin and parent_status != "confirmed":
-        out["parent_asin"] = ""
+    variation = out.get("variation_evidence")
+    variation_is_confirmed = (
+        isinstance(variation, Mapping)
+        and normalize_asin(variation.get("current_asin")) == asin
+        and normalize_asin(variation.get("parent_asin")) == parent
+        and parent in {normalize_asin(value) for value in (variation.get("family_asins") or [])}
+        and any(
+            normalize_asin(value) and normalize_asin(value) != asin
+            for value in (variation.get("family_asins") or [])
+        )
+    )
+    if parent == asin:
+        # A status string is caller-provided metadata, not provenance.  Keep
+        # a self-parent only when parser-produced variation evidence confirms
+        # the family relationship; otherwise make the canonical field empty.
+        if parent_status == "confirmed" and variation_is_confirmed:
+            out["parent_asin"] = parent
+            out["parent_asin_status"] = "confirmed"
+        else:
+            out["parent_asin"] = ""
+            out["parent_asin_status"] = "unconfirmed"
     elif parent:
         out["parent_asin"] = parent
     else:
@@ -111,9 +135,10 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["current_price"] = cur
     # A struck/list price at or below the current price is not a valid original
     # price.  Keep original_price_raw as evidence, but never display the bad number.
-    out["original_price"] = orig if (cur is None or orig is None or orig > cur) else None
+    canonical_original = orig if (cur is None or orig is None or orig > cur) else None
+    out["original_price"] = canonical_original
     out["currency"] = CURRENCY
-    out["discount_rate"] = discount_rate(cur, orig)
+    out["discount_rate"] = discount_rate(cur, canonical_original)
 
     out["rating"] = _to_rating_num(out.get("rating_raw"))
     out["review_count"] = _to_int_spanish(out.get("review_count_raw"))

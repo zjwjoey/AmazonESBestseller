@@ -1,0 +1,82 @@
+{
+  "run_id": "20261007T000000Z_price_self_parent",
+  "immutable_output": true,
+  "work_item": {
+    "name": "canonical_normalization_price_chain_and_self_parent",
+    "status": "COMPLETE_PENDING_REVIEW",
+    "scope": [
+      "src/amazon_es_bestseller/pipeline.py",
+      "tests/test_pipeline.py",
+      "docs/production_closure/PROJECT_STATE.md"
+    ],
+    "excluded_scope": [
+      "raw production outputs",
+      "candidate data",
+      "Excel export",
+      "translation",
+      "brand/category/audit/CLI changes",
+      "network and live collection"
+    ]
+  },
+  "base": {
+    "production_branch": "feature/amazon-es-production-v1-complete",
+    "production_sha": "1c570e2e708a2b90f8a7ac9be3f2d0e5d2a9bdf9",
+    "development_branch": "feature/translation-production-closure-v1",
+    "production_output_source": "F:\\AmazonESBestseller\\.worktrees\\production-v1-complete\\outputs\\amazon_es_bestseller_5500_202610_fresh2"
+  },
+  "issues": {
+    "self_parent_without_confirmed_provenance": {
+      "observed_count": 845,
+      "status": "PATCHED_IN_CANONICAL_NORMALIZATION",
+      "resolution": "preserve parent_asin_raw; clear canonical parent_asin and mark unconfirmed unless parser variation evidence confirms a multi-ASIN family"
+    },
+    "original_price_less_than_or_equal_to_current": {
+      "observed_counts": {
+        "less_than": 71,
+        "equal": 190
+      },
+      "status": "PATCHED_IN_CANONICAL_NORMALIZATION",
+      "resolution": "do not emit canonical original_price or discount_rate"
+    },
+    "valid_original_price_missing_discount": {
+      "observed_count": 3094,
+      "status": "PATCHED_IN_CANONICAL_NORMALIZATION",
+      "resolution": "derive deterministic discount_rate from canonical original_price when original_price > current_price"
+    },
+    "candidate_manifest_hash": {
+      "status": "VERIFIED_CANONICAL_HASH",
+      "byte_hash": "05e0c12364e0ac0d1d8514ad94a7d44ab86d50efcb7595a2737b26dff1a62689",
+      "canonical_json_sha256": "7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414",
+      "note": "CRLF pretty formatting explains byte-hash difference; canonical hash matches all checked sidecars/checkpoints."
+    },
+    "identity_coverage": {
+      "status": "OBSERVED_NOT_REMEDIATED",
+      "exact_source_count": 5480,
+      "identity_mismatch_count": 19,
+      "pending_asin": "B0DKT3NTS9",
+      "note": "5480 equals 5500 minus 19 identity mismatches minus one pending record; audit bindings match the MATCH-detail set."
+    }
+  },
+  "phases": {
+    "source_gate": "BLOCKED_NOT_REREVIEWED",
+    "live_collection": "NOT_EXECUTED",
+    "saved_html_reparse": "NOT_EXECUTED",
+    "translation": "NOT_EXECUTED",
+    "field_closure_audit": "NOT_EXECUTED",
+    "excel_export": "NOT_EXECUTED",
+    "final_manifest": "NOT_EXECUTED"
+  },
+  "tests": [
+    {
+      "command": "tests/test_pipeline.py -k self_parent or discount",
+      "result": "PASSED",
+      "count": 5
+    },
+    {
+      "command": "tests/test_price.py",
+      "result": "PASSED",
+      "count": 6
+    }
+  ],
+  "ready": false
+}

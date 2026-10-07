@@ -148,6 +148,32 @@ def test_enrich_drops_unconfirmed_self_parent_asin():
              parent_asin_status="self_reported_unconfirmed")
     p = enrich_products(RANKING, [d])[0]
     assert p["parent_asin"] == ""
+    assert p["parent_asin_status"] == "unconfirmed"
+    assert p["parent_asin_raw"] == "B078C6QR1C"
+
+
+def test_enrich_does_not_trust_confirmed_self_parent_status_without_provenance():
+    d = dict(DETAIL[0], asin="B078C6QR1C", parent_asin="B078C6QR1C",
+             parent_asin_status="confirmed")
+    p = enrich_products(RANKING, [d])[0]
+    assert p["parent_asin"] == ""
+    assert p["parent_asin_status"] == "unconfirmed"
+    assert p["parent_asin_raw"] == "B078C6QR1C"
+
+
+def test_enrich_preserves_confirmed_self_parent_with_variation_provenance():
+    d = dict(
+        DETAIL[0], asin="B078C6QR1C", parent_asin="B078C6QR1C",
+        parent_asin_status="confirmed",
+        variation_evidence={
+            "current_asin": "B078C6QR1C",
+            "parent_asin": "B078C6QR1C",
+            "family_asins": ["B078C6QR1C", "B0DH0ABC01"],
+        },
+    )
+    p = enrich_products(RANKING, [d])[0]
+    assert p["parent_asin"] == "B078C6QR1C"
+    assert p["parent_asin_status"] == "confirmed"
 
 
 def test_enrich_preserves_confirmed_parent_asin():
