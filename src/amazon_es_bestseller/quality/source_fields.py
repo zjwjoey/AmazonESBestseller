@@ -138,7 +138,7 @@ _BAD_TEXT = re.compile(r"(?:�{2,}|Ã[\x80-\xBF]|Â[\x80-\xBF]|[\x00-\x08\x0b\x
 _REPEATED_TEXT = re.compile(r"(.{8,}?)(?:\s*\1){2,}", re.S)
 _STRICT_HTML_TAG = re.compile(r"</?\s*(?:script|style|div|span|iframe|object|embed)\b[^>]*>", re.I)
 _STRICT_UI_TEXT = re.compile(r"\b(?:javascript|cookie|captcha|robot\s*check|add\s+to\s+cart|privacy)\b", re.I)
-_EXPLICIT_BAD_TEXT = re.compile(r"\ufffd|[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_EXPLICIT_BAD_TEXT = re.compile(r"\ufffd|\?{2,}|[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _UNIT = re.compile(
     r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(?P<unit>mililitros?|litros?|gramos?|"
     r"kilogramos?|cent[ií]metros?|metros?|vatios?|voltios?|ml|kg|mm|cm|pcs|pack|uds|"
