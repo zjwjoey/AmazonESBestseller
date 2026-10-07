@@ -355,3 +355,21 @@ to use for review.
   (`6/8/10/12mm8pcs` → `6/8/10/12毫米 8件装`) and `B006ZH7956`
   (`400 GR / 1-Pack` → `400克/1包装`). They remain `QA_FAILED` pending a
   separately reviewed normalizer/validator fix.
+
+## QA compact-unit correction (2026-10-07)
+
+- The positive offline production workflow failure was a fixture defect, not a
+  SourceGate or no-repeat regression. `FakeTranslationProvider` discarded its
+  protected `__Txxxx__` token for `Botella de acero 500 ml`, causing the first
+  and only response to fail protected-token, numeric, and unit QA. It now
+  retains technical placeholders in that first synthetic response; fake mode
+  remains non-formal and performs no retry.
+- QA now recognizes only two narrow compact forms: a slash-delimited size
+  series immediately followed by `mm`/`cm` and an item count (`6/8/10/12mm8pcs`),
+  and `N-Pack` as a package count. This makes the established Chinese forms
+  equivalent while retaining negative drift checks for `9L→25.4L`,
+  `30L→20L`, and `10x15cm→10x10mm`.
+- Immutable offline subset re-QA:
+  `outputs/production_closure_20261007T180000Z_legacy_reference_subset_reqa`.
+  It checked 10 existing candidates for `B0DT976WF2` and `B006ZH7956`, changed
+  four prior QA decisions, and has 10 pass-after rows. Provider calls: zero.

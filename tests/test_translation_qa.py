@@ -98,6 +98,15 @@ def test_compact_multipack_numbers_and_count_nouns_are_semantically_equivalent()
     assert qa_field(protect("160gr"), "160克", "160gr")["qa_status"] == "pass"
 
 
+def test_compact_slash_sizes_and_hyphen_pack_keep_numeric_and_unit_facts():
+    assert qa_field(protect("6/8/10/12mm8pcs"), "6/8/10/12\u6beb\u7c73 8\u4ef6\u88c5",
+                    "6/8/10/12mm8pcs", field="specification_es")["qa_status"] == "pass"
+    assert qa_field(protect("400 GR / 1-Pack"), "400\u514b/1\u5305\u88c5",
+                    "400 GR / 1-Pack", field="specification_es")["qa_status"] == "pass"
+    for source, target in (("9L", "25.4L"), ("30L", "20L"), ("10x15cm", "10x10mm")):
+        assert qa_field(protect(source), target, source, field="specification_es")["qa_status"] == "qa_failed"
+
+
 def test_qa_detects_reversed_or_missing_spanish_negation():
     result = qa_field(protect("Etiquetas sin laminado protector"),
                       "带保护性覆膜的标签", "Etiquetas sin laminado protector")

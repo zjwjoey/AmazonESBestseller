@@ -107,6 +107,9 @@ _COUNT_NOUN_RE = re.compile(
     r"(?:juguetes?|chupetes?|filtros?|accesorios?|art[ií]culos?|"
     r"piezas?|unidades?|paquetes?|packs?|rollos?|vasos?|bombillas?)\b"
 )
+_COMPACT_SLASH_PACK_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])(?P<sizes>\d+(?:/\d+){1,})\s*(?P<unit>mm|cm)\s*(?P<count>\d+)\s*pcs\b")
+_HYPHEN_PACK_RE = re.compile(r"(?i)(?<![A-Za-z0-9])(\d+(?:[.,]\d+)?)\s*-\s*pack\b")
 _SOURCE_NEGATION_RE = re.compile(
     r"(?i)(?<!\w)(?:sin\b|no\s+(?:requiere|contiene|incluye)|libre\s+de\b|"
     r"sin\s+fragancia\b|sin\s+perfume\b)"
@@ -161,6 +164,16 @@ def _units(text: str) -> List[tuple[str, str]]:
         if not any(_number_key(existing) == _number_key(number) and unit == "pcs"
                    for existing, unit in units):
             units.append((number, "pcs"))
+    # Amazon titles sometimes glue a size series and item count together,
+    # e.g. ``6/8/10/12mm8pcs``.  It is intentionally a narrow full-pattern
+    # rule, not a generic relaxation of adjacent number/unit validation.
+    for match in _COMPACT_SLASH_PACK_RE.finditer(value):
+        sizes = match.group("sizes").split("/")
+        for fact in ((sizes[-1], match.group("unit").casefold()), (match.group("count"), "pcs")):
+            if fact not in units:
+                units.append(fact)
+    for number in _HYPHEN_PACK_RE.findall(value):
+        units.append((number, "pcs"))
     return units
 
 
@@ -233,6 +246,12 @@ def _fact_numbers(text: str) -> List[str]:
             str(text or "")):
         observed[_number_key(left)] += 1
         observed[_number_key(right)] += 1
+    for match in _COMPACT_SLASH_PACK_RE.finditer(str(text or "")):
+        required = Counter(_number_key(number)
+                           for number in (*match.group("sizes").split("/"), match.group("count")))
+        for number, count in required.items():
+            if observed[number] < count:
+                observed[number] += count - observed[number]
     return [str(value) for value in observed.elements()]
 
 
@@ -270,6 +289,10 @@ def _protected_token_is_equivalent(token: str, source: str, translated: str) -> 
         return all(result_numbers[number] >= count
                    for number, count in token_numbers.items())
     token_units = _unit_keys(_units(token))
+    if not token_units:
+        pack = _HYPHEN_PACK_RE.fullmatch(str(token or "").strip())
+        if pack:
+            return Counter(_unit_keys(_units(translated))).get((_number_key(pack.group(1)), "pcs"), 0) > 0
     if token_units:
         result_units = _unit_keys(_units(translated))
         remaining = Counter(result_units)
