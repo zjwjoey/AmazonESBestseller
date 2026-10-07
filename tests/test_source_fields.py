@@ -132,6 +132,11 @@ def test_source_audit_recognizes_spanish_compound_volume_and_flow_units():
         {"label_raw": "Caudal de aire", "value_raw": "2 metros cúbicos por hora"},
         {"label_raw": "Caudal de aire", "value_raw": "1 metros cúbicos por minuto"},
         {"label_raw": "Caudal de aire", "value_raw": "12 litros por minuto"},
+        # Exact full-word forms retained by production canonical records.
+        {"label_raw": "Volumen Art��culo", "value_raw": "1426,56 Cent��metros c��bicos"},
+        {"label_raw": "Volumen del producto", "value_raw": "48600 Cent��metros c��bicos"},
+        {"label_raw": "Capacidad de flujo de aire", "value_raw": "18 Litros por hora"},
+        {"label_raw": "Capacidad de caudal de aire", "value_raw": "29 Cent��metros c��bicos por segundo"},
     ])])
     assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in report["issues"]}
 

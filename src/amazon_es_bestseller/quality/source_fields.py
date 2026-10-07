@@ -15,6 +15,7 @@ from .models import QualityStatus, check_result, issue
 
 _HTML_TAG = r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+(?:[^<>\s]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?))*\s*/?>"
 _JUNK = re.compile(rf"(?:{_HTML_TAG}|\b(?:javascript|cookie|captcha|robot check)\b)", re.I)
+SOURCE_FIELD_AUDIT_RULES_VERSION = "source-fields-unit-v2"
 
 
 def _number(value: object) -> Decimal | None:
@@ -332,6 +333,16 @@ def _compound_units(value) -> set[str]:
         units.add("m3/min")
     if re.search(r"\blitros?\s+por\s+minutos?\b", text):
         units.add("l/min")
+    if re.search(r"\blitros?\s+por\s+horas?\b", text):
+        units.add("l/h")
+    if re.search(r"\blitros?\s+por\s+segundos?\b", text):
+        units.add("l/s")
+    if re.search(r"\blitros?\s+por\s+d(?:i)?as?\b", text):
+        units.add("l/day")
+    if re.search(r"\bcentimetros?\s+cubicos?\s+por\s+segundos?\b", text):
+        units.add("cm3/s")
+    if re.search(r"\b\d+(?:[.,]\d+)?\s*centimetros?\s+cubicos?\b(?!\s+por\s+segundos?\b)", text):
+        units.add("ml")
     raw = str(value or "")
     if re.search(r"\b\d+(?:[.,]\d+)?\s*cm(?:3|\u00b3)(?!\s*/|[a-z0-9])", raw, re.I):
         units.add("ml")
@@ -347,7 +358,9 @@ def _compound_units(value) -> set[str]:
 def _without_compound_units(value) -> str:
     text = _semantic_text(value)
     text = re.sub(r"\bmetros?\s+cubicos?\s+por\s+(?:horas?|minutos?)\b", "", text)
-    text = re.sub(r"\blitros?\s+por\s+minutos?\b", "", text)
+    text = re.sub(r"\blitros?\s+por\s+(?:minutos?|horas?|segundos?|d(?:i)?as?)\b", "", text)
+    text = re.sub(r"\b\d+(?:[.,]\d+)?\s*centimetros?\s+cubicos?\s+por\s+segundos?\b", "", text)
+    text = re.sub(r"\b\d+(?:[.,]\d+)?\s*centimetros?\s+cubicos?\b", "", text)
     return re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:cm3(?:\s*/\s*s)?|l\s*/\s*(?:s|h|day|dia))", "", text)
 
 
