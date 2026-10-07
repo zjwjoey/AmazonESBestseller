@@ -366,6 +366,13 @@ def _audit_markdown(result: Mapping) -> str:
     queue = result.get("source_review_queue") or []
     fields = Counter(str(item.get("field") or "unspecified") for item in queue if isinstance(item, Mapping))
     kinds = Counter(str(item.get("classification") or item.get("issue") or "unspecified") for item in queue if isinstance(item, Mapping))
+    closure = result.get("closure_audit") or {}
+    issues = [item for item in closure.get("issues") or [] if isinstance(item, Mapping)]
+    field_audits = [item for item in closure.get("field_audits") or [] if isinstance(item, Mapping)]
+    code_severity = Counter((str(item.get("severity") or "UNKNOWN"), str(item.get("issue_code") or "UNKNOWN")) for item in issues)
+    field_severity = Counter((str(item.get("severity") or "UNKNOWN"), str(item.get("field") or "unspecified")) for item in field_audits)
+    blocking = [item for item in issues if item.get("status") == "BLOCK" and item.get("severity") in {"P0", "P1"}]
+    review = [item for item in issues if item.get("status") == "REVIEW"]
     lines = [
         "# Spanish source closure audit",
         "",
@@ -380,7 +387,18 @@ def _audit_markdown(result: Mapping) -> str:
     lines.extend(f"- `{field}`: {count}" for field, count in sorted(fields.items()))
     lines.extend(["", "## Review queue by classification", ""])
     lines.extend(f"- `{kind}`: {count}" for kind, count in sorted(kinds.items()))
-    lines.extend(["", "## Regression note", "", "Rank/Detail-BSR separation and unit semantics are re-audited from current code; this candidate does not suppress remaining source blockers.", ""])
+    lines.extend(["", "## Current closure audit: code and severity", ""])
+    lines.extend(f"- `{severity}` `{code}`: {count}" for (severity, code), count in sorted(code_severity.items()))
+    lines.extend(["", "## Current closure audit: field and severity", ""])
+    lines.extend(f"- `{severity}` `{field}`: {count}" for (severity, field), count in sorted(field_severity.items()))
+    lines.extend([
+        "", "## Current closure disposition", "",
+        f"- Blocking P0/P1 findings (`status=BLOCK`): {len(blocking)} across {len({item.get('asin') for item in blocking if item.get('asin')})} SKUs",
+        f"- Review findings (`status=REVIEW`, including P1): {len(review)} across {len({item.get('asin') for item in review if item.get('asin')})} SKUs",
+        "- P2 findings are reported above but are not counted as blocking.",
+        "", "## Historical audit", "",
+        "The reviewed input source audit is retained separately as `historical_source_audit.json`; it is historical evidence, not a newly re-authorized SourceGate report.",
+        "", "## Regression note", "", "Rank/Detail-BSR separation and unit semantics are re-audited from current code; this candidate does not suppress remaining source blockers.", ""])
     return "\n".join(lines)
 
 
@@ -406,12 +424,14 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
             for key in ("attributes", "feature_bullets_raw", "ranking_contexts"):
                 row[key] = json.dumps(row.get(key), ensure_ascii=False, sort_keys=True, default=str)
             writer.writerow(row)
+    historical_path = directory / "historical_source_audit.json"
+    historical_path.write_text(json.dumps(result.get("source_audit") or {}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     audit_path = directory / "audit.json"
     audit_path.write_text(json.dumps({
         "schema_version": result.get("schema_version"), "status": result.get("status"),
         "candidate_manifest_hash": result.get("candidate_manifest_hash"), "binding_scope": result.get("binding_scope"),
         "source_gate": result.get("source_gate"), "closure_source_gate": result.get("closure_source_gate"),
-        "source_audit_hash": result.get("source_audit_hash"), "source_audit": result.get("source_audit"),
+        "source_audit_history": {"path": historical_path.name, "hash": result.get("source_audit_hash")},
         "closure_audit": result.get("closure_audit"),
     }, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     (directory / "audit.md").write_text(_audit_markdown(result), encoding="utf-8")
@@ -419,9 +439,11 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
     queue_path.write_text(json.dumps(result.get("source_review_queue") or [], ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     manifest = {
         "schema_version": SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION,
-        "status": result.get("status"), "candidate_manifest_hash": result.get("candidate_manifest_hash"),
+        "status": result.get("status"),
+        "dataset_canonical_hash": _hash(records),
+        "frozen_candidate_manifest_canonical_hash": result.get("candidate_manifest_hash"),
         "binding_scope": result.get("binding_scope"), "source_gate": result.get("source_gate"),
-        "artifacts": {name: _artifact_hash(directory / name) for name in ("spanish_master_5480.json", "spanish_master_5480.csv", "audit.json", "audit.md", "source_review_queue.json")},
+        "artifacts": {name: _artifact_hash(directory / name) for name in ("spanish_master_5480.json", "spanish_master_5480.csv", "audit.json", "audit.md", "source_review_queue.json", "historical_source_audit.json")},
     }
     (directory / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest

@@ -156,3 +156,23 @@ to use for review.
 - The proposal artifact was not missing: it remains read-only at
   `F:\AmazonESBestseller\.worktrees\production-v1-complete\outputs\amazon_es_bestseller_5500_202610_fresh2\source_audit_5480\category_l3_backfill_proposals.json`.
   It is `REVIEWABLE_NOT_APPLIED` and is not consumed by this change.
+
+## Spanish source closure candidate — r3 diagnostic
+
+- Immutable output: `outputs/production_closure_20261007T000000Z_spanish_source_5480_r3`.
+  It remains `CANDIDATE_SOURCE_GATE_BLOCKED`; no Master promotion, new
+  authoritative SourceGate, translation, or Excel export was performed.
+- Its manifest separates records canonical dataset hash
+  `4ff1b2388db3f7c19271a02551e2c55e011888df3887760d1c0efefda1d5bd46`
+  from frozen candidate-manifest canonical hash
+  `7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414`.
+- The current closure audit has `1109` findings: `247` blocking P0/P1 across
+  `177` SKUs (`246` unit-type mismatches and `1` field-misplacement); `782`
+  REVIEW findings across `648` SKUs (`694` ambiguous-unit semantics, `72`
+  misplaced text, `16` rank gaps); and `96` P2 findings, excluded from the
+  blocking count. `CATEGORY_COPIED=0` and
+  `CATEGORY_PROVENANCE_MISSING=0`.
+- `audit.md` now lists current closure code/severity and field/severity counts,
+  BLOCK/REVIEW disposition, and excludes P2 from the blocking total. The
+  pre-existing reviewed input is copied separately as
+  `historical_source_audit.json`; it is history only.

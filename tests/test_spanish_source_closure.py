@@ -4,6 +4,7 @@ import json
 from amazon_es_bestseller.production.spanish_source_closure import (
     build_spanish_source_candidate,
     candidate_manifest_hash,
+    write_spanish_source_candidate,
 )
 
 
@@ -180,3 +181,18 @@ def test_candidate_restores_frozen_ranking_categories_instead_of_detail_breadcru
     assert record["detail_category_trail"] == ["Hogar", "Cocina", "Botes", "Botes herméticos"]
     assert record["category_provenance"]["source"] == "ranking_context"
     assert record["category_provenance"]["ranking_source_category_path"] == "Hogar > Cocina"
+
+
+def test_written_manifest_separates_dataset_and_frozen_manifest_hashes(tmp_path):
+    asin = "B000000008"
+    candidates = [_ranking(asin)]
+    result = build_spanish_source_candidate(
+        candidates, [_detail(asin)], candidates, _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash(candidates),
+    )
+    manifest = write_spanish_source_candidate(tmp_path / "closure", result)
+
+    assert manifest["dataset_canonical_hash"] == _hash(result["records"])
+    assert manifest["frozen_candidate_manifest_canonical_hash"] == candidate_manifest_hash(candidates)
+    assert (tmp_path / "closure" / "historical_source_audit.json").is_file()
+    assert "P2 findings are reported" in (tmp_path / "closure" / "audit.md").read_text(encoding="utf-8")

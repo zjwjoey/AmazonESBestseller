@@ -1,0 +1,36 @@
+{
+  "run_id": "20261007T000000Z_spanish_source_5480_r3",
+  "status": "CANDIDATE_SOURCE_GATE_BLOCKED",
+  "artifact_dir": "outputs/production_closure_20261007T000000Z_spanish_source_5480_r3",
+  "hashes": {
+    "dataset_canonical_hash": "4ff1b2388db3f7c19271a02551e2c55e011888df3887760d1c0efefda1d5bd46",
+    "frozen_candidate_manifest_canonical_hash": "7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414"
+  },
+  "scope": {
+    "records": 5480,
+    "raw_binding_scope": "exact source_audit_5480 record_bindings",
+    "category_provenance_missing": 0,
+    "category_copied": 0
+  },
+  "closure_audit": {
+    "issue_count": 1109,
+    "blocking_p0_p1": 247,
+    "blocking_skus": 177,
+    "blocking_codes": {"SPEC_UNIT_TYPE_MISMATCH": 246, "FIELD_MISPLACED": 1},
+    "review_count": 782,
+    "review_skus": 648,
+    "review_codes": {"UNIT_SEMANTICS_AMBIGUOUS": 694, "MISPLACED": 72, "RANK_GAP": 16},
+    "p2_non_blocking_count": 96
+  },
+  "gate": {
+    "historical_reviewed_source_gate": "BLOCKED",
+    "closure_diagnostic_gate": "BLOCKED",
+    "new_authoritative_gate": "NOT_EXECUTED"
+  },
+  "remaining_phases": {
+    "raw_binding_reaudit": "NOT_EXECUTED",
+    "formal_master_promotion": "NOT_EXECUTED",
+    "translation": "NOT_EXECUTED",
+    "excel_export": "NOT_EXECUTED"
+  }
+}
