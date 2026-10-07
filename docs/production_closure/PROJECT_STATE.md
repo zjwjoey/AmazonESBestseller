@@ -315,3 +315,15 @@ to use for review.
 - The one-shot current-gate logger records code versions (including Git SHA)
   in the new immutable manifest and always appends a final process-exit record
   to the persisted stage log.
+- Immutable post-fix run:
+  `outputs/production_closure_20261007T140000Z_current_gate_rank_unit/candidate`.
+  It finished with `PROCESS_EXIT=0`, exact scope `5478`, and remains
+  `CANDIDATE_CURRENT_GATE_BLOCKED`.  The current audit has 572 findings:
+  38 P1 blocks (`SPEC_UNIT_TYPE_MISMATCH`), 59 P1 semantic conflicts, 463 P1
+  unit-semantic reviews, and 12 P2 repetition reviews.  The full rank matrix
+  has zero real gaps and four recorded out-of-exact-scope slots.
+- Follow-up is intentionally pending: the current gate has not yet merged the
+  r3 builder unresolved-decision queue, so 17 raw CJK attribute decisions are
+  not represented in its 572 findings.  This is a P1 coverage gap, not a
+  readiness signal; the translation structured-input alias issue is likewise
+  recorded as a separate blocked wiring slice.
