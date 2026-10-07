@@ -36,6 +36,10 @@ from ..translation.repair_queue import apply_repair, build_repair_queue
 from ..translation.schemas import TRANSLATION_SCHEMA_VERSION
 from ..translation.service import TranslationService
 from ..translation.cache import TranslationCache
+from ..translation.structured_contract import (
+    bind_formal_structured_translation_input,
+    execute_formal_structured_translation,
+)
 
 from .history import HistoryRepository, JsonHistoryRepository
 from .production_run import STAGES, artifact_hash
@@ -566,6 +570,8 @@ class ProductionWorkflow:
                                        translation_schema_version=TRANSLATION_SCHEMA_VERSION, run_id=self.run_id)
         reports = self._translation_batch_reports(context, batch)
         return self._store("translation-input", {"status": "READY", "translation_input": value,
+            "structured_profile": str(self.task.translation.get("structured_profile") or "legacy_diagnostic"),
+            "structured_review_snapshot": deepcopy(self.task.translation.get("structured_review_snapshot") or {}),
             "translation_batch_reports": reports, **batch,
             "input_artifact_hashes": {"spanish-master": self._prior(context, "spanish-master").get("artifact_file_hash"),
                                         "ranking-authority": self._prior(context, "ranking-authority").get("artifact_file_hash"),
@@ -598,7 +604,8 @@ class ProductionWorkflow:
 
     def stage_translation(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         from ..commands.translation import FakeTranslationProvider
-        translation_input = self._artifact_data(self._prior(context, "translation-input"))["translation_input"]
+        translation_payload = self._artifact_data(self._prior(context, "translation-input"))
+        translation_input = translation_payload["translation_input"]
         preclean = self._artifact_data(self._prior(context, "preclean"))["preclean"]
         provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
         provider = self.translation_provider
@@ -618,6 +625,36 @@ class ProductionWorkflow:
         service = TranslationService(provider, TranslationCache(self.work / "translation_cache.json"),
                                      schema_version=TRANSLATION_SCHEMA_VERSION,
                                      dictionary_manifest=dictionary_manifest)
+        structured_profile = str(translation_payload.get("structured_profile") or "legacy_diagnostic")
+        if structured_profile == "formal":
+            if provider_mode not in {"qwen-mt", "qwen-mt-fixture"}:
+                raise ProductionWorkflowError("STRUCTURED_FORMAL_PROVIDER_MODE_REQUIRED")
+            review = translation_payload.get("structured_review_snapshot") or {}
+            try:
+                formal = bind_formal_structured_translation_input(
+                    translation_payload["translation_batch_master"],
+                    translation_payload["translation_batch_source_audit"],
+                    translation_payload["translation_batch_source_gate"], review,
+                    prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest)
+                structured = execute_formal_structured_translation(
+                    formal, translation_payload["translation_batch_master"],
+                    translation_payload["translation_batch_source_audit"],
+                    translation_payload["translation_batch_source_gate"], review, service,
+                    prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest)
+            except ValueError as exc:
+                raise ProductionWorkflowError("STRUCTURED_FORMAL_INPUT_INVALID:%s" % exc) from exc
+            # This vertical slice deliberately stops before the legacy flat
+            # state/rerender/release stages; they cannot reinterpret these
+            # item-level facts as display strings.
+            return self._store("translation", {"status": "READY", "execution": structured,
+                "structured_formal_input": formal, "state": {"structured_only": True, "records": []},
+                "structured_followup_status": "NOT_EXECUTED",
+                "provider_provenance": {"provider": provider.name, "model": provider.model,
+                                        "verified": provider_mode in {"qwen-mt", "qwen-mt-fixture"},
+                                        "request_count": structured["summary"]["provider_calls"]},
+                "input_artifact_hashes": {"preclean": self._prior(context, "preclean").get("artifact_file_hash"),
+                                            "dictionary": self._prior(context, "dictionary").get("artifact_file_hash")},
+                "counts": dict(structured.get("summary") or {})})
         translated = service.translate_records(records_for_preclean(translation_input))
         state = build_production_state(translation_input, preclean.get("translation_input_records") or [],
                                        translated.get("records") or {})

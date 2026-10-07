@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 from .dictionary_service import is_identity_attribute
 from .preclean import clean_text
 from .production_contract import canonical_source_field, target_field_for
 from .service import source_hash
+from ..production.spanish_master import verify_artifact_hash
+from ..quality.source_gate import canonical_audit_hash, verify_source_gate
 
 
 STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION = "translation-structured-input-v2"
@@ -133,7 +135,13 @@ def build_structured_translation_draft(records: Iterable[Mapping], *, review_ite
         asin = _text(raw.get("asin")).upper()
         if not asin:
             raise ValueError("STRUCTURED_TRANSLATION_MISSING_ASIN")
-        eligible = raw.get("eligibleattributes")
+        # Owner-approved exclusions may consume only the explicitly derived
+        # eligible list.  Ordinary records must carry the canonical structured
+        # source; neither branch ever parses a flat display field or raw owner
+        # exclusions as a fallback.
+        exclusion = raw.get("owner_optional_exclusion")
+        eligible = (raw.get("eligibleattributes") if isinstance(exclusion, Mapping)
+                    else raw.get("canonicalstructuredsource"))
         excluded = _excluded_trace(raw)
         if not isinstance(eligible, list):
             details = _field_fact("product_details", [], excluded_raw_trace=excluded,
@@ -179,15 +187,156 @@ def formalize_structured_translation_input(draft: Mapping, source_gate: Mapping)
     return result
 
 
-def dispatch_structured_translation_tasks(draft: Mapping, source_gate: Mapping,
-                                          dispatch: Callable[[Mapping], Any]) -> list[Any]:
-    """Dispatch only formally admitted value tasks; gate rejection precedes callbacks."""
-    formal = formalize_structured_translation_input(draft, source_gate)
-    return [dispatch(task) for record in formal.get("records", [])
-            for field in (record.get("fields") or {}).values()
-            for task in field.get("translation_tasks", [])]
+def _review_snapshot_hash(snapshot: Mapping) -> str:
+    payload = {"schema_version": snapshot.get("schema_version"),
+               "item_ids": sorted(str(value) for value in snapshot.get("item_ids") or ()),
+               "review_item_ids": sorted(str(value) for value in snapshot.get("review_item_ids") or ())}
+    return _hash(payload)
+
+
+def _all_item_ids(draft: Mapping) -> list[str]:
+    return sorted("%s:%s" % (record.get("asin"), item.get("item_id"))
+                  for record in draft.get("records") or []
+                  for field in (record.get("fields") or {}).values()
+                  for item in field.get("items") or [])
+
+
+def _verify_master_gate(master: Mapping, source_audit: Mapping, source_gate: Mapping) -> None:
+    if not verify_artifact_hash(master):
+        raise ValueError("VERIFIED_MASTER_ARTIFACT_INVALID")
+    if not verify_source_gate(source_audit, source_gate):
+        raise ValueError("SOURCE_GATE_UNVERIFIED")
+    if source_gate.get("status") != "SOURCE_READY" or not source_gate.get("ready"):
+        raise ValueError("SOURCE_GATE_NOT_READY")
+    if master.get("source_audit_hash") != canonical_audit_hash(source_audit):
+        raise ValueError("VERIFIED_MASTER_SOURCE_AUDIT_MISMATCH")
+    if master.get("source_gate_status") != "SOURCE_READY":
+        raise ValueError("VERIFIED_MASTER_SOURCE_GATE_MISMATCH")
+
+
+def bind_formal_structured_translation_input(
+        verified_master: Mapping, source_audit: Mapping, source_gate: Mapping,
+        review_snapshot: Mapping, *, prompt_version: str,
+        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Bind closure details to the existing verified Master/SourceGate chain."""
+    _verify_master_gate(verified_master, source_audit, source_gate)
+    if not isinstance(review_snapshot, Mapping) or review_snapshot.get("schema_version") != "structured-review-snapshot-v1":
+        raise ValueError("STRUCTURED_REVIEW_SNAPSHOT_INVALID")
+    draft = build_structured_translation_draft(
+        verified_master.get("records") or [], review_item_ids=review_snapshot.get("review_item_ids"))
+    item_ids = _all_item_ids(draft)
+    if sorted(str(value) for value in review_snapshot.get("item_ids") or ()) != item_ids:
+        raise ValueError("STRUCTURED_REVIEW_ITEM_SET_MISMATCH")
+    result = deepcopy(draft)
+    master_records = {str(row.get("asin") or "").upper(): row for row in verified_master.get("records") or []}
+    for record in result["records"]:
+        source = master_records[record["asin"]]
+        record["brand"] = _text(source.get("brand"))
+    result.update({
+        "formal": True,
+        "binding": {
+            "verified_master_artifact_hash": verified_master.get("artifact_hash"),
+            "source_audit_hash": canonical_audit_hash(source_audit),
+            "source_gate_audit_hash": source_gate.get("audit_hash"),
+            "dataset_hash": draft["dataset_hash"],
+            "asins": [record["asin"] for record in result["records"]],
+            "record_hashes": {record["asin"]: record["source_record_hash"] for record in result["records"]},
+            "review_snapshot_hash": _review_snapshot_hash(review_snapshot),
+            "review_item_ids_hash": _hash(sorted(str(value) for value in review_snapshot.get("review_item_ids") or ())),
+            "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
+            "prompt_version": str(prompt_version),
+            "dictionary_version": str(dictionary_manifest.get("dictionary_version") or ""),
+            "dictionary_hash": str(dictionary_manifest.get("dictionary_hash") or ""),
+        },
+    })
+    return result
+
+
+def validate_formal_structured_translation_input(
+        formal: Mapping, verified_master: Mapping, source_audit: Mapping, source_gate: Mapping,
+        review_snapshot: Mapping, *, prompt_version: str,
+        dictionary_manifest: Mapping[str, Any]) -> None:
+    """Rebuild formal facts from independent current authority before provider use."""
+    expected = bind_formal_structured_translation_input(
+        verified_master, source_audit, source_gate, review_snapshot,
+        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest)
+    if sorted(str(row.get("asin") or "") for row in formal.get("records") or ()) != expected["binding"]["asins"]:
+        raise ValueError("STRUCTURED_BINDING_ASIN_SET_MISMATCH")
+    if formal.get("schema_version") != STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION:
+        raise ValueError("STRUCTURED_TRANSLATION_SCHEMA_MISMATCH")
+    if formal.get("binding") != expected["binding"]:
+        raise ValueError("STRUCTURED_BINDING_MISMATCH")
+    if _hash(formal.get("records") or []) != _hash(expected.get("records") or []):
+        raise ValueError("STRUCTURED_RECORD_OR_ITEM_HASH_MISMATCH")
+
+
+def _service_records(formal: Mapping) -> list[dict[str, Any]]:
+    rows = []
+    for record in formal.get("records") or []:
+        fields = record.get("fields") or {}
+        detail_items = [item for item in (fields.get("product_details") or {}).get("items") or []
+                        if item.get("admission") in {"TRANSLATION_TASK", "PRESERVED_IDENTITY"}]
+        bullet_items = [item for item in (fields.get("feature_bullets") or {}).get("items") or []
+                        if item.get("admission") == "TRANSLATION_TASK"]
+        rows.append({"asin": record.get("asin"), "brand": record.get("brand", ""),
+                     "product_details": [{"label_raw": item.get("label_raw"), "value_raw": item.get("value_raw")}
+                                         for item in detail_items],
+                     "feature_bullets": [item.get("value_raw") for item in bullet_items]})
+    return rows
+
+
+def execute_formal_structured_translation(
+        formal: Mapping, verified_master: Mapping, source_audit: Mapping, source_gate: Mapping,
+        review_snapshot: Mapping, service: Any, *, prompt_version: str,
+        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Use TranslationService's existing cache/TM/QA path for admitted items only."""
+    validate_formal_structured_translation_input(formal, verified_master, source_audit, source_gate,
+                                                 review_snapshot, prompt_version=prompt_version,
+                                                 dictionary_manifest=dictionary_manifest)
+    translated = service.translate_records(_service_records(formal), fields=["product_details", "feature_bullets"])
+    records: dict[str, Any] = {}
+    provider_calls = 0
+    for record in formal.get("records") or []:
+        asin = record["asin"]
+        provider_fields = (translated.get("records") or {}).get(asin, {}).get("fields") or {}
+        output_fields = {}
+        for field, field_fact in (record.get("fields") or {}).items():
+            provider_envelope = provider_fields.get(target_field_for(field), {}) or {}
+            provider_items = list(provider_envelope.get("items") or [])
+            field_cached = provider_envelope.get("translation_status") == "cached"
+            allowed = [item for item in field_fact.get("items") or []
+                       if item.get("admission") in ({"TRANSLATION_TASK", "PRESERVED_IDENTITY"} if field == "product_details" else {"TRANSLATION_TASK"})]
+            rendered = iter(provider_items)
+            translated_by_id = {item["item_id"]: next(rendered, {}) for item in allowed}
+            items = []
+            for item in field_fact.get("items") or []:
+                result = translated_by_id.get(item.get("item_id"))
+                if result:
+                    provider_calls += (int(result.get("attempt_count") or 0)
+                                       if not field_cached and result.get("resolution_source") == "provider" else 0)
+                    items.append({**item, "translated_text": result.get("translated_text", ""),
+                                  "candidate_text": result.get("candidate_text", ""),
+                                  "translation_status": result.get("translation_status"),
+                                  "qa_status": result.get("qa_status"), "qa_issues": result.get("qa_issues") or []})
+                elif item.get("admission") == "PRESERVED_IDENTITY":
+                    items.append({**item, "translated_text": item.get("value_raw"), "candidate_text": item.get("value_raw"),
+                                  "translation_status": "success", "qa_status": "pass", "qa_issues": []})
+                else:
+                    items.append({**item, "translated_text": "", "candidate_text": "", "translation_status": "review_required",
+                                  "qa_status": "review_required", "qa_issues": [{"code": item.get("block_code") or "SOURCE_REVIEW_REQUIRED"}]})
+            output_fields[field] = {"field_hash": field_fact.get("field_hash"), "items": items,
+                                    "excluded_raw_trace": field_fact.get("excluded_raw_trace") or []}
+        records[asin] = {"asin": asin, "source_record_hash": record.get("source_record_hash"), "fields": output_fields}
+    return {"records": records, "summary": {"records": len(records), "provider_calls": provider_calls},
+            "binding": deepcopy(formal.get("binding") or {})}
+
+
+def dispatch_structured_translation_tasks(*_args: Any, **_kwargs: Any) -> None:
+    """Retired: formal structured work must use ``TranslationService`` only."""
+    raise RuntimeError("STRUCTURED_CALLBACK_DISPATCH_RETIRED")
 
 
 __all__ = ["STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION", "STRUCTURED_TRANSLATION_CACHE_NAMESPACE",
            "build_structured_translation_draft", "formalize_structured_translation_input",
-           "dispatch_structured_translation_tasks"]
+           "bind_formal_structured_translation_input", "validate_formal_structured_translation_input",
+           "execute_formal_structured_translation", "dispatch_structured_translation_tasks"]

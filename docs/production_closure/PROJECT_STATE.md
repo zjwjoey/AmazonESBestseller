@@ -327,3 +327,31 @@ to use for review.
   not represented in its 572 findings.  This is a P1 coverage gap, not a
   readiness signal; the translation structured-input alias issue is likewise
   recorded as a separate blocked wiring slice.
+
+## Structured TranslationService vertical slice (2026-10-07)
+
+- Formal structured translation now reconstructs its item facts from the
+  verified Spanish Master, its exact source-fields audit, and the bound
+  SourceGate. A hand-written `SOURCE_READY` object is rejected. The binding
+  includes the verified Master artifact hash, audit hash, exact ASIN set,
+  record hashes, structured item/field hashes, review-snapshot hash, prompt
+  version, and dictionary version/hash; all are rebuilt before provider use.
+- The production workflow has an explicit `structured_profile=formal` route
+  for reviewed Qwen fixtures or budgeted Qwen only. It calls the existing
+  `TranslationService` item path, preserving cache/TM/QA behavior. Owner
+  optional exclusions must use `eligibleattributes`; ordinary records must
+  supply `canonicalstructuredsource`. Missing structured evidence fails
+  closed. Flat display details and excluded raw attributes are never fallback
+  provider input. The former callback dispatcher is retired.
+- This is intentionally a vertical slice. Its structured follow-up state is
+  `NOT_EXECUTED`: legacy flat state, dictionary rerender, repair, export, and
+  release callers are not yet consumers of structured item output. No claim
+  is made that those callers are covered.
+- Legacy Excel references remain diagnostic only. Their future formal review
+  must use the same verified source-artifact loader, rather than a caller
+  supplied `canonical_hash`; current production gates expose an audit hash and
+  the dataset binding belongs to the verified manifest.
+- Deferred QA-only fixtures, with no Qwen retry authorized: `B0DT976WF2`
+  (`6/8/10/12mm8pcs` → `6/8/10/12毫米 8件装`) and `B006ZH7956`
+  (`400 GR / 1-Pack` → `400克/1包装`). They remain `QA_FAILED` pending a
+  separately reviewed normalizer/validator fix.
