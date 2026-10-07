@@ -34,37 +34,51 @@ class TranslationCache:
         self.load()
 
     @contextmanager
-    def _claim_lock(self):
-        """Small cross-process lock for check-and-claim transitions only."""
+    def _claim_lock(self, *, timeout_seconds: float = 10.0):
+        """Take an OS-owned advisory lock for one check-and-claim transition.
+
+        The lock file is deliberately persistent.  Its presence is not proof of
+        ownership: Windows ``msvcrt`` and POSIX ``flock`` hold the byte-range
+        lock in the kernel, so an abrupt process exit releases the lock without
+        making an uncertain cache claim eligible for another provider send.
+        """
         lock_path = self.path.with_name(self.path.name + ".claim.lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        deadline = time.monotonic() + 10.0
-        descriptor = None
-        while descriptor is None:
-            try:
-                descriptor = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(descriptor, (str(os.getpid()) + "\n").encode("ascii"))
-                os.fsync(descriptor)
-            except FileExistsError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("translation cache claim lock timed out: %s" % lock_path)
-                time.sleep(0.02)
-            except Exception:
-                if descriptor is not None:
-                    os.close(descriptor)
-                try:
-                    lock_path.unlink()
-                except FileNotFoundError:
-                    pass
-                raise
+        deadline = time.monotonic() + timeout_seconds
+        handle = open(lock_path, "a+b")
         try:
-            yield
-        finally:
-            os.close(descriptor)
+            # A non-empty range makes Windows byte-range locking unambiguous.
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+                os.fsync(handle.fileno())
+            while True:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+                        handle.seek(0)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("translation cache claim lock timed out: %s" % lock_path)
+                    time.sleep(0.02)
             try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
+                yield
+            finally:
+                if os.name == "nt":
+                    import msvcrt
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
     @staticmethod
     def key(asin: str, field: str, source_hash: str, provider: str,

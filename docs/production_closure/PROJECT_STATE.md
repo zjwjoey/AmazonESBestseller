@@ -513,6 +513,25 @@ wiring, formal legacy policy, and Provider-3/API validation remain incomplete.
   tests passed, as did `ruff check src tests`, compileall, and diff check. No
   full suite or real provider/API run was performed after this small patch.
 
+## Advisory claim-lock recovery slice (2026-10-07)
+
+- The cache claim critical section now uses an OS-owned advisory lock on a
+  persistent `.claim.lock` file: `msvcrt` byte-range locking on Windows and
+  `flock` on POSIX. The file's presence is not treated as ownership and is not
+  removed by normal or exception cleanup.
+- A terminated lock-holder process releases the kernel lock, allowing a later
+  cache process to enter the critical section. Its already-fsynced `pending`
+  claim remains evidence of an uncertain provider attempt and still blocks an
+  automatic resend. A live holder times out rather than being stolen.
+- Focused offline verification: the cache/service claim tests passed (`5
+  passed, 58 deselected`), including hard termination, active-lock timeout,
+  write-failure cleanup, no-resend pending recovery, and deterministic
+  winner-independent concurrent-TM assertions. No provider API or full suite
+  was run.
+- Platform boundary: this was exercised on Windows. The POSIX `flock` branch
+  is implemented but not exercised here; network filesystems with advisory
+  locking semantics outside local NTFS/POSIX behavior remain unverified.
+
 ## Structured translation overlay slice (2026-10-07)
 
 - Formal structured service output now projects into a non-release production

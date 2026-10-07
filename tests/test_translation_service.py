@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -369,13 +371,64 @@ def test_two_services_same_tm_unit_make_one_provider_call(tmp_path):
             {"asin": asin, "title_es_raw": "Unidad TM concurrente"}
         ])
     with ThreadPoolExecutor(max_workers=2) as executor:
-        list(executor.map(run, ["B00000001", "B00000002"]))
+        outputs = list(executor.map(run, ["B00000001", "B00000002"]))
     assert len(provider.calls) == 1
     verifier = TranslationService(FakeProvider(), TranslationCache(cache_path))
-    loser_key = verifier._field_cache_key("B00000002", "title_es_raw", source_hash("Unidad TM concurrente"))
-    loser = TranslationCache(cache_path).get(loser_key)
-    assert loser["translation_status"] == "cached"
-    assert loser["source_hash"] == source_hash("Unidad TM concurrente")
+    disk_statuses = []
+    result_statuses = []
+    for asin, output in zip(["B00000001", "B00000002"], outputs):
+        key = verifier._field_cache_key(asin, "title_es_raw", source_hash("Unidad TM concurrente"))
+        entry = TranslationCache(cache_path).get(key)
+        disk_statuses.append(entry["translation_status"])
+        result_statuses.append(output["records"][asin]["fields"]["title_zh"]["translation_status"])
+        assert entry["source_hash"] == source_hash("Unidad TM concurrente")
+    assert set(disk_statuses) == {"success", "cached"}
+    assert set(result_statuses) == {"success", "cached"}
+    assert "pending" not in disk_statuses + result_statuses
+
+
+def test_hard_terminated_lock_releases_but_pending_claim_does_not_resend(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    asin, text = "B00000001", "Bloqueo durable"
+    seed = TranslationService(FakeProvider(), TranslationCache(cache_path))
+    key = seed._field_cache_key(asin, "title_es_raw", source_hash(text))
+    source_root = Path(__file__).parents[1] / "src"
+    script = "\n".join((
+        "import sys, time",
+        "sys.path.insert(0, %r)" % str(source_root),
+        "from amazon_es_bestseller.translation.cache import TranslationCache",
+        "cache = TranslationCache(sys.argv[1])",
+        "claimed, _ = cache.claim(sys.argv[2], {'asin': 'B00000001', 'field': 'title_es_raw', 'target_field': 'title_zh', 'source_text': 'Bloqueo durable', 'source_hash': sys.argv[3], 'candidate_text': '', 'translated_text': '', 'translation_status': 'pending', 'qa_status': 'review_required', 'last_error': 'child-hold'})",
+        "assert claimed",
+        "with cache._claim_lock():",
+        "    print('LOCKED', flush=True)",
+        "    time.sleep(60)",
+    ))
+    child = subprocess.Popen([sys.executable, "-c", script, str(cache_path), key, source_hash(text)],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert child.stdout is not None
+        assert child.stdout.readline().strip() == "LOCKED"
+        contender = TranslationCache(cache_path)
+        with pytest.raises(TimeoutError, match="claim lock timed out"):
+            with contender._claim_lock(timeout_seconds=0.1):
+                pass
+        assert child.poll() is None
+        child.terminate()
+        assert child.wait(timeout=5) is not None
+        with TranslationCache(cache_path)._claim_lock(timeout_seconds=0.5):
+            pass
+        provider = FakeProvider()
+        resumed = TranslationService(provider, TranslationCache(cache_path)).translate_records([
+            {"asin": asin, "title_es_raw": text},
+        ])
+        assert provider.calls == []
+        assert resumed["records"][asin]["fields"]["title_zh"]["translation_status"] == "pending"
+        assert cache_path.with_name(cache_path.name + ".claim.lock").exists()
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
 
 
 def test_structured_first_item_settles_before_second_item_crash(tmp_path):

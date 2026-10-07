@@ -1,3 +1,5 @@
+import pytest
+
 from amazon_es_bestseller.translation.cache import TranslationCache
 
 
@@ -28,6 +30,22 @@ def test_derived_keys_bind_dictionary_content_and_structured_schema(tmp_path):
     changed_structured_schema = cache.key("B00000001", "product_details", "source", "fake", "model",
                                           "translation-v2", "v1", "202610", "dictionary-a", "structured-v3")
     assert len({base, changed_dictionary, changed_structured_schema}) == 3
+
+
+def test_claim_save_failure_releases_advisory_lock_without_removing_lock_file(tmp_path, monkeypatch):
+    path = tmp_path / "cache.json"
+    cache = TranslationCache(path)
+
+    def fail_save():
+        raise OSError("synthetic cache write failure")
+
+    monkeypatch.setattr(cache, "save", fail_save)
+    with pytest.raises(OSError, match="synthetic cache write failure"):
+        cache.claim("field-key", {"translation_status": "pending"})
+    lock_path = path.with_name(path.name + ".claim.lock")
+    assert lock_path.exists()
+    with TranslationCache(path)._claim_lock(timeout_seconds=0.1):
+        pass
 
 
 def test_translation_memory_roundtrip_is_not_asin_scoped(tmp_path):
