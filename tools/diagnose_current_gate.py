@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 import traceback
@@ -42,6 +43,7 @@ def main() -> int:
         stage(f"LOAD_{name}_DONE", item_count=len(value) if isinstance(value, list) else None)
         return value
 
+    exit_code = 1
     try:
         stage("PYTHON_READY", version=sys.version.split()[0])
         candidates = load("CANDIDATES", args.production_root / "candidate_manifest.json")
@@ -58,15 +60,29 @@ def main() -> int:
             candidates, details, rankings, parent, scope, expected_input_hashes=hashes,
             historical_source_audit=history, cache_root=args.production_root, progress=stage,
         )
+        try:
+            git_sha = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            git_sha = "UNKNOWN"
+        result["code_versions"] = {
+            "git_sha": git_sha,
+            "python": sys.version.split()[0],
+            "current_gate_schema_version": result.get("schema_version"),
+            "source_field_audit": "ranking-matrix-v1",
+        }
         stage("CURRENT_GATE_BUILD_DONE", status=result["status"], gate=result["current_source_gate"]["status"])
         stage("WRITE_START")
         write_spanish_source_candidate(args.output_dir / "candidate", result)
         stage("WRITE_DONE")
-        return 0
+        exit_code = 0
     except BaseException as exc:
         stage("EXCEPTION", type=type(exc).__name__, message=str(exc))
         traceback.print_exc()
-        return 1
+    finally:
+        stage("PROCESS_EXIT", exit_code=exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":

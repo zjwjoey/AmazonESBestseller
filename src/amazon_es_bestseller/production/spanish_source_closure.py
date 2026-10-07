@@ -543,6 +543,7 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
         "dataset_canonical_hash": _hash(records),
         "frozen_candidate_manifest_canonical_hash": result.get("candidate_manifest_hash"),
         "binding_scope": result.get("binding_scope"), "source_gate": result.get("source_gate"),
+        "code_versions": result.get("code_versions") or {},
         "artifacts": {name: _artifact_hash(directory / name) for name in ("spanish_master_5480.json", "spanish_master_5480.csv", "audit.json", "audit.md", "source_review_queue.json", "historical_source_audit.json")},
     }
     (directory / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -702,7 +703,7 @@ def build_current_source_gate_candidate(
             if _text(record.get("parent_asin")):
                 raise ValueError(f"unconfirmed self-parent was retained for {asin}")
     emit("CURRENT_AUDIT_START", records=len(records))
-    current_audit = audit_source_fields(records, progress=emit)
+    current_audit = audit_source_fields(records, ranking_matrix=ranking_rows, progress=emit)
     emit("CURRENT_AUDIT_DONE", issues=len(current_audit.get("issues") or []))
     current_gate = evaluate_source_gate(current_audit)
     rank_diagnostic = rank_matrix_diagnostics(ranking_rows, exact_scope=expected_scope, owner_scope=owner_scope)

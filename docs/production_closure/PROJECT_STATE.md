@@ -301,3 +301,17 @@ to use for review.
 - Targeted fixtures and read-only validation against the three r3 records
   passed.  No current-gate rerun, promotion, translation, raw source edit, or
   change to the remaining review backlog occurred.
+
+## Current-gate rank and unit authority follow-up
+
+- Source-field rank-gap checks now accept the complete ranking matrix as their
+  authority.  The owner subset no longer manufactures gaps for ranks occupied
+  by out-of-exact-scope ASINs; real gaps in the complete matrix remain REVIEW.
+- Unit parsing gives complete Spanish volume/flow expressions precedence,
+  including cubic centimetres, cubic metres per hour/minute, and litres per
+  minute.  Generic capacity measurements and tension-as-weight without
+  hand-gripper evidence remain REVIEW; explicit voltage/power conflicts remain
+  reviewable source-semantic conflicts.
+- The one-shot current-gate logger records code versions (including Git SHA)
+  in the new immutable manifest and always appends a final process-exit record
+  to the persisted stage log.

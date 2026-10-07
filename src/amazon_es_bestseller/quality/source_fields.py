@@ -323,6 +323,26 @@ def _semantic_text(value) -> str:
     return unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode().casefold()
 
 
+def _compound_units(value) -> set[str]:
+    text = _semantic_text(value)
+    units = set()
+    if re.search(r"\bmetros?\s+cubicos?\s+por\s+horas?\b", text):
+        units.add("m3/h")
+    if re.search(r"\bmetros?\s+cubicos?\s+por\s+minutos?\b", text):
+        units.add("m3/min")
+    if re.search(r"\blitros?\s+por\s+minutos?\b", text):
+        units.add("l/min")
+    if re.search(r"\b\d+(?:[.,]\d+)?\s*cm(?:3|\u00b3)\b", str(value or ""), re.I):
+        units.add("ml")
+    return units
+
+
+def _without_compound_units(value) -> str:
+    text = _semantic_text(value)
+    text = re.sub(r"\bmetros?\s+cubicos?\s+por\s+(?:horas?|minutos?)\b", "", text)
+    return re.sub(r"\blitros?\s+por\s+minutos?\b", "", text)
+
+
 def _structured_attribute_pairs(row) -> list[tuple[str, str, str]]:
     pairs = []
     for attr in row.get("attributes") or []:
@@ -383,11 +403,14 @@ def _unit_evidence(row, label, value, field, *, kind, corroborated_by="", corrob
 
 def _measure_signatures(value) -> set[str]:
     signatures = set()
-    for match in _UNIT.finditer(str(value or "")):
+    text = _without_compound_units(value)
+    for match in _UNIT.finditer(text):
         unit = _UNIT_CANONICAL.get(_semantic_text(match.group("unit")), _semantic_text(match.group("unit")))
         number = match.group(0)[:match.group(0).lower().rfind(match.group("unit").lower())].strip().replace(",", ".")
         if number:
             signatures.add(f"{number}{unit}")
+    for unit in _compound_units(value):
+        signatures.add(unit)
     return signatures
 
 
@@ -416,11 +439,16 @@ def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict |
     if re.search(r"\bvoltaje(?:\s+maximo)?\b", normalized) and units & {"w"}:
         return set(), "voltage label conflicts with power value", evidence("label_value_conflict"), None
     if re.search(r"\b(?:caudal|flujo)\s+de\s+aire\b|\bairflow\b", normalized):
-        return {"m3/h"}, None, evidence("airflow"), None
+        return {"m3/h", "m3/min", "l/min"}, None, evidence("airflow"), None
     if re.search(r"\bcapacidad\s+de\s+perfor", normalized):
         return {"mm", "cm", "m"}, None, evidence("drill_capacity"), None
-    if re.search(r"\btension\b", normalized) and re.search(r"\b(?:mano|grip|hand\s*gripper|ejercitador)\b", _semantic_text(row.get("title_es_raw"))):
-        return {"g", "kg"}, None, evidence("grip_resistance"), None
+    if re.search(r"\btension\b", normalized):
+        if units & {"v"}:
+            return {"v"}, None, evidence("voltage"), None
+        if units & {"g", "kg"}:
+            if re.search(r"\b(?:mano|grip|hand\s*gripper|ejercitador)\b", _semantic_text(row.get("title_es_raw"))):
+                return {"g", "kg"}, None, evidence("grip_resistance"), None
+            return set(), "tension weight requires hand-gripper domain evidence", evidence("tension_weight_unresolved"), None
     if re.search(r"\bcantidad\s+de\s+pilas\b", normalized) and units & {"v"}:
         return {"v"}, None, evidence("battery_count_and_voltage"), None
     if re.search(r"\btamano\b", normalized):
@@ -449,13 +477,17 @@ def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict |
                         "unit-count label measure corroborated by product evidence")
             return (set(), "unit-count label contains a packaging amount rather than an unambiguous count",
                     evidence("unit_count_unresolved"), None)
+    generic_capacity = bool(re.search(r"\bcapacidad(?:\s+de\s+salida)?\b", normalized))
+    specific_capacity = bool(re.search(r"\bcapacidad\s+de\s+(?:carga|peso|la\s+bateria|perfor)", normalized))
+    if generic_capacity and not specific_capacity and units - {"ml", "l"}:
+        return set(), "generic capacity measure lacks domain evidence", evidence("generic_capacity_unresolved"), None
     return _allowed_units_for_label(label), None, None, None
 
 
 def _units_for_labeled_value(label, value) -> set[str]:
-    units = set()
+    units = _compound_units(value)
     dimension_label = bool(re.search(r"\b(?:dimension|dimensiones|tamano)\b", _semantic_text(label)))
-    text = str(value or "")
+    text = _without_compound_units(value)
     for match in _UNIT.finditer(text):
         raw_unit = _semantic_text(match.group("unit"))
         # Spanish Amazon dimensions use ``l.`` / ``an.`` for largo/ancho.
@@ -650,13 +682,16 @@ def _sf_semantics(row, asin, issues, fields):
                 _sf_issue(issues, fields, asin, "MISPLACED", REVIEW_REQUIRED, "P1", "malformed JSON text", "specification")
 
 
-def _sf_rankings(rows, issues, fields):
+def _ranking_context_rows(row):
+    contexts = row.get("ranking_contexts") or ([row] if row.get("ranking_source_url") else [])
+    return contexts if isinstance(contexts, list) else []
+
+
+def _sf_rankings(rows, issues, fields, *, ranking_matrix=None):
     slots, slot_count, pages = defaultdict(set), defaultdict(int), defaultdict(set)
     for row in rows:
         asin = normalize_asin(row.get("asin"))
-        contexts = row.get("ranking_contexts") or ([row] if row.get("ranking_source_url") else [])
-        if not isinstance(contexts, list):
-            contexts = []
+        contexts = _ranking_context_rows(row)
         for ctx in contexts:
             if not isinstance(ctx, Mapping):
                 _sf_issue(issues, fields, asin, "RANKING_CONTEXT_INVALID", BLOCKED, "P1", "ranking context must be mapping", "ranking_contexts")
@@ -685,7 +720,26 @@ def _sf_rankings(rows, issues, fields):
         if len(asins) > 1 or slot_count[(source, page, rank)] > 1:
             for asin in asins:
                 _sf_issue(issues, fields, asin, "DUPLICATE_RANK_SLOT", BLOCKED, "P1", "multiple ASINs occupy rank slot", "bestseller_rank", {"source": source, "page": page, "rank": rank})
-    for (source, page), ranks in pages.items():
+    # Gap authority must be the complete reviewed ranking matrix.  The current
+    # owner scope is a subset, so treating its absent ASINs as missing ranks
+    # would manufacture a gap.  Per-record context checks above remain bound
+    # to the current records.
+    matrix_pages = defaultdict(set)
+    for row in (ranking_matrix if ranking_matrix is not None else rows):
+        if not isinstance(row, Mapping):
+            continue
+        for ctx in _ranking_context_rows(row):
+            if not isinstance(ctx, Mapping):
+                continue
+            try:
+                page = int(ctx.get("ranking_page_number", ctx.get("page_number")))
+                rank = int(ctx.get("bestseller_rank", ctx.get("ranking_rank")))
+            except (TypeError, ValueError):
+                continue
+            source = str(ctx.get("ranking_source_url") or ctx.get("source_url") or "")
+            if source and page >= 1 and rank >= 1:
+                matrix_pages[(source, page)].add(rank)
+    for (source, page), ranks in matrix_pages.items():
         if len(ranks) > 2:
             missing = sorted(set(range(min(ranks), max(ranks) + 1)) - ranks)
             if missing:
@@ -712,7 +766,7 @@ def _sf_record_binding(row: Mapping) -> dict:
     }
 
 
-def audit_source_fields(products: Iterable[Mapping], *, progress=None) -> dict:
+def audit_source_fields(products: Iterable[Mapping], *, ranking_matrix: Iterable[Mapping] | None = None, progress=None) -> dict:
     """Perform the production source audit without network access or mutation."""
     emit = progress or (lambda *_args, **_kwargs: None)
     # The audit does not mutate source rows; keep only one shallow container.
@@ -748,7 +802,8 @@ def audit_source_fields(products: Iterable[Mapping], *, progress=None) -> dict:
         material = (row.get("product_url"), row.get("final_url"), row.get("ranking_contexts"), row.get("title_es_raw"), row.get("current_price"), row.get("rating"))
         if not any(not _sf_empty(value) for value in material):
             _sf_issue(issues, fields, asin, "EMPTY_SOURCE_INPUT", REVIEW_REQUIRED, "P1", "ASIN-only record has no source evidence", "asin")
-    _sf_rankings(rows, issues, fields)
+    matrix_rows = [row for row in (ranking_matrix or ()) if isinstance(row, Mapping)] if ranking_matrix is not None else None
+    _sf_rankings(rows, issues, fields, ranking_matrix=matrix_rows)
     per_asin = defaultdict(list)
     for item in issues:
         if item["asin"]:

@@ -102,6 +102,54 @@ def test_source_audit_allows_top_level_ranking_path_without_browse_node():
     assert "RANK_CATEGORY_EVIDENCE_MISSING" not in {item["issue_code"] for item in report["issues"]}
 
 
+def test_source_audit_uses_full_ranking_matrix_for_subset_gap_authority():
+    def ranked(asin, rank):
+        context = {
+            "ranking_source_url": "https://www.amazon.es/gp/bestsellers/test",
+            "ranking_page_number": 1, "bestseller_rank": rank,
+            "ranking_source_category_path": "Hogar",
+        }
+        return _row(asin=asin, ranking_contexts=[context])
+
+    subset = [ranked("B000000101", 1), ranked("B000000103", 3), ranked("B000000104", 4)]
+    full_matrix = [
+        {"asin": "B000000101", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/test", "ranking_page_number": 1, "bestseller_rank": 1},
+        {"asin": "B000000102", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/test", "ranking_page_number": 1, "bestseller_rank": 2},
+        {"asin": "B000000103", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/test", "ranking_page_number": 1, "bestseller_rank": 3},
+        {"asin": "B000000104", "ranking_source_url": "https://www.amazon.es/gp/bestsellers/test", "ranking_page_number": 1, "bestseller_rank": 4},
+    ]
+    subset_only = audit_source_fields(subset)
+    matrix_bound = audit_source_fields(subset, ranking_matrix=full_matrix)
+    matrix_with_real_gap = audit_source_fields(subset, ranking_matrix=full_matrix[:1] + full_matrix[2:])
+    assert "RANK_GAP" in {item["issue_code"] for item in subset_only["issues"]}
+    assert "RANK_GAP" not in {item["issue_code"] for item in matrix_bound["issues"]}
+    assert "RANK_GAP" in {item["issue_code"] for item in matrix_with_real_gap["issues"]}
+
+
+def test_source_audit_recognizes_spanish_compound_volume_and_flow_units():
+    report = audit_source_fields([_row(attributes=[
+        {"label_raw": "Capacidad", "value_raw": "1426.56 cm³"},
+        {"label_raw": "Caudal de aire", "value_raw": "2 metros cúbicos por hora"},
+        {"label_raw": "Caudal de aire", "value_raw": "1 metros cúbicos por minuto"},
+        {"label_raw": "Caudal de aire", "value_raw": "12 litros por minuto"},
+    ])])
+    assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_reviews_generic_capacity_or_unproven_tension_weight_but_keeps_voltage_conflict():
+    report = audit_source_fields([_row(attributes=[
+        {"label_raw": "Capacidad", "value_raw": "15 kg"},
+        {"label_raw": "Capacidad de salida", "value_raw": "20 cm"},
+        {"label_raw": "Tensión", "value_raw": "60 kg"},
+        {"label_raw": "Tensión", "value_raw": "12 V"},
+        {"label_raw": "Voltaje", "value_raw": "30 W"},
+    ])])
+    issues = report["issues"]
+    assert len([item for item in issues if item["issue_code"] == "UNIT_SEMANTICS_AMBIGUOUS"]) == 3
+    assert len([item for item in issues if item["issue_code"] == "SOURCE_SEMANTIC_CONFLICT"]) == 1
+    assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in issues}
+
+
 def test_source_audit_uses_specific_unit_labels_and_reviews_ambiguous_size_or_count():
     report = audit_source_fields([_row(attributes=[
         {"label_raw": "Capacidad de carga", "value_raw": "150 Kg"},
