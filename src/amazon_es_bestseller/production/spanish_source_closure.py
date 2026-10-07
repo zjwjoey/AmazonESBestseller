@@ -31,6 +31,7 @@ _MOJIBAKE_RE = re.compile(r"\ufffd|(?:Ã.|Â.)")
 _NON_BRAND_BYLINE_RE = re.compile(
     r"(?:^edici[oó]n\s+en\b|^de\b.*\b(?:autor|redactor|traductor|formato)\s*:|\bformato\s*:)", re.I
 )
+_RANKING_CATEGORY_KEYS = ("category_l1", "category_l2", "category_l3", "leaf_category", "browse_node_id")
 
 
 def _canonical(value: Any) -> str:
@@ -190,6 +191,29 @@ def _confirmed_self_parent(detail: Mapping, asin: str, cache_root: Path | None) 
     return path.is_file() and _file_sha256(path) == expected_hash.casefold()
 
 
+def _ranking_category_provenance(primary: Mapping) -> dict:
+    """Bind canonical categories to the selected ranking context, not detail inference."""
+    category_path = _text(primary.get("ranking_source_category_path"))
+    return {
+        "source": "ranking_context",
+        "ranking_context_hash": _hash(dict(primary)),
+        "ranking_source_url": _text(primary.get("ranking_source_url")),
+        "ranking_page_number": primary.get("ranking_page_number"),
+        "browse_node_id": _text(primary.get("browse_node_id")),
+        "ranking_source_category_path": category_path,
+        "levels": {key: primary.get(key) for key in _RANKING_CATEGORY_KEYS[:-1]},
+        "leaf_category": primary.get("leaf_category"),
+    }
+
+
+def _restore_ranking_categories(record: dict, primary: Mapping) -> None:
+    """Undo normalizer breadcrumb enrichment for this ranking-bound candidate."""
+    for key in _RANKING_CATEGORY_KEYS:
+        record[key] = primary.get(key)
+    record["research_category"] = primary.get("research_category")
+    record["category_provenance"] = _ranking_category_provenance(primary)
+
+
 def _merged_records(candidate_manifest: list[Mapping], details: list[Mapping], rankings: list[Mapping], scope: set[str]) -> list[dict]:
     selected_candidates = [dict(record) for record in candidate_manifest if normalize_asin(record.get("asin")) in scope]
     selected_details = [dict(record) for record in details if normalize_asin(record.get("asin")) in scope]
@@ -266,6 +290,10 @@ def build_spanish_source_candidate(
         # remove display-language overlays: this artifact is Spanish source
         # evidence, not a translation output.
         record = _spanish_only(normalize_product(deepcopy(source)))
+        # ``normalize_product`` may enrich blank ranking L3/leaf values from a
+        # product-detail breadcrumb.  That is useful for a display helper but
+        # is not permitted to rewrite this source candidate's ranking taxonomy.
+        _restore_ranking_categories(record, primary_candidates[asin])
         record["attributes"] = _attrs(detail)
         record["feature_bullets_raw"] = deepcopy(detail.get("feature_bullets_raw") or [])
         record["detail_bullets_raw"] = deepcopy(detail.get("detail_bullets_raw") or [])

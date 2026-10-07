@@ -364,6 +364,23 @@ def _units_for_labeled_value(label, value) -> set[str]:
     return units
 
 
+def _category_leaf_supported(provenance, values) -> bool:
+    """Require ranking-path evidence before accepting a leaf equal to L3."""
+    if not isinstance(provenance, Mapping) or str(provenance.get("source") or "") != "ranking_context":
+        return False
+    l1, l2, l3, leaf = values
+    if not l3 or l3 != leaf or provenance.get("leaf_category") != leaf:
+        return False
+    levels = provenance.get("levels")
+    if not isinstance(levels, Mapping):
+        return False
+    if levels.get("category_l1") != l1 or levels.get("category_l2") != l2 or levels.get("category_l3") != l3:
+        return False
+    path = str(provenance.get("ranking_source_category_path") or "")
+    parts = [part.strip() for part in path.split(">") if part.strip()]
+    return len(parts) >= 3 and parts[-1] == leaf
+
+
 def _sf_semantics(row, asin, issues, fields):
     for field in ("title_es_raw", "brand", "specification", "specification_es", "product_details_es", "feature_bullets_es"):
         _sf_absence(row, asin, field, issues, fields)
@@ -381,9 +398,16 @@ def _sf_semantics(row, asin, issues, fields):
     for field in ("category_l1", "category_l2", "category_l3", "leaf_category"):
         _sf_absence(row, asin, field, issues, fields)
     values = [str(row.get(field) or "").strip() for field in ("category_l1", "category_l2", "category_l3", "leaf_category")]
-    if any(values) and not row.get("category_provenance"):
+    provenance = row.get("category_provenance")
+    if any(values) and not provenance:
         _sf_issue(issues, fields, asin, "CATEGORY_PROVENANCE_MISSING", REVIEW_REQUIRED, "P2", "category lacks Amazon provenance", "category_l1")
-    if any(left and left == right for left, right in zip(values, values[1:])):
+    l1, l2, l3, leaf = values
+    copied_hierarchy = bool((l1 and l1 == l2) or (l2 and l2 == l3))
+    # A three-segment Amazon path legitimately has ``leaf == L3``.  Accept it
+    # only when the exact ranking category path/provenance says the same;
+    # otherwise it remains a likely fill-down error.
+    leaf_l3_without_evidence = bool(l3 and l3 == leaf and not _category_leaf_supported(provenance, values))
+    if copied_hierarchy or leaf_l3_without_evidence:
         _sf_issue(issues, fields, asin, "CATEGORY_COPIED", MAPPING_MISSED, "P1", "category levels must not be copied to fill blanks", "category_l2")
     if any(re.search(r"(?:€|\bEUR\b|\d+[,.]\d{2})", value, re.I) for value in values):
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "category contains price text", "category_l1")

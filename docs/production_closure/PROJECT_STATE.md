@@ -136,3 +136,23 @@ insufficient.
 The earlier non-r2 closure directory is retained as an immutable, superseded
 failed evidence attempt: its brand rule was too broad and it is not the output
 to use for review.
+
+## Category/provenance mapping correction (no full r3 run yet)
+
+- The r2 builder allowed `normalize_product` to enrich blank ranking L3/leaf
+  values from `detail_category_trail`, and omitted `category_provenance`.  This
+  inflated r2 diagnostic `CATEGORY_COPIED` findings; it did not establish a
+  new reviewed taxonomy.
+- The builder now restores frozen selected-ranking `category_l1/l2/l3/leaf`
+  and `browse_node_id` after normalization, retains the detail breadcrumb as
+  raw evidence only, and attaches a hash-bound ranking-context provenance map.
+  `research_category` remains ranking/task evidence.
+- Source-field audit now accepts `leaf_category == category_l3` only if a
+  matching ranking category path and provenance map support it. It continues
+  to block L1=L2 or L2=L3 fill-downs and unsupported L3=leaf duplicates.
+- In-memory diagnosis only (no full r3 artifact): all `5480` frozen records
+  have ranking URL provenance; `464` have a provenance-supported L3=leaf; the
+  corrected copied-hierarchy predicate finds `0` records.
+- The proposal artifact was not missing: it remains read-only at
+  `F:\AmazonESBestseller\.worktrees\production-v1-complete\outputs\amazon_es_bestseller_5500_202610_fresh2\source_audit_5480\category_l3_backfill_proposals.json`.
+  It is `REVIEWABLE_NOT_APPLIED` and is not consumed by this change.

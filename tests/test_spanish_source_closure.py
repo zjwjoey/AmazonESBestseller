@@ -158,3 +158,25 @@ def test_candidate_rejects_wrong_hash_or_identity_scope():
         assert "candidate manifest hash" in str(exc)
     else:  # pragma: no cover - makes failed validation explicit
         raise AssertionError("expected candidate hash validation")
+
+
+def test_candidate_restores_frozen_ranking_categories_instead_of_detail_breadcrumb():
+    asin = "B000000007"
+    ranking = _ranking(
+        asin,
+        category_l1="Hogar", category_l2="Cocina", category_l3=None,
+        leaf_category="Cocina", browse_node_id="123",
+        ranking_source_category_path="Hogar > Cocina",
+    )
+    detail = _detail(asin, detail_category_trail=["Hogar", "Cocina", "Botes", "Botes herméticos"])
+    result = build_spanish_source_candidate(
+        [ranking], [detail], [ranking], _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash([ranking]),
+    )
+
+    record = result["records"][0]
+    assert record["category_l3"] is None
+    assert record["leaf_category"] == "Cocina"
+    assert record["detail_category_trail"] == ["Hogar", "Cocina", "Botes", "Botes herméticos"]
+    assert record["category_provenance"]["source"] == "ranking_context"
+    assert record["category_provenance"]["ranking_source_category_path"] == "Hogar > Cocina"

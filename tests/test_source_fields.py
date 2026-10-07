@@ -52,3 +52,20 @@ def test_source_audit_checks_compact_specification_even_when_attributes_exist():
         specification="Potencia: 10 ml",
     )])
     assert "SPEC_UNIT_TYPE_MISMATCH" in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_accepts_leaf_equal_l3_only_with_matching_ranking_provenance():
+    supported = _row(
+        category_l1="Hogar", category_l2="Cocina", category_l3="Botes", leaf_category="Botes",
+        category_provenance={
+            "source": "ranking_context", "ranking_source_category_path": "Hogar > Cocina > Botes",
+            "levels": {"category_l1": "Hogar", "category_l2": "Cocina", "category_l3": "Botes"},
+            "leaf_category": "Botes",
+        },
+    )
+    missing_provenance = dict(supported, category_provenance=None)
+    forged_duplicate = dict(supported, category_l2="Botes")
+    assert "CATEGORY_COPIED" not in {item["issue_code"] for item in audit_source_fields([supported])["issues"]}
+    missing_codes = {item["issue_code"] for item in audit_source_fields([missing_provenance])["issues"]}
+    assert {"CATEGORY_PROVENANCE_MISSING", "CATEGORY_COPIED"} <= missing_codes
+    assert "CATEGORY_COPIED" in {item["issue_code"] for item in audit_source_fields([forged_duplicate])["issues"]}
