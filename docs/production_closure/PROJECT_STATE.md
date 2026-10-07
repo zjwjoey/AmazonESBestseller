@@ -4,10 +4,9 @@ Run ID: `20261007T000000Z_price_self_parent`
 
 ## Scope
 
-This isolated development worktree contains only the canonical-normalization
-closure for price chaining and self-parent identity handling.  It does not
-change production outputs, raw evidence, candidate data, Excel export,
-translation, category mapping, audits, or CLI behavior.
+This isolated development worktree contains narrowly scoped closure patches.
+It does not change production outputs, raw evidence, candidate data, Excel
+export, provider behavior, brand derivation, category mapping, or CLI behavior.
 
 ## Base and workspace
 
@@ -55,3 +54,36 @@ Using the project test interpreter from the existing production worktree:
 - `tests/test_price.py` — passed, 6 tests
 
 No full test suite was run for this narrowly scoped patch.
+
+## Follow-on HTML and unit-audit patch
+
+- Fixed tag-aware handling in translation pre-clean and source-field junk
+  detection: escaped product text and comparison thresholds such as
+  `&lt; MULTIFUNCIÓN &gt;`, `<50% RH`, and `>70% RH` are retained, while real
+  HTML tags such as `<script>` remain detected and removed from derived text.
+- Fixed unit-type audit to inspect structured `attributes` / `details_json`
+  label-value pairs first. Legacy compact specifications are only inspected as
+  explicit label-value segments; a flattened detail blob no longer lets
+  `Potenciador` impersonate the `Potencia` label, and dimension abbreviations
+  such as `14,6l.` are not treated as litres.
+- Locked the existing display behavior that keeps detail-bullet BSR raw
+  evidence while excluding the ranking-specific label from derived product
+  details. No rank value is inferred from a number in raw evidence.
+- Focused verification: `tests/test_translation_preclean.py`,
+  `tests/test_source_fields.py`, `tests/test_source_fields_production.py`, and
+  `tests/test_full_detail_render.py` passed (`44` tests). No full source audit
+  or translation run was performed.
+
+## Authorized next task — optional-field damage isolation
+
+The user approved a separate, later builder task to retain damaged raw source
+but isolate its corresponding optional canonical field as empty with
+`EVIDENCE_UNAVAILABLE`; it must not mark those fields PASS or suppress other
+blockers:
+
+- `B015YK51H2`: damaged `Marca=Bons�i`; no independently intact brand evidence.
+- `B017WK9SSK`: damaged manufacturer `TulipÃ¡n negro`; the intact `Marca` must
+  not be substituted as manufacturer.
+- `B08BYLMK7C`: damaged speaker-type values `Port�til`; no replacement source.
+
+This isolation has not been implemented in the current patch.

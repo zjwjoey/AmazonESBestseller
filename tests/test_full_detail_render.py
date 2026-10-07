@@ -101,6 +101,15 @@ def test_detail_bullets_can_supply_structured_details_when_tables_are_absent():
     assert "Opiniones de los clientes" not in zh
 
 
+def test_detail_bullet_bsr_stays_raw_but_is_excluded_from_display_details():
+    raw_bsr = "Clasificación en los más vendidos de Amazon: nº6 en Belleza"
+    attrs = detail_bullets_to_attributes([raw_bsr, "Fabricante: Philips"])
+    assert any(row["label_raw"] == "Clasificación en los más vendidos de Amazon" for row in attrs)
+    displayed = render_details_es(attrs)
+    assert raw_bsr not in displayed
+    assert "Fabricante: Philips" in displayed
+
+
 def test_render_details_zh_merges_mapped_duplicates():
     """两个西语标签映射同一中文标签且值相同 → 中文层去重；西语原文层各保留。"""
     attrs = [

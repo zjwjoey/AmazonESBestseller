@@ -44,6 +44,18 @@ def test_clean_text_does_not_change_normal_source():
     assert result["clean_text"] == result["source_text"]
 
 
+def test_clean_text_preserves_angle_bracket_product_text_but_removes_real_tags():
+    title = "&lt; MULTIFUNCIÓN PARA EL HOGAR &gt;"
+    title_result = clean_text(title, field="title_es_raw")
+    humidity_result = clean_text("<50% RH / >70% RH", field="feature_bullet")
+    tag_result = clean_text("Antes <script>alert(1)</script> después", field="feature_bullet")
+
+    assert "< MULTIFUNCIÓN PARA EL HOGAR >" in title_result["clean_text"]
+    assert humidity_result["clean_text"] == "<50% RH / >70% RH"
+    assert "script" not in tag_result["clean_text"]
+    assert "alert(1)" in tag_result["clean_text"]
+
+
 def test_description_metadata_is_flagged_not_repaired():
     result = audit_records([{
         "asin": "B00000003",

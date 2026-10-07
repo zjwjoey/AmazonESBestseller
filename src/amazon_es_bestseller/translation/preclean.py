@@ -38,7 +38,12 @@ FIELD_ALIASES = {
 }
 AUDIT_FIELDS = tuple(FIELD_ALIASES)
 ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]")
-HTML_TAG_RE = re.compile(r"<[^>]+>")
+# A product title can legitimately contain comparison/threshold notation such
+# as ``<50% RH`` or escaped ``&lt; MULTIFUNCIÓN &gt;``. Only a syntactically
+# valid tag begins immediately with a tag-name character after ``<``.
+HTML_TAG_RE = re.compile(
+    r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+(?:[^<>\s]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?))*\s*/?>"
+)
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 UI_RE = re.compile(r"(?:…|\.\.\.)?\s*(?:Ver\s+(?:m[aá]s|menos)|查看更多|展开|收起)\b", re.I)
 PROTECTED_TOKEN_RE = re.compile(

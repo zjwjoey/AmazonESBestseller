@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
@@ -11,7 +12,8 @@ from ..models import is_valid_asin, normalize_asin
 from .models import QualityStatus, check_result, issue
 
 
-_JUNK = re.compile(r"(?:<[^>]+>|\b(?:javascript|cookie|captcha|robot check)\b)", re.I)
+_HTML_TAG = r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+(?:[^<>\s]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?))*\s*/?>"
+_JUNK = re.compile(rf"(?:{_HTML_TAG}|\b(?:javascript|cookie|captcha|robot check)\b)", re.I)
 
 
 def _number(value: object) -> Decimal | None:
@@ -130,18 +132,30 @@ REVIEW_REQUIRED = "REVIEW_REQUIRED"
 BLOCKED = "BLOCKED"
 SOURCE_READY = "SOURCE_READY"
 
-_TEXT_JUNK = re.compile(r"(?:<[^>]+>|\b(?:javascript|cookie|captcha|robot\s*check|add to cart|selecciona|privacy|css)\b|[{}]\s*[\"'][\w-]+[\"']\s*:)", re.I)
+_TEXT_JUNK = re.compile(rf"(?:{_HTML_TAG}|\b(?:javascript|cookie|captcha|robot\s*check|add to cart|selecciona|privacy|css)\b|[{{}}]\s*[\"'][\w-]+[\"']\s*:)", re.I)
 _BAD_TEXT = re.compile(r"(?:�{2,}|Ã[\x80-\xBF]|Â[\x80-\xBF]|[\x00-\x08\x0b\x0c\x0e-\x1f])")
 _REPEATED_TEXT = re.compile(r"(.{8,}?)(?:\s*\1){2,}", re.S)
-_UNIT = re.compile(r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(ml|kg|mm|cm|pcs|pack|uds|unidades|piezas|[lgwmv])(?![a-z])", re.I)
-_SPEC_TYPES = {
-    "capacidad": {"ml", "l"}, "volumen": {"ml", "l"},
-    "dimensiones": {"mm", "cm", "m"}, "dimension": {"mm", "cm", "m"},
-    "peso": {"g", "kg"}, "weight": {"g", "kg"},
-    "potencia": {"w"}, "power": {"w"}, "voltaje": {"v"}, "tension": {"v"},
-    "cantidad": {"pcs", "pack", "uds", "unidades", "piezas"},
-    "unidades": {"pcs", "pack", "uds", "unidades", "piezas"},
-    "piezas": {"pcs", "pack", "uds", "unidades", "piezas"},
+_UNIT = re.compile(
+    r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(?P<unit>mililitros?|litros?|gramos?|"
+    r"kilogramos?|cent[ií]metros?|metros?|vatios?|voltios?|ml|kg|mm|cm|pcs|pack|uds|"
+    r"unidades|piezas|[lgwmv])(?![a-z])", re.I)
+_LABEL_UNIT_TYPES = (
+    (r"\b(?:capacidad|volumen)\b", {"ml", "l"}),
+    (r"\b(?:dimension|dimensiones|tamano)\b", {"mm", "cm", "m"}),
+    (r"\b(?:peso|weight)\b", {"g", "kg"}),
+    (r"\b(?:potencia|power)\b", {"w"}),
+    (r"\b(?:voltaje|tension)\b", {"v"}),
+    (r"\b(?:cantidad|unidades|piezas)\b", {"pcs", "pack", "uds", "unidades", "piezas"}),
+)
+_UNIT_CANONICAL = {
+    "mililitro": "ml", "mililitros": "ml", "ml": "ml",
+    "litro": "l", "litros": "l", "l": "l",
+    "gramo": "g", "gramos": "g", "g": "g",
+    "kilogramo": "kg", "kilogramos": "kg", "kg": "kg",
+    "centimetro": "cm", "centimetros": "cm", "cm": "cm",
+    "metro": "m", "metros": "m", "m": "m", "mm": "mm",
+    "vatio": "w", "vatios": "w", "w": "w",
+    "voltio": "v", "voltios": "v", "v": "v",
 }
 _BINDING_EXCLUDED = {
     "notes", "remark", "remarks", "备注", "title_zh", "specification_zh",
@@ -296,6 +310,60 @@ def _sf_values(row, asin, issues, fields):
             _sf_issue(issues, fields, asin, "DATE_INVALID", BLOCKED, "P1", "normalized date is not ISO", "date_first_available")
 
 
+def _semantic_text(value) -> str:
+    return unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode().casefold()
+
+
+def _structured_attribute_pairs(row) -> list[tuple[str, str, str]]:
+    pairs = []
+    for attr in row.get("attributes") or []:
+        if not isinstance(attr, Mapping):
+            continue
+        label = attr.get("label_raw") or attr.get("label")
+        value = attr.get("value_raw") or attr.get("value")
+        if label not in (None, "") and value not in (None, ""):
+            pairs.append((str(label), str(value), "attributes"))
+    details = row.get("details_json")
+    if isinstance(details, Mapping):
+        for label, value in details.items():
+            if label not in (None, "") and value not in (None, ""):
+                pairs.append((str(label), str(value), "details_json"))
+    return pairs
+
+
+def _labelled_text_pairs(text, field) -> list[tuple[str, str, str]]:
+    pairs = []
+    for segment in re.split(r"[/;\n]", str(text or "")):
+        if ":" not in segment and "：" not in segment:
+            continue
+        label, value = re.split(r"[:：]", segment, maxsplit=1)
+        if label.strip() and value.strip():
+            pairs.append((label.strip(), value.strip(), field))
+    return pairs
+
+
+def _allowed_units_for_label(label) -> set[str]:
+    normalized = _semantic_text(label)
+    for pattern, allowed in _LABEL_UNIT_TYPES:
+        if re.search(pattern, normalized):
+            return allowed
+    return set()
+
+
+def _units_for_labeled_value(label, value) -> set[str]:
+    units = set()
+    dimension_label = bool(re.search(r"\b(?:dimension|dimensiones|tamano)\b", _semantic_text(label)))
+    text = str(value or "")
+    for match in _UNIT.finditer(text):
+        raw_unit = _semantic_text(match.group("unit"))
+        # Spanish Amazon dimensions use ``l.`` / ``an.`` for largo/ancho.
+        # ``14,6l. x 6,7an. centímetros`` is not a 14.6 L capacity.
+        if raw_unit == "l" and dimension_label and text[match.end():].lstrip().startswith("."):
+            continue
+        units.add(_UNIT_CANONICAL.get(raw_unit, raw_unit))
+    return units
+
+
 def _sf_semantics(row, asin, issues, fields):
     for field in ("title_es_raw", "brand", "specification", "specification_es", "product_details_es", "feature_bullets_es"):
         _sf_absence(row, asin, field, issues, fields)
@@ -322,19 +390,24 @@ def _sf_semantics(row, asin, issues, fields):
     details = str(row.get("product_details_es") or "")
     if details and re.search(r"\b(?:best sellers rank|m[aá]s vendidos|ranking source url)\b", details, re.I):
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "details contain ranking/UI text", "product_details_es")
+    labelled_units = _structured_attribute_pairs(row)
+    if not labelled_units:
+        # Legacy compact specifications remain auditable, but only as explicit
+        # label/value segments. Do not infer a label from a flattened detail
+        # blob (for example, ``Potenciador`` is not ``Potencia``).
+        labelled_units = _labelled_text_pairs(spec, "specification")
+        labelled_units.extend(_labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
+                                                   "selected_variation_raw"))
+    for label, value, field in labelled_units:
+        allowed = _allowed_units_for_label(label)
+        if not allowed:
+            continue
+        units = _units_for_labeled_value(label, value)
+        if units and not units <= allowed:
+            _sf_issue(issues, fields, asin, "SPEC_UNIT_TYPE_MISMATCH", MAPPING_MISSED, "P1",
+                      f"{label} has the wrong unit type", field,
+                      {"units": sorted(units), "allowed": sorted(allowed)})
     for text in (spec, str(row.get("selected_variation_raw") or "")):
-        low = text.casefold()
-        for label, allowed in _SPEC_TYPES.items():
-            if label in low:
-                # Evaluate the value belonging to this label, not every unit
-                # in a multi-part compact specification (capacity and weight
-                # commonly appear in the same string).
-                labelled = re.findall(r"%s\s*[:：]?\s*([^/;\n]+)" % re.escape(label), low)
-                unit_text = " ".join(labelled) if labelled else low
-                units = {match.group(1).casefold() for match in _UNIT.finditer(unit_text)}
-                if units and not units <= allowed:
-                    _sf_issue(issues, fields, asin, "SPEC_UNIT_TYPE_MISMATCH", MAPPING_MISSED, "P1",
-                              f"{label} has the wrong unit type", "specification", {"units": sorted(units), "allowed": sorted(allowed)})
         if text.lstrip().startswith(("{", "[")):
             try:
                 _json.loads(text)
