@@ -140,8 +140,10 @@ _UNIT = re.compile(
     r"kilogramos?|cent[ií]metros?|metros?|vatios?|voltios?|ml|kg|mm|cm|pcs|pack|uds|"
     r"unidades|piezas|[lgwmv])(?![a-z])", re.I)
 _LABEL_UNIT_TYPES = (
+    # Specific labels must win before generic ``capacidad`` / ``peso`` words.
+    (r"\b(?:capacidad\s+(?:de\s+)?(?:carga|peso)|peso\s+maxim)\b", {"g", "kg"}),
     (r"\b(?:capacidad|volumen)\b", {"ml", "l"}),
-    (r"\b(?:dimension|dimensiones|tamano)\b", {"mm", "cm", "m"}),
+    (r"\b(?:dimension|dimensiones)\b", {"mm", "cm", "m"}),
     (r"\b(?:peso|weight)\b", {"g", "kg"}),
     (r"\b(?:potencia|power)\b", {"w"}),
     (r"\b(?:voltaje|tension)\b", {"v"}),
@@ -350,6 +352,27 @@ def _allowed_units_for_label(label) -> set[str]:
     return set()
 
 
+def _unit_policy(label, value) -> tuple[set[str], str | None]:
+    """Return a conservative label policy without turning ambiguity into PASS."""
+    normalized = _semantic_text(label)
+    units = _units_for_labeled_value(label, value)
+    if re.search(r"\btamano\b", normalized):
+        dimensional = units & {"mm", "cm", "m"}
+        # ``Tamaño`` is an Amazon option label, not proof that a number is a
+        # physical dimension.  Only an actual dimension unit lets us constrain
+        # it; ml/L/pieces alone remain reviewable rather than a false BLOCK.
+        if dimensional and not (units - dimensional):
+            return {"mm", "cm", "m"}, None
+        if units:
+            return set(), "generic Tamaño value has no unambiguous dimension semantics"
+        return set(), None
+    if re.search(r"\b(?:numero|cantidad)\s+de\s+unidades\b", normalized):
+        count_units = {"pcs", "pack", "uds", "unidades", "piezas"}
+        if units - count_units:
+            return set(), "unit-count label contains a packaging amount rather than an unambiguous count"
+    return _allowed_units_for_label(label), None
+
+
 def _units_for_labeled_value(label, value) -> set[str]:
     units = set()
     dimension_label = bool(re.search(r"\b(?:dimension|dimensiones|tamano)\b", _semantic_text(label)))
@@ -361,6 +384,21 @@ def _units_for_labeled_value(label, value) -> set[str]:
         if raw_unit == "l" and dimension_label and text[match.end():].lstrip().startswith("."):
             continue
         units.add(_UNIT_CANONICAL.get(raw_unit, raw_unit))
+    return units
+
+
+def _units_for_unit_audit(label, value) -> set[str]:
+    """Ignore an attached weight segment in an otherwise dimensional value."""
+    units = _units_for_labeled_value(label, value)
+    if not re.search(r"\b(?:dimension|dimensiones)\b", _semantic_text(label)):
+        return units
+    segments = [segment for segment in re.split(r"[;|]", str(value or "")) if segment.strip()]
+    segment_units = [_units_for_labeled_value(label, segment) for segment in segments]
+    has_dimensions = any(part & {"mm", "cm", "m"} for part in segment_units)
+    if has_dimensions:
+        for part in segment_units:
+            if part <= {"g", "kg"}:
+                units -= part
     return units
 
 
@@ -423,10 +461,14 @@ def _sf_semantics(row, asin, issues, fields):
     labelled_units.extend(_labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
                                                "selected_variation_raw"))
     for label, value, field in labelled_units:
-        allowed = _allowed_units_for_label(label)
+        allowed, review_reason = _unit_policy(label, value)
+        if review_reason:
+            _sf_issue(issues, fields, asin, "UNIT_SEMANTICS_AMBIGUOUS", REVIEW_REQUIRED, "P1",
+                      review_reason, field, {"label": label, "value": value})
+            continue
         if not allowed:
             continue
-        units = _units_for_labeled_value(label, value)
+        units = _units_for_unit_audit(label, value)
         if units and not units <= allowed:
             _sf_issue(issues, fields, asin, "SPEC_UNIT_TYPE_MISMATCH", MAPPING_MISSED, "P1",
                       f"{label} has the wrong unit type", field,

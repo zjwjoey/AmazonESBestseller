@@ -69,3 +69,27 @@ def test_source_audit_accepts_leaf_equal_l3_only_with_matching_ranking_provenanc
     missing_codes = {item["issue_code"] for item in audit_source_fields([missing_provenance])["issues"]}
     assert {"CATEGORY_PROVENANCE_MISSING", "CATEGORY_COPIED"} <= missing_codes
     assert "CATEGORY_COPIED" in {item["issue_code"] for item in audit_source_fields([forged_duplicate])["issues"]}
+
+
+def test_source_audit_uses_specific_unit_labels_and_reviews_ambiguous_size_or_count():
+    report = audit_source_fields([_row(attributes=[
+        {"label_raw": "Capacidad de carga", "value_raw": "150 Kg"},
+        {"label_raw": "Capacidad de peso máxima", "value_raw": "20 kg"},
+        {"label_raw": "Número de unidades", "value_raw": "1000.0 Gramos"},
+        {"label_raw": "Tamaño", "value_raw": "100 ml"},
+        {"label_raw": "Tamaño", "value_raw": "22 x 25 x 45 cm"},
+        {"label_raw": "Dimensiones del producto", "value_raw": "22 x 25 x 45 cm; 282 g"},
+    ])])
+    mismatches = [item for item in report["issues"] if item["issue_code"] == "SPEC_UNIT_TYPE_MISMATCH"]
+    ambiguous = [item for item in report["issues"] if item["issue_code"] == "UNIT_SEMANTICS_AMBIGUOUS"]
+    assert not mismatches
+    assert {item["evidence"]["label"] for item in ambiguous} == {"Número de unidades", "Tamaño"}
+    assert len(ambiguous) == 2
+
+
+def test_source_audit_keeps_explicit_power_and_voltage_unit_mismatches_blocking():
+    report = audit_source_fields([_row(attributes=[
+        {"label_raw": "Potencia", "value_raw": "10 ml"},
+        {"label_raw": "Voltaje", "value_raw": "2 kg"},
+    ])])
+    assert len([item for item in report["issues"] if item["issue_code"] == "SPEC_UNIT_TYPE_MISMATCH"]) == 2
