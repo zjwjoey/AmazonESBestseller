@@ -2,6 +2,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 from amazon_es_bestseller.orchestration.workflow import ProductionWorkflow
+from amazon_es_bestseller.quality.chinese import audit_field
 from amazon_es_bestseller.translation.dictionary_sync import sync_evidence
 from amazon_es_bestseller.translation.service import source_hash
 from amazon_es_bestseller.translation.structured_contract import (
@@ -11,11 +12,16 @@ from amazon_es_bestseller.translation.structured_contract import (
 
 
 def _item(asin, record_hash, item_hash):
+    qa = audit_field(asin=asin, field="product_details", source_es="Rojo", translated_zh="红色",
+                     source_hash=source_hash("Rojo"), dictionary_version="1",
+                     target_field="product_details_zh", field_type="product_details",
+                     context={"item_id": "attr-color", "position": 0, "field": "product_details"},
+                     translation_schema_version="translation-structured-input-v2")
     return {
         "asin": asin, "field": "product_details", "item_id": "attr-color", "position": 0,
         "label_raw": "Color", "label_zh": "颜色", "label_status": "PASS", "value_raw": "Rojo",
         "source_hash": item_hash, "admission": "TRANSLATION_TASK", "promotion_status": "PROMOTED",
-        "translated_text": "红色", "qa": {"status": "PASS"},
+        "translated_text": "红色", "qa": qa,
         "label_qa": {"status": "PASS"}, "translation_schema_version": "translation-structured-input-v2",
         "dictionary_version": "1", "dictionary_hash": "old-dict",
     }
@@ -92,7 +98,7 @@ def test_structured_dictionary_rerenders_one_bound_item_and_leaves_unaffected_it
     assert state == before
 
 
-def test_structured_dictionary_rejects_tampered_asin_record_item_source_or_target_binding_and_does_not_pollute_overlay():
+def test_structured_dictionary_rejects_tampered_asin_record_item_source_or_target_binding_and_blocks_matched_field():
     for tampered in ("asin", "record", "item", "source", "target"):
         state = _state()
         evidence = {"asin": "B000000001", "source_record_hash": "record-1", "item_id": "attr-color",
@@ -111,7 +117,34 @@ def test_structured_dictionary_rejects_tampered_asin_record_item_source_or_targe
         result = apply_structured_dictionary_rerender(state, _changed_manifest(evidence=[evidence]))
         assert result["status"] == "REPAIR_REQUIRED"
         assert result["updates"] == []
-        assert result["state"]["chinese_master_overlay"] == state["chinese_master_overlay"]
+        if tampered == "asin":
+            assert result["state"]["chinese_master_overlay"] == state["chinese_master_overlay"]
+        else:
+            field = result["state"]["records"][0]["fields"][0]
+            assert field["promotion_status"] == "QA_BLOCKED"
+            assert field["final_zh"] == ""
+            assert "product_details_zh" not in result["state"]["chinese_master_overlay"][0]
+
+
+def test_structured_dictionary_evidence_rejects_status_only_qa_and_cannot_promote_it():
+    state = _state()
+    for record in state["records"]:
+        record["fields"][0]["items"][0]["qa"] = {"status": "PASS"}
+    evidence, qa = build_structured_dictionary_evidence(state)
+    assert evidence == []
+    assert qa == {}
+    sync = sync_evidence(evidence, qa_results=qa, source_run_id="fixture",
+                         translation_schema_version="translation-structured-input-v2",
+                         previous={"dictionary_version": 1, "promoted_map": {}})
+    assert sync["promotions"] == []
+
+
+def test_structured_dictionary_evidence_uses_field_order_not_raw_attribute_position_for_qa_binding():
+    state = _state()
+    state["records"][0]["fields"][0]["items"][0]["position"] = 17
+    evidence, qa = build_structured_dictionary_evidence(state)
+    assert evidence[0]["asin"] == "B000000001"
+    assert qa[evidence[0]["evidence_id"]]["status"] == "PASS"
 
 
 def test_structured_dictionary_qa_failure_blocks_entire_field_and_never_requests_provider_retry():
@@ -168,6 +201,18 @@ def test_workflow_routes_structured_state_through_dictionary_sync_and_rerender_w
     assert result["structured_dictionary_rerender"] is True
     assert result["rerender"]["status"] == "READY"
     assert result["translation_state"]["formal_release"] is False
+
+
+def test_structured_chinese_qa_uses_per_field_effective_dictionary_version_after_rerender(tmp_path):
+    state = _state()
+    evidence = [{"asin": "B000000001", "source_record_hash": "record-1", "item_id": "attr-color",
+                 "affected_field": "product_details", "target_field": "product_details_zh",
+                 "item_source_hash": "item-1", "source_hash": source_hash("Rojo")}]
+    rerendered = apply_structured_dictionary_rerender(state, _changed_manifest(evidence=evidence))["state"]
+    workflow = ProductionWorkflow(SimpleNamespace(task_id="structured-version", history_dir=tmp_path / "history", translation={}),
+                                  tmp_path / "run", run_id="structured-version")
+    rows = workflow._chinese_qa({}, rerendered)
+    assert {row["asin"]: row["dictionary_version"] for row in rows} == {"B000000001": "2", "B000000002": "1"}
 
 
 def test_workflow_structured_dictionary_noop_is_ready_and_never_calls_provider(tmp_path):

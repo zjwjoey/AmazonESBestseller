@@ -13,7 +13,7 @@ from typing import Any, Iterable, Mapping
 
 from .dictionary_service import is_identity_attribute
 from .preclean import clean_text
-from .production_contract import canonical_source_field, target_field_for
+from .production_contract import canonical_source_field, target_field_for, translation_candidate_hash
 from .service import source_hash
 from ..production.spanish_master import verify_artifact_hash
 from ..quality.source_gate import canonical_audit_hash, verify_source_gate
@@ -618,8 +618,32 @@ def build_structured_production_overlay(
 
 def build_structured_dictionary_evidence(state: Mapping) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """Expose only current PASS structured-detail facts to DictionarySync."""
-    from ..quality.chinese import canonical_qa_row
+    from ..quality.chinese import audit_field, canonical_qa_row
     from .dictionary_sync import normalize_context
+
+    def bound_item_qa(qa: Any, *, asin: str, item: Mapping, item_position: int, source: str, target: str,
+                      target_field: str, dictionary_version: str, schema_version: str) -> dict[str, Any] | None:
+        """Accept only the original, fully-bound QA decision for this item."""
+        if not isinstance(qa, Mapping) or not qa.get("qa_row_version"):
+            return None
+        row = canonical_qa_row(qa)
+        context = row.get("context") if isinstance(row.get("context"), Mapping) else {}
+        expected_hash = source_hash(source)
+        if (str(row.get("status") or "") != "PASS"
+                or str(row.get("asin") or "").upper() != asin
+                or str(row.get("field") or "") != "product_details"
+                or str(row.get("target_field") or "") != target_field
+                or str(row.get("source_text") or "") != source
+                or str(row.get("source_hash") or "") != expected_hash
+                or str(row.get("translated_text") or "") != target
+                or str(row.get("dictionary_version") or "") != dictionary_version
+                or str(row.get("translation_schema_version") or "") != schema_version
+                or str(context.get("item_id") or "") != str(item.get("item_id") or "")
+                or str(context.get("field") or "") != "product_details"
+                or context.get("position") != item_position
+                or str(qa.get("candidate_hash") or "") != translation_candidate_hash(row)):
+            return None
+        return row
 
     evidence, qa_results = [], {}
     for record in state.get("records") or []:
@@ -627,13 +651,20 @@ def build_structured_dictionary_evidence(state: Mapping) -> tuple[list[dict[str,
         for field in record.get("fields") or []:
             if str(field.get("field") or "") != "product_details":
                 continue
-            for item in field.get("items") or []:
+            for item_position, item in enumerate(field.get("items") or []):
                 effective = item.get("effective_render") if isinstance(item.get("effective_render"), Mapping) else {}
                 qa = effective.get("qa") if effective else item.get("qa")
                 target = str((effective or item).get("translated_text") or "")
                 label = str(item.get("label_raw") or "")
+                source = str(item.get("value_raw") or "")
+                dictionary_version = str((effective or item).get("dictionary_version") or "")
+                schema_version = str((effective or item).get("translation_schema_version") or "")
+                bound_qa = bound_item_qa(qa, asin=asin, item=item, item_position=item_position,
+                                          source=source, target=target,
+                                          target_field=str(field.get("target_field") or ""),
+                                          dictionary_version=dictionary_version, schema_version=schema_version)
                 if (item.get("promotion_status") != "PROMOTED" or not target
-                        or not isinstance(qa, Mapping) or str(qa.get("status") or "") != "PASS"
+                        or bound_qa is None
                         or item.get("admission") == "PRESERVED_IDENTITY"):
                     continue
                 normalized_label = label.casefold()
@@ -643,7 +674,6 @@ def build_structured_dictionary_evidence(state: Mapping) -> tuple[list[dict[str,
                 context = {"attribute_label": label, "field": "product_details"}
                 context_key, reason = normalize_context(context)
                 evidence_id = "%s:product_details:%s" % (asin, item.get("item_id"))
-                source = str(item.get("value_raw") or "")
                 source_hash_value = source_hash(source)
                 row = {"evidence_id": evidence_id, "asin": asin,
                        "source_record_hash": record.get("source_record_hash"), "source": source,
@@ -653,15 +683,13 @@ def build_structured_dictionary_evidence(state: Mapping) -> tuple[list[dict[str,
                        "affected_field": "product_details", "target_field": field.get("target_field"),
                        "item_id": item.get("item_id")}
                 evidence.append(row)
-                qa_row = canonical_qa_row({**qa, "qa_status": qa.get("status"),
-                    "asin": asin, "field": "product_details", "target_field": field.get("target_field"),
-                    "source_text": source, "translated_text": target, "target": target,
-                    "field_type": field_type, "context": context, "context_key": context_key or "",
-                    "dictionary_version": str((effective or item).get("dictionary_version") or ""),
-                    "schema_version": str((effective or item).get("translation_schema_version") or ""),
-                    "source_hash": source_hash_value, "context_error": reason})
+                qa_row = audit_field(asin=asin, field="product_details", source_es=source,
+                                     translated_zh=target, source_hash=source_hash_value,
+                                     dictionary_version=dictionary_version,
+                                     target_field=str(field.get("target_field") or ""), field_type=field_type,
+                                     context=context, translation_schema_version=schema_version)
                 qa_results[evidence_id] = {**qa_row, "qa_status": qa_row.get("status"), "target": target,
-                                           "context_key": context_key or ""}
+                                           "context_key": context_key or "", "context_error": reason}
     return evidence, qa_results
 
 
@@ -679,20 +707,20 @@ def apply_structured_dictionary_rerender(state: Mapping, manifest: Mapping) -> d
                 "dictionary_version": manifest.get("dictionary_version"),
                 "dictionary_hash": manifest.get("dictionary_hash")}
 
-    def rerender_qa(*, asin: str, field: str, item: Mapping, candidate: str,
+    def rerender_qa(*, asin: str, field: str, item: Mapping, position: int, candidate: str,
                     dictionary_version: str, dictionary_hash: str) -> dict[str, Any]:
         raw = str(item.get("value_raw") or "")
         return audit_field(asin=asin, field=field, source_es=raw, translated_zh=candidate,
                            source_hash=source_hash(raw), dictionary_version=dictionary_version,
                            target_field="product_details_zh", field_type=field,
-                           context={"item_id": item.get("item_id"), "label_raw": item.get("label_raw")},
+                           context={"item_id": item.get("item_id"), "position": position,
+                                    "field": field, "label_raw": item.get("label_raw")},
                            translation_schema_version=STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
 
     rerender = rerender_structured_items(state, manifest, qa_callback=rerender_qa)
     result = rerender["state"]
     blocked = {(str(row.get("asin") or "").upper(), str(row.get("field") or ""),
-                str(row.get("item_id") or "")): row for row in rerender["selective_repair"]
-               if str(row.get("reason") or "") == "RERENDER_QA_NOT_PASS"}
+                str(row.get("item_id") or "")): row for row in rerender["selective_repair"]}
     impacted = {(str(row.get("asin") or "").upper(), str(row.get("field") or ""))
                 for row in [*rerender["updates"], *blocked.values()]}
     prior_overlays = {str(row.get("asin") or "").upper(): deepcopy(dict(row))
@@ -731,6 +759,8 @@ def apply_structured_dictionary_rerender(state: Mapping, manifest: Mapping) -> d
             field["final_zh"] = "\n".join(parts) if all_pass else ""
             field["promotion_status"] = "PROMOTED" if all_pass else "QA_BLOCKED"
             if all_pass:
+                field["dictionary_version"] = rerender["dictionary_version"]
+                field["dictionary_hash"] = rerender["dictionary_hash"]
                 overlay[target] = field["final_zh"]
             else:
                 overlay.pop(target, None)

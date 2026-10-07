@@ -812,7 +812,8 @@ class ProductionWorkflow:
         if not isinstance(state, Mapping):
             state = self._artifact_data(self._prior(context, "translation"))["state"]
         rows = []
-        effective_dictionary_version = str(state.get("release_dictionary_version") or "")
+        effective_dictionary_version = str(state.get("effective_dictionary_version")
+                                           or state.get("release_dictionary_version") or "")
         for record in state.get("records") or []:
             for field in record.get("fields") or []:
                 # Source-missing and non-promoted envelopes are execution
@@ -824,7 +825,7 @@ class ProductionWorkflow:
                 rows.append(audit_field(asin=record.get("asin", ""), field=field.get("field", ""),
                     source_es=field.get("source_text", ""), translated_zh=field.get("final_zh") or "",
                     source_hash=field.get("source_hash", ""), dictionary_version=(
-                        effective_dictionary_version or str(field.get("dictionary_version") or "")),
+                        str(field.get("dictionary_version") or "") or effective_dictionary_version),
                     target_field=str(field.get("target_field") or ""), field_type=str(field.get("target_field") or ""),
                     context=field.get("context") if isinstance(field.get("context"), Mapping) else None,
                     translation_schema_version=str(field.get("translation_schema_version") or field.get("schema_version") or TRANSLATION_SCHEMA_VERSION)))

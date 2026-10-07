@@ -135,8 +135,8 @@ def rerender_structured_items(state: Mapping[str, Any], manifest: Mapping[str, A
             record = records.get(asin)
             field = next((row for row in (record or {}).get("fields") or []
                           if str(row.get("field") or "") == field_name), None)
-            item = next((row for row in (field or {}).get("items") or []
-                         if str(row.get("item_id") or "") == item_id), None)
+            item_position, item = next(((position, row) for position, row in enumerate((field or {}).get("items") or [])
+                                       if str(row.get("item_id") or "") == item_id), (None, None))
             if not record or not field or not item:
                 selective_repair.append({**item_ref, "reason": "AFFECTED_ITEM_NOT_FOUND"})
                 continue
@@ -159,7 +159,7 @@ def rerender_structured_items(state: Mapping[str, Any], manifest: Mapping[str, A
                 selective_repair.append({**item_ref, "reason": "NON_DETERMINISTIC_STRUCTURED_ITEM"})
                 continue
             candidate = str(promotion.get("target") or evidence.get("target") or "")
-            qa = qa_callback(asin=asin, field=field_name, item=item, candidate=candidate,
+            qa = qa_callback(asin=asin, field=field_name, item=item, position=item_position, candidate=candidate,
                              dictionary_version=dictionary_version, dictionary_hash=dictionary_hash)
             if not isinstance(qa, Mapping) or str(qa.get("status") or "") != "PASS":
                 selective_repair.append({**item_ref, "reason": "RERENDER_QA_NOT_PASS",
