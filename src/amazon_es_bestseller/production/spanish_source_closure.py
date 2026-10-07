@@ -330,6 +330,12 @@ def build_spanish_source_candidate(
     closure_audit = audit_source_fields(records)
     source_gate = evaluate_source_gate(source_audit)
     closure_gate = evaluate_source_gate(closure_audit)
+    for field_audit in closure_audit.get("field_audits") or []:
+        if not isinstance(field_audit, Mapping) or field_audit.get("classification") in {"PASS", "WARN"}:
+            continue
+        item = dict(field_audit)
+        item["origin"] = "closure_field_audit"
+        queue.append(item)
     for issue in source_audit.get("issues") or []:
         if isinstance(issue, Mapping):
             item = dict(issue)

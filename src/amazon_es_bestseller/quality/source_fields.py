@@ -1,6 +1,7 @@
 """Evidence-backed source field audit before Spanish Master promotion."""
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from collections import defaultdict
@@ -135,6 +136,9 @@ SOURCE_READY = "SOURCE_READY"
 _TEXT_JUNK = re.compile(rf"(?:{_HTML_TAG}|\b(?:javascript|cookie|captcha|robot\s*check|add to cart|selecciona|privacy|css)\b|[{{}}]\s*[\"'][\w-]+[\"']\s*:)", re.I)
 _BAD_TEXT = re.compile(r"(?:�{2,}|Ã[\x80-\xBF]|Â[\x80-\xBF]|[\x00-\x08\x0b\x0c\x0e-\x1f])")
 _REPEATED_TEXT = re.compile(r"(.{8,}?)(?:\s*\1){2,}", re.S)
+_STRICT_HTML_TAG = re.compile(r"</?\s*(?:script|style|div|span|iframe|object|embed)\b[^>]*>", re.I)
+_STRICT_UI_TEXT = re.compile(r"\b(?:javascript|cookie|captcha|robot\s*check|add\s+to\s+cart|privacy)\b", re.I)
+_EXPLICIT_BAD_TEXT = re.compile(r"\ufffd|[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _UNIT = re.compile(
     r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(?P<unit>mililitros?|litros?|gramos?|"
     r"kilogramos?|cent[ií]metros?|metros?|vatios?|voltios?|ml|kg|mm|cm|pcs|pack|uds|"
@@ -206,7 +210,7 @@ def _sf_field(fields, asin, field, classification, severity, message, evidence=N
 
 def _sf_issue(issues, fields, asin, code, classification, severity, message, field="", evidence=None):
     status = "REVIEW" if classification == REVIEW_REQUIRED else ("BLOCK" if severity in {"P0", "P1"} else "WARN")
-    issues.append({"asin": asin, "stage": "source_fields", "check": "source_fields", "severity": severity,
+    issues.append({"asin": asin, "field": field, "stage": "source_fields", "check": "source_fields", "severity": severity,
                    "status": status, "issue_code": code, "field_classification": classification,
                    "message": message, "source_file": "", "evidence": dict(evidence or {})})
     _sf_field(fields, asin, field or code, classification, severity, message, evidence)
@@ -419,17 +423,55 @@ def _category_leaf_supported(provenance, values) -> bool:
     return len(parts) >= 3 and parts[-1] == leaf
 
 
+def _text_locator(text: str, match: re.Match[str], kind: str) -> dict:
+    snippet = text[max(0, match.start() - 24):match.end() + 24]
+    return {
+        "match_kind": kind,
+        "offset": match.start(),
+        "snippet_hash": hashlib.sha256(snippet.encode("utf-8")).hexdigest()[:16],
+    }
+
+
+def _has_visible_attribute_duplicate(row) -> bool:
+    seen = set()
+    for label, value, field in _structured_attribute_pairs(row):
+        key = (_semantic_text(label), _semantic_text(value))
+        if key in seen:
+            return True
+        seen.add(key)
+    return False
+
+
+def _text_semantic_finding(row, field: str, text: str):
+    """Flag only strict UI/corruption; ordinary product repetition is reviewable."""
+    for pattern, kind in ((_STRICT_HTML_TAG, "html_script"), (_STRICT_UI_TEXT, "explicit_ui"),
+                          (_EXPLICIT_BAD_TEXT, "mojibake")):
+        match = pattern.search(text)
+        if match:
+            return ("MISPLACED", REVIEW_REQUIRED, "P1",
+                    "strict HTML/UI/control or damaged text is not product evidence", _text_locator(text, match, kind))
+    match = _REPEATED_TEXT.search(text)
+    if not match:
+        return None
+    if field == "product_details_es" and _has_visible_attribute_duplicate(row):
+        return None
+    return ("TEXT_REPETITION_REVIEW", REVIEW_REQUIRED, "P2",
+            "repeated product text requires review but is not treated as UI text", _text_locator(text, match, "repeated_text"))
+
+
 def _sf_semantics(row, asin, issues, fields):
     for field in ("title_es_raw", "brand", "specification", "specification_es", "product_details_es", "feature_bullets_es"):
         _sf_absence(row, asin, field, issues, fields)
         text = str(row.get(field) or "")
-        if text and (_TEXT_JUNK.search(text) or _BAD_TEXT.search(text) or _REPEATED_TEXT.search(text)):
-            _sf_issue(issues, fields, asin, "MISPLACED", REVIEW_REQUIRED, "P1",
-                      "HTML/JS/CSS/UI/control/mojibake/repeated text is not product evidence", field)
+        if text:
+            finding = _text_semantic_finding(row, field, text)
+            if finding:
+                code, classification, severity, message, evidence = finding
+                _sf_issue(issues, fields, asin, code, classification, severity, message, field, evidence)
     title, brand, spec = (str(row.get(k) or "").strip() for k in ("title_es_raw", "brand", "specification"))
     if "http://" in title or "https://" in title:
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "title contains URL", "title_es_raw")
-    if brand and (brand == spec or re.search(r"\b(?:ml|kg|cm|mm|\d+[,.]?\d*\s*€)\b", brand, re.I)):
+    if brand and (brand == spec or re.search(r"\b\d+(?:[,.]\d+)?\s*(?:ml|l|g|kg|cm|mm|m|w|v|€|eur)\b", brand, re.I)):
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "brand contains spec or price", "brand")
     if title and spec and title.casefold() == spec.casefold():
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "spec duplicates title", "specification")
@@ -474,7 +516,7 @@ def _sf_semantics(row, asin, issues, fields):
                       f"{label} has the wrong unit type", field,
                       {"units": sorted(units), "allowed": sorted(allowed)})
     for text in (spec, str(row.get("selected_variation_raw") or "")):
-        if text.lstrip().startswith(("{", "[")):
+        if text.lstrip().startswith(("{", "[{")):
             try:
                 _json.loads(text)
             except ValueError:

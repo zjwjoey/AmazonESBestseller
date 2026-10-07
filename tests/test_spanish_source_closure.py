@@ -196,3 +196,13 @@ def test_written_manifest_separates_dataset_and_frozen_manifest_hashes(tmp_path)
     assert manifest["frozen_candidate_manifest_canonical_hash"] == candidate_manifest_hash(candidates)
     assert (tmp_path / "closure" / "historical_source_audit.json").is_file()
     assert "P2 findings are reported" in (tmp_path / "closure" / "audit.md").read_text(encoding="utf-8")
+
+
+def test_candidate_review_queue_includes_current_closure_field_audits():
+    asin = "B000000009"
+    result = build_spanish_source_candidate(
+        [_ranking(asin)], [_detail(asin, title_es_raw="Antes <script>x</script>")], [_ranking(asin)], _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash([_ranking(asin)]),
+    )
+    assert any(item.get("origin") == "closure_field_audit" and item.get("field") == "title_es_raw"
+               for item in result["source_review_queue"])

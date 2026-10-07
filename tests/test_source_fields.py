@@ -93,3 +93,40 @@ def test_source_audit_keeps_explicit_power_and_voltage_unit_mismatches_blocking(
         {"label_raw": "Voltaje", "value_raw": "2 kg"},
     ])])
     assert len([item for item in report["issues"] if item["issue_code"] == "SPEC_UNIT_TYPE_MISMATCH"]) == 2
+
+
+def test_source_audit_keeps_visible_repetition_and_selects_as_product_evidence():
+    report = audit_source_fields([_row(
+        asin="B0CNQ4DJRV",
+        attributes=[
+            {"label_raw": "Idioma", "value_raw": "Inglés"},
+            {"label_raw": "Idioma", "value_raw": "Inglés"},
+        ],
+        product_details_es="Idioma: Inglés; Idioma: Inglés",
+        feature_bullets_es="Selecciona automáticamente el modo adecuado para cada uso.",
+        selected_variation_raw="CoreBlack CoreBlack",
+        title_es_raw="Black&Black bolsillo {dict} para accesorios",
+    )])
+    assert "MISPLACED" not in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_does_not_force_selected_variation_display_text_to_json():
+    report = audit_source_fields([_row(
+        asin="B07NGG8GTN", selected_variation_raw="['24 cm']",
+    ), _row(
+        asin="B0FJM3WXX6", selected_variation_raw="[Nuevo] 17-in-1",
+    )])
+    assert "MISPLACED" not in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_strict_text_findings_have_locators_and_brand_kg_is_not_spec():
+    report = audit_source_fields([_row(
+        asin="B0CRTYZG5C", brand="KG KITGARDEN", title_es_raw="Antes <script>alert(1)</script>",
+    ), _row(
+        asin="B0CFL41KG8", title_es_raw="Producto � dañado",
+    )])
+    misplaced = [item for item in report["issues"] if item["issue_code"] == "MISPLACED"]
+    assert len(misplaced) == 2
+    assert all(item["field"] == "title_es_raw" for item in misplaced)
+    assert {item["evidence"]["match_kind"] for item in misplaced} == {"html_script", "mojibake"}
+    assert all(item["evidence"].get("offset") is not None and item["evidence"].get("snippet_hash") for item in misplaced)
