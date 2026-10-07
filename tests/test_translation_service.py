@@ -1,6 +1,10 @@
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import pytest
 
 from amazon_es_bestseller.translation.cache import TranslationCache
 from amazon_es_bestseller.translation.pool import ProviderPool
@@ -51,6 +55,26 @@ class SlowProvider(FakeProvider):
         self.calls.append((asin, field, text))
         time.sleep(0.05)
         return ProviderResponse(text="中文 " + text, provider=self.name, model=self.model)
+
+
+class ClaimInspectProvider(FakeProvider):
+    """Fake provider that proves the durable claim exists at provider entry."""
+
+    def __init__(self, cache_path, key, *, memory=False):
+        super().__init__()
+        self.cache_path = cache_path
+        self.key = key
+        self.memory = memory
+        self.pending_seen = False
+
+    def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
+        cache = TranslationCache(self.cache_path)
+        claimed = cache.get_memory(self.key) if self.memory else cache.get(self.key)
+        self.pending_seen = bool(claimed and claimed.get("translation_status") == "pending"
+                                 and claimed.get("attempt_state") == "claimed")
+        return super().translate(text, asin=asin, field=field,
+                                 source_language=source_language,
+                                 target_language=target_language, context=context)
 
 
 def records(n=100):
@@ -253,7 +277,9 @@ def test_cross_asin_tm_stops_provider_repeat_when_namespace_changes(tmp_path):
         dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-b"},
     ).translate_records([{"asin": "B00000002", "title_es_raw": "Bolsa aislante"}])
     assert not resumed_provider.calls
-    assert result["records"]["B00000002"]["fields"]["title_zh"]["translation_status"] in {"cached", "success"}
+    reused = result["records"]["B00000002"]["fields"]["title_zh"]
+    assert reused["translation_status"] == "pending"
+    assert reused["qa_status"] == "review_required"
 
 
 def test_new_source_hash_is_plan_only_in_no_repeat_slice(tmp_path):
@@ -284,6 +310,99 @@ def test_pending_prior_attempt_requires_manual_resume_not_provider_retry(tmp_pat
     assert not resumed_provider.calls
     assert field["translation_status"] == "pending"
     assert field["qa_status"] == "review_required"
+
+
+def test_provider_entry_observes_durable_field_claim(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    seed = TranslationService(FakeProvider(), TranslationCache(cache_path))
+    text = "Taladro durable"
+    key = seed._field_cache_key("B00000001", "title_es_raw", source_hash(text))
+    provider = ClaimInspectProvider(cache_path, key)
+    TranslationService(provider, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000001", "title_es_raw": text}
+    ])
+    assert provider.pending_seen
+    assert len(provider.calls) == 1
+
+
+def test_structured_provider_entry_observes_durable_item_claim(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    seed = TranslationService(FakeProvider(), TranslationCache(cache_path))
+    key = seed._memory_key("Detalle durable", "feature_bullets")
+    provider = ClaimInspectProvider(cache_path, key, memory=True)
+    TranslationService(provider, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000001", "feature_bullets_raw": ["Detalle durable"]}
+    ])
+    assert provider.pending_seen
+    assert len(provider.calls) == 1
+
+
+def test_crash_after_provider_response_leaves_durable_pending_without_repeat(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(cache_path))
+    service._after_provider_response = lambda _response: (_ for _ in ()).throw(RuntimeError("simulated crash"))
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        service.translate_records([{"asin": "B00000001", "title_es_raw": "Taladro crash"}])
+    resumed_provider = FakeProvider()
+    resumed = TranslationService(resumed_provider, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000001", "title_es_raw": "Taladro crash"}
+    ])
+    assert not resumed_provider.calls
+    assert resumed["records"]["B00000001"]["fields"]["title_zh"]["translation_status"] == "pending"
+
+
+def test_two_services_same_tm_unit_make_one_provider_call(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    provider = SlowProvider()
+    start = threading.Barrier(2)
+    def run(asin):
+        start.wait(timeout=2)
+        return TranslationService(provider, TranslationCache(cache_path)).translate_records([
+            {"asin": asin, "title_es_raw": "Unidad TM concurrente"}
+        ])
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(run, ["B00000001", "B00000002"]))
+    assert len(provider.calls) == 1
+
+
+def test_structured_first_item_settles_before_second_item_crash(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(cache_path))
+    seen = {"count": 0}
+    def crash_second(_response):
+        seen["count"] += 1
+        if seen["count"] == 2:
+            raise RuntimeError("second item crash")
+    service._after_provider_response = crash_second
+    record = {"asin": "B00000001", "feature_bullets_raw": ["Primero durable", "Segundo durable"]}
+    with pytest.raises(RuntimeError, match="second item crash"):
+        service.translate_records([record])
+    resumed_provider = FakeProvider()
+    resumed = TranslationService(resumed_provider, TranslationCache(cache_path)).translate_records([record])
+    items = resumed["records"]["B00000001"]["fields"]["feature_bullets_zh"]["items"]
+    assert not resumed_provider.calls
+    assert items[0]["translation_status"] == "success"
+    assert items[1]["translation_status"] == "pending"
+
+
+def test_structured_cross_namespace_memory_success_becomes_review_without_call(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    first = FakeProvider()
+    TranslationService(first, TranslationCache(cache_path),
+                       dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "a"}).translate_records([
+                           {"asin": "B00000001", "feature_bullets_raw": ["Detalle compartido"]}
+                       ])
+    resumed_provider = FakeProvider()
+    resumed = TranslationService(resumed_provider, TranslationCache(cache_path),
+                                 dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "b"}).translate_records([
+                                     {"asin": "B00000002", "feature_bullets_raw": ["Detalle compartido"]}
+                                 ])
+    item = resumed["records"]["B00000002"]["fields"]["feature_bullets_zh"]["items"][0]
+    assert not resumed_provider.calls
+    assert item["translation_status"] == "pending"
+    assert {issue["code"] for issue in item["qa_issues"]} == {"CACHE_NAMESPACE_REVIEW_REQUIRED"}
 
 
 def test_service_dry_run_never_calls_provider(tmp_path):

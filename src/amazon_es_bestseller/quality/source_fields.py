@@ -448,9 +448,10 @@ def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict |
     """Return a conservative label policy without turning ambiguity into PASS."""
     normalized = _semantic_text(label)
     units = _units_for_labeled_value(label, value)
-    evidence = lambda kind, corroborated_by="", corroborated_signature="": _unit_evidence(
-        row, label, value, field, kind=kind, corroborated_by=corroborated_by,
-        corroborated_signature=corroborated_signature)
+    def evidence(kind, corroborated_by="", corroborated_signature=""):
+        return _unit_evidence(
+            row, label, value, field, kind=kind, corroborated_by=corroborated_by,
+            corroborated_signature=corroborated_signature)
     if re.search(r"\bcapacidad\s+de\s+la\s+bateria\b", normalized) and units & {"v"}:
         return set(), "battery capacity label conflicts with voltage value", evidence("label_value_conflict"), None
     if re.search(r"\bcapacidad\s+de\s+peso\b", normalized) and units & {"ml", "l"}:

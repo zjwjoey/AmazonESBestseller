@@ -122,8 +122,17 @@ def test_price_rating_dates_units_and_text_semantics_are_checked():
         title_es_raw="<div>Robot Check</div>", product_details_es="{bad json",
     )])
     codes = issue_codes(report)
+    # Generic ``Capacidad`` plus watts has no product-domain evidence, so the
+    # current conservative policy retains it as review rather than claiming a
+    # specific mismatch classification.
     assert {"SOURCE_FIELD_INVALID", "RATING_INVALID", "REVIEW_COUNT_INVALID", "DATE_INVALID",
-            "SPEC_UNIT_TYPE_MISMATCH", "MISPLACED"} <= codes
+            "UNIT_SEMANTICS_AMBIGUOUS", "MISPLACED"} <= codes
+
+
+def test_explicit_power_label_with_volume_is_a_true_unit_type_block():
+    report = audit_source_fields([row(specification="Potencia: 10 ml")])
+    assert "SPEC_UNIT_TYPE_MISMATCH" in issue_codes(report)
+    assert report["sku_status"][ASIN] == "BLOCKED"
 
 
 def test_empty_input_and_p1_blocked_record_cannot_pass_source_gate():

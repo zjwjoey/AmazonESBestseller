@@ -425,3 +425,37 @@ to use for review.
   Excel/export/release callers, and formal legacy-reference reuse. Provider-3
   configuration validation has not been run. SourceGate is not `READY`, and
   the owner-partial-field policy still needs the requested human answer.
+
+## Durable translation claim and namespace-review slice (2026-10-07)
+
+- The prior P0 durable-attempt gap is now covered by the existing JSON cache:
+  `TranslationCache` uses a short cross-process exclusive claim lock, reloads
+  the cache inside that lock, atomically writes and fsyncs a `pending` claim
+  before provider entry, and immediately settles/saves terminal results. A
+  timed-out or restarted pending claim remains `review_required`; it is never
+  silently resent. Concurrent same-TM misses join a live settlement when one
+  appears, otherwise retain the pending review state.
+- Structured items claim and settle their canonical memory key one at a time.
+  A completed first item survives a crash at the second item and is not sent
+  again on resume. Structured cross-dictionary/schema TM reuse now retains the
+  old candidate but marks it `pending`/`review_required` with
+  `CACHE_NAMESPACE_REVIEW_REQUIRED`; it makes zero provider calls.
+- Focused offline evidence (all with local unique `--basetemp`):
+  `tests/test_translation_service.py`, `tests/test_translation_cache.py`,
+  `tests/test_translation_pool.py`, `tests/test_translation_structured_contract.py`,
+  and `tests/test_source_fields_production.py` passed. Regression fixtures
+  prove disk-visible claim before provider entry, post-response/pre-settle
+  crash no-repeat, two services sharing one TM key make one provider call,
+  per-item structured settlement, and namespace review without provider use.
+- The old generic `Capacidad: 3 W` fixture correctly asserts the current
+  conservative REVIEW classification (`UNIT_SEMANTICS_AMBIGUOUS`), while a new
+  independent `Potencia: 10 ml` fixture proves a true
+  `SPEC_UNIT_TYPE_MISMATCH` remains `BLOCKED`. The only `ruff check src tests`
+  finding was the local E731 lambda in this same unit-policy function; it was
+  replaced mechanically by an equivalent local function. `ruff`, `compileall`,
+  and `git diff --check` now pass.
+
+The remaining items in the preceding section are historical at this point:
+the P0 and P1 bullets are resolved by this slice; structured follow-up repair,
+closure/export/release wiring, legacy formal reuse, Provider-3 validation,
+SourceGate readiness, and the owner-policy decision remain pending.

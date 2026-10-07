@@ -6,13 +6,15 @@ import os
 import tempfile
 import threading
 import time
+import uuid
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 
 class TranslationCache:
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -30,6 +32,31 @@ class TranslationCache:
         self._corruption_preserved = False
         self._lock = threading.RLock()
         self.load()
+
+    @contextmanager
+    def _claim_lock(self):
+        """Small cross-process lock for check-and-claim transitions only."""
+        lock_path = self.path.with_name(self.path.name + ".claim.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + 10.0
+        descriptor = None
+        while descriptor is None:
+            try:
+                descriptor = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(descriptor, (str(os.getpid()) + "\n").encode("ascii"))
+                os.fsync(descriptor)
+            except FileExistsError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("translation cache claim lock timed out: %s" % lock_path)
+                time.sleep(0.02)
+        try:
+            yield
+        finally:
+            os.close(descriptor)
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
 
     @staticmethod
     def key(asin: str, field: str, source_hash: str, provider: str,
@@ -96,8 +123,35 @@ class TranslationCache:
             # Do not overwrite the raw provider/QA evidence selected by the
             # first attempt with a later namespace render or retry envelope.
             if (all(identity.split("|")) and identity not in self.results
+                    and snapshot.get("translation_status") != "pending"
                     and snapshot.get("resolution_source") != "immutable_cache_namespace_reuse"):
                 self.results[identity] = deepcopy(snapshot)
+
+    def claim(self, key: str, pending: Dict[str, Any]) -> tuple[bool, Dict[str, Any]]:
+        """Durably publish an uncertain provider attempt before any send.
+
+        ``False`` means another process or a previous crashed attempt already
+        owns the key. Callers must not retry it automatically.
+        """
+        with self._lock, self._claim_lock():
+            self.load()
+            existing = self.entries.get(key)
+            if isinstance(existing, dict):
+                return False, deepcopy(existing)
+            snapshot = deepcopy(pending)
+            snapshot.setdefault("translation_status", "pending")
+            snapshot.setdefault("attempt_state", "claimed")
+            snapshot.setdefault("claim_id", uuid.uuid4().hex)
+            self.entries[key] = snapshot
+            self.save()
+            return True, deepcopy(snapshot)
+
+    def settle(self, key: str, value: Dict[str, Any]) -> None:
+        """Persist a provider result immediately; never replace first raw evidence."""
+        with self._lock, self._claim_lock():
+            self.load()
+            self.put(key, value)
+            self.save()
 
     def find_result(self, asin: str, field: str, source_hash: str) -> Optional[Dict[str, Any]]:
         """Find immutable evidence even when its derived cache key changed.
@@ -144,8 +198,43 @@ class TranslationCache:
             parts = key.split("|")
             if len(parts) >= 6:
                 identity = "|".join(parts[:6])
-                if identity not in self.memory_results:
+                prior = self.memory_results.get(identity)
+                if not isinstance(prior, dict) or prior.get("translation_status") == "pending":
                     self.memory_results[identity] = deepcopy(snapshot)
+
+    def claim_memory(self, key: str, pending: Dict[str, Any], *, replace_terminal: bool = False) -> tuple[bool, Dict[str, Any]]:
+        """Durably reserve one canonical TM unit before provider entry."""
+        with self._lock, self._claim_lock():
+            self.load()
+            existing = self.memory.get(key)
+            if (isinstance(existing, dict) and not (replace_terminal and
+                    existing.get("translation_status") in {"partial", "failed", "qa_failed"})):
+                return False, deepcopy(existing)
+            snapshot = deepcopy(pending)
+            snapshot.setdefault("translation_status", "pending")
+            snapshot.setdefault("attempt_state", "claimed")
+            snapshot.setdefault("claim_id", uuid.uuid4().hex)
+            self.memory[key] = snapshot
+            self.save()
+            return True, deepcopy(snapshot)
+
+    def settle_memory(self, key: str, value: Dict[str, Any]) -> None:
+        with self._lock, self._claim_lock():
+            self.load()
+            self.put_memory(key, value)
+            self.save()
+
+    def wait_memory_settlement(self, key: str, *, timeout_seconds: float = 2.0) -> Optional[Dict[str, Any]]:
+        """Join a live claimant, but leave a crashed/unknown claim pending."""
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            with self._lock:
+                self.load()
+                value = self.memory.get(key)
+                if isinstance(value, dict) and value.get("translation_status") != "pending":
+                    return deepcopy(value)
+            time.sleep(0.02)
+        return None
 
     def find_memory_result(self, source_text: str, source_language: str, target_language: str,
                            field_type: str, provider: str, model: str) -> Optional[Dict[str, Any]]:
