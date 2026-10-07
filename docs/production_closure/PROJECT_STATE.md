@@ -107,3 +107,32 @@ The current self-parent clearing remains unchanged. Any later builder work
 that needs to retain a self-parent must bind the decision to saved-cache HTML
 and parser-produced variation evidence; an ordinary dict/status remains
 insufficient.
+
+## Spanish source closure candidate — r2
+
+- Offline candidate builder output:
+  `outputs/production_closure_20261007T000000Z_spanish_source_5480_r2`.
+  It is a candidate artifact only, not Spanish Master and not `SOURCE_READY`.
+- It binds the exact 5,480-ASIN reviewed source-audit scope to candidate
+  manifest canonical hash
+  `7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414`.
+  All selected detail records have `IDENTITY_MATCH`; ranking contexts remain
+  independent and detail BSR remains raw evidence.
+- Both the reviewed SourceGate and the rebuilt closure audit are `BLOCKED`
+  (`ready=false`).  No translation, Excel export, source re-review, or formal
+  Master promotion was performed.
+- The source-only candidate has no `_zh`/Chinese display fields. It retains
+  raw structured attributes and feature bullets, plus collection, ranking,
+  detail-parser, and snapshot-hash provenance.
+- Generic evidence rules blank the eight author/editorial/format bylines in
+  the reviewed fixtures, prefer explicit `Marca=Bontempi` for `B01NBM854W`,
+  preserve raw evidence for the three approved damaged optional fields, and
+  clear all `845` unproven self-parents (`0` retained; status `unconfirmed`).
+- Current unresolved blocker counts are reported in `audit.md` and
+  `source_review_queue.json`; they are not suppressed by this candidate.
+- Focused verification: translation pre-clean, source fields/production
+  source fields, and source-closure tests: `34 passed`.
+
+The earlier non-r2 closure directory is retained as an immutable, superseded
+failed evidence attempt: its brand rule was too broad and it is not the output
+to use for review.

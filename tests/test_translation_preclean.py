@@ -56,6 +56,16 @@ def test_clean_text_preserves_angle_bracket_product_text_but_removes_real_tags()
     assert "alert(1)" in tag_result["clean_text"]
 
 
+def test_clean_text_keeps_literal_size_and_compatibility_tokens():
+    size = clean_text("Talla &lt;M&gt;", field="selected_variation_raw")
+    compatibility = clean_text("Adaptador &lt;USB-C&gt;", field="title_es_raw")
+    real_tag = clean_text("Antes <span class='x'>texto</span> después", field="feature_bullet")
+
+    assert size["clean_text"] == "Talla <M>"
+    assert compatibility["clean_text"] == "Adaptador <USB-C>"
+    assert "span" not in real_tag["clean_text"]
+
+
 def test_description_metadata_is_flagged_not_repaired():
     result = audit_records([{
         "asin": "B00000003",

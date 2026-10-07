@@ -44,6 +44,18 @@ ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]")
 HTML_TAG_RE = re.compile(
     r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+(?:[^<>\s]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?))*\s*/?>"
 )
+_HTML_TAG_NAME_RE = re.compile(r"^</?\s*([A-Za-z][A-Za-z0-9:_-]*)")
+# Treat angle brackets as markup only for actual HTML elements.  Product
+# evidence regularly contains literal short sizes and compatibility tokens
+# such as ``<M>`` and ``<USB-C>``; the generic syntactic pattern alone is too
+# broad to distinguish them from a tag.
+_HTML_ELEMENT_NAMES = frozenset({
+    "a", "abbr", "article", "aside", "b", "blockquote", "body", "br", "button", "canvas", "caption", "code",
+    "div", "em", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "html", "i", "img",
+    "input", "label", "li", "link", "main", "meta", "nav", "ol", "option", "p", "picture", "pre", "script", "section",
+    "select", "small", "source", "span", "strong", "style", "sub", "sup", "svg", "table", "tbody", "td", "textarea",
+    "tfoot", "th", "thead", "title", "tr", "ul", "video",
+})
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 UI_RE = re.compile(r"(?:…|\.\.\.)?\s*(?:Ver\s+(?:m[aá]s|menos)|查看更多|展开|收起)\b", re.I)
 PROTECTED_TOKEN_RE = re.compile(
@@ -108,6 +120,22 @@ def _collapse_repeated(text: str) -> tuple[str, bool]:
     return stripped, False
 
 
+def _strip_real_html_tags(text: str) -> tuple[str, int]:
+    """Remove known HTML tags without treating literal product tokens as tags."""
+    removed = 0
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal removed
+        name_match = _HTML_TAG_NAME_RE.match(match.group(0))
+        name = name_match.group(1).casefold() if name_match else ""
+        if name in _HTML_ELEMENT_NAMES:
+            removed += 1
+            return " "
+        return match.group(0)
+
+    return HTML_TAG_RE.sub(replace, text), removed
+
+
 def clean_text(value: Any, *, field: str = "") -> dict[str, Any]:
     """Clean UI/control noise while retaining source and an action ledger."""
     source = _text(value)
@@ -119,9 +147,9 @@ def clean_text(value: Any, *, field: str = "") -> dict[str, Any]:
     text = html.unescape(source)
     actions: list[str] = []
     issues: list[str] = []
-    html_detected = bool(HTML_TAG_RE.search(text))
+    text, html_tag_count = _strip_real_html_tags(text)
+    html_detected = bool(html_tag_count)
     if html_detected:
-        text = HTML_TAG_RE.sub(" ", text)
         actions.append("REMOVE_HTML_TAGS")
     ui_hits = len(UI_RE.findall(text))
     if ui_hits:

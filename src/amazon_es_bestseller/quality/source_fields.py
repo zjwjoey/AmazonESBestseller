@@ -391,13 +391,13 @@ def _sf_semantics(row, asin, issues, fields):
     if details and re.search(r"\b(?:best sellers rank|m[aá]s vendidos|ranking source url)\b", details, re.I):
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "details contain ranking/UI text", "product_details_es")
     labelled_units = _structured_attribute_pairs(row)
-    if not labelled_units:
-        # Legacy compact specifications remain auditable, but only as explicit
-        # label/value segments. Do not infer a label from a flattened detail
-        # blob (for example, ``Potenciador`` is not ``Potencia``).
-        labelled_units = _labelled_text_pairs(spec, "specification")
-        labelled_units.extend(_labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
-                                                   "selected_variation_raw"))
+    # Structured attributes and compact evidence are independent sources.  A
+    # present attribute (for example ``Marca: Acme``) must not make a malformed
+    # compact specification invisible.  Keep the pairs separate and audit the
+    # union; do not flatten unrelated attribute fields into specification text.
+    labelled_units.extend(_labelled_text_pairs(spec, "specification"))
+    labelled_units.extend(_labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
+                                               "selected_variation_raw"))
     for label, value, field in labelled_units:
         allowed = _allowed_units_for_label(label)
         if not allowed:

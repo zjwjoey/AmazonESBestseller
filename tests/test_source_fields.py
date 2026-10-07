@@ -44,3 +44,11 @@ def test_source_audit_uses_labeled_values_for_unit_semantics():
                       "Dimensiones: 14,6l. x 6,7an. centímetros",
     )])
     assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_checks_compact_specification_even_when_attributes_exist():
+    report = audit_source_fields([_row(
+        attributes=[{"label_raw": "Marca", "value_raw": "Acme"}],
+        specification="Potencia: 10 ml",
+    )])
+    assert "SPEC_UNIT_TYPE_MISMATCH" in {item["issue_code"] for item in report["issues"]}

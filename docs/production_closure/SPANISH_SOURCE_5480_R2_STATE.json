@@ -1,0 +1,40 @@
+{
+  "run_id": "20261007T000000Z_spanish_source_5480_r2",
+  "status": "CANDIDATE_SOURCE_GATE_BLOCKED",
+  "base": {
+    "production_branch": "feature/amazon-es-production-v1-complete",
+    "production_sha": "1c570e2e708a2b90f8a7ac9be3f2d0e5d2a9bdf9",
+    "development_branch": "feature/translation-production-closure-v1"
+  },
+  "input": {
+    "production_root": "F:\\AmazonESBestseller\\.worktrees\\production-v1-complete\\outputs\\amazon_es_bestseller_5500_202610_fresh2",
+    "candidate_manifest_canonical_hash": "7774cc27bfccb7a1377bfc031103881085d1e8cdaf3018451e848f0505137414",
+    "binding_scope_count": 5480,
+    "identity_status": "MATCH"
+  },
+  "gates": {
+    "reviewed_source_gate": "BLOCKED",
+    "reviewed_source_gate_ready": false,
+    "closure_source_gate": "BLOCKED",
+    "closure_source_gate_ready": false
+  },
+  "artifact_dir": "outputs/production_closure_20261007T000000Z_spanish_source_5480_r2",
+  "artifact_manifest_sha256": "not_self_hashed; see immutable manifest.json",
+  "verification": {
+    "focused_pytest": "34 passed",
+    "records": 5480,
+    "self_parent_raw": 845,
+    "self_parent_retained": 0,
+    "self_parent_unconfirmed": 845,
+    "rank_bsr_mixed_in_closure_audit": 0,
+    "source_audit_issue_count": 6933,
+    "closure_audit_issue_count": 12147
+  },
+  "remaining_phases": {
+    "source_rereview": "NOT_EXECUTED",
+    "translation": "NOT_EXECUTED",
+    "field_closure": "NOT_EXECUTED",
+    "excel_export": "NOT_EXECUTED",
+    "formal_master_promotion": "NOT_EXECUTED"
+  }
+}

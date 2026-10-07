@@ -1,0 +1,160 @@
+import hashlib
+import json
+
+from amazon_es_bestseller.production.spanish_source_closure import (
+    build_spanish_source_candidate,
+    candidate_manifest_hash,
+)
+
+
+def _hash(value):
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _audit(asins):
+    return {
+        "check": "source_fields",
+        "status": "BLOCK",
+        "summary": {"record_count": len(asins), "issue_count": 1},
+        "issues": [{"asin": asins[0], "issue": "EXISTING_BLOCKER", "severity": "P1"}],
+        "field_audits": [],
+        "sku_status": {asin: "BLOCKED" for asin in asins},
+        "record_bindings": {asin: [{"record_hash": "evidence-" + asin}] for asin in asins},
+    }
+
+
+def _detail(asin, **changes):
+    detail = {
+        "asin": asin,
+        "identity_status": "MATCH",
+        "identity_status_code": "IDENTITY_MATCH",
+        "title_es_raw": "Producto de prueba",
+        "current_price_raw": "10,00 €",
+        "original_price_raw": "20,00 €",
+        "product_url": f"https://www.amazon.es/dp/{asin}",
+        "brand_raw": "Visita la tienda de Bylines No Son Marca",
+        "attributes": [],
+        "feature_bullets_raw": ["bullet evidence"],
+        "detail_bsr_raw": "n.º 1 en Prueba",
+        "detail_schema_version": "detail-v1",
+        "detail_parser_version": "parser-v1",
+    }
+    detail.update(changes)
+    return detail
+
+
+def _ranking(asin, rank=1, **changes):
+    record = {
+        "asin": asin,
+        "ranking_asin": asin,
+        "bestseller_rank": rank,
+        "bestseller_rank_raw": f"#{rank}",
+        "ranking_source_url": "https://www.amazon.es/gp/bestsellers/test",
+        "ranking_source_category": "Prueba",
+        "ranking_page_number": 1,
+        "research_category": "Hogar",
+        "collection_batch": "batch-1",
+        "collection_time": "2026-10-06T00:00:00",
+    }
+    record.update(changes)
+    return record
+
+
+def test_candidate_keeps_source_gate_blocked_and_ranking_contexts():
+    asin = "B000000001"
+    candidates = [_ranking(asin)]
+    result = build_spanish_source_candidate(
+        candidates,
+        [_detail(asin, attributes=[{"label_raw": "Marca", "value_raw": "Marca explícita"}])],
+        [_ranking(asin), _ranking(asin, rank=2, ranking_page_number=2)],
+        _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash(candidates),
+    )
+
+    record = result["records"][0]
+    assert result["status"] == "CANDIDATE_SOURCE_GATE_BLOCKED"
+    assert result["source_gate"]["ready"] is False
+    assert record["brand"] == "Marca explícita"
+    assert len(record["ranking_contexts"]) == 2
+    assert record["bestseller_rank"] == 1
+    assert record["detail_bsr_raw"] == "n.º 1 en Prueba"
+    assert record["metadata"]["collection_batch"] == "batch-1"
+
+
+def test_candidate_isolates_damaged_optional_values_and_preserves_raw():
+    asin = "B000000002"
+    detail = _detail(
+        asin,
+        attributes=[
+            {"label_raw": "Marca", "value_raw": "Bons�i"},
+            {"label_raw": "Fabricante", "value_raw": "TulipÃ¡n negro"},
+            {"label_raw": "Tipo de altavoz", "value_raw": "Port�til"},
+        ],
+    )
+    result = build_spanish_source_candidate(
+        [_ranking(asin)], [detail], [_ranking(asin)], _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash([_ranking(asin)]),
+    )
+
+    record = result["records"][0]
+    assert record["brand"] == ""
+    assert record["manufacturer"] == ""
+    assert record["speaker_type"] == ""
+    assert record["attributes"] == detail["attributes"]
+    assert {item["field"] for item in result["source_review_queue"]} >= {
+        "brand", "manufacturer", "speaker_type"
+    }
+
+
+def test_candidate_keeps_plain_brand_byline_but_rejects_editorial_format_byline():
+    asin = "B000000006"
+    plain = _detail(asin, brand_raw="Reliable Brand")
+    result = build_spanish_source_candidate(
+        [_ranking(asin)], [plain], [_ranking(asin)], _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash([_ranking(asin)]),
+    )
+    assert result["records"][0]["brand"] == "Reliable Brand"
+
+    editorial = _detail(asin, brand_raw="de Someone (Autor) Formato: Tapa blanda")
+    result = build_spanish_source_candidate(
+        [_ranking(asin)], [editorial], [_ranking(asin)], _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash([_ranking(asin)]),
+    )
+    assert result["records"][0]["brand"] == ""
+
+
+def test_candidate_preserves_supported_multilingual_evidence_and_clears_unproven_self_parent():
+    asin = "B000000003"
+    detail = _detail(
+        asin,
+        parent_asin=asin,
+        parent_asin_status="confirmed",
+        variation_evidence={"current_asin": asin, "parent_asin": asin, "family_asins": [asin, "B000000004"]},
+        attributes=[
+            {"label_raw": "Idioma", "value_raw": "Japonés"},
+            {"label_raw": "ISBN", "value_raw": "9781234567890"},
+            {"label_raw": "Nombre", "value_raw": "日本語"},
+        ],
+    )
+    result = build_spanish_source_candidate(
+        [_ranking(asin)], [detail], [_ranking(asin)], _audit([asin]),
+        expected_candidate_hash=candidate_manifest_hash([_ranking(asin)]),
+    )
+
+    record = result["records"][0]
+    assert record["parent_asin"] == ""
+    assert record["parent_asin_status"] == "unconfirmed"
+    assert record["attributes"][-1]["value_raw"] == "日本語"
+    assert any(item["classification"] == "VALID_MULTILINGUAL_EVIDENCE" for item in result["source_review_queue"])
+
+
+def test_candidate_rejects_wrong_hash_or_identity_scope():
+    asin = "B000000005"
+    try:
+        build_spanish_source_candidate([_ranking(asin)], [_detail(asin)], [_ranking(asin)], _audit([asin]), expected_candidate_hash="wrong")
+    except ValueError as exc:
+        assert "candidate manifest hash" in str(exc)
+    else:  # pragma: no cover - makes failed validation explicit
+        raise AssertionError("expected candidate hash validation")
