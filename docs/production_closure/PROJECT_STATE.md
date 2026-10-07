@@ -234,3 +234,11 @@ to use for review.
 - The requested rank-matrix/subset diagnostic is intentionally deferred to a
   separate small slice to avoid combining rank scope semantics with these P1
   evidence and text-boundary changes.
+
+## Current SourceGate chain and 5,478 owner scope
+
+- Current-gate evidence binds candidate, detail, ranking, parent, and owner-scope hashes before selecting the exact 5,478 ASINs. Historical audits remain history only.
+- `CANDIDATE_CURRENT_GATE_READY` is still a candidate, never a reviewed Master; any current P0/P1/REVIEW yields `CANDIDATE_CURRENT_GATE_BLOCKED`.
+- Complete rank-matrix diagnostics mark owner/exact-scope omissions as `OUT_OF_EXACT_SCOPE` with their exclusion reference, while real matrix gaps remain REVIEW. No rank changes.
+- Generic unit PASS evidence now includes the exact numeric/unit signature, corroborating source field/hash, attribute label/value hash, and same-ASIN binding. Changed title/variation evidence no longer supports the old explanation.
+- The attempted full 5,478 local diagnostic emitted no artifact under the current process resource limit; it remains `NOT_EXECUTED`, not asserted READY, and needs a higher-memory rerun.

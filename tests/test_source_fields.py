@@ -213,3 +213,15 @@ def test_source_audit_explains_generic_size_only_when_title_or_variation_proves_
     explained_fields = [item for item in explained["field_audits"] if item["message"].startswith("generic label measure")]
     assert explained_fields and explained_fields[0]["classification"] == "PASS"
     assert "UNIT_SEMANTICS_AMBIGUOUS" in {item["issue_code"] for item in unknown["issues"]}
+    evidence = explained_fields[0]["evidence"]
+    assert evidence["corroborated_signature"] == "500ml"
+    assert evidence["corroborated_source_field"] == "title_es_raw"
+    assert evidence["corroborated_source_hash"]
+    assert evidence["attribute_label_value_hash"]
+    assert evidence["same_asin_record_binding"]
+
+    changed = audit_source_fields([_row(
+        title_es_raw="Botella de viaje sin medida", selected_variation_raw="",
+        attributes=[{"label_raw": "Tamaño", "value_raw": "500 ml"}],
+    )])
+    assert "UNIT_SEMANTICS_AMBIGUOUS" in {item["issue_code"] for item in changed["issues"]}

@@ -359,17 +359,25 @@ def _allowed_units_for_label(label) -> set[str]:
     return set()
 
 
-def _unit_evidence(row, label, value, field, *, kind, corroborated_by="") -> dict:
+def _unit_evidence(row, label, value, field, *, kind, corroborated_by="", corroborated_signature="") -> dict:
     source = {"label": str(label), "value": str(value), "field": field}
     if corroborated_by:
         source["corroborated_by"] = corroborated_by
+    if corroborated_signature:
+        source["corroborated_signature"] = corroborated_signature
+    record_binding = _sf_record_binding(row)
     return {
         "match_kind": kind,
         "label": str(label),
         "value": str(value),
         "evidence_locator": {"source": field, "label_raw": str(label), "value_raw": str(value)},
         "source_hash": hashlib.sha256(_json.dumps(source, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
-        **({"corroborated_by": corroborated_by} if corroborated_by else {}),
+        "attribute_label_value_hash": _sf_hash({"label_raw": str(label), "value_raw": str(value), "field": field}),
+        "same_asin_record_binding": record_binding["record_hash"],
+        **({"corroborated_by": corroborated_by,
+            "corroborated_source_field": corroborated_by,
+            "corroborated_source_hash": _sf_hash({corroborated_by: row.get(corroborated_by)}),
+            "corroborated_signature": corroborated_signature} if corroborated_by else {}),
     }
 
 
@@ -383,19 +391,22 @@ def _measure_signatures(value) -> set[str]:
     return signatures
 
 
-def _corroborated_measure(row, value) -> str:
+def _corroborated_measure(row, value) -> tuple[str, str]:
     signatures = _measure_signatures(value)
     for field in ("title_es_raw", "selected_variation_raw"):
-        if signatures and signatures & _measure_signatures(row.get(field)):
-            return field
-    return ""
+        matches = signatures & _measure_signatures(row.get(field))
+        if matches:
+            return field, sorted(matches)[0]
+    return "", ""
 
 
 def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict | None, str | None]:
     """Return a conservative label policy without turning ambiguity into PASS."""
     normalized = _semantic_text(label)
     units = _units_for_labeled_value(label, value)
-    evidence = lambda kind, corroborated_by="": _unit_evidence(row, label, value, field, kind=kind, corroborated_by=corroborated_by)
+    evidence = lambda kind, corroborated_by="", corroborated_signature="": _unit_evidence(
+        row, label, value, field, kind=kind, corroborated_by=corroborated_by,
+        corroborated_signature=corroborated_signature)
     if re.search(r"\bcapacidad\s+de\s+la\s+bateria\b", normalized) and units & {"v"}:
         return set(), "battery capacity label conflicts with voltage value", evidence("label_value_conflict"), None
     if re.search(r"\bcapacidad\s+de\s+peso\b", normalized) and units & {"ml", "l"}:
@@ -420,10 +431,10 @@ def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict |
         if dimensional and not (units - dimensional):
             return {"mm", "cm", "m"}, None, evidence("explicit_dimension"), None
         if units:
-            corroborated_by = _corroborated_measure(row, value)
+            corroborated_by, signature = _corroborated_measure(row, value)
             if corroborated_by:
                 return (set(units), None,
-                        evidence("generic_measure_correlated", corroborated_by),
+                        evidence("generic_measure_correlated", corroborated_by, signature),
                         "generic label measure corroborated by product evidence")
             return (set(), "generic Tamaño value has no unambiguous dimension semantics",
                     evidence("generic_measure_unresolved"), None)
@@ -431,10 +442,10 @@ def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict |
     if re.search(r"\b(?:numero|cantidad)\s+de\s+unidades\b", normalized):
         count_units = {"pcs", "pack", "uds", "unidades", "piezas"}
         if units - count_units:
-            corroborated_by = _corroborated_measure(row, value)
+            corroborated_by, signature = _corroborated_measure(row, value)
             if corroborated_by:
                 return (set(units), None,
-                        evidence("unit_count_measure_correlated", corroborated_by),
+                        evidence("unit_count_measure_correlated", corroborated_by, signature),
                         "unit-count label measure corroborated by product evidence")
             return (set(), "unit-count label contains a packaging amount rather than an unambiguous count",
                     evidence("unit_count_unresolved"), None)

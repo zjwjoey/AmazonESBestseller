@@ -4,7 +4,9 @@ import json
 from amazon_es_bestseller.production.spanish_source_closure import (
     build_spanish_source_candidate,
     candidate_manifest_hash,
+    build_current_source_gate_candidate,
     derive_owner_excluded_scope,
+    rank_matrix_diagnostics,
     write_owner_excluded_scope,
     write_spanish_source_candidate,
 )
@@ -264,3 +266,66 @@ def test_owner_exclusion_scope_rejects_an_unbound_parent_hash():
         assert "parent dataset canonical hash" in str(exc)
     else:  # pragma: no cover - makes failed binding validation explicit
         raise AssertionError("expected parent hash validation")
+
+
+def test_current_gate_rejects_changed_raw_inputs_and_uses_current_audit_not_historical_block():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000012"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)]) for item in candidates]
+    owner_scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    input_hashes = {"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)}
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, owner_scope,
+        expected_input_hashes=input_hashes, historical_source_audit=_audit(asins),
+    )
+
+    assert result["binding_scope"]["asins"] == ["B000000012"]
+    assert result["current_source_gate"]["ready"] is True
+    assert result["status"] == "CANDIDATE_CURRENT_GATE_READY"
+    assert result["promotion_state"] == {"candidate": True, "reviewed_master": False, "eligible": True}
+    changed = list(details)
+    changed[2] = dict(changed[2], title_es_raw="changed raw source")
+    try:
+        build_current_source_gate_candidate(
+            candidates, changed, candidates, parents, owner_scope,
+            expected_input_hashes=input_hashes,
+        )
+    except ValueError as exc:
+        assert "input hash mismatch" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected raw-input binding validation")
+
+
+def test_current_gate_stays_blocked_for_current_review_even_if_history_is_ready():
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000013"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    details[-1] = _detail(asins[-1], title_es_raw="Antes <script>x</script>")
+    parents = [dict(item, ranking_contexts=[dict(item)]) for item in candidates]
+    parents[-1]["title_es_raw"] = "Antes <script>x</script>"
+    owner_scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, owner_scope,
+        expected_input_hashes={"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)},
+        historical_source_audit=_ready_audit(asins),
+    )
+
+    assert result["historical_source_audit"]["status"] == "PASS"
+    assert result["current_source_gate"]["ready"] is False
+    assert result["status"] == "CANDIDATE_CURRENT_GATE_BLOCKED"
+    assert result["promotion_state"]["eligible"] is False
+
+
+def test_rank_matrix_distinguishes_real_gaps_from_owner_scope_exclusions():
+    all_asins = ["B07F6LYVT6", "B077H1MZ35", "B000000014"]
+    owner_scope = derive_owner_excluded_scope(
+        [{"asin": asin} for asin in all_asins], parent_dataset_canonical_hash=_hash([{"asin": asin} for asin in all_asins]),
+    )
+    complete_with_exclusion = [_ranking("B000000014", rank=1), _ranking("B07F6LYVT6", rank=2), _ranking("B077H1MZ35", rank=3)]
+    diagnostic = rank_matrix_diagnostics(complete_with_exclusion, exact_scope={"B000000014"}, owner_scope=owner_scope)
+    assert not diagnostic["issues"]
+    assert {item["asin"] for item in diagnostic["out_of_exact_scope"]} == {"B07F6LYVT6", "B077H1MZ35"}
+    assert all(item["classification"] == "OUT_OF_EXACT_SCOPE" and item["exclusion"] for item in diagnostic["out_of_exact_scope"])
+    real_gap = rank_matrix_diagnostics([_ranking("B000000014", rank=1), _ranking("B07F6LYVT6", rank=3)], exact_scope={"B000000014"}, owner_scope=owner_scope)
+    assert real_gap["issues"][0]["issue_code"] == "RANK_GAP"

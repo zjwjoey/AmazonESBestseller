@@ -27,6 +27,7 @@ from ..quality.source_gate import canonical_audit_hash, evaluate_source_gate
 
 SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION = "spanish-source-closure-v1"
 OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION = "owner-exclusion-scope-v1"
+CURRENT_SOURCE_GATE_SCHEMA_VERSION = "current-source-gate-v1"
 _OWNER_EXCLUSIONS = {
     "B07F6LYVT6": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
     "B077H1MZ35": "owner exclusion: damaged special-function source text is unrecoverable; whole SKU must not be used",
@@ -441,14 +442,17 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping) -> d
                 row[key] = json.dumps(row.get(key), ensure_ascii=False, sort_keys=True, default=str)
             writer.writerow(row)
     historical_path = directory / "historical_source_audit.json"
-    historical_path.write_text(json.dumps(result.get("source_audit") or {}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    historical_path.write_text(json.dumps(result.get("historical_source_audit") or result.get("source_audit") or {}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     audit_path = directory / "audit.json"
     audit_path.write_text(json.dumps({
         "schema_version": result.get("schema_version"), "status": result.get("status"),
         "candidate_manifest_hash": result.get("candidate_manifest_hash"), "binding_scope": result.get("binding_scope"),
         "source_gate": result.get("source_gate"), "closure_source_gate": result.get("closure_source_gate"),
-        "source_audit_history": {"path": historical_path.name, "hash": result.get("source_audit_hash")},
+        "current_source_audit": result.get("source_audit"),
+        "source_audit_history": {"path": historical_path.name, "hash": canonical_audit_hash(result.get("historical_source_audit") or result.get("source_audit") or {})},
         "closure_audit": result.get("closure_audit"),
+        "current_source_gate": result.get("current_source_gate"),
+        "rank_matrix_diagnostic": result.get("rank_matrix_diagnostic"),
     }, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     (directory / "audit.md").write_text(_audit_markdown(result), encoding="utf-8")
     queue_path = directory / "source_review_queue.json"
@@ -524,8 +528,119 @@ def write_owner_excluded_scope(output_dir: str | Path, scope: Mapping) -> dict:
     return manifest
 
 
+def rank_matrix_diagnostics(rankings: Iterable[Mapping], *, exact_scope: set[str], owner_scope: Mapping) -> dict:
+    """Audit rank gaps against the complete matrix, not an owner-excluded view."""
+    slots: dict[tuple[str, int], set[int]] = defaultdict(set)
+    excluded: list[dict] = []
+    owner_reasons = {normalize_asin(item.get("asin")): item for item in owner_scope.get("owner_exclusions") or []
+                     if isinstance(item, Mapping) and normalize_asin(item.get("asin"))}
+    parent_asins = set(owner_scope.get("effective_scope", {}).get("asins") or ()) | set(owner_reasons)
+    for ranking in rankings:
+        if not isinstance(ranking, Mapping):
+            continue
+        asin = normalize_asin(ranking.get("asin"))
+        source = _text(ranking.get("ranking_source_url") or ranking.get("source_url"))
+        try:
+            page, rank = int(ranking.get("ranking_page_number", ranking.get("page_number"))), int(ranking.get("bestseller_rank", ranking.get("ranking_rank")))
+        except (TypeError, ValueError):
+            continue
+        slots[(source, page)].add(rank)
+        if asin and asin not in exact_scope and asin in parent_asins:
+            excluded.append({
+                "asin": asin, "classification": "OUT_OF_EXACT_SCOPE", "status": "INFO",
+                "ranking_slot": {"source": source, "page": page, "rank": rank},
+                "exclusion": owner_reasons.get(asin, {"asin": asin, "reason": "exact-identity exclusion"}),
+            })
+    issues = []
+    for (source, page), ranks in sorted(slots.items()):
+        if len(ranks) > 1:
+            missing = sorted(set(range(min(ranks), max(ranks) + 1)) - ranks)
+            if missing:
+                issues.append({"issue_code": "RANK_GAP", "status": "REVIEW", "severity": "P2",
+                               "field": "bestseller_rank", "evidence": {"source": source, "page": page, "missing": missing}})
+    return {"complete_matrix_slot_count": sum(len(ranks) for ranks in slots.values()),
+            "out_of_exact_scope": excluded, "issues": issues}
+
+
+def build_current_source_gate_candidate(
+    candidate_manifest: Iterable[Mapping], details: Iterable[Mapping], rankings: Iterable[Mapping],
+    parent_records: Iterable[Mapping], owner_scope: Mapping, *, expected_input_hashes: Mapping,
+    historical_source_audit: Mapping | None = None, cache_root: str | Path | None = None,
+    snapshot_provenance: Mapping | None = None,
+) -> dict:
+    """Revalidate a hash-bound owner subset; history is retained but not authoritative."""
+    candidates = [dict(item) for item in candidate_manifest if isinstance(item, Mapping)]
+    detail_rows = [dict(item) for item in details if isinstance(item, Mapping)]
+    ranking_rows = [dict(item) for item in rankings if isinstance(item, Mapping)]
+    parents = [dict(item) for item in parent_records if isinstance(item, Mapping)]
+    observed_hashes = {"candidate_manifest": _hash(candidates), "details": _hash(detail_rows), "rankings": _hash(ranking_rows)}
+    for name, observed in observed_hashes.items():
+        if str(expected_input_hashes.get(name) or "") != observed:
+            raise ValueError(f"input hash mismatch for {name}")
+    parent = owner_scope.get("parent_scope") or {}
+    if parent.get("dataset_canonical_hash") != _hash(parents):
+        raise ValueError("owner scope parent hash does not match supplied parent records")
+    parent_asins = {normalize_asin(item.get("asin")) for item in parents if normalize_asin(item.get("asin"))}
+    expected_scope = {normalize_asin(item) for item in (owner_scope.get("effective_scope") or {}).get("asins") or () if normalize_asin(item)}
+    exclusions = {normalize_asin(item.get("asin")) for item in owner_scope.get("owner_exclusions") or []
+                  if isinstance(item, Mapping) and normalize_asin(item.get("asin"))}
+    if not expected_scope or expected_scope | exclusions != parent_asins or expected_scope & exclusions:
+        raise ValueError("owner scope is not an exact parent-minus-exclusions subset")
+    if (owner_scope.get("effective_scope") or {}).get("canonical_asin_hash") != _hash(sorted(expected_scope)):
+        raise ValueError("owner scope effective ASIN hash does not match")
+    candidate_asins = {normalize_asin(item.get("asin")) for item in candidates if normalize_asin(item.get("asin"))}
+    detail_map = {normalize_asin(item.get("asin")): item for item in detail_rows
+                  if normalize_asin(item.get("asin")) in expected_scope
+                  and _text(item.get("identity_status_code") or item.get("identity_status")).upper() in {"MATCH", "IDENTITY_MATCH"}}
+    if not expected_scope <= candidate_asins or set(detail_map) != expected_scope:
+        raise ValueError("current scope does not have exact candidate and identity-MATCH detail evidence")
+    ranking_contexts: dict[str, set[str]] = defaultdict(set)
+    for ranking in ranking_rows:
+        asin = normalize_asin(ranking.get("asin"))
+        if asin in expected_scope:
+            ranking_contexts[asin].add(_hash(dict(ranking)))
+    records = [dict(record) for record in parents if normalize_asin(record.get("asin")) in expected_scope]
+    if {normalize_asin(record.get("asin")) for record in records} != expected_scope:
+        raise ValueError("owner scope does not select an exact parent record set")
+    for record in records:
+        asin = normalize_asin(record.get("asin"))
+        if not record.get("ranking_contexts") or not all(_hash(dict(ctx)) in ranking_contexts[asin]
+                                                          for ctx in record.get("ranking_contexts") if isinstance(ctx, Mapping)):
+            raise ValueError(f"saved canonical record has unbound ranking context for {asin}")
+        detail = detail_map[asin]
+        if normalize_asin(detail.get("parent_asin")) == asin and not _confirmed_self_parent(detail, asin, Path(cache_root) if cache_root else None):
+            if _text(record.get("parent_asin")):
+                raise ValueError(f"unconfirmed self-parent was retained for {asin}")
+    current_audit = audit_source_fields(records)
+    current_gate = evaluate_source_gate(current_audit)
+    rank_diagnostic = rank_matrix_diagnostics(ranking_rows, exact_scope=expected_scope, owner_scope=owner_scope)
+    queue = [dict(item, origin="current_field_audit") for item in current_audit.get("field_audits") or []
+             if isinstance(item, Mapping) and item.get("classification") not in {"PASS", "WARN"}]
+    result = {
+        "schema_version": CURRENT_SOURCE_GATE_SCHEMA_VERSION,
+        "candidate_manifest_hash": candidate_manifest_hash(candidates),
+        "binding_scope": {"count": len(expected_scope), "asins": sorted(expected_scope), "exact_match": True},
+        "historical_source_audit": dict(historical_source_audit or {}),
+        "source_audit": current_audit,
+        "current_input_hashes": observed_hashes,
+        "current_source_audit": current_audit,
+        "current_source_gate": current_gate,
+        "source_audit_hash": canonical_audit_hash(current_audit),
+        "closure_audit": current_audit,
+        "rank_matrix_diagnostic": rank_diagnostic,
+        "source_gate": current_gate,
+        "promotion_state": {"candidate": True, "reviewed_master": False, "eligible": current_gate["ready"]},
+        "status": "CANDIDATE_CURRENT_GATE_READY" if current_gate["ready"] else "CANDIDATE_CURRENT_GATE_BLOCKED",
+        "snapshot_provenance": dict(snapshot_provenance or {}),
+        "records": records,
+        "source_review_queue": queue,
+    }
+    return result
+
+
 __all__ = [
-    "SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION", "OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION",
+    "SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION", "OWNER_EXCLUSION_SCOPE_SCHEMA_VERSION", "CURRENT_SOURCE_GATE_SCHEMA_VERSION",
     "build_spanish_source_candidate", "candidate_manifest_hash", "write_spanish_source_candidate",
-    "derive_owner_excluded_scope", "write_owner_excluded_scope",
+    "derive_owner_excluded_scope", "write_owner_excluded_scope", "rank_matrix_diagnostics",
+    "build_current_source_gate_candidate",
 ]
