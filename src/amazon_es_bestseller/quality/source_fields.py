@@ -140,7 +140,7 @@ _STRICT_HTML_TAG = re.compile(r"</?\s*(?:script|style|div|span|iframe|object|emb
 _STRICT_UI_TEXT = re.compile(r"\b(?:javascript|cookie|captcha|robot\s*check|add\s+to\s+cart|privacy)\b", re.I)
 _EXPLICIT_BAD_TEXT = re.compile(r"\ufffd|\?{2,}|[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _UNIT = re.compile(
-    r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(?P<unit>mililitros?|litros?|gramos?|"
+    r"(?<![a-z0-9])\d+(?:[.,]\d+)?\s*(?P<unit>m(?:3|³)\s*/\s*h|cm(?:3|³)|cc|mililitros?|litros?|gramos?|"
     r"kilogramos?|cent[ií]metros?|metros?|vatios?|voltios?|ml|kg|mm|cm|pcs|pack|uds|"
     r"unidades|piezas|[lgwmv])(?![a-z])", re.I)
 _LABEL_UNIT_TYPES = (
@@ -154,6 +154,7 @@ _LABEL_UNIT_TYPES = (
     (r"\b(?:cantidad|unidades|piezas)\b", {"pcs", "pack", "uds", "unidades", "piezas"}),
 )
 _UNIT_CANONICAL = {
+    "m3/h": "m3/h", "cm3": "ml", "cc": "ml",
     "mililitro": "ml", "mililitros": "ml", "ml": "ml",
     "litro": "l", "litros": "l", "l": "l",
     "gramo": "g", "gramos": "g", "g": "g",
@@ -356,25 +357,86 @@ def _allowed_units_for_label(label) -> set[str]:
     return set()
 
 
-def _unit_policy(label, value) -> tuple[set[str], str | None]:
+def _unit_evidence(row, label, value, field, *, kind, corroborated_by="") -> dict:
+    source = {"label": str(label), "value": str(value), "field": field}
+    if corroborated_by:
+        source["corroborated_by"] = corroborated_by
+    return {
+        "match_kind": kind,
+        "label": str(label),
+        "value": str(value),
+        "evidence_locator": {"source": field, "label_raw": str(label), "value_raw": str(value)},
+        "source_hash": hashlib.sha256(_json.dumps(source, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
+        **({"corroborated_by": corroborated_by} if corroborated_by else {}),
+    }
+
+
+def _measure_signatures(value) -> set[str]:
+    signatures = set()
+    for match in _UNIT.finditer(str(value or "")):
+        unit = _UNIT_CANONICAL.get(_semantic_text(match.group("unit")), _semantic_text(match.group("unit")))
+        number = match.group(0)[:match.group(0).lower().rfind(match.group("unit").lower())].strip().replace(",", ".")
+        if number:
+            signatures.add(f"{number}{unit}")
+    return signatures
+
+
+def _corroborated_measure(row, value) -> str:
+    signatures = _measure_signatures(value)
+    for field in ("title_es_raw", "selected_variation_raw"):
+        if signatures and signatures & _measure_signatures(row.get(field)):
+            return field
+    return ""
+
+
+def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict | None, str | None]:
     """Return a conservative label policy without turning ambiguity into PASS."""
     normalized = _semantic_text(label)
     units = _units_for_labeled_value(label, value)
+    evidence = lambda kind, corroborated_by="": _unit_evidence(row, label, value, field, kind=kind, corroborated_by=corroborated_by)
+    if re.search(r"\bcapacidad\s+de\s+la\s+bateria\b", normalized) and units & {"v"}:
+        return set(), "battery capacity label conflicts with voltage value", evidence("label_value_conflict"), None
+    if re.search(r"\bcapacidad\s+de\s+peso\b", normalized) and units & {"ml", "l"}:
+        return set(), "weight-capacity label conflicts with volume value", evidence("label_value_conflict"), None
+    if re.search(r"\bvolumen\s+liquido\b", normalized) and units & {"g", "kg"}:
+        return set(), "liquid-volume label conflicts with weight value", evidence("label_value_conflict"), None
+    if re.search(r"\bvoltaje(?:\s+maximo)?\b", normalized) and units & {"w"}:
+        return set(), "voltage label conflicts with power value", evidence("label_value_conflict"), None
+    if re.search(r"\b(?:caudal|flujo)\s+de\s+aire\b|\bairflow\b", normalized):
+        return {"m3/h"}, None, evidence("airflow"), None
+    if re.search(r"\bcapacidad\s+de\s+perfor", normalized):
+        return {"mm", "cm", "m"}, None, evidence("drill_capacity"), None
+    if re.search(r"\btension\b", normalized) and re.search(r"\b(?:mano|grip|hand\s*gripper|ejercitador)\b", _semantic_text(row.get("title_es_raw"))):
+        return {"g", "kg"}, None, evidence("grip_resistance"), None
+    if re.search(r"\bcantidad\s+de\s+pilas\b", normalized) and units & {"v"}:
+        return {"v"}, None, evidence("battery_count_and_voltage"), None
     if re.search(r"\btamano\b", normalized):
         dimensional = units & {"mm", "cm", "m"}
         # ``Tamaño`` is an Amazon option label, not proof that a number is a
         # physical dimension.  Only an actual dimension unit lets us constrain
         # it; ml/L/pieces alone remain reviewable rather than a false BLOCK.
         if dimensional and not (units - dimensional):
-            return {"mm", "cm", "m"}, None
+            return {"mm", "cm", "m"}, None, evidence("explicit_dimension"), None
         if units:
-            return set(), "generic Tamaño value has no unambiguous dimension semantics"
-        return set(), None
+            corroborated_by = _corroborated_measure(row, value)
+            if corroborated_by:
+                return (set(units), None,
+                        evidence("generic_measure_correlated", corroborated_by),
+                        "generic label measure corroborated by product evidence")
+            return (set(), "generic Tamaño value has no unambiguous dimension semantics",
+                    evidence("generic_measure_unresolved"), None)
+        return set(), None, None, None
     if re.search(r"\b(?:numero|cantidad)\s+de\s+unidades\b", normalized):
         count_units = {"pcs", "pack", "uds", "unidades", "piezas"}
         if units - count_units:
-            return set(), "unit-count label contains a packaging amount rather than an unambiguous count"
-    return _allowed_units_for_label(label), None
+            corroborated_by = _corroborated_measure(row, value)
+            if corroborated_by:
+                return (set(units), None,
+                        evidence("unit_count_measure_correlated", corroborated_by),
+                        "unit-count label measure corroborated by product evidence")
+            return (set(), "unit-count label contains a packaging amount rather than an unambiguous count",
+                    evidence("unit_count_unresolved"), None)
+    return _allowed_units_for_label(label), None, None, None
 
 
 def _units_for_labeled_value(label, value) -> set[str]:
@@ -503,18 +565,25 @@ def _sf_semantics(row, asin, issues, fields):
     labelled_units.extend(_labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
                                                "selected_variation_raw"))
     for label, value, field in labelled_units:
-        allowed, review_reason = _unit_policy(label, value)
+        allowed, review_reason, unit_evidence, explanation = _unit_policy(row, label, value, field)
         if review_reason:
-            _sf_issue(issues, fields, asin, "UNIT_SEMANTICS_AMBIGUOUS", REVIEW_REQUIRED, "P1",
-                      review_reason, field, {"label": label, "value": value})
+            code = ("SOURCE_SEMANTIC_CONFLICT" if unit_evidence and
+                    unit_evidence.get("match_kind") == "label_value_conflict"
+                    else "UNIT_SEMANTICS_AMBIGUOUS")
+            _sf_issue(issues, fields, asin, code, REVIEW_REQUIRED, "P1",
+                      review_reason, field, unit_evidence or {"label": label, "value": value})
             continue
+        if explanation:
+            _sf_field(fields, asin, field, PASS, "INFO", explanation, unit_evidence)
         if not allowed:
             continue
         units = _units_for_unit_audit(label, value)
         if units and not units <= allowed:
+            evidence = dict(unit_evidence or {})
+            evidence.update({"units": sorted(units), "allowed": sorted(allowed)})
             _sf_issue(issues, fields, asin, "SPEC_UNIT_TYPE_MISMATCH", MAPPING_MISSED, "P1",
                       f"{label} has the wrong unit type", field,
-                      {"units": sorted(units), "allowed": sorted(allowed)})
+                      evidence)
     for text in (spec, str(row.get("selected_variation_raw") or "")):
         if text.lstrip().startswith(("{", "[{")):
             try:

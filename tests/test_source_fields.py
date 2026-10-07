@@ -132,3 +132,44 @@ def test_source_audit_strict_text_findings_have_locators_and_brand_kg_is_not_spe
     assert all(item["field"] == "title_es_raw" for item in misplaced)
     assert {item["evidence"]["match_kind"] for item in misplaced} == {"html_script", "mojibake"}
     assert all(item["evidence"].get("offset") is not None and item["evidence"].get("snippet_hash") for item in misplaced)
+
+
+def test_source_audit_recognizes_explicit_domain_unit_labels_and_battery_components():
+    report = audit_source_fields([_row(
+        title_es_raw="Ejercitador de mano y taladro 13 mm con ventilador 120 m³/h",
+        attributes=[
+            {"label_raw": "Caudal de aire", "value_raw": "120 m³/h"},
+            {"label_raw": "Capacidad de perforación", "value_raw": "13 mm"},
+            {"label_raw": "Tensión", "value_raw": "60 kg"},
+            {"label_raw": "Capacidad", "value_raw": "250 cc"},
+            {"label_raw": "Cantidad de pilas", "value_raw": "2 pilas, 1.5 V"},
+        ],
+    )])
+    assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in report["issues"]}
+    assert "SOURCE_SEMANTIC_CONFLICT" not in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_reviews_conflicting_label_value_semantics_without_rewriting_raw():
+    report = audit_source_fields([_row(attributes=[
+        {"label_raw": "Capacidad de la batería", "value_raw": "1.5 V"},
+        {"label_raw": "Capacidad de peso", "value_raw": "68 L"},
+        {"label_raw": "Volumen líquido", "value_raw": "7 kg"},
+        {"label_raw": "Voltaje máximo", "value_raw": "30 W"},
+    ])])
+    conflicts = [item for item in report["issues"] if item["issue_code"] == "SOURCE_SEMANTIC_CONFLICT"]
+    assert len(conflicts) == 4
+    assert all(item["status"] == "REVIEW" and item["evidence"].get("source_hash") for item in conflicts)
+    assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in report["issues"]}
+
+
+def test_source_audit_explains_generic_size_only_when_title_or_variation_proves_measure():
+    explained = audit_source_fields([_row(
+        title_es_raw="Botella de viaje 500 ml", selected_variation_raw="500 ml",
+        attributes=[{"label_raw": "Tamaño", "value_raw": "500 ml"}],
+    )])
+    unknown = audit_source_fields([_row(
+        attributes=[{"label_raw": "Tamaño", "value_raw": "500 ml"}],
+    )])
+    explained_fields = [item for item in explained["field_audits"] if item["message"].startswith("generic label measure")]
+    assert explained_fields and explained_fields[0]["classification"] == "PASS"
+    assert "UNIT_SEMANTICS_AMBIGUOUS" in {item["issue_code"] for item in unknown["issues"]}
