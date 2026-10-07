@@ -309,7 +309,14 @@ def execute_formal_structured_translation(
     validate_formal_structured_translation_input(formal, verified_master, source_audit, source_gate,
                                                  review_snapshot, prompt_version=prompt_version,
                                                  dictionary_manifest=dictionary_manifest)
-    translated = service.translate_records(_service_records(formal), fields=["product_details", "feature_bullets"])
+    # Avoid mutating a potentially shared pool/service while binding the
+    # formal structured-input contract into cache derivation. The execution
+    # view shares provider/cache semantics (including inflight dedupe) but its
+    # derived keys include this immutable structured schema version.
+    structured_service = service.with_structured_schema_version(
+        STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
+    translated = structured_service.translate_records(
+        _service_records(formal), fields=["product_details", "feature_bullets"])
     records: dict[str, Any] = {}
     provider_calls = 0
     for record in formal.get("records") or []:

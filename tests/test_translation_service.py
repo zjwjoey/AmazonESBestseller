@@ -180,6 +180,112 @@ def test_entries_only_qa_failed_field_cache_resumes_without_provider_call(tmp_pa
     assert field["candidate_text"] == "中文"
 
 
+def test_cache_reuses_immutable_result_after_dictionary_hash_change_and_restart(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    original_provider = FakeProvider()
+    original = TranslationService(
+        original_provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-a"},
+    ).translate_records([{"asin": "B00000001", "title_es_raw": "Taladro compacto"}])
+    original_field = original["records"]["B00000001"]["fields"]["title_zh"]
+    assert len(original_provider.calls) == 1
+
+    # Persist the original process cache then recreate the process with a new
+    # dictionary content hash. The old raw provider candidate remains intact,
+    # but it is review-required rather than silently certified as a new render.
+    resumed_provider = FakeProvider()
+    resumed = TranslationService(
+        resumed_provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-b"},
+    ).translate_records([{"asin": "B00000001", "title_es_raw": "Taladro compacto"}])
+    field = resumed["records"]["B00000001"]["fields"]["title_zh"]
+    assert not resumed_provider.calls
+    assert field["translation_status"] == "pending"
+    assert field["qa_status"] == "review_required"
+    assert field["candidate_text"] == original_field["candidate_text"]
+    persisted = TranslationCache(cache_path)
+    raw = persisted.find_result("B00000001", "title_es_raw", source_hash("Taladro compacto"))
+    assert raw["candidate_text"] == original_field["candidate_text"]
+    assert raw["translation_status"] == "success"
+
+
+def test_entries_only_qa_failed_result_stops_new_dictionary_namespace_call(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    text = "Parasol Protecci��n UPF50+"
+    provider = MissingProtectedTokenThenLiteralProvider()
+    original = TranslationService(
+        provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-a"},
+    )
+    key = original._field_cache_key("B00000001", "title_es_raw", source_hash(text))
+    original.cache.entries[key] = {
+        "asin": "B00000001", "field": "title_es_raw", "target_field": "title_zh",
+        "source_text": text, "source_hash": source_hash(text), "candidate_text": "����",
+        "translated_text": "����", "translation_status": "qa_failed", "qa_status": "qa_failed",
+        "qa_issues": [{"code": "PROTECTED_TOKEN_MISSING"}],
+    }
+    original.cache.save()
+
+    resumed_provider = MissingProtectedTokenThenLiteralProvider()
+    resumed = TranslationService(
+        resumed_provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-b"},
+    ).translate_records([{"asin": "B00000001", "title_es_raw": text}])
+    field = resumed["records"]["B00000001"]["fields"]["title_zh"]
+    assert not resumed_provider.calls
+    assert field["translation_status"] == "qa_failed"
+    assert field["candidate_text"] == "����"
+
+
+def test_cross_asin_tm_stops_provider_repeat_when_namespace_changes(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    first_provider = FakeProvider()
+    TranslationService(
+        first_provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-a"},
+    ).translate_records([{"asin": "B00000001", "title_es_raw": "Bolsa aislante"}])
+    assert len(first_provider.calls) == 1
+    # Service writes atomically at translate_records completion; this reload is
+    # deliberately a fresh process boundary.
+    resumed_provider = FakeProvider()
+    result = TranslationService(
+        resumed_provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "hash-b"},
+    ).translate_records([{"asin": "B00000002", "title_es_raw": "Bolsa aislante"}])
+    assert not resumed_provider.calls
+    assert result["records"]["B00000002"]["fields"]["title_zh"]["translation_status"] in {"cached", "success"}
+
+
+def test_new_source_hash_is_plan_only_in_no_repeat_slice(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    plan = service.plan([{"asin": "B00000001", "title_es_raw": "Nuevo texto sin resultado"}])
+    assert plan["estimated_api_requests"] == 1
+    assert not provider.calls
+
+
+def test_pending_prior_attempt_requires_manual_resume_not_provider_retry(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    text = "Pendiente de recuperar"
+    original = TranslationService(FakeProvider(), TranslationCache(cache_path))
+    original.cache.put(original._field_cache_key("B00000001", "title_es_raw", source_hash(text)), {
+        "asin": "B00000001", "field": "title_es_raw", "target_field": "title_zh",
+        "source_text": text, "source_hash": source_hash(text), "candidate_text": "",
+        "translated_text": "", "translation_status": "pending", "qa_status": "pending",
+        "last_error": "NO_HEALTHY_PROVIDER", "qa_issues": [],
+    })
+    original.cache.save()
+    resumed_provider = FakeProvider()
+    resumed = TranslationService(
+        resumed_provider, TranslationCache(cache_path),
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "changed"},
+    ).translate_records([{"asin": "B00000001", "title_es_raw": text}])
+    field = resumed["records"]["B00000001"]["fields"]["title_zh"]
+    assert not resumed_provider.calls
+    assert field["translation_status"] == "pending"
+    assert field["qa_status"] == "review_required"
+
+
 def test_service_dry_run_never_calls_provider(tmp_path):
     provider = FakeProvider()
     service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))

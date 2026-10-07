@@ -6,17 +6,25 @@ import os
 import tempfile
 import threading
 import time
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 
 class TranslationCache:
-    VERSION = 3
+    VERSION = 4
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.entries: Dict[str, Dict[str, Any]] = {}
         self.memory: Dict[str, Dict[str, Any]] = {}
+        # ``results`` and ``memory_results`` are intentionally append-only
+        # indexes of the first observed provider/QA envelope.  They are not a
+        # second cache: derived namespace entries still live in ``entries``.
+        # The indexes make a dictionary/schema key change unable to disguise a
+        # prior provider attempt as a fresh request.
+        self.results: Dict[str, Dict[str, Any]] = {}
+        self.memory_results: Dict[str, Dict[str, Any]] = {}
         self.recovered_from_corruption = False
         self.corruption_error: Optional[str] = None
         self._corruption_preserved = False
@@ -26,9 +34,23 @@ class TranslationCache:
     @staticmethod
     def key(asin: str, field: str, source_hash: str, provider: str,
             model: str, schema_version: str, prompt_version: str,
-            dictionary_version: str = "0") -> str:
+            dictionary_version: str = "0", dictionary_hash: str = "",
+            structured_schema_version: str = "") -> str:
         return "|".join((asin.upper(), field, source_hash, provider, model,
-                          str(dictionary_version), schema_version, prompt_version))
+                          str(dictionary_version), str(dictionary_hash),
+                          schema_version, str(structured_schema_version), prompt_version))
+
+    @staticmethod
+    def result_key(asin: str, field: str, source_hash: str) -> str:
+        """Stable per-ASIN raw-result identity, independent of render namespace."""
+        return "|".join((str(asin or "").upper(), str(field or ""), str(source_hash or "")))
+
+    @staticmethod
+    def memory_result_key(source_text: str, source_language: str, target_language: str,
+                          field_type: str, provider: str, model: str) -> str:
+        import hashlib
+        digest = hashlib.sha256(str(source_text or "").encode("utf-8")).hexdigest()
+        return "|".join((digest, source_language, target_language, field_type, provider, model))
 
     def load(self) -> None:
         if not self.path.exists():
@@ -38,6 +60,8 @@ class TranslationCache:
             if isinstance(data, dict) and "entries" in data:
                 self.entries = dict(data.get("entries") or {})
                 self.memory = dict(data.get("memory") or {})
+                self.results = dict(data.get("results") or {})
+                self.memory_results = dict(data.get("memory_results") or {})
             else:
                 # Backward-compatible V1 cache shape: old records remain
                 # field entries; no implicit migration is attempted.
@@ -65,17 +89,45 @@ class TranslationCache:
 
     def put(self, key: str, value: Dict[str, Any]) -> None:
         with self._lock:
-            self.entries[key] = dict(value)
+            snapshot = deepcopy(value)
+            self.entries[key] = snapshot
+            identity = self.result_key(snapshot.get("asin", ""), snapshot.get("field", ""),
+                                       snapshot.get("source_hash", ""))
+            # Do not overwrite the raw provider/QA evidence selected by the
+            # first attempt with a later namespace render or retry envelope.
+            if (all(identity.split("|")) and identity not in self.results
+                    and snapshot.get("resolution_source") != "immutable_cache_namespace_reuse"):
+                self.results[identity] = deepcopy(snapshot)
+
+    def find_result(self, asin: str, field: str, source_hash: str) -> Optional[Dict[str, Any]]:
+        """Find immutable evidence even when its derived cache key changed.
+
+        The entry scan keeps old entries-only JSON caches usable after a
+        process restart without rewriting or trusting a synthetic migration.
+        """
+        identity = self.result_key(asin, field, source_hash)
+        with self._lock:
+            value = self.results.get(identity)
+            if isinstance(value, dict):
+                return deepcopy(value)
+            for candidate in self.entries.values():
+                if not isinstance(candidate, dict):
+                    continue
+                if self.result_key(candidate.get("asin", ""), candidate.get("field", ""),
+                                   candidate.get("source_hash", "")) == identity:
+                    return deepcopy(candidate)
+        return None
 
     @staticmethod
     def memory_key(source_text: str, source_language: str, target_language: str,
                    field_type: str, provider: str, model: str,
                    schema_version: str, prompt_version: str,
-                   dictionary_version: str = "v1") -> str:
-        import hashlib
-        digest = hashlib.sha256(str(source_text or "").encode("utf-8")).hexdigest()
-        return "|".join((digest, source_language, target_language, field_type,
-                          provider, model, dictionary_version, schema_version, prompt_version))
+                   dictionary_version: str = "v1", dictionary_hash: str = "",
+                   structured_schema_version: str = "") -> str:
+        stable = TranslationCache.memory_result_key(
+            source_text, source_language, target_language, field_type, provider, model)
+        return "|".join((stable, dictionary_version, str(dictionary_hash), schema_version,
+                          str(structured_schema_version), prompt_version))
 
     def get_memory(self, key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
@@ -84,15 +136,39 @@ class TranslationCache:
 
     def put_memory(self, key: str, value: Dict[str, Any]) -> None:
         with self._lock:
-            self.memory[key] = dict(value)
+            snapshot = deepcopy(value)
+            self.memory[key] = snapshot
+            # The first six components are the canonical TM context.  It does
+            # not include ASIN by design, but it does include field type and
+            # language pair so unlike fields never cross-contaminate.
+            parts = key.split("|")
+            if len(parts) >= 6:
+                identity = "|".join(parts[:6])
+                if identity not in self.memory_results:
+                    self.memory_results[identity] = deepcopy(snapshot)
+
+    def find_memory_result(self, source_text: str, source_language: str, target_language: str,
+                           field_type: str, provider: str, model: str) -> Optional[Dict[str, Any]]:
+        identity = self.memory_result_key(source_text, source_language, target_language,
+                                          field_type, provider, model)
+        with self._lock:
+            value = self.memory_results.get(identity)
+            if isinstance(value, dict):
+                return deepcopy(value)
+            # Compatibility with V1--V3 memory-only cache payloads.
+            for key, candidate in self.memory.items():
+                if key.startswith(identity + "|") and isinstance(candidate, dict):
+                    return deepcopy(candidate)
+        return None
 
     def save(self) -> None:
         with self._lock:
             if self.recovered_from_corruption and not self._corruption_preserved and self.path.exists():
                 raise RuntimeError("corrupt translation cache could not be preserved: %s" % self.path)
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {"cache_version": self.VERSION, "entries": dict(self.entries),
-                       "memory": dict(self.memory)}
+            payload = {"cache_version": self.VERSION, "entries": deepcopy(self.entries),
+                       "memory": deepcopy(self.memory), "results": deepcopy(self.results),
+                       "memory_results": deepcopy(self.memory_results)}
             fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".tmp-", dir=str(self.path.parent))
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as handle:

@@ -50,7 +50,8 @@ class TranslationService:
                  schema_version: str = TRANSLATION_SCHEMA_VERSION,
                  prompt_version: str = "v1", max_fields: Optional[Sequence[str]] = None,
                  source_language: str = "es", target_language: str = "zh-CN",
-                 dictionary_manifest: Optional[Dict[str, Any]] = None):
+                 dictionary_manifest: Optional[Dict[str, Any]] = None,
+                 structured_schema_version: str = ""):
         self.provider = provider
         self.cache = cache
         self.field_map = dict(field_map or DEFAULT_FIELD_MAP)
@@ -70,6 +71,10 @@ class TranslationService:
         self.dictionary_manifest = dict(dictionary_manifest or {})
         self.dictionary_version = str(self.dictionary_manifest.get("dictionary_version", "0"))
         self.dictionary_hash = str(self.dictionary_manifest.get("dictionary_hash", ""))
+        # Kept separate from the field translation schema: formal structured
+        # inputs have their own immutable contract and must not share a
+        # derived result namespace merely because the provider is unchanged.
+        self.structured_schema_version = str(structured_schema_version or "")
         self.dictionary = DictionaryService(manifest=self.dictionary_manifest)
 
     @staticmethod
@@ -81,7 +86,53 @@ class TranslationService:
             text, self.source_language, self.target_language,
             canonical_translation_unit_field(field, label=label), self.provider.name,
             self.provider.model, self.schema_version, self.prompt_version,
-            self.dictionary_version)
+            self.dictionary_version, self.dictionary_hash, self.structured_schema_version)
+
+    def _field_cache_key(self, asin: str, source_field: str, digest: str) -> str:
+        return self.cache.key(asin, source_field, digest, self.provider.name,
+                              self.provider.model, self.schema_version, self.prompt_version,
+                              self.dictionary_version, self.dictionary_hash,
+                              self.structured_schema_version)
+
+    def with_structured_schema_version(self, schema_version: str) -> "TranslationService":
+        """Create an execution view without mutating a shared provider/pool."""
+        return TranslationService(
+            self.provider, self.cache, field_map=self.field_map,
+            schema_version=self.schema_version, prompt_version=self.prompt_version,
+            max_fields=sorted(self.max_fields) if self.max_fields else None,
+            source_language=self.source_language, target_language=self.target_language,
+            dictionary_manifest=self.dictionary_manifest,
+            structured_schema_version=schema_version)
+
+    def _memory_lookup(self, key: str, text: str, field: str, *, label: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Use current namespace first, then immutable cross-namespace TM.
+
+        The latter is constrained by canonical field type, languages and
+        source hash inside ``TranslationCache``; it never allows a changed
+        dictionary/schema namespace to issue an identical provider request.
+        """
+        return (self._memory_get(key) or self.cache.get_memory(key) or
+                self.cache.find_memory_result(
+                    text, self.source_language, self.target_language,
+                    canonical_translation_unit_field(field, label=label),
+                    self.provider.name, self.provider.model))
+
+    @staticmethod
+    def _namespace_review(prior: Dict[str, Any]) -> Dict[str, Any]:
+        """Keep an old raw candidate visible without certifying a new render."""
+        result = dict(prior)
+        status = result.get("translation_status")
+        if status in {"success", "cached"}:
+            result["translation_status"] = "pending"
+            result["qa_status"] = "review_required"
+            result["qa_issues"] = list(result.get("qa_issues") or []) + [
+                {"code": "CACHE_NAMESPACE_REVIEW_REQUIRED"}]
+        elif status == "pending":
+            result["qa_status"] = "review_required"
+            result["qa_issues"] = list(result.get("qa_issues") or []) + [
+                {"code": "CACHE_PENDING_MANUAL_RESUME"}]
+        result["resolution_source"] = "immutable_cache_namespace_reuse"
+        return result
 
     def _memory_get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._memory_lock:
@@ -235,7 +286,7 @@ class TranslationService:
         for index, (label, value) in enumerate(items):
             unit_field = canonical_translation_unit_field(source_field, label=label)
             memory_key = self._memory_key(value, unit_field)
-            memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
+            memory = self._memory_lookup(memory_key, value, unit_field, label=label)
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):
@@ -356,7 +407,9 @@ class TranslationService:
             item_providers.append(item_provider)
             item_models.append(item_model)
             item_aliases.append(item_alias)
-            rendered_items.append({"item_index": index, "label": label,
+            rendered_items.append({"item_index": index,
+                                   "item_identity": "%s:%s:%s" % (source_field, index, source_hash(value)),
+                                   "label": label,
                                    "source_text": value, "translated_text": rendered_value,
                                    "translation_status": item_status,
                                    "qa_status": ("pass" if item_status == "success" else
@@ -502,14 +555,12 @@ class TranslationService:
                 source_missing += 1
             for source, target, text in selected:
                 digest = source_hash(text)
-                key = self.cache.key(asin, source, digest, self.provider.name,
-                                     self.provider.model, self.schema_version, self.prompt_version,
-                                     self.dictionary_version)
+                key = self._field_cache_key(asin, source, digest)
                 deterministic = self._resolve_scalar_before_provider(
                     asin=asin, source_field=source, target=target, text=text)
                 if deterministic is not None:
                     continue
-                cached = self.cache.get(key)
+                cached = self.cache.get(key) or self.cache.find_result(asin, source, digest)
                 memory = None
                 bypass_memory = False
                 if cached and cached.get("translation_status") in {"success", "cached"}:
@@ -534,7 +585,9 @@ class TranslationService:
                                                   field=normalize_key(item_label))["status"] == "resolved"):
                             continue
                         unit_field = canonical_translation_unit_field(source, label=item_label)
-                        item_memory = self.cache.get_memory(self._memory_key(item_text, unit_field))
+                        item_memory = self._memory_lookup(
+                            self._memory_key(item_text, unit_field), item_text, unit_field,
+                            label=item_label)
                         item_bypass = item_memory and (
                             (item_memory.get("translation_status") == "partial" and repair_partial)
                             or (item_memory.get("translation_status") in {"failed", "qa_failed"}
@@ -546,7 +599,7 @@ class TranslationService:
                                                  self.source_language, self.target_language,
                                                  self.provider.name, self.provider.model))
                 else:
-                    memory = self.cache.get_memory(self._memory_key(text, source))
+                    memory = self._memory_lookup(self._memory_key(text, source), text, source)
                     bypass_memory = memory and ((memory.get("translation_status") == "partial" and repair_partial)
                                                 or (memory.get("translation_status") in {"failed", "qa_failed"}
                                                     and repair_failed))
@@ -575,9 +628,7 @@ class TranslationService:
         output_fields: Dict[str, Dict[str, Any]] = {}
         for source_field, target, text in self.selected_fields(record, fields):
             digest = source_hash(text)
-            key = self.cache.key(asin, source_field, digest, self.provider.name,
-                                 self.provider.model, self.schema_version, self.prompt_version,
-                                 self.dictionary_version)
+            key = self._field_cache_key(asin, source_field, digest)
             deterministic_result = self._resolve_scalar_before_provider(
                 asin=asin, source_field=source_field, target=target, text=text)
             if deterministic_result is not None:
@@ -586,6 +637,9 @@ class TranslationService:
                 output_fields[target] = deterministic_result
                 continue
             cached = self.cache.get(key)
+            if cached and cached.get("resolution_source") == "immutable_cache_namespace_reuse":
+                output_fields[target] = cached
+                continue
             if cached and cached.get("translation_status") == "partial" and not repair_partial:
                 output_fields[target] = cached
                 continue
@@ -595,6 +649,16 @@ class TranslationService:
             if cached and cached.get("translation_status") in {"success", "cached"}:
                 cached["translation_status"] = "cached"
                 output_fields[target] = cached
+                continue
+            # A result under an older dictionary/schema namespace is evidence
+            # of a prior provider attempt. Closure no-repeat must surface it
+            # for offline re-render/re-QA, never silently call again.
+            prior = self.cache.find_result(asin, source_field, digest)
+            if prior:
+                reused = self._namespace_review(prior)
+                self._stamp_dictionary_version(reused)
+                self.cache.put(key, reused)
+                output_fields[target] = reused
                 continue
             raw_value = self._prepared_value(record, source_field)
             is_bullet_field = source_field in {"feature_bullets", "feature_bullets_es", "feature_bullets_raw", "features_es"}
@@ -611,9 +675,26 @@ class TranslationService:
                     output_fields[target] = structured_result
                     continue
             memory_key = self._memory_key(text, source_field)
-            memory = self._memory_get(memory_key) or self.cache.get_memory(memory_key)
+            memory = self._memory_lookup(memory_key, text, source_field)
             if memory and memory.get("translation_status") == "pending":
-                memory = None
+                result = {"asin": asin, "field": source_field, "target_field": target,
+                          "source_text": text, "source_hash": digest,
+                          "translated_text": str(memory.get("translated_text") or ""),
+                          "candidate_text": str(memory.get("candidate_text") or ""),
+                          "translation_status": "pending", "qa_status": "review_required",
+                          "provider": memory.get("provider", self.provider.name),
+                          "provider_alias": memory.get("provider_alias"),
+                          "model": memory.get("model", self.provider.model),
+                          "schema_version": self.schema_version, "prompt_version": self.prompt_version,
+                          "attempt_count": 0, "last_error": memory.get("last_error"),
+                          "qa_issues": list(memory.get("qa_issues") or []) + [
+                              {"code": "CACHE_PENDING_MANUAL_RESUME"}],
+                          "translated_at": self._now(),
+                          "resolution_source": "immutable_cache_namespace_reuse"}
+                self._stamp_dictionary_version(result)
+                self.cache.put(key, result)
+                output_fields[target] = result
+                continue
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):

@@ -19,6 +19,17 @@ def test_cache_corruption_is_preserved_and_recovered(tmp_path):
     assert list(tmp_path.glob("cache.json.corrupt-*"))
 
 
+def test_derived_keys_bind_dictionary_content_and_structured_schema(tmp_path):
+    cache = TranslationCache(tmp_path / "cache.json")
+    base = cache.key("B00000001", "product_details", "source", "fake", "model",
+                     "translation-v2", "v1", "202610", "dictionary-a", "structured-v2")
+    changed_dictionary = cache.key("B00000001", "product_details", "source", "fake", "model",
+                                   "translation-v2", "v1", "202610", "dictionary-b", "structured-v2")
+    changed_structured_schema = cache.key("B00000001", "product_details", "source", "fake", "model",
+                                          "translation-v2", "v1", "202610", "dictionary-a", "structured-v3")
+    assert len({base, changed_dictionary, changed_structured_schema}) == 3
+
+
 def test_translation_memory_roundtrip_is_not_asin_scoped(tmp_path):
     cache = TranslationCache(tmp_path / "cache.json")
     key = cache.memory_key("Hogar y cocina", "es", "zh-CN", "category",
