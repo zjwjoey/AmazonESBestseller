@@ -313,36 +313,6 @@ class TranslationService:
                                       allowed_residual=["para"])
                         item_issues = list(qa["issues"])
                         rendered_value = restored
-                        if (not hasattr(self.provider, "pool")
-                                and any(issue.get("code") == "PROTECTED_TOKEN_MISSING"
-                                        for issue in item_issues)):
-                            retry = self.provider.translate(
-                                value, asin=asin, field=source_field,
-                                source_language=self.source_language,
-                                target_language=self.target_language,
-                                context={"target_field": target, "item_index": index,
-                                         "label": label,
-                                         "translation_unit_field": unit_field,
-                                         "protected_tokens": [],
-                                         "retry_reason": "protected_token_missing",
-                                         "schema_version": self.schema_version,
-                                         "prompt_version": self.prompt_version,
-                                         "dictionary_version": self.dictionary_version})
-                            attempts += retry.attempts
-                            item_attempts += retry.attempts
-                            if retry.status == "success" and retry.text:
-                                retry_normalized = postprocess(source_field, retry.text, value)
-                                retry_restored = normalize_unit_display(retry_normalized)
-                                retry_restored = contextual_postprocess(source_field, retry_restored, value)
-                                retry_qa = qa_field(
-                                    protected, retry_restored, value, field=source_field,
-                                    brand=brand, allowed_residual=["para"])
-                                item_candidate_text = retry.text
-                                rendered_value = retry_restored
-                                item_issues = list(retry_qa["issues"])
-                                item_provider = retry.provider or item_provider
-                                item_alias = (retry.raw or {}).get("provider_alias")
-                                item_model = retry.model or item_model
                         item_status = "qa_failed" if item_issues else "success"
                         statuses.append(item_status)
                         issues.extend({"item_index": index, **issue} for issue in item_issues)
@@ -701,44 +671,6 @@ class TranslationService:
                     result["translated_text"] = restored
                     result["qa_status"] = qa["qa_status"]
                     result["qa_issues"] = list(qa["issues"])
-                    # Qwen-MT can occasionally drop one opaque placeholder
-                    # while preserving the same technical token when the
-                    # source is sent literally.  Retry this narrow condition
-                    # once with the immutable source text; never synthesize a
-                    # missing fact from the source in the QA result.
-                    if (not hasattr(self.provider, "pool")
-                            and any(issue.get("code") == "PROTECTED_TOKEN_MISSING"
-                                    for issue in result["qa_issues"])):
-                        retry = self.provider.translate(
-                            text, asin=asin, field=source_field,
-                            source_language=self.source_language,
-                            target_language=self.target_language,
-                            context={"target_field": target,
-                                     "protected_tokens": [],
-                                     "retry_reason": "protected_token_missing",
-                                     "schema_version": self.schema_version,
-                                     "prompt_version": self.prompt_version,
-                                     "dictionary_version": self.dictionary_version})
-                        result["attempt_count"] += retry.attempts
-                        if retry.status == "success" and retry.text:
-                            retry_normalized = postprocess(source_field, retry.text, text)
-                            retry_restored = contextual_postprocess(
-                                source_field,
-                                normalize_unit_display(retry_normalized),
-                                text,
-                            )
-                            if source_field in {"title_es_raw", "title_es", "title"}:
-                                retry_restored = strip_display_brand(retry_restored, brand)
-                            retry_qa = qa_field(
-                                protected, retry_restored, text, field=source_field,
-                                brand=brand, allowed_residual=[brand])
-                            result["candidate_text"] = retry.text
-                            result["translated_text"] = retry_restored
-                            result["qa_status"] = retry_qa["qa_status"]
-                            result["qa_issues"] = list(retry_qa["issues"])
-                            result["provider"] = retry.provider or result["provider"]
-                            result["provider_alias"] = (retry.raw or {}).get("provider_alias")
-                            result["model"] = retry.model or result["model"]
                     if result["qa_issues"]:
                         result["translation_status"] = "qa_failed"
                     # Translation memory deduplicates provider calls even when

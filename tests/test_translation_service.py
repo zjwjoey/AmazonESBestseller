@@ -115,28 +115,41 @@ def test_empty_provider_response_is_reported_as_qa_failure(tmp_path):
     assert {issue["code"] for issue in field["qa_issues"]} == {"EMPTY_TRANSLATION"}
 
 
-def test_missing_protected_token_retries_with_literal_source(tmp_path):
+def test_missing_protected_token_is_preserved_for_repair_without_provider_retry(tmp_path):
     provider = MissingProtectedTokenThenLiteralProvider()
-    result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
+    cache_path = tmp_path / "cache.json"
+    result = TranslationService(provider, TranslationCache(cache_path)).translate_records([
         {"asin": "B00000001", "title_es_raw": "Parasol Protección UPF50+"}
     ])
     field = result["records"]["B00000001"]["fields"]["title_zh"]
-    assert field["translation_status"] == "success"
-    assert field["qa_status"] == "pass"
-    assert "UPF50+" in field["translated_text"]
-    assert len(provider.calls) == 2
+    assert field["translation_status"] == "qa_failed"
+    assert field["qa_status"] == "qa_failed"
+    assert field["candidate_text"] == "中文"
+    assert {issue["code"] for issue in field["qa_issues"]} == {"PROTECTED_TOKEN_MISSING"}
+    assert len(provider.calls) == 1
+
+    # The failed QA envelope is persisted and reused by a later run by
+    # default. An explicit repair workflow owns any future provider call.
+    resumed_provider = MissingProtectedTokenThenLiteralProvider()
+    resumed = TranslationService(resumed_provider, TranslationCache(cache_path)).translate_records([
+        {"asin": "B00000002", "title_es_raw": "Parasol Protección UPF50+"}
+    ])
+    resumed_field = resumed["records"]["B00000002"]["fields"]["title_zh"]
+    assert resumed_field["translation_status"] == "qa_failed"
+    assert resumed_field["candidate_text"] == field["candidate_text"]
+    assert not resumed_provider.calls
 
 
-def test_structured_missing_protected_token_keeps_retry_result(tmp_path):
+def test_structured_missing_protected_token_is_preserved_for_repair_without_provider_retry(tmp_path):
     provider = MissingProtectedTokenThenLiteralProvider()
     result = TranslationService(provider, TranslationCache(tmp_path / "cache.json")).translate_records([
         {"asin": "B00000001", "feature_bullets_raw": ["Protección UPF50+"]}
     ])
     field = result["records"]["B00000001"]["fields"]["feature_bullets_zh"]
-    assert field["translation_status"] == "success"
-    assert "UPF50+" in field["translated_text"]
-    assert field["items"][0]["candidate_text"] == "中文 UPF50+"
-    assert len(provider.calls) == 2
+    assert field["translation_status"] == "qa_failed"
+    assert field["items"][0]["candidate_text"] == "中文"
+    assert {issue["code"] for issue in field["qa_issues"]} == {"PROTECTED_TOKEN_MISSING"}
+    assert len(provider.calls) == 1
 
 
 def test_service_dry_run_never_calls_provider(tmp_path):
@@ -353,6 +366,19 @@ def test_persistent_translation_memory_reuses_same_text_for_new_asin(tmp_path):
     assert len(provider1.calls) == 1
     assert not provider2.calls
     assert result["records"]["B00000002"]["category_l1_zh"]
+
+
+def test_exact_cached_source_hash_does_not_call_provider_in_new_service_run(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    record = {"asin": "B00000001", "category_l1": "Categoria futura XYZ"}
+    initial_provider = FakeProvider()
+    TranslationService(initial_provider, TranslationCache(cache_path)).translate_records([record])
+    resumed_provider = FakeProvider()
+    resumed = TranslationService(resumed_provider, TranslationCache(cache_path)).translate_records([record])
+    field = resumed["records"]["B00000001"]["fields"]["category_l1_zh"]
+    assert len(initial_provider.calls) == 1
+    assert not resumed_provider.calls
+    assert field["translation_status"] == "cached"
 
 
 def test_structured_bullets_are_translated_item_by_item(tmp_path):

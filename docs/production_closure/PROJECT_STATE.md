@@ -256,3 +256,24 @@ to use for review.
 - Instrumentation uses same-parameter `JSONEncoder.iterencode` canonical
   hashes, avoids unnecessary shallow copies, and flushes builder/audit progress
   every 100 records. Fixture tests verify hash equality and audit behavior.
+
+## Translation QA no-repeat safety slice
+
+- `TranslationService` no longer makes an implicit second provider request
+  after `PROTECTED_TOKEN_MISSING`, for either scalar or structured fields.
+  The first provider candidate, QA issues, and `qa_failed` status are retained
+  in both the field cache and translation memory.  Default resume therefore
+  reuses that evidence without another provider call; only an explicit repair
+  workflow with `repair_failed=True` may request new provider work.
+- Production-state construction keeps a QA-failed field out of the release
+  candidate as `QA_BLOCKED` and retains its original `candidate_text` in the
+  derived repair queue.  No source Spanish evidence is changed.
+- Existing `ProviderPool` transport behavior was inspected but not changed:
+  it may fail over only rate-limit/degraded transport failures.  QA failures
+  arrive as successful provider responses and do not trigger pool failover.
+- Verification was offline only, using fake providers and a temporary cache:
+  focused tests cover one provider call for protected-token QA failure,
+  zero calls on default QA-failed resume, zero calls for unchanged exact cache
+  reuse in a new service instance, candidate retention in the repair queue,
+  and the existing no-failover QA behavior.  No Qwen/API/network request and
+  no production translation input was created.

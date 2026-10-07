@@ -80,6 +80,10 @@ def test_production_state_preserves_source_and_blocks_non_promoted_results():
     assert [row["source_record_hash"] for row in production_input["records"]] == before
     assert state["release_candidate"]["records"][0]["fields"]["title_zh"] == "保温袋 500 ml"
     assert state["release_candidate"]["records"][2]["fields"].get("title_zh") is None
+    qa_repair = next(item for item in state["repair_queue"]
+                     if item["asin"] == "B000000002" and item["field"] == "title_es_raw")
+    assert qa_repair["status"] == "QA_BLOCKED"
+    assert qa_repair["candidate_text"] == translations["B000000002"]["fields"]["title_zh"]["candidate_text"]
 
 
 def test_synthetic_5000_input_is_stable_and_offline():
