@@ -115,8 +115,12 @@ def _ready_bound_input():
     audit = audit_source_fields([record])
     gate = evaluate_source_gate(audit)
     master = build_spanish_master([record], audit, gate, run_id="structured-test")
-    review = {"schema_version": "structured-review-snapshot-v1", "item_ids": [
-        "B000000101:attr-free", "B000000101:attr-color", "B000000101:attr-model", "B000000101:attr-cjk"], "review_item_ids": []}
+    draft = build_structured_translation_draft(master["records"], review_item_ids=set())
+    decisions = [{"item_id": "%s:%s" % (row["asin"], item["item_id"]),
+                  "source_hash": item["source_hash"], "status": "APPROVED"}
+                 for row in draft["records"] for field in row["fields"].values() for item in field["items"]]
+    review = {"schema_version": "structured-review-snapshot-v1", "source_audit_hash": gate["audit_hash"],
+              "item_ids": [item["item_id"] for item in decisions], "item_decisions": decisions}
     return bind_formal_structured_translation_input(
         master, audit, gate, review, prompt_version="structured-test-v1",
         dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"},

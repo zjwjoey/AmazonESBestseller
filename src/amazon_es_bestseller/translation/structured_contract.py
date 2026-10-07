@@ -190,7 +190,8 @@ def formalize_structured_translation_input(draft: Mapping, source_gate: Mapping)
 def _review_snapshot_hash(snapshot: Mapping) -> str:
     payload = {"schema_version": snapshot.get("schema_version"),
                "item_ids": sorted(str(value) for value in snapshot.get("item_ids") or ()),
-               "review_item_ids": sorted(str(value) for value in snapshot.get("review_item_ids") or ())}
+               "source_audit_hash": snapshot.get("source_audit_hash"),
+               "item_decisions": sorted(snapshot.get("item_decisions") or [], key=lambda item: str(item.get("item_id") if isinstance(item, Mapping) else item))}
     return _hash(payload)
 
 
@@ -222,11 +223,26 @@ def bind_formal_structured_translation_input(
     _verify_master_gate(verified_master, source_audit, source_gate)
     if not isinstance(review_snapshot, Mapping) or review_snapshot.get("schema_version") != "structured-review-snapshot-v1":
         raise ValueError("STRUCTURED_REVIEW_SNAPSHOT_INVALID")
+    if review_snapshot.get("source_audit_hash") != canonical_audit_hash(source_audit):
+        raise ValueError("STRUCTURED_REVIEW_AUDIT_BINDING_MISMATCH")
+    decisions = review_snapshot.get("item_decisions")
+    if not isinstance(decisions, list):
+        raise ValueError("STRUCTURED_REVIEW_DECISIONS_MISSING")
+    review_ids = {str(item.get("item_id")) for item in decisions if isinstance(item, Mapping)
+                  and str(item.get("status") or "").upper() != "APPROVED"}
     draft = build_structured_translation_draft(
-        verified_master.get("records") or [], review_item_ids=review_snapshot.get("review_item_ids"))
+        verified_master.get("records") or [], review_item_ids=review_ids)
     item_ids = _all_item_ids(draft)
     if sorted(str(value) for value in review_snapshot.get("item_ids") or ()) != item_ids:
         raise ValueError("STRUCTURED_REVIEW_ITEM_SET_MISMATCH")
+    expected_decisions = sorted([{"item_id": "%s:%s" % (record["asin"], item["item_id"]),
+                                  "source_hash": item["source_hash"]}
+                                 for record in draft["records"] for field in record["fields"].values()
+                                 for item in field["items"]], key=lambda item: item["item_id"])
+    supplied_decisions = sorted([{"item_id": str(item.get("item_id") or ""), "source_hash": str(item.get("source_hash") or "")}
+                                 for item in decisions if isinstance(item, Mapping)], key=lambda item: item["item_id"])
+    if supplied_decisions != expected_decisions:
+        raise ValueError("STRUCTURED_REVIEW_DECISION_BINDING_MISMATCH")
     result = deepcopy(draft)
     master_records = {str(row.get("asin") or "").upper(): row for row in verified_master.get("records") or []}
     for record in result["records"]:
@@ -242,7 +258,7 @@ def bind_formal_structured_translation_input(
             "asins": [record["asin"] for record in result["records"]],
             "record_hashes": {record["asin"]: record["source_record_hash"] for record in result["records"]},
             "review_snapshot_hash": _review_snapshot_hash(review_snapshot),
-            "review_item_ids_hash": _hash(sorted(str(value) for value in review_snapshot.get("review_item_ids") or ())),
+            "review_item_ids_hash": _hash(sorted(review_ids)),
             "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
             "prompt_version": str(prompt_version),
             "dictionary_version": str(dictionary_manifest.get("dictionary_version") or ""),
