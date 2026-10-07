@@ -332,15 +332,23 @@ def _compound_units(value) -> set[str]:
         units.add("m3/min")
     if re.search(r"\blitros?\s+por\s+minutos?\b", text):
         units.add("l/min")
-    if re.search(r"\b\d+(?:[.,]\d+)?\s*cm(?:3|\u00b3)\b", str(value or ""), re.I):
+    raw = str(value or "")
+    if re.search(r"\b\d+(?:[.,]\d+)?\s*cm(?:3|\u00b3)(?!\s*/|[a-z0-9])", raw, re.I):
         units.add("ml")
+    for unit, canonical in ((r"cm(?:3|\u00b3)\s*/\s*s", "cm3/s"),
+                            (r"l\s*/\s*s", "l/s"),
+                            (r"l\s*/\s*h", "l/h"),
+                            (r"l\s*/\s*(?:day|d[ií]a)", "l/day")):
+        if re.search(rf"\b\d+(?:[.,]\d+)?\s*{unit}(?![a-z0-9])", raw, re.I):
+            units.add(canonical)
     return units
 
 
 def _without_compound_units(value) -> str:
     text = _semantic_text(value)
     text = re.sub(r"\bmetros?\s+cubicos?\s+por\s+(?:horas?|minutos?)\b", "", text)
-    return re.sub(r"\blitros?\s+por\s+minutos?\b", "", text)
+    text = re.sub(r"\blitros?\s+por\s+minutos?\b", "", text)
+    return re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:cm3(?:\s*/\s*s)?|l\s*/\s*(?:s|h|day|dia))", "", text)
 
 
 def _structured_attribute_pairs(row) -> list[tuple[str, str, str]]:
@@ -439,7 +447,9 @@ def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict |
     if re.search(r"\bvoltaje(?:\s+maximo)?\b", normalized) and units & {"w"}:
         return set(), "voltage label conflicts with power value", evidence("label_value_conflict"), None
     if re.search(r"\b(?:caudal|flujo)\s+de\s+aire\b|\bairflow\b", normalized):
-        return {"m3/h", "m3/min", "l/min"}, None, evidence("airflow"), None
+        if "l/day" in units:
+            return set(), "dehumidifier rate must not be classified as airflow", evidence("rate_semantics_unresolved"), None
+        return {"m3/h", "m3/min", "l/min", "cm3/s", "l/s", "l/h"}, None, evidence("airflow"), None
     if re.search(r"\bcapacidad\s+de\s+perfor", normalized):
         return {"mm", "cm", "m"}, None, evidence("drill_capacity"), None
     if re.search(r"\btension\b", normalized):

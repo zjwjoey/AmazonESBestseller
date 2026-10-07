@@ -136,6 +136,20 @@ def test_source_audit_recognizes_spanish_compound_volume_and_flow_units():
     assert "SPEC_UNIT_TYPE_MISMATCH" not in {item["issue_code"] for item in report["issues"]}
 
 
+def test_source_audit_keeps_cubic_volume_and_rate_tokens_atomic_without_conversion():
+    report = audit_source_fields([_row(attributes=[
+        {"label_raw": "Volumen", "value_raw": "1426.56 cm³"},
+        {"label_raw": "Volumen", "value_raw": "48600 cm³"},
+        {"label_raw": "Caudal de aire", "value_raw": "2 cm³/s"},
+        {"label_raw": "Caudal de aire", "value_raw": "3 L/s"},
+        {"label_raw": "Caudal de aire", "value_raw": "4 L/h"},
+        {"label_raw": "Caudal de aire", "value_raw": "12 L/day"},
+    ])])
+    codes = [item["issue_code"] for item in report["issues"]]
+    assert "SPEC_UNIT_TYPE_MISMATCH" not in codes
+    assert codes.count("UNIT_SEMANTICS_AMBIGUOUS") == 1
+
+
 def test_source_audit_reviews_generic_capacity_or_unproven_tension_weight_but_keeps_voltage_conflict():
     report = audit_source_fields([_row(attributes=[
         {"label_raw": "Capacidad", "value_raw": "15 kg"},
