@@ -373,3 +373,55 @@ to use for review.
   `outputs/production_closure_20261007T180000Z_legacy_reference_subset_reqa`.
   It checked 10 existing candidates for `B0DT976WF2` and `B006ZH7956`, changed
   four prior QA decisions, and has 10 pass-after rows. Provider calls: zero.
+
+## Offline integration checkpoint (2026-10-07)
+
+- Checked commit: `86aceffc296591ef24997fcd0decdc3d3afd09dd`
+  (`fix(translation): prevent cache namespace repeats`). Tracked worktree state
+  was clean before the checkpoint; no source code was changed during it.
+- One complete offline default-suite invocation was started with
+  `pytest -q -rs` (project default `testpaths = ["tests"]`), using the project
+  test interpreter. It made no Amazon, Qwen, API, or network request. Its
+  single captured runtime log is
+  `outputs/production_closure_20261007T190000Z_offline_checkpoint/pytest-q-rs.log`.
+  The execution environment did not return the parent-shell exit status or the
+  final numeric pytest footer after the child process exited, so this checkpoint
+  is **NOT PASS / exit code not independently captured**, not a green suite.
+- The dominant test error is environmental: pytest fixture setup cannot scan
+  its default temporary root
+  `C:\Users\Administrator\AppData\Local\Temp\pytest-of-Administrator`
+  (`PermissionError: WinError 5`); the captured log has `332` setup-error
+  headings attributable to that root and `6` explicit skips. A later offline
+  rerun must use an explicitly writable `--basetemp` and preserve one complete
+  final log.
+- One actual assertion failure is visible independently: `tests/test_source_fields_production.py::test_price_rating_dates_units_and_text_semantics_are_checked`
+  expects `SPEC_UNIT_TYPE_MISMATCH` for `Capacidad: 3 W`, while current output
+  reports `UNIT_SEMANTICS_AMBIGUOUS`. No behavior change was made here.
+- `ruff check .` is nonzero with six unrelated existing findings:
+  `historical/audit_current_v2.py` (E401, E402),
+  `historical/build_selection_workbook.py` (E741),
+  `quality/source_fields.py` (E731), and
+  `tools/reqa_legacy_reference_subset.py` (two E402). They were not modified.
+  `python -m compileall -q src` and `git diff --check` passed. Their logs are
+  in the same immutable checkpoint directory.
+
+## Explicit next gaps -- not implemented
+
+- **P0 provider-attempt durability:** cache results are settled after a
+  provider response, not atomically claimed and fsynced before it. A crash
+  after provider acceptance can lose evidence and resend on restart; concurrent
+  workers can also miss the same TM key and call simultaneously. The next
+  implementation must add a disk-visible, atomic check-and-claim pending
+  record before scalar and structured provider calls, refuse automatic resend
+  of unknown/pending attempts, and settle/save each structured item immediately
+  rather than at whole-SKU completion. Existing synthetic pending-cache tests
+  do not prove this send-before-claim invariant.
+- **P1 structured cross-namespace safety:** immutable `memory_results` can
+  currently return a successful structured item directly across a changed
+  dictionary/schema namespace. It must use the same zero-call,
+  candidate-preserving `review_required` transition as scalar
+  `_namespace_review`, not certify the old rendered value.
+- Still unconnected: structured follow-up repair, closure audit consumption,
+  Excel/export/release callers, and formal legacy-reference reuse. Provider-3
+  configuration validation has not been run. SourceGate is not `READY`, and
+  the owner-partial-field policy still needs the requested human answer.
