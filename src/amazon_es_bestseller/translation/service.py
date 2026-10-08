@@ -671,6 +671,7 @@ class TranslationService:
                 "source_missing": source_missing,
                 "review_blocked": review_blocked,
                 "estimated_api_requests": len(unique_requests), "fields": rows,
+                "dispatch_keys": sorted(unique_requests),
                 "request_count_basis": "unique_semantic_unit_dispatches_before_retries"}
 
     def _translate_record(self, record: Dict[str, Any], *, fields: Optional[Sequence[str]] = None,

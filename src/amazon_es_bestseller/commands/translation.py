@@ -405,6 +405,11 @@ def cmd_translate(args) -> None:
     provider_name = args.provider or config.get('provider', 'qwen-mt')
     if provider_name not in {'qwen-mt', 'qwen_mt'}:
         raise SystemExit('Translation V2 \u5f53\u524d\u53ea\u5141\u8bb8 provider=qwen-mt\uff1b\u65e7 DeepSeek \u8bf7\u7ee7\u7eed\u4f7f\u7528 translate-ds')
+    run_context = None
+    if config.get('run_context'):
+        from ..translation.run_context import TranslationRunContext
+        run_context = TranslationRunContext(config['run_context'], products_path=args.products,
+                                             products=products, cache_path=args.cache)
     preflight = None
     if config.get('strict_provider_mapping'):
         from ..translation.pool import preflight_qwen_provider_pool
@@ -417,6 +422,11 @@ def cmd_translate(args) -> None:
                 return
             raise SystemExit('PROVIDER_CONFIGURATION_BLOCKED: %s' % preflight['missing'])
     model = args.model or config.get('model') or os.getenv('QWEN_MT_MODEL') or 'qwen-mt-flash'
+    if run_context:
+        run_context.validate_provider(name='qwen-mt', model=model,
+            source_language=config.get('source_language', 'es'), target_language=config.get('target_language', 'zh-CN'))
+        if preflight and any(row['model'] != model for row in preflight['providers']):
+            raise ValueError('RUN_CONTEXT_PROVIDER_MODEL_MISMATCH')
     provider = QwenMTProvider(model=model,
                               api_key='OFFLINE_DRY_RUN_NO_CREDENTIAL' if preflight and args.dry_run else None,
                               endpoint=preflight['providers'][0]['endpoint'] if preflight else config.get('endpoint'),
@@ -426,13 +436,17 @@ def cmd_translate(args) -> None:
                               backoff_seconds=float(config.get('backoff_seconds', 5.0)),
                               rate=float(args.rate if args.rate is not None
                                          else config.get('rate', 0.5)))
-    cache = TranslationCache(args.cache)
+    cache = run_context.cache if run_context else TranslationCache(args.cache)
     fields = args.field or ([args.fields] if args.fields else None) or config.get('fields') or None
     if fields:
         fields = [item.strip() for value in fields for item in str(value).split(',') if item.strip()]
-    service = TranslationService(provider, cache,
-                                 source_language=config.get('source_language', 'es'),
-                                 target_language=config.get('target_language', 'zh-CN'))
+    if run_context:
+        run_context.validate_options(fields=fields, offset=args.offset, limit=args.limit,
+            repair_partial=args.repair_partial, repair_failed=args.repair_failed)
+    service_kwargs = run_context.service_kwargs() if run_context else {
+        'source_language': config.get('source_language', 'es'),
+        'target_language': config.get('target_language', 'zh-CN')}
+    service = TranslationService(provider, cache, **service_kwargs)
     parallel_requested = bool(getattr(args, 'parallel_providers', False) or
                               isinstance(config.get('providers'), list) and len(config['providers']) > 1)
     pool = None
@@ -451,6 +465,8 @@ def cmd_translate(args) -> None:
                                                limit=args.limit, repair_partial=args.repair_partial,
                                                repair_failed=args.repair_failed, dry_run=True)
         plan = result['summary']
+        if run_context:
+            run_context.apply_plan(plan)
         if preflight:
             plan['provider_preflight'] = preflight
             plan['pool'] = {'provider_count': len(preflight['providers']), 'max_workers': preflight['max_workers'],
@@ -485,6 +501,8 @@ def cmd_translate(args) -> None:
         raise SystemExit('translate \u5b9e\u9645 API \u8c03\u7528\u4e0d\u80fd\u4e0e --offline \u540c\u7528\uff1b\u53ef\u5148\u4f7f\u7528 --dry-run')
     plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit,
                         repair_partial=args.repair_partial, repair_failed=args.repair_failed)
+    if run_context:
+        run_context.apply_plan(plan)
     print('translate V2 \u5373\u5c06\u8c03\u7528 %s%s\uff1aSKU %d\u3001\u5f85\u7ffb\u8bd1\u5b57\u6bb5 %d\u3001\u7f13\u5b58\u547d\u4e2d %d\u3001TM \u547d\u4e2d %d\u3001\u9884\u8ba1 API \u8bf7\u6c42 %d\u3001source_missing %d\u3001review_blocked %d\u3001model=%s\u3001rate=%.3g/s' %
           (provider.name, ' [parallel-providers]' if pool is not None else '',
            plan['total_records'], plan['total_fields'], plan['cache_hits'],
@@ -502,6 +520,8 @@ def cmd_translate(args) -> None:
             raise SystemExit('\u672a\u786e\u8ba4\uff0c\u5df2\u53d6\u6d88 Translation V2 API \u8c03\u7528')
         if confirmation.strip().upper() != 'YES':
             raise SystemExit('\u672a\u786e\u8ba4\uff0c\u5df2\u53d6\u6d88 Translation V2 API \u8c03\u7528')
+    if run_context:
+        run_context.prepare_execution()
     if pool is not None:
         result = service.translate_records_parallel(
             products, pool, fields=fields, offset=args.offset, limit=args.limit,
@@ -510,6 +530,9 @@ def cmd_translate(args) -> None:
         result = service.translate_records(products, fields=fields, offset=args.offset,
                                            limit=args.limit, repair_partial=args.repair_partial,
                                            repair_failed=args.repair_failed)
+    if run_context:
+        run_context.apply_result(result, products)
+        result['summary']['execution_plan'] = plan
     _save_json(result['records'], args.out)
     qa_out = args.qa_out or str(Path(args.out).with_name('translation_qa.json'))
     _save_json(result['qa_report'], qa_out)

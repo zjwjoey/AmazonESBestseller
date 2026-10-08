@@ -91,6 +91,25 @@ base URL variable, and shared `QWEN_MT_BASE_URL`, in that order. They retain
 their explicitly mapped credential variables even when sharing an address.
 Strict preflight never uses the unconfigured public default. A malformed
 configured address blocks dispatch rather than falling through to another address.
+
+For a reviewed canary using historical caches, configure `run_context` as a
+`{"path": ".../run_manifest.json", "sha256": "..."}` reference. The manifest
+binds the exact prepared products, selected ASINs, fields, provider/languages,
+schema/prompt/structured schema, original historical caches, independent cache
+snapshot, source candidate manifest, legacy candidates, semantic policy, and
+reference overlay. CLI dry-run and execution load the same context. The snapshot
+is independently reconstructed from the read-only historical files; conflicting
+translations and pending attempts remain held across namespaces. No cache uses
+last-file-wins selection.
+
+`--cache` must name the manifest's independent run cache. Dry-run does not create
+it. Execution seeds it after confirmation and records a binding sidecar; resume
+requires that same manifest. Changed scope, schema, hashes, fields, repair flags,
+provider or language settings fail closed. Admitted legacy references stay out
+of Qwen entries and global TM, and join the final field/display result with
+their original `unknown / legacy-reviewed-reference` provenance. Held fields
+remain visible and cannot dispatch. Plans expose `dispatch_keys` for offline
+verification of the exact unique semantic call set.
 Per-alias model, model environment, global configured model, then the default
 are used in that order. Base URL paths `/compatible-mode/v1` and `/v1` append
 `/chat/completions`; a complete chat path remains unchanged. HTTPS, no embedded
