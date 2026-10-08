@@ -15,7 +15,9 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional, Sequence
 
 from .providers.base import ProviderResponse, TranslationProvider
-from .providers.qwen_mt import QwenMTProvider, normalize_qwen_base_url, validate_qwen_endpoint
+from .providers.qwen_mt import (
+    QwenMTProvider, normalize_qwen_base_url, qwen_endpoint_configuration, validate_qwen_endpoint,
+)
 from .field_contract import canonical_translation_unit_field
 
 
@@ -372,8 +374,9 @@ def preflight_qwen_provider_pool(config: Mapping[str, Any]) -> dict[str, Any]:
         key_env = str(spec.get("api_key_env") or "")
         endpoint_env = str(spec.get("endpoint_env") or "")
         base_env = str(spec.get("base_url_env") or "")
-        endpoint = spec.get("endpoint") or (os.getenv(endpoint_env) if endpoint_env else None)
-        base = os.getenv(base_env) if base_env else None
+        endpoint, endpoint_source, is_base = qwen_endpoint_configuration(
+            endpoint=spec.get("endpoint"), endpoint_env=endpoint_env,
+            shared_endpoint=config.get("endpoint"), base_url_env=base_env)
         issues = []
         if not alias or alias in seen:
             issues.append("ALIAS_MISSING_OR_DUPLICATED")
@@ -381,7 +384,7 @@ def preflight_qwen_provider_pool(config: Mapping[str, Any]) -> dict[str, Any]:
         if not key_env or key_env not in credential_names:
             issues.append("CREDENTIAL_ENV_MISSING")
         try:
-            endpoint = validate_qwen_endpoint(endpoint) if endpoint else normalize_qwen_base_url(base) if base else None
+            endpoint = (normalize_qwen_base_url(endpoint) if is_base else validate_qwen_endpoint(endpoint)) if endpoint else None
         except ValueError as exc:
             endpoint = None
             issues.append(str(exc))
@@ -389,6 +392,7 @@ def preflight_qwen_provider_pool(config: Mapping[str, Any]) -> dict[str, Any]:
             issues.append("ENDPOINT_MAPPING_MISSING")
         row = {"alias": alias, "api_key_env": key_env, "credential_present": key_env in credential_names,
             "endpoint_env": endpoint_env, "base_url_env": base_env, "endpoint": endpoint,
+            "endpoint_source": endpoint_source,
             "model": spec.get("model") or os.getenv(str(spec.get("model_env") or "QWEN_MT_MODEL"))
                      or config.get("model") or "qwen-mt-flash"}
         rows.append(row)

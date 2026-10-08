@@ -51,13 +51,13 @@ def test_three_explicit_aliases_and_masked_preflight(monkeypatch):
     assert sum(row['http_attempts'] for row in pool.stats().values()) == 6
 
 
-def test_unmapped_endpoints_block_before_credential_reads_or_transport(monkeypatch):
+def test_unconfigured_endpoints_block_before_credential_reads_or_transport(monkeypatch):
     config = configured(monkeypatch)
-    monkeypatch.delenv('DASHSCOPE_API_ENDPOINT')
-    monkeypatch.delenv('QWEN_THIRD_API_ENDPOINT')
+    for name in ('QWEN_API_ENDPOINT', 'DASHSCOPE_API_ENDPOINT', 'QWEN_THIRD_API_ENDPOINT', 'QWEN_MT_BASE_URL'):
+        monkeypatch.delenv(name)
     report = module.preflight_qwen_provider_pool(config)
     assert report['status'] == 'BLOCKED'
-    assert {item['alias'] for item in report['missing']} == {'QWEN_B', 'QWEN_C'}
+    assert {item['alias'] for item in report['missing']} == {'QWEN_A', 'QWEN_B', 'QWEN_C'}
     with pytest.raises(ValueError, match='PROVIDER_CONFIGURATION_BLOCKED'):
         build_qwen_provider_pool(config, transport_factory=lambda _: pytest.fail('must not construct transport'))
 
@@ -130,7 +130,7 @@ def test_real_cli_strict_dryrun_never_reads_credentials(monkeypatch, tmp_path, b
     from amazon_es_bestseller.cli import main
     configured(monkeypatch)
     if blocked:
-        monkeypatch.delenv('DASHSCOPE_API_ENDPOINT')
+        monkeypatch.delenv('DASHSCOPE_API_KEY')
     real_getenv = module.os.getenv
 
     def guarded(name, *args):
@@ -172,3 +172,70 @@ def test_service_pending_attempt_survives_cache_reload_without_resend(monkeypatc
     assert first['records']['B000000020']['fields']['title_zh']['translation_status'] == 'pending'
     TranslationService(adapter, TranslationCache(path)).translate_records(records, repair_failed=True)
     assert len(calls) == 1
+
+
+def shared_configured(monkeypatch):
+    config = configured(monkeypatch)
+    for name in ('QWEN_API_ENDPOINT', 'DASHSCOPE_API_ENDPOINT', 'QWEN_THIRD_API_ENDPOINT'):
+        monkeypatch.delenv(name)
+    return config
+
+
+def test_three_confirmed_key_routes_use_configured_shared_base_without_reading_keys(monkeypatch):
+    config = shared_configured(monkeypatch)
+    original = module.os.getenv
+
+    def guarded(name, *args):
+        if name in {'QWEN_API_KEY', 'DASHSCOPE_API_KEY', 'QWEN_THIRD_API_KEY'}:
+            pytest.fail('preflight cannot read credential values')
+        return original(name, *args)
+
+    monkeypatch.setattr(module.os, 'getenv', guarded)
+    report = module.preflight_qwen_provider_pool(config)
+    assert report['status'] == 'READY'
+    assert [row['api_key_env'] for row in report['providers']] == ['QWEN_API_KEY', 'DASHSCOPE_API_KEY', 'QWEN_THIRD_API_KEY']
+    assert {row['endpoint'] for row in report['providers']} == {'https://base.invalid/compatible-mode/v1/chat/completions'}
+    assert {row['endpoint_source'] for row in report['providers']} == {'environment:QWEN_MT_BASE_URL'}
+
+
+def test_dedicated_endpoint_wins_over_shared_base_and_records_source(monkeypatch):
+    config = shared_configured(monkeypatch)
+    monkeypatch.setenv('QWEN_THIRD_API_ENDPOINT', 'https://third.invalid/v1/chat/completions')
+    report = module.preflight_qwen_provider_pool(config)
+    assert report['status'] == 'READY'
+    third = report['providers'][2]
+    assert third['endpoint'] == 'https://third.invalid/v1/chat/completions'
+    assert third['endpoint_source'] == 'environment:QWEN_THIRD_API_ENDPOINT'
+
+
+def test_missing_key_blocks_even_when_shared_endpoint_resolves(monkeypatch):
+    config = shared_configured(monkeypatch)
+    monkeypatch.delenv('QWEN_THIRD_API_KEY')
+    report = module.preflight_qwen_provider_pool(config)
+    assert report['status'] == 'BLOCKED'
+    assert report['missing'][0]['issues'] == ['CREDENTIAL_ENV_MISSING']
+    with pytest.raises(ValueError, match='PROVIDER_CONFIGURATION_BLOCKED'):
+        build_qwen_provider_pool(config, transport_factory=lambda _: pytest.fail('no dispatch'))
+
+
+@pytest.mark.parametrize('url', ['http://third.invalid/v1/chat/completions',
+    'https://user:fake-password@third.invalid/v1/chat/completions',
+    'https://third.invalid/v1/chat/completions?token=fake-token',
+    'https://third.invalid/unknown'])
+def test_malformed_dedicated_endpoint_never_falls_back_to_good_shared_base(monkeypatch, url):
+    config = shared_configured(monkeypatch)
+    monkeypatch.setenv('QWEN_THIRD_API_ENDPOINT', url)
+    report = module.preflight_qwen_provider_pool(config)
+    assert report['status'] == 'BLOCKED' and report['providers'][2]['endpoint'] is None
+    assert 'fake-password' not in json.dumps(report) and 'fake-token' not in json.dumps(report)
+
+
+def test_shared_endpoint_environment_priority_matches_adapter(monkeypatch):
+    config = shared_configured(monkeypatch)
+    monkeypatch.setenv('DASHSCOPE_API_ENDPOINT', 'https://shared.invalid/v1/chat/completions')
+    report = module.preflight_qwen_provider_pool(config)
+    assert {row['endpoint'] for row in report['providers']} == {'https://shared.invalid/v1/chat/completions'}
+    monkeypatch.setenv('QWEN_API_ENDPOINT', 'https://priority.invalid/v1/chat/completions')
+    report = module.preflight_qwen_provider_pool(config)
+    assert report['providers'][2]['endpoint'] == 'https://priority.invalid/v1/chat/completions'
+    assert report['providers'][2]['endpoint_source'] == 'environment:QWEN_API_ENDPOINT'

@@ -72,11 +72,11 @@ belong to the same host:
 | Alias | Credential variable | Endpoint variable | Optional base URL |
 | --- | --- | --- | --- |
 | QWEN_A | QWEN_API_KEY | QWEN_API_ENDPOINT | QWEN_MT_BASE_URL |
-| QWEN_B | DASHSCOPE_API_KEY | DASHSCOPE_API_ENDPOINT | none |
-| QWEN_C | QWEN_THIRD_API_KEY | QWEN_THIRD_API_ENDPOINT | none |
+| QWEN_B | DASHSCOPE_API_KEY | DASHSCOPE_API_ENDPOINT | QWEN_MT_BASE_URL (shared fallback) |
+| QWEN_C | QWEN_THIRD_API_KEY | QWEN_THIRD_API_ENDPOINT | QWEN_MT_BASE_URL (shared fallback) |
 
-The third endpoint name is a required explicit mapping slot, not evidence that
-it is configured. Missing endpoint mappings block dispatch before key values
+The third endpoint name is an optional dedicated override, not evidence that
+it is configured. Missing all configured endpoint sources blocks dispatch before key values
 or transports are loaded. Strict dry-run enumerates credential variable names
 only, records non-sensitive missing mappings, and never reads credential values.
 This configuration requests three workers and zero provider-internal retries.
@@ -85,8 +85,12 @@ No system environment variables are changed by loading or preflighting it.
 For the single adapter, precedence is explicit endpoint, `QWEN_API_ENDPOINT`,
 `DASHSCOPE_API_ENDPOINT`, `QWEN_MT_BASE_URL`, then the existing public default.
 An explicit model wins over `QWEN_MT_MODEL`, then the default. Strict pool
-aliases use their own explicit endpoint or endpoint variable, then only their
-declared base URL variable; they never fall back to another alias's host.
+aliases use their own explicit endpoint or endpoint variable, then the global
+configured endpoint, `QWEN_API_ENDPOINT`, `DASHSCOPE_API_ENDPOINT`, their declared
+base URL variable, and shared `QWEN_MT_BASE_URL`, in that order. They retain
+their explicitly mapped credential variables even when sharing an address.
+Strict preflight never uses the unconfigured public default. A malformed
+configured address blocks dispatch rather than falling through to another address.
 Per-alias model, model environment, global configured model, then the default
 are used in that order. Base URL paths `/compatible-mode/v1` and `/v1` append
 `/chat/completions`; a complete chat path remains unchanged. HTTPS, no embedded

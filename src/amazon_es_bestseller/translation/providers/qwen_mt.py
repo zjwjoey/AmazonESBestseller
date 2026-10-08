@@ -20,7 +20,34 @@ from .base import ProviderResponse, TranslationProvider
 Transport = Callable[[str, Dict[str, str], Dict[str, Any], float], Dict[str, Any]]
 
 
+def qwen_endpoint_configuration(*, endpoint: Optional[str] = None, endpoint_env: str = "",
+                                shared_endpoint: Optional[str] = None, base_url_env: str = "",
+                                allow_public_default: bool = False) -> tuple[Optional[str], str, bool]:
+    """Select configured endpoint facts with the adapter's shared fallback order.
+
+    The third return value distinguishes a base URL requiring a chat suffix.
+    Strict callers never opt into the adapter's unconfigured public default.
+    """
+    candidates = [
+        (endpoint, "configuration:alias.endpoint", False),
+        (os.getenv(endpoint_env) if endpoint_env else None, "environment:" + endpoint_env, False),
+        (shared_endpoint, "configuration:endpoint", False),
+        (os.getenv("QWEN_API_ENDPOINT"), "environment:QWEN_API_ENDPOINT", False),
+        (os.getenv("DASHSCOPE_API_ENDPOINT"), "environment:DASHSCOPE_API_ENDPOINT", False),
+        (os.getenv(base_url_env) if base_url_env else None, "environment:" + base_url_env, True),
+        (os.getenv("QWEN_MT_BASE_URL"), "environment:QWEN_MT_BASE_URL", True),
+    ]
+    for value, source, is_base in candidates:
+        if value:
+            return value, source, is_base
+    if allow_public_default:
+        return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "adapter_default", False
+    return None, "unconfigured", False
+
+
 def validate_qwen_endpoint(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("QWEN_ENDPOINT_FORMAT_INVALID")
     parts = urlsplit(value)
     if (parts.scheme != "https" or not parts.hostname or parts.username or parts.password
             or parts.query or parts.fragment or not parts.path.endswith("/chat/completions")):
@@ -30,6 +57,8 @@ def validate_qwen_endpoint(value: str) -> str:
 
 def normalize_qwen_base_url(value: str) -> str:
     """Use the existing OpenAI-compatible chat path, never infer a host route."""
+    if not isinstance(value, str):
+        raise ValueError("QWEN_BASE_URL_PATH_INVALID")
     value = value.rstrip("/")
     parts = urlsplit(value)
     if parts.path in {"/compatible-mode/v1", "/v1"}:
@@ -56,10 +85,9 @@ class QwenMTProvider(TranslationProvider):
                  rate: float = 0.5,
                  transport: Optional[Transport] = None):
         self.api_key = api_key or os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
-        base_url = os.getenv("QWEN_MT_BASE_URL")
-        self.endpoint = (endpoint or os.getenv("QWEN_API_ENDPOINT") or os.getenv("DASHSCOPE_API_ENDPOINT")
-                         or (normalize_qwen_base_url(base_url) if base_url else None)
-                         or "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+        configured_endpoint, self.endpoint_source, is_base = qwen_endpoint_configuration(
+            endpoint=endpoint, allow_public_default=True)
+        self.endpoint = normalize_qwen_base_url(configured_endpoint) if is_base else configured_endpoint
         self._model = model or os.getenv("QWEN_MT_MODEL") or "qwen-mt-flash"
         self.protocol = protocol or os.getenv("QWEN_API_PROTOCOL", "openai_compatible")
         self.timeout = timeout
