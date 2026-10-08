@@ -105,5 +105,99 @@ def load_selection_manifest(path: str | Path, *, parent_artifact_hash: str,
     return {**dict(value), "selected_asins": selected, "manifest_file_hash": file_hash(source)}
 
 
-__all__ = ["MAX_TRANSLATION_BATCH_ASINS", "TranslationBatchError", "create_selection_manifest",
+def load_parent_authority(reference: Mapping[str, Any] | None, *, artifact_dir: str | Path,
+                          available_asins: Iterable[object], selected_asins: Iterable[object]) -> list[dict]:
+    """Resolve producer-owned raw parents, never derived records or inline data."""
+    if not isinstance(reference, Mapping) or not reference.get("artifact_path"):
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_MISSING")
+    path = Path(artifact_dir) / str(reference["artifact_path"])
+    try:
+        content = path.read_bytes()
+        payload = json.loads(content)
+    except (OSError, ValueError) as exc:
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_ARTIFACT_INVALID") from exc
+    if hashlib.sha256(content).hexdigest() != reference.get("artifact_file_hash"):
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_FILE_HASH_MISMATCH")
+    records = payload.get("records") if isinstance(payload, Mapping) else None
+    if not isinstance(records, list) or not records or any(not isinstance(row, Mapping) for row in records):
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_RECORDS_INVALID")
+    digest = hashlib.sha256(json.dumps(records, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    if digest != reference.get("dataset_canonical_hash"):
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_CONTENT_HASH_MISMATCH")
+    asins = [str(row.get("asin") or "").strip().upper() for row in records]
+    allowed = {str(asin or "").strip().upper() for asin in available_asins}
+    if (len(asins) != len(set(asins)) or sorted(asins) != reference.get("asins")
+            or set(asins) != allowed):
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_SCOPE_MISMATCH")
+    if any(row.get("owner_attribute_exclusions") is not None for row in records):
+        raise TranslationBatchError("TRANSLATION_PARENT_AUTHORITY_DERIVED_RECORD")
+    selected = set(selected_asins)
+    return [dict(row) for row in records if str(row.get("asin") or "").upper() in selected]
+
+
+def load_source_candidate(path: str | Path, *, manifest_hash: str,
+                          available_asins: Iterable[object]) -> dict[str, Any]:
+    """Verify an immutable closure candidate before normalizing its eligible view."""
+    from ..production.spanish_source_closure import (
+        _hash, _audit_eligible_attribute_view, SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION,
+        CURRENT_SOURCE_GATE_SCHEMA_VERSION,
+    )
+    from ..quality.source_gate import verify_source_gate
+    from ..translation.structured_contract import build_structured_translation_draft
+
+    source = Path(path)
+    try:
+        if file_hash(source) != manifest_hash:
+            raise TranslationBatchError("SOURCE_CANDIDATE_MANIFEST_HASH_MISMATCH")
+        manifest = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(manifest, Mapping) or manifest.get("schema_version") != SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION:
+            raise TranslationBatchError("SOURCE_CANDIDATE_MANIFEST_SCHEMA_INVALID")
+        master_path = source.parent / "spanish_master_5480.json"
+        if file_hash(master_path) != (manifest.get("artifacts") or {}).get(master_path.name):
+            raise TranslationBatchError("SOURCE_CANDIDATE_MASTER_FILE_HASH_MISMATCH")
+        candidate = json.loads(master_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, AttributeError) as exc:
+        raise TranslationBatchError("SOURCE_CANDIDATE_ARTIFACT_INVALID:%s" % exc) from exc
+    records = candidate.get("records") if isinstance(candidate, Mapping) else None
+    if not isinstance(candidate, Mapping) or candidate.get("schema_version") not in {
+            SPANISH_SOURCE_CLOSURE_SCHEMA_VERSION, CURRENT_SOURCE_GATE_SCHEMA_VERSION}:
+        raise TranslationBatchError("SOURCE_CANDIDATE_MASTER_SCHEMA_INVALID")
+    if not isinstance(records, list) or not records or any(not isinstance(row, Mapping) for row in records):
+        raise TranslationBatchError("SOURCE_CANDIDATE_RECORDS_INVALID")
+    if _hash(records) != manifest.get("dataset_canonical_hash"):
+        raise TranslationBatchError("SOURCE_CANDIDATE_MASTER_CANONICAL_HASH_MISMATCH")
+    asins = [str(row.get("asin") or "").strip().upper() for row in records]
+    scope = manifest.get("binding_scope") or {}
+    allowed = {str(asin or "").strip().upper() for asin in available_asins}
+    if (len(asins) != len(set(asins)) or any(len(asin) != 10 or not asin.isalnum() for asin in asins)
+            or sorted(asins) != scope.get("asins") or len(asins) != scope.get("count")
+            or candidate.get("binding_scope") != scope or not set(asins) <= allowed):
+        raise TranslationBatchError("SOURCE_CANDIDATE_ASIN_SCOPE_MISMATCH")
+    reference = candidate.get("parent_authority_artifact")
+    policy = candidate.get("source_exclusion_policy")
+    policy_records = any(isinstance(row.get("owner_attribute_exclusions"), Mapping) for row in records)
+    if reference != manifest.get("parent_authority_artifact"):
+        raise TranslationBatchError("SOURCE_CANDIDATE_PARENT_AUTHORITY_REFERENCE_MISMATCH")
+    if reference is not None or policy_records:
+        if isinstance(reference, Mapping) and (manifest.get("artifacts") or {}).get("parent_authority.json") != reference.get("artifact_file_hash"):
+            raise TranslationBatchError("SOURCE_CANDIDATE_PARENT_AUTHORITY_MANIFEST_HASH_MISMATCH")
+        authority = load_parent_authority(reference, artifact_dir=source.parent,
+            available_asins=asins, selected_asins=asins)
+        if (not isinstance(policy, Mapping) or policy.get("raw_dataset_canonical_hash") != reference.get("dataset_canonical_hash")
+                or policy.get("derived_dataset_canonical_hash") != _hash(records)):
+            raise TranslationBatchError("SOURCE_CANDIDATE_PARENT_AUTHORITY_POLICY_MISMATCH")
+        try:
+            build_structured_translation_draft(records, review_item_ids=set(), authority_records=authority)
+        except ValueError as exc:
+            raise TranslationBatchError("SOURCE_CANDIDATE_PARENT_AUTHORITY_POLICY_BINDING_INVALID:%s" % exc) from exc
+    audit, gate = candidate.get("source_audit") or {}, candidate.get("source_gate") or {}
+    if not verify_source_gate(audit, gate) or not gate.get("ready") or manifest.get("source_gate") != gate:
+        raise TranslationBatchError("SOURCE_CANDIDATE_SOURCE_GATE_NOT_READY_OR_UNVERIFIED")
+    return {"records": _audit_eligible_attribute_view(records),
+            "parent_authority_artifact": reference,
+            "source_candidate_manifest_hash": manifest_hash}
+
+
+__all__ = ["MAX_TRANSLATION_BATCH_ASINS", "TranslationBatchError", "create_selection_manifest", "load_parent_authority", "load_source_candidate",
            "file_hash", "load_selection_manifest", "write_selection_manifest"]

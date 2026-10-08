@@ -329,11 +329,12 @@ def bind_formal_structured_translation_input(
 def validate_formal_structured_translation_input(
         formal: Mapping, verified_master: Mapping, source_audit: Mapping, source_gate: Mapping,
         review_snapshot: Mapping, *, prompt_version: str,
-        dictionary_manifest: Mapping[str, Any]) -> None:
+        dictionary_manifest: Mapping[str, Any], parent_authority_records: Iterable[Mapping] | None = None) -> None:
     """Rebuild formal facts from independent current authority before provider use."""
     expected = bind_formal_structured_translation_input(
         verified_master, source_audit, source_gate, review_snapshot,
-        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest)
+        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest,
+        parent_authority_records=parent_authority_records)
     if sorted(str(row.get("asin") or "") for row in formal.get("records") or ()) != expected["binding"]["asins"]:
         raise ValueError("STRUCTURED_BINDING_ASIN_SET_MISMATCH")
     if formal.get("schema_version") != STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION:
@@ -362,11 +363,12 @@ def _service_records(formal: Mapping) -> list[dict[str, Any]]:
 def execute_formal_structured_translation(
         formal: Mapping, verified_master: Mapping, source_audit: Mapping, source_gate: Mapping,
         review_snapshot: Mapping, service: Any, *, prompt_version: str,
-        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+        dictionary_manifest: Mapping[str, Any], parent_authority_records: Iterable[Mapping] | None = None) -> dict[str, Any]:
     """Use TranslationService's existing cache/TM/QA path for admitted items only."""
     validate_formal_structured_translation_input(formal, verified_master, source_audit, source_gate,
                                                  review_snapshot, prompt_version=prompt_version,
-                                                 dictionary_manifest=dictionary_manifest)
+                                                 dictionary_manifest=dictionary_manifest,
+                                                 parent_authority_records=parent_authority_records)
     # Avoid mutating a potentially shared pool/service while binding the
     # formal structured-input contract into cache derivation. The execution
     # view shares provider/cache semantics (including inflight dedupe) but its
@@ -454,11 +456,12 @@ def _require_unique(values: Iterable[str], code: str) -> None:
 def _assert_bound_execution(
         formal: Mapping, execution: Mapping, verified_master: Mapping, source_audit: Mapping,
         source_gate: Mapping, review_snapshot: Mapping, *, prompt_version: str,
-        dictionary_manifest: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], Mapping[str, Any]]]:
+        dictionary_manifest: Mapping[str, Any], parent_authority_records: Iterable[Mapping] | None = None) -> list[tuple[Mapping[str, Any], Mapping[str, Any]]]:
     """Validate results against independently rebuilt formal source facts."""
     validate_formal_structured_translation_input(
         formal, verified_master, source_audit, source_gate, review_snapshot,
-        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest)
+        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest,
+        parent_authority_records=parent_authority_records)
     if dict(execution.get("binding") or {}) != dict(formal.get("binding") or {}):
         raise ValueError("STRUCTURED_EXECUTION_BINDING_MISMATCH")
     if str(execution.get("translation_schema_version") or "") != STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION:
@@ -554,7 +557,7 @@ def _label_translation_state(*, asin: str, item: Mapping[str, Any], dictionary_v
 def build_structured_production_overlay(
         formal: Mapping, execution: Mapping, *, verified_master: Mapping, source_audit: Mapping,
         source_gate: Mapping, review_snapshot: Mapping, prompt_version: str,
-        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+        dictionary_manifest: Mapping[str, Any], parent_authority_records: Iterable[Mapping] | None = None) -> dict[str, Any]:
     """Build a non-release Chinese overlay from complete structured item facts.
 
     This is deliberately an adapter, not a second translation path: every
@@ -569,7 +572,8 @@ def build_structured_production_overlay(
 
     bound_pairs = _assert_bound_execution(
         formal, execution, verified_master, source_audit, source_gate, review_snapshot,
-        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest)
+        prompt_version=prompt_version, dictionary_manifest=dictionary_manifest,
+        parent_authority_records=parent_authority_records)
     dictionary_version = str(dictionary_manifest.get("dictionary_version") or "")
     dictionary_hash = str(dictionary_manifest.get("dictionary_hash") or "")
     qa_rows, repair_rows, overlay_records, state_records, dictionary_impacts = [], [], [], [], []

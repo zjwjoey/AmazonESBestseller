@@ -35,6 +35,8 @@ class TaskConfig:
     diagnostic_sample_detail_limit: int | None
     refresh_due_asins: frozenset[str]
     raw: Mapping[str, Any]
+    source_candidate_manifest: Path | None = None
+    source_candidate_manifest_hash: str | None = None
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any], *, base_dir: str | Path = ".") -> "TaskConfig":
@@ -53,6 +55,13 @@ class TaskConfig:
         if network_mode not in {"offline", "live"}:
             raise TaskConfigError("TASK_CONFIG_NETWORK_MODE_INVALID")
         source = value.get("source") if isinstance(value.get("source"), Mapping) else value
+        candidate_value = str(source.get("source_candidate_manifest") or "").strip()
+        candidate_manifest = ((root / candidate_value).resolve() if candidate_value else None)
+        if candidate_manifest is not None and network_mode != "offline":
+            raise TaskConfigError("SOURCE_CANDIDATE_OFFLINE_ONLY")
+        if candidate_manifest is not None and not candidate_manifest.is_file():
+            raise TaskConfigError("SOURCE_CANDIDATE_MANIFEST_MISSING:%s" % candidate_manifest)
+        candidate_manifest_hash = _file_hash(candidate_manifest) if candidate_manifest is not None else None
         evidence = str(source.get("ranking_evidence") or value.get("ranking_evidence") or "").strip()
         ranking_evidence = ((root / evidence).resolve() if evidence and not Path(evidence).is_absolute()
                             else Path(evidence) if evidence else None)
@@ -133,7 +142,7 @@ class TaskConfig:
         return cls(task_id, mode, network_mode, ranking_evidence, source_urls, pages_per_url,
                    reviewed_task_plan, reviewed_task_plan_hash, dirs, history_dir,
                    profile, dict(translation), selection_manifest, selection_manifest_hash,
-                   sample_limit, refresh_due_asins, dict(value))
+                   sample_limit, refresh_due_asins, dict(value), candidate_manifest, candidate_manifest_hash)
 
     def evidence_fingerprints(self) -> dict[str, str]:
         if self.ranking_evidence is not None and not self.ranking_evidence.is_file():
@@ -144,6 +153,8 @@ class TaskConfig:
                       "pages_per_url": self.pages_per_url}, sort_keys=True).encode("utf-8")).hexdigest()})
         if self.reviewed_task_plan_hash:
             result["reviewed_task_plan"] = self.reviewed_task_plan_hash
+        if self.source_candidate_manifest is not None:
+            result["source_candidate_manifest"] = _file_hash(self.source_candidate_manifest)
         for index, root in enumerate(self.detail_html_dirs):
             if not root.is_dir():
                 raise TaskConfigError("DETAIL_HTML_DIR_MISSING:%s" % root)

@@ -774,7 +774,21 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping, *, b
     directory.mkdir(parents=True)
     records = list(result.get("records") or [])
     master_path = directory / "spanish_master_5480.json"
-    master_payload = {key: value for key, value in result.items() if key != "source_review_queue"}
+    master_payload = {key: value for key, value in result.items()
+                      if key not in {"source_review_queue", "parent_authority_records"}}
+    parent_reference = None
+    if result.get("source_exclusion_policy") is not None:
+        parents = list(result.get("parent_authority_records") or [])
+        policy = result["source_exclusion_policy"]
+        if not parents or _hash(parents) != policy.get("raw_dataset_canonical_hash"):
+            raise ValueError("parent authority does not match source exclusion raw dataset")
+        parent_path = directory / "parent_authority.json"
+        parent_path.write_text(json.dumps({"records": parents}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        parent_reference = {"artifact_path": str(parent_path.resolve()),
+                            "artifact_file_hash": _artifact_hash(parent_path),
+                            "dataset_canonical_hash": _hash(parents),
+                            "asins": sorted(normalize_asin(row.get("asin")) for row in parents)}
+        master_payload["parent_authority_artifact"] = parent_reference
     # Builder outputs carry a large decision list separately.  Current-gate
     # outputs instead carry the consumer's mapping (inherited/resolved/report
     # state), which is required audit evidence and must remain persisted.
@@ -815,6 +829,8 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping, *, b
     queue_path.write_text(json.dumps(result.get("source_review_queue") or [], ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     builder_artifact = _write_builder_unresolved_decision_artifact(directory, result, builder_artifact_metadata) if builder_artifact_metadata is not None else None
     artifact_names = ["spanish_master_5480.json", "spanish_master_5480.csv", "audit.json", "audit.md", "source_review_queue.json", "historical_source_audit.json"]
+    if parent_reference is not None:
+        artifact_names.append("parent_authority.json")
     if builder_artifact is not None:
         artifact_names.extend(["builder_unresolved_decisions.json", "builder_unresolved_decisions.manifest.json"])
     manifest = {
@@ -828,6 +844,8 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping, *, b
     }
     if builder_artifact is not None:
         manifest["builder_unresolved_decision_artifact"] = builder_artifact
+    if parent_reference is not None:
+        manifest["parent_authority_artifact"] = parent_reference
     (directory / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest
 
@@ -1237,6 +1255,7 @@ def build_current_source_gate_candidate(
         "snapshot_provenance": dict(snapshot_provenance or {}),
         "records": records,
         "owner_optional_exclusion_repair_log": owner_optional_repair_log,
+        "parent_authority_records": raw_parent_records if exclusion_state is not None else [],
         "source_exclusion_policy": exclusion_state,
         "source_review_queue": queue,
         "builder_unresolved_decisions": builder_state,

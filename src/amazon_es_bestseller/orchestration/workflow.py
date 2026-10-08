@@ -45,7 +45,7 @@ from ..translation.structured_contract import (
 from .history import HistoryRepository, JsonHistoryRepository
 from .production_run import STAGES, artifact_hash
 from .task_config import TaskConfig
-from .translation_batch import TranslationBatchError, load_selection_manifest
+from .translation_batch import TranslationBatchError, load_selection_manifest, load_parent_authority, load_source_candidate
 
 
 class ProductionWorkflowError(RuntimeError):
@@ -376,7 +376,20 @@ class ProductionWorkflow:
         if selected:
             rankings = [row for row in rankings if normalize_asin(row.get("asin") or row.get("ranking_asin")) in selected]
         details = _read_json(self.run_dir / str(self._prior(context, "offline-reparse").get("details_path") or ""))
-        products = merge_ranking_and_detail(rankings, details)
+        candidate_path = getattr(self.task, "source_candidate_manifest", None)
+        candidate = None
+        if candidate_path is not None:
+            if self.task.network_mode != "offline":
+                raise ProductionWorkflowError("SOURCE_CANDIDATE_OFFLINE_ONLY")
+            try:
+                candidate = load_source_candidate(candidate_path,
+                    manifest_hash=str(self.task.source_candidate_manifest_hash or ""),
+                    available_asins=[row.get("asin") or row.get("ranking_asin") for row in rankings])
+            except TranslationBatchError as exc:
+                raise ProductionWorkflowError(str(exc)) from exc
+            products = candidate["records"]
+        else:
+            products = merge_ranking_and_detail(rankings, details)
         for row in products:
             asin = normalize_asin(row.get("asin")); row["asin"] = asin
             row.setdefault("requested_asin", asin); row.setdefault("ranking_asin", asin)
@@ -388,18 +401,33 @@ class ProductionWorkflow:
                 row["bestseller_rank"] = row["ranking_rank"]
         path = self.work / "normalized_products.json"; _atomic_json(path, products)
         return self._store("normalize", {"status": "READY", "products_path": str(path.relative_to(self.run_dir)),
+            **({"parent_authority_artifact": candidate["parent_authority_artifact"],
+                "source_candidate_manifest_hash": candidate["source_candidate_manifest_hash"]}
+               if candidate is not None else {}),
             "products_hash": artifact_hash(products), "input_artifact_hashes": {
                 "ranking-authority": self._prior(context, "ranking-authority").get("artifact_file_hash"),
                 "offline-reparse": self._prior(context, "offline-reparse").get("artifact_file_hash")},
             "counts": {"records": len(products), "unique_asins": len({r.get("asin") for r in products})}})
 
     def stage_source_audit(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
-        normalized = self._artifact_data(self._prior(context, "normalize"))
+        normalized_payload = self._prior(context, "normalize")
+        normalized = self._artifact_data(normalized_payload)
         products = _read_json(self.run_dir / str(normalized.get("products_path") or ""))
+        parent_reference = normalized.get("parent_authority_artifact")
+        if parent_reference is not None or any(isinstance(row.get("owner_attribute_exclusions"), Mapping) for row in products):
+            asins = [normalize_asin(row.get("asin")) for row in products]
+            try:
+                load_parent_authority(parent_reference,
+                    artifact_dir=(self.run_dir / str(normalized_payload["artifact_path"])).parent,
+                    available_asins=asins, selected_asins=asins)
+            except TranslationBatchError as exc:
+                raise ProductionWorkflowError(str(exc)) from exc
         audit = audit_source_fields(products); gate = evaluate_source_gate(audit)
         if not gate.get("ready"):
             raise ProductionWorkflowError("SOURCE_AUDIT_NOT_READY:%s" % gate.get("status"))
         return self._store("source-audit", {"status": "READY", "audit": audit, "source_gate": gate,
+            **({"parent_authority_artifact": deepcopy(parent_reference)}
+               if parent_reference is not None else {}),
             "input_artifact_hashes": {"normalize": self._prior(context, "normalize").get("artifact_file_hash")},
             "counts": {"records": len(products), "issues": len(audit.get("issues") or [])}})
 
@@ -411,6 +439,8 @@ class ProductionWorkflow:
                                       refresh_strategy="preserve_prior")
         self.history.save_master(master)
         return self._store("spanish-master", {"status": "READY", "master": master,
+            **({"parent_authority_artifact": deepcopy(source["parent_authority_artifact"])}
+               if source.get("parent_authority_artifact") is not None else {}),
             "input_artifact_hashes": {"source-audit": self._prior(context, "source-audit").get("artifact_file_hash")},
             "counts": {"records": len(master.get("records") or [])}})
 
@@ -429,7 +459,8 @@ class ProductionWorkflow:
         bilingual READY export.
         """
         parent_payload = self._prior(context, "spanish-master")
-        master = self._artifact_data(parent_payload)["master"]
+        parent_data = self._artifact_data(parent_payload)
+        master = parent_data["master"]
         records = [dict(row) for row in master.get("records") or [] if isinstance(row, Mapping)]
         available = {str(row.get("asin") or "").upper(): row for row in records}
         provider_mode = str(self.task.translation.get("provider_mode") or "fake").lower()
@@ -453,6 +484,14 @@ class ProductionWorkflow:
                 raise ProductionWorkflowError(str(exc)) from exc
             selected_asins = list(selection["selected_asins"])
         selected = [available[asin] for asin in selected_asins]
+        authority = []
+        if any(isinstance(row.get("owner_attribute_exclusions"), Mapping) for row in selected):
+            try:
+                authority = load_parent_authority(parent_data.get("parent_authority_artifact"),
+                    artifact_dir=(self.run_dir / str(parent_payload["artifact_path"])).parent,
+                    available_asins=available, selected_asins=selected_asins)
+            except TranslationBatchError as exc:
+                raise ProductionWorkflowError(str(exc)) from exc
         # Rebuild source facts only for the releaseable subset.  This avoids
         # reusing a full-collection PASS report to bless records that have not
         # entered the selected translation batch.
@@ -465,7 +504,8 @@ class ProductionWorkflow:
         return {"parent_spanish_master_artifact_hash": parent_payload.get("artifact_file_hash"),
                 "selection_manifest": selection, "translation_batch_master": batch_master,
                 "translation_batch_source_audit": batch_audit,
-                "translation_batch_source_gate": batch_gate}
+                "translation_batch_source_gate": batch_gate,
+                "translation_batch_parent_authority_records": authority}
 
     def _translation_master(self, context: Mapping[str, Any]) -> Mapping[str, Any]:
         value = self._artifact_data(self._prior(context, "translation-input"))
@@ -642,14 +682,16 @@ class ProductionWorkflow:
                     formal, translation_payload["translation_batch_master"],
                     translation_payload["translation_batch_source_audit"],
                     translation_payload["translation_batch_source_gate"], review, service,
-                    prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest)
+                    prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest,
+                    parent_authority_records=translation_payload.get("translation_batch_parent_authority_records"))
                 structured_state = build_structured_production_overlay(
                     formal, structured,
                     verified_master=translation_payload["translation_batch_master"],
                     source_audit=translation_payload["translation_batch_source_audit"],
                     source_gate=translation_payload["translation_batch_source_gate"],
                     review_snapshot=review, prompt_version=service.prompt_version,
-                    dictionary_manifest=dictionary_manifest)
+                    dictionary_manifest=dictionary_manifest,
+                    parent_authority_records=translation_payload.get("translation_batch_parent_authority_records"))
             except ValueError as exc:
                 raise ProductionWorkflowError("STRUCTURED_FORMAL_INPUT_INVALID:%s" % exc) from exc
             return self._store("translation", {"status": "READY", "execution": structured,
