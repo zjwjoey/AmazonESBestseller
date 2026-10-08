@@ -230,22 +230,104 @@ def build_legacy_reference_candidates(
     }
 
 
+def prepare_legacy_review_input(
+        candidate_manifest: Mapping[str, Any], *, source_candidate_manifest_path: str | Path,
+        source_candidate_manifest_hash: str, available_asins: Iterable[object],
+        selected_asins: Iterable[str] | None = None) -> dict[str, Any]:
+    """Bind pending semantic review to real producer files, never a synthetic gate.
+
+    Automatic QA is rechecked but cannot create KEEP or write translation memory.
+    The existing source loader also verifies independent raw-parent authority.
+    """
+    from ..orchestration.translation_batch import load_source_candidate
+
+    path = Path(source_candidate_manifest_path)
+    loaded = load_source_candidate(path, manifest_hash=source_candidate_manifest_hash,
+                                   available_asins=available_asins)
+    manifest_bytes = path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    master_path = path.parent / "spanish_master_5480.json"
+    master_bytes = master_path.read_bytes()
+    if (hashlib.sha256(manifest_bytes).hexdigest() != source_candidate_manifest_hash
+            or hashlib.sha256(master_bytes).hexdigest() != manifest["artifacts"].get(master_path.name)):
+        raise ValueError("LEGACY_SOURCE_CHANGED_AFTER_VERIFICATION")
+    producer = json.loads(master_bytes)
+    records = producer["records"]
+    current_hash = _hash_json(sorted(_canonical_hash(row) for row in records))
+    if (candidate_manifest.get("schema_version") != LEGACY_REFERENCE_CANDIDATES_SCHEMA_VERSION
+            or candidate_manifest.get("source_binding", {}).get("current_canonical_hash") != current_hash):
+        raise ValueError("LEGACY_CURRENT_CONTEXT_HASH_MISMATCH")
+    by_asin = {row["asin"]: row for row in records}
+    selected = set(selected_asins) if selected_asins is not None else set(by_asin)
+    if not selected or not selected <= set(by_asin):
+        raise ValueError("LEGACY_REVIEW_ASIN_SCOPE_MISMATCH")
+    output, seen = [], set()
+    for candidate in candidate_manifest.get("candidates") or []:
+        asin, field = str(candidate.get("asin") or ""), str(candidate.get("field") or "")
+        if (asin not in by_asin or field not in SUPPORTED_LEGACY_FIELDS or (asin, field) in seen
+                or candidate.get("provider") != LEGACY_PROVIDER or candidate.get("source_kind") != LEGACY_SOURCE_KIND
+                or candidate.get("target_field") != target_field_for(field)):
+            raise ValueError("LEGACY_CANDIDATE_IDENTITY_OR_PROVENANCE_INVALID")
+        seen.add((asin, field))
+        if asin not in selected:
+            continue
+        record = canonical_record(by_asin[asin])
+        source, translated = source_text(record.get(field)), source_text(candidate.get("legacy_zh"))
+        context_hash = _canonical_hash(by_asin[asin])
+        if (not source or not translated or source != candidate.get("legacy_es")
+                or source_hash(source) != candidate.get("field_hash")
+                or context_hash != candidate.get("current_canonical_hash")):
+            raise ValueError("LEGACY_CANDIDATE_CURRENT_FIELD_BINDING_INVALID")
+        brand = source_text(record.get("brand"))
+        qa = qa_field(protect(source, protected_values=(brand,)), translated, source, field=field, brand=brand)
+        output.append({"asin": asin, "field": field, "target_field": target_field_for(field),
+            "source_value": source, "source_hash": source_hash(source), "candidate_value": translated,
+            "candidate_hash": _hash_json(candidate), "context_hash": context_hash, "context": record,
+            "qa": qa, "decision": "PENDING_SEMANTIC_REVIEW", "semantic_review_required": True,
+            "provider": LEGACY_PROVIDER, "source_kind": LEGACY_SOURCE_KIND,
+            "resolution_source": "legacy-reviewed-reference", "provenance": candidate.get("provenance") or {}})
+    authority = {"source_candidate_manifest_path": str(path.resolve()),
+        "source_candidate_manifest_hash": loaded["source_candidate_manifest_hash"],
+        "source_master_file_hash": hashlib.sha256(master_bytes).hexdigest(),
+        "current_canonical_hash": current_hash, "source_gate_audit_hash": producer["source_gate"]["audit_hash"],
+        "selected_asins": sorted(selected)}
+    return {"schema_version": "legacy-verified-review-input-v1", "status": "LEGACY_PENDING_SEMANTIC_REVIEW",
+        "authority": authority, "candidates": output, "admitted_candidate_hashes": [],
+        "provider_calls": 0, "formal_tm_writes": 0, "automatic_promotions": 0}
+
+
 def evaluate_legacy_reviewed_formal_gate(
         candidate_manifest: Mapping[str, Any], source_gate: Mapping[str, Any],
-        policy_evidence: Mapping[str, Any]) -> dict[str, Any]:
-    """Future audit interface; does not promote any candidate by itself."""
+        policy_evidence: Mapping[str, Any], *, source_candidate_manifest_path: str | Path | None = None,
+        source_candidate_manifest_hash: str = "", available_asins: Iterable[object] = (),
+        selected_asins: Iterable[str] | None = None) -> dict[str, Any]:
+    """Require independently loaded current authority and explicit semantic KEEP."""
     if str(source_gate.get("status") or "").upper() != "SOURCE_READY":
         return {"status": "SOURCE_GATE_NOT_READY", "admitted_candidate_hashes": []}
-    expected_hash = (candidate_manifest.get("source_binding") or {}).get("current_canonical_hash")
-    if not expected_hash or source_gate.get("canonical_hash") != expected_hash:
+    if source_candidate_manifest_path is None:
+        return {"status": "SOURCE_BINDING_REVERIFY_REQUIRED", "admitted_candidate_hashes": []}
+    review = prepare_legacy_review_input(candidate_manifest,
+        source_candidate_manifest_path=source_candidate_manifest_path,
+        source_candidate_manifest_hash=source_candidate_manifest_hash,
+        available_asins=available_asins, selected_asins=selected_asins)
+    if source_gate.get("audit_hash") != review["authority"]["source_gate_audit_hash"] or not source_gate.get("ready"):
         return {"status": "SOURCE_BINDING_REVERIFY_REQUIRED", "admitted_candidate_hashes": []}
     if policy_evidence.get("policy_version") != LEGACY_REVIEWED_POLICY_VERSION:
         return {"status": "LEGACY_REVIEW_POLICY_MISSING", "admitted_candidate_hashes": []}
-    reviewed = set(str(value) for value in policy_evidence.get("reviewed_candidate_hashes", []))
+    decisions = policy_evidence.get("semantic_decisions") or []
+    reviewed = {str(item.get("candidate_hash") or ""): item for item in decisions if isinstance(item, Mapping)}
+    if len(reviewed) != len(decisions):
+        raise ValueError("LEGACY_SEMANTIC_DECISION_IDENTITY_INVALID")
     admitted = []
-    for candidate in candidate_manifest.get("candidates") or []:
-        candidate_hash = _hash_json(candidate)
-        if candidate.get("candidate_status") == "PASS" and candidate_hash in reviewed:
-            admitted.append(candidate_hash)
-    return {"status": "LEGACY_REVIEW_REQUIRED" if not admitted else "LEGACY_REVIEWED_REFERENCE_READY",
-            "admitted_candidate_hashes": admitted}
+    for candidate in review["candidates"]:
+        decision = reviewed.get(candidate["candidate_hash"]) or {}
+        if (candidate["qa"]["qa_status"] == "pass" and decision.get("decision") == "KEEP"
+                and decision.get("semantic_review_status") == "PASS"
+                and decision.get("review_model") in {"CODEX", "OWNER"} and str(decision.get("review_note") or "").strip()
+                and decision.get("source_hash") == candidate["source_hash"]
+                and decision.get("context_hash") == candidate["context_hash"]
+                and decision.get("reviewed_value") == candidate["candidate_value"]):
+            admitted.append(candidate["candidate_hash"])
+    return {"status": "LEGACY_REVIEWED_REFERENCE_READY" if admitted and len(admitted) == len(review["candidates"])
+            else "LEGACY_REVIEW_REQUIRED", "admitted_candidate_hashes": admitted,
+            "pending_review_count": len(review["candidates"]) - len(admitted), "formal_tm_writes": 0}

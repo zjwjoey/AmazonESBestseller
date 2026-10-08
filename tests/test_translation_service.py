@@ -38,6 +38,47 @@ class WrongNumericProvider(FakeProvider):
         return ProviderResponse(text="250 ml", provider=self.name, model=self.model)
 
 
+@pytest.mark.parametrize("text", ["200g", "PRO 600", "800ml", "x 30", "80 Cápsulas"])
+def test_plan_does_not_omit_specification_when_execution_resolver_returns_none(tmp_path, text):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"))
+    records = [{"asin": "B000000020", "specification_es": text}]
+    assert service._resolve_scalar_before_provider(asin="B000000020", source_field="specification_es",
+        target="specification_zh", text=text) is None
+    assert service.plan(records)["estimated_api_requests"] == 1
+    assert not provider.calls
+    service.translate_records(records)
+    assert len(provider.calls) == 1
+
+
+def test_specification_plan_uses_canonical_tm_key_and_keeps_attempt_holds(tmp_path):
+    provider = FakeProvider()
+    cache = TranslationCache(tmp_path / "cache.json")
+    service = TranslationService(provider, cache)
+    records = [{"asin": asin, "specification_es": "200g"} for asin in ("B000000020", "B000000021")]
+    plan = service.plan(records)
+    assert plan["estimated_api_requests"] == 1
+    assert plan["request_count_basis"] == "unique_semantic_unit_dispatches_before_retries"
+    cache.put_memory(service._memory_key("200g", "specification_es"), {"translation_status": "failed"})
+    assert service.plan(records)["estimated_api_requests"] == 0
+    assert not provider.calls
+
+
+def test_plan_keeps_pending_field_attempt_and_legacy_failed_envelope_held(tmp_path):
+    provider = FakeProvider()
+    cache = TranslationCache(tmp_path / "cache.json")
+    service = TranslationService(provider, cache)
+    key = service._field_cache_key("B000000020", "specification_es", source_hash("200g"))
+    cache.put(key, {"asin": "B000000020", "field": "specification_es", "source_hash": source_hash("200g"),
+                    "translation_status": "pending"})
+    assert service.plan([{"asin": "B000000020", "specification_es": "200g"}])["estimated_api_requests"] == 0
+    legacy_hold = {"asin": "B000000021", "fields": {"specification_es": {
+        "source_text": "200g", "clean_text": "200g", "translate_allowed": False,
+        "resolution_source": "legacy-reviewed-reference", "clean_status": "LEGACY_QA_FAILED_HOLD_NO_AUTO_RETRANSLATE"}}}
+    assert service.plan([legacy_hold])["estimated_api_requests"] == 0
+    assert not provider.calls
+
+
 class EmptyProvider(FakeProvider):
     def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         self.calls.append((asin, field, text))

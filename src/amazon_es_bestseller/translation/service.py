@@ -620,6 +620,8 @@ class TranslationService:
                 cached = self.cache.get(key) or self.cache.find_result(asin, source, digest)
                 memory = None
                 bypass_memory = False
+                if cached and cached.get("translation_status") == "pending":
+                    continue
                 if cached and cached.get("translation_status") in {"success", "cached"}:
                     cache_hits += 1
                     continue
@@ -629,8 +631,6 @@ class TranslationService:
                                      and repair_failed)):
                     continue
                 if source in {"brand", "brand_es"}:
-                    continue
-                if source == "specification_es" and specification_is_deterministic(text):
                     continue
                 items = self._structured_items(source, self._prepared_value(record, source))
                 if items is not None:
@@ -652,9 +652,7 @@ class TranslationService:
                         if item_memory and not item_bypass:
                             translation_memory_hits += 1
                         else:
-                            unique_requests.add((unit_field, source_hash(item_text),
-                                                 self.source_language, self.target_language,
-                                                 self.provider.name, self.provider.model))
+                            unique_requests.add(self._memory_key(item_text, unit_field))
                 else:
                     memory = self._memory_lookup(self._memory_key(text, source), text, source)
                     bypass_memory = memory and ((memory.get("translation_status") == "partial" and repair_partial)
@@ -663,9 +661,7 @@ class TranslationService:
                     if memory and not bypass_memory:
                         translation_memory_hits += 1
                     else:
-                        unique_requests.add((translation_memory_field_type(source), digest,
-                                             self.source_language, self.target_language,
-                                             self.provider.name, self.provider.model))
+                        unique_requests.add(self._memory_key(text, source))
                 rows.append({"asin": asin, "source_field": source, "target_field": target,
                              "source_hash": digest, "source_chars": len(text)})
         return {"schema_version": self.schema_version, "provider": self.provider.name,
@@ -674,7 +670,8 @@ class TranslationService:
                 "translation_memory_hits": translation_memory_hits,
                 "source_missing": source_missing,
                 "review_blocked": review_blocked,
-                "estimated_api_requests": len(unique_requests), "fields": rows}
+                "estimated_api_requests": len(unique_requests), "fields": rows,
+                "request_count_basis": "unique_semantic_unit_dispatches_before_retries"}
 
     def _translate_record(self, record: Dict[str, Any], *, fields: Optional[Sequence[str]] = None,
                           repair_partial: bool = False, repair_failed: bool = False) -> Dict[str, Any]:

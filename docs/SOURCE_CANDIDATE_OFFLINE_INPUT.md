@@ -61,3 +61,23 @@ Write the result to a new directory using `write_spanish_source_candidate`.
 The derived manifest is then consumed by the same offline task input above.
 Translation input recomputes record and L3 field hashes from the new facts;
 existing translation/TM candidates need revalidation before use.
+
+## Legacy pending semantic review and request planning
+
+The existing `tools/build_legacy_reference_candidates.py` accepts
+`--prepare-review-input --ranking-evidence rankings.json` and an optional
+`--review-asins ASIN1,ASIN2`. It loads the actual candidate manifest through
+the verified source loader, checks current field/context hashes and current
+Chinese QA, and writes `legacy_review_input.json`. QA PASS remains pending
+semantic review. Historical references retain provider `unknown` and source
+`legacy_excel_reference`; no TM write or promotion occurs.
+
+The formal legacy gate requires that same independent manifest authority and
+explicit hash-bound semantic KEEP decisions. An auto-QA result or an old list
+of reviewed hashes cannot replace the current source and semantic review.
+
+`TranslationService.plan().estimated_api_requests` counts unique semantic
+unit dispatches before retries, using the execution TM key. It is neither a
+SKU count, a batch count nor a count of HTTP attempts after retry/failover.
+Specifications use the same deterministic resolver as execution. Existing
+attempt holds remain excluded unless an explicit repair mode is requested.

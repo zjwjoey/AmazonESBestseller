@@ -17,9 +17,9 @@ from test_translation_structured_contract import _CaptureProvider
 from test_production_workflow import _write_fixture
 
 
-def _source(tmp_path, *, no_policy=False, blocked=False):
+def _source(tmp_path, *, no_policy=False, blocked=False, scalar_fields=None):
     asins = ["B07F6LYVT6", "B077H1MZ35", "B000000020"]
-    candidates = [_ranking(asin, leaf_category="Prueba") for asin in asins]
+    candidates = [_ranking(asin, leaf_category="Prueba", **(scalar_fields or {})) for asin in asins]
     parents = [dict(row, ranking_contexts=[dict(row)], attributes=[], raw_source={"fixture": True},
                     detail_schema_version="2", ranking_schema_version="ranking-v1", parser_version="fixture-v1")
                for row in candidates]
