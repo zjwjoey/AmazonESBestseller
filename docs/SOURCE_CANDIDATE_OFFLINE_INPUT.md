@@ -81,3 +81,16 @@ unit dispatches before retries, using the execution TM key. It is neither a
 SKU count, a batch count nor a count of HTTP attempts after retry/failover.
 Specifications use the same deterministic resolver as execution. Existing
 attempt holds remain excluded unless an explicit repair mode is requested.
+
+### Run-scoped legacy reference admission
+
+`admit_legacy_run_reference_cache` first calls the existing formal legacy gate
+against independently loaded source authority. Every requested candidate must
+be admitted with exact source/context/value hashes, current QA PASS and explicit
+semantic KEEP/PASS. CODEX is agent review, not OWNER review or human gold.
+Dry admission writes no cache. Application creates a new ASIN/field/source-hash
+cache under `provider=unknown`, `model=legacy-reviewed-reference`; it refuses
+an existing output file. No Qwen namespace, global dictionary or cross-ASIN TM
+is written. Unreviewed fields remain held; partial admission does not make the
+whole batch formally ready. The returned reference envelopes can be retained
+as the reference overlay while only remaining eligible fields enter dispatch.

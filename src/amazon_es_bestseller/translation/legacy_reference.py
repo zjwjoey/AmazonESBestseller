@@ -331,3 +331,61 @@ def evaluate_legacy_reviewed_formal_gate(
     return {"status": "LEGACY_REVIEWED_REFERENCE_READY" if admitted and len(admitted) == len(review["candidates"])
             else "LEGACY_REVIEW_REQUIRED", "admitted_candidate_hashes": admitted,
             "pending_review_count": len(review["candidates"]) - len(admitted), "formal_tm_writes": 0}
+
+
+def admit_legacy_run_reference_cache(
+        candidate_manifest: Mapping[str, Any], source_gate: Mapping[str, Any],
+        policy_evidence: Mapping[str, Any], *, output_path: str | Path,
+        dry_run: bool = False, **authority: Any) -> dict[str, Any]:
+    """Write only exact, formally admitted fields to a new ASIN-scoped run cache.
+
+    This is an agent/reference namespace, never Qwen evidence, human gold or
+    global TM. A partially reviewed batch retains its overall review gate.
+    """
+    from .cache import TranslationCache
+
+    path = Path(output_path)
+    if path.exists():
+        raise FileExistsError("LEGACY_RUN_CACHE_ALREADY_EXISTS")
+    gate = evaluate_legacy_reviewed_formal_gate(candidate_manifest, source_gate, policy_evidence, **authority)
+    if gate["status"] not in {"LEGACY_REVIEW_REQUIRED", "LEGACY_REVIEWED_REFERENCE_READY"}:
+        raise ValueError("LEGACY_FORMAL_GATE_BLOCKED:" + gate["status"])
+    requested = {str(row.get("candidate_hash") or "") for row in policy_evidence.get("semantic_decisions") or []}
+    admitted = set(gate["admitted_candidate_hashes"])
+    if requested != admitted:
+        raise ValueError("LEGACY_REQUESTED_ADMISSION_NOT_VERIFIED")
+    review = prepare_legacy_review_input(candidate_manifest, **authority)
+    decisions = {row["candidate_hash"]: row for row in policy_evidence.get("semantic_decisions") or []}
+    envelopes = []
+    for row in review["candidates"]:
+        if row["candidate_hash"] not in admitted:
+            continue
+        decision = decisions[row["candidate_hash"]]
+        envelopes.append({"asin": row["asin"], "field": row["field"], "target_field": row["target_field"],
+            "source_text": row["source_value"], "source_hash": row["source_hash"],
+            "translated_text": row["candidate_value"], "candidate_text": row["candidate_value"],
+            "translation_status": "success", "qa_status": "pass", "qa_issues": [],
+            "provider": LEGACY_PROVIDER, "model": "legacy-reviewed-reference",
+            "source_kind": LEGACY_SOURCE_KIND, "resolution_source": "legacy-reviewed-reference",
+            "schema_version": LEGACY_REVIEWED_POLICY_VERSION, "prompt_version": "explicit-review-v1",
+            "attempt_count": 0, "last_error": None, "context_hash": row["context_hash"],
+            "candidate_hash": row["candidate_hash"], "review_model": decision["review_model"],
+            "review_origin": "agent" if decision["review_model"] == "CODEX" else "human",
+            "review_note": decision["review_note"], "semantic_review_status": "PASS",
+            "human_gold": False, "provider_verified": False, "formal_authority": review["authority"],
+            "review_artifact_sha256": policy_evidence.get("review_artifact_sha256", ""),
+            "provenance": row["provenance"]})
+    report = {"status": "DRY_ADMISSION_VERIFIED" if dry_run else "RUN_REFERENCES_ADMITTED",
+        "gate": gate, "admitted_fields": len(envelopes), "held_fields": len(review["candidates"]) - len(envelopes),
+        "admitted_candidate_hashes": sorted(admitted), "cache_path": str(path),
+        "cache_written": False, "provider_calls": 0, "formal_tm_writes": 0, "automatic_promotions": 0,
+        "authority": review["authority"], "reference_envelopes": envelopes}
+    if not dry_run and envelopes:
+        cache = TranslationCache(path)
+        for envelope in envelopes:
+            key = cache.key(envelope["asin"], envelope["field"], envelope["source_hash"], LEGACY_PROVIDER,
+                            "legacy-reviewed-reference", LEGACY_REVIEWED_POLICY_VERSION, "explicit-review-v1")
+            cache.put(key, envelope)
+        cache.save()
+        report["cache_written"] = True
+    return report
