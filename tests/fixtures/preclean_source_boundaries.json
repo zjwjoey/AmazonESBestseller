@@ -1,0 +1,100 @@
+{
+  "structured": [
+    {
+      "asin": "B00083CZCK",
+      "attributes": [
+        {
+          "section": "product_overview",
+          "label_raw": "Dimensiones del producto: largo x ancho x alto",
+          "value_raw": "6,3 x 2,5 x 1,5 centímetros",
+          "position": 3,
+          "source": "productOverview"
+        },
+        {
+          "section": "technical_details",
+          "label_raw": "Dimensiones Artículo",
+          "value_raw": "6,3 x 2,5 x 1,5 centímetros",
+          "position": 39,
+          "source": "prodDetails"
+        }
+      ],
+      "detail_bullets_raw": [
+        "Dimensiones del producto ‏ : ‎ 6,3 x 2,49 x 1,5 cm; 113,4 g"
+      ],
+      "expected_preclean": "not NEEDS_REVIEW solely for CONFLICTING_DUPLICATE after provenance-preserving input selection"
+    },
+    {
+      "asin": "B07CTK4TH4",
+      "attributes": [
+        {
+          "section": "product_overview",
+          "label_raw": "Dimensiones del producto: largo x ancho x alto",
+          "value_raw": "10 x 10 x 10 milímetros",
+          "position": 4,
+          "source": "productOverview"
+        },
+        {
+          "section": "technical_details",
+          "label_raw": "Dimensiones Artículo",
+          "value_raw": "10 x 10 x 10 milímetros",
+          "position": 9,
+          "source": "prodDetails"
+        }
+      ],
+      "detail_bullets_raw": [
+        "Dimensiones del producto ‏ : ‎ 1 x 1 x 1 cm; 27,22 g"
+      ],
+      "expected_preclean": "not NEEDS_REVIEW solely for CONFLICTING_DUPLICATE after provenance-preserving input selection"
+    },
+    {
+      "asin": "B000BRNBZ8",
+      "attributes": [
+        {
+          "section": "product_overview",
+          "label_raw": "Dimensiones del producto: largo x ancho x alto",
+          "value_raw": "12,5 x 6,5 x 4 centímetros",
+          "position": 3,
+          "source": "productOverview"
+        },
+        {
+          "section": "technical_details",
+          "label_raw": "Dimensiones Artículo",
+          "value_raw": "12,5 x 6,5 x 4 centímetros",
+          "position": 43,
+          "source": "prodDetails"
+        },
+        {
+          "section": "technical_details",
+          "label_raw": "Dimensiones del artículo (profundidad x ancho x alto)",
+          "value_raw": "4f. x 12,5an. x 6,8al. centímetros",
+          "position": 44,
+          "source": "prodDetails"
+        }
+      ],
+      "detail_bullets_raw": [
+        "Dimensiones del producto ‏ : ‎ 12,5 x 6,5 x 4 cm; 113,4 g"
+      ],
+      "expected_preclean": "not NEEDS_REVIEW solely for CONFLICTING_DUPLICATE after provenance-preserving input selection"
+    }
+  ],
+  "numeric": [
+    {
+      "asin": "B000V9H9NQ",
+      "field": "specification_es",
+      "source_text": "Capacidad: 600 ml / Dimensiones del producto: 5l. x 5an. x 20al. centímetros",
+      "expected_numeric_issues": []
+    },
+    {
+      "asin": "B0002APIJG",
+      "field": "product_description",
+      "source_text": "Descripción del producto Descripción del producto La estabilidad establecerá y equilibrará de forma rápida y segura los filtros biológicos de los acuarios de agua dulce y salada, previniendo la causa número uno de mortalidad de los peces: el `` síndrome del nuevo acuario ''. La estabilidad está formulada específicamente para acuarios y contiene una combinación de sustancias aeróbicas y anaeróbicas sinérgicas. y bacterias facultativas que ayudan en la descomposición de desechos orgánicos, amoníaco y nitratos. A diferencia de los productos de la competencia, las bacterias utilizadas en Stability no se unen al azufre y no producen sulfuro de hidrógeno tóxico. La estabilidad es completamente inofensiva para todos los organismos acuáticos, incluidas las plantas acuáticas, por lo que no hay peligro en caso de sobredosis. La estabilidad ha sido respaldada por casi una década de investigación y desarrollo y representa la culminación absoluta en el arte del manejo orgánico natural. dirección Agita bien antes de usar y apaga el filtro UV o de ozono; usa 1 cucharada colmada (5 ml) cada 40 l el primer día; después usa 5 ml por cada 80L durante 7 días. Contenido de la caja Tratamiento de agua Ver más",
+      "expected_numeric_issues": []
+    },
+    {
+      "asin": "B0F1968H9W",
+      "field": "specification_es",
+      "source_text": "Capacidad: 68 litros / Peso del producto: 16,7 Kilogramos / Dimensiones del artículo (largo x ancho x alto): 24,5l. x 58,5an. x 90,5al. centímetros",
+      "expected_numeric_issues": []
+    }
+  ]
+}

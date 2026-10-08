@@ -14,6 +14,7 @@ import re
 import statistics
 import unicodedata
 from collections import Counter, defaultdict
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -197,11 +198,13 @@ def parse_details(value: Any) -> dict[str, Any]:
     source = _text(value)
     rows: list[dict[str, Any]] = []
     issues: list[str] = []
+    provenance = []
     if isinstance(value, Mapping):
         iterable = list(value.items())
     elif isinstance(value, list):
         iterable = []
         for item in value:
+            provenance.append(item if isinstance(item, Mapping) else {})
             if isinstance(item, Mapping):
                 label = item.get("label_raw") or item.get("label") or item.get("name")
                 raw_value = item.get("value_raw") or item.get("value")
@@ -228,31 +231,47 @@ def parse_details(value: Any) -> dict[str, Any]:
             issues.append("VALUE_MISSING")
             continue
         rows.append({"label": label_clean["clean_text"], "value": value_clean["clean_text"],
-                     "position": position, "source": "preclean", "label_clean": label_clean,
+                     "position": provenance[position].get("position", position) if provenance else position,
+                     "section": provenance[position].get("section", "") if provenance else "",
+                     "source": provenance[position].get("source", "preclean") if provenance else "preclean",
+                     "label_clean": label_clean,
                      "value_clean": value_clean})
     raw_rows = list(rows)
     # Deduplicate only exact label/value pairs in the derived input.  The
     # original source remains intact in source_text and raw_fields.  A safe
     # duplicate is informational; only the same label with different values
     # is a conflicting duplicate that blocks admission.
-    exact_seen: set[tuple[str, str]] = set()
+    exact_seen: set[tuple[str, str, str, str]] = set()
     deduped_rows: list[dict[str, Any]] = []
     exact_duplicates = 0
     for row in rows:
-        pair = (normalize_key(row["label"]), normalize_key(row["value"]))
+        pair = (row["section"], row["source"], normalize_key(row["label"]), normalize_key(row["value"]))
         if pair in exact_seen:
             exact_duplicates += 1
             continue
         exact_seen.add(pair)
         deduped_rows.append(row)
     rows = deduped_rows
-    counts = Counter(normalize_key(row["label"]) for row in rows)
+    counts = Counter((row["section"], row["source"], normalize_key(row["label"])) for row in rows)
     conflicting_duplicate_labels = sum(max(0, count - 1) for count in counts.values())
     safe_duplicate_rows = exact_duplicates
     if safe_duplicate_rows:
         issues.append("SAFE_DUPLICATE")
     if conflicting_duplicate_labels:
         issues.append("CONFLICTING_DUPLICATE")
+    by_label = defaultdict(list)
+    for row in rows:
+        by_label[normalize_key(row["label"])].append(row)
+    for surfaces in by_label.values():
+        for index, left in enumerate(surfaces):
+            for right in surfaces[index + 1:]:
+                if (left["section"], left["source"]) == (right["section"], right["source"]):
+                    continue
+                if normalize_key(left["value"]) == normalize_key(right["value"]):
+                    continue
+                signature = _dimension_signature(left["value"]) if normalize_key(left["label"]).startswith("dimensiones") else None
+                if signature is None or signature != _dimension_signature(right["value"]):
+                    issues.append("CROSS_SOURCE_DETAIL_DIFFERENCE")
     if not source.strip():
         status = "SOURCE_MISSING"
     elif not rows:
@@ -322,6 +341,83 @@ def language_label(value: str) -> str:
     return ranked[0][0]
 
 
+_CAPACITY_WORD_RE = re.compile(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", re.I)
+_FACT_LABEL_RE = re.compile(r"(?:^|[/;\n])\s*([^:/;\n]+):")
+
+
+def _capacity_facts(value: str, label: str | None) -> list[list[float]]:
+    """Compare volume facts only inside explicit capacity-labelled fragments."""
+    fragments = []
+    labels = list(_FACT_LABEL_RE.finditer(value)) if label is None else []
+    if labels:
+        for index, match in enumerate(labels):
+            fragments.append((match.group(1), value[match.end():labels[index + 1].start()
+                              if index + 1 < len(labels) else len(value)]))
+    elif label is not None:
+        fragments.append((label, value))
+    else:
+        # A prose mention qualifies only the following clause, never earlier
+        # dosing numbers elsewhere in the paragraph (e.g. Contenido de la caja).
+        for match in _CAPACITY_WORD_RE.finditer(value):
+            clause = re.split(r"[;\n]|\.(?!\d)", value[match.end():], maxsplit=1)[0]
+            fragments.append((match.group(), clause))
+    facts = defaultdict(list)
+    factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
+    for fragment_label, text in fragments:
+        if (not _CAPACITY_WORD_RE.search(str(fragment_label))
+                or re.search(r"contenido\s+de\s+la\s+caja", str(fragment_label), re.I)):
+            continue
+        subject = normalize_key(str(fragment_label))
+        if _CAPACITY_WORD_RE.fullmatch(subject):
+            subject = "product_capacity"
+        for clause in re.split(r"[;\n]", text):
+            if re.search(r"\b(?:cada|por|per|dosis|dosificaci[oó]n|dose|dosage)\b", clause, re.I):
+                continue
+            for match in NUMERIC_UNIT_RE.finditer(clause):
+                unit = UNIT_CANONICAL.get(match.group("unit").casefold())
+                # l. beside an./al. is a length-axis abbreviation, not litres.
+                if unit == "L" and re.search(r"\b(?:an|al)\.", clause, re.I):
+                    continue
+                if unit in factors:
+                    facts[subject].append(float(match.group("number").replace(",", ".")) * factors[unit])
+    return list(facts.values())
+
+
+def _dimension_signature(value: str):
+    match = re.search(r"(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*[x×]\s*"
+                      r"(\d+(?:[.,]\d+)?)\s*(mil[ií]metros?|cent[ií]metros?|mm|cm|metros?|m)\b", value, re.I)
+    if not match:
+        return None
+    unit = UNIT_CANONICAL.get(match.group(4).casefold())
+    factor = {"mm": Decimal(1), "cm": Decimal(10), "m": Decimal(1000)}.get(unit)
+    return tuple(Decimal(number.replace(",", ".")) * factor for number in match.groups()[:3]) if factor else None
+
+
+def _detail_source_evidence(record: Mapping, rows: list[dict]) -> dict[str, Any]:
+    """Retain independent detail bullets; exact conversion never selects a fact."""
+    raw = record.get("detail_bullets_raw")
+    raw = raw if isinstance(raw, list) else []
+    comparisons = []
+    for position, bullet in enumerate(raw):
+        text = clean_text(bullet)["clean_text"]
+        if not re.match(r"Dimensiones del producto\b", text, re.I):
+            continue
+        signature = _dimension_signature(text)
+        if signature is None:
+            continue
+        for row in rows:
+            if not re.match(r"Dimensiones del producto\b", row["label"], re.I):
+                continue
+            attribute_signature = _dimension_signature(row["value"])
+            if attribute_signature is None:
+                continue
+            comparisons.append({"attribute": {key: row[key] for key in ("label", "value", "section", "source", "position")},
+                                "detail_bullet": {"source": "detail_bullets_raw", "position": position, "value_raw": bullet},
+                                "status": "EXACT_UNIT_EQUIVALENT" if attribute_signature == signature else
+                                "CROSS_SOURCE_DETAIL_DIFFERENCE"})
+    return {"detail_bullets_raw": raw, "comparisons": comparisons}
+
+
 def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     matches = NUMERIC_UNIT_RE.findall(value)
     units = [match[1].strip().casefold() for match in matches]
@@ -359,15 +455,11 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     # Capacity values can be written in mixed units, but contradictory values
     # in the same field are an ambiguity that must be reviewed.  Equivalent
     # representations (500 ml / 0,5 L) are deliberately accepted.
-    capacity_factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
-    capacity_context = bool(re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", value, re.I)) if label is None else bool(
-        re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", str(label), re.I))
-    capacity_values = [item["numeric_value"] * capacity_factors[item["canonical_unit"]]
-                       for item in values if item["canonical_unit"] in capacity_factors] if capacity_context else []
-    if len(capacity_values) > 1:
-        baseline = max(capacity_values)
-        if baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001):
-            issues.append("CONTRADICTORY_CAPACITY")
+    for capacity_values in _capacity_facts(value, label):
+        if len(capacity_values) > 1:
+            baseline = max(capacity_values)
+            if baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001):
+                issues.append("CONTRADICTORY_CAPACITY")
     return {"values": values, "issues": sorted(set(issues))}
 
 
@@ -405,6 +497,10 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         clean_fields: dict[str, dict[str, Any]] = {}
         raw_fields: dict[str, dict[str, Any]] = {}
         detail = parse_details(_source_value(record, "product_details"))
+        detail_evidence = _detail_source_evidence(record, detail["rows"])
+        if any(item["status"] == "CROSS_SOURCE_DETAIL_DIFFERENCE" for item in detail_evidence["comparisons"]):
+            detail["issues"] = sorted(set(detail["issues"]) | {"CROSS_SOURCE_DETAIL_DIFFERENCE"})
+            detail["status"] = "NEEDS_REVIEW"
         bullets = parse_bullets(_source_value(record, "feature_bullets"))
         record_issues: list[str] = []
         record_identity: list[dict[str, Any]] = []
@@ -574,6 +670,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         translation_input.append({"asin": asin, "clean_schema_version": CLEAN_SCHEMA_VERSION,
                                   "raw_fields": raw_fields, "fields": clean_fields,
                                   "details_structured": detail["rows"], "bullet_items": bullets["items"],
+                                  "detail_source_evidence": detail_evidence,
                                   "detail_parser_status": detail["status"],
                                   "detail_fully_structured": detail["fully_structured"],
                                   "detail_partially_structured": detail["partially_structured"],

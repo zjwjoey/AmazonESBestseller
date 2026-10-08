@@ -291,6 +291,13 @@ def records_for_preclean(production_input: Mapping[str, Any]) -> list[dict[str, 
         source = item.get("source_record") or {}
         row = deepcopy(source)
         row["asin"] = str(item.get("asin") or "").upper()
+        # Canonical display text can mix attributes and detail bullets. Keep
+        # item evidence at the preclean boundary; never reconstruct items from
+        # that flattened text when the original structured surface exists.
+        for key in ("eligibleattributes", "canonicalstructuredsource", "attributes", "detail_attributes_raw"):
+            if isinstance(source.get(key), list):
+                row["product_details"] = deepcopy(source[key])
+                break
         rows.append(row)
     return rows
 
