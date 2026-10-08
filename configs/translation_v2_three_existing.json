@@ -1,0 +1,13 @@
+{
+  "provider": "qwen-mt",
+  "source_language": "es",
+  "target_language": "zh-CN",
+  "protocol": "openai_compatible",
+  "strict_provider_mapping": true,
+  "max_workers": 3,
+  "providers": [
+    {"name": "QWEN_A", "type": "qwen-mt", "api_key_env": "QWEN_API_KEY", "endpoint_env": "QWEN_API_ENDPOINT", "base_url_env": "QWEN_MT_BASE_URL", "model_env": "QWEN_MT_MODEL", "rate": 0.5, "max_retries": 0},
+    {"name": "QWEN_B", "type": "qwen-mt", "api_key_env": "DASHSCOPE_API_KEY", "endpoint_env": "DASHSCOPE_API_ENDPOINT", "model_env": "QWEN_MT_MODEL", "rate": 0.5, "max_retries": 0},
+    {"name": "QWEN_C", "type": "qwen-mt", "api_key_env": "QWEN_THIRD_API_KEY", "endpoint_env": "QWEN_THIRD_API_ENDPOINT", "model_env": "QWEN_MT_MODEL", "rate": 0.5, "max_retries": 0}
+  ]
+}

@@ -1,4 +1,4 @@
-"""Safe dual-provider execution for Translation V2.
+"""Safe multi-provider execution for Translation V2.
 
 The pool owns scheduling and provider health; individual providers remain
 single-endpoint, single-request adapters.  This module is transport-agnostic
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional, Sequence
 
 from .providers.base import ProviderResponse, TranslationProvider
-from .providers.qwen_mt import QwenMTProvider
+from .providers.qwen_mt import QwenMTProvider, normalize_qwen_base_url, validate_qwen_endpoint
 from .field_contract import canonical_translation_unit_field
 
 
@@ -53,6 +53,7 @@ class ProviderStats:
     alias: str
     state: str = HEALTHY
     requests: int = 0
+    http_attempts: int = 0
     success: int = 0
     retries: int = 0
     rate_limited: int = 0
@@ -125,22 +126,32 @@ class ProviderPool:
                                               source_language=task.context.get("source_language", "es"),
                                               target_language=task.context.get("target_language", "zh-CN"),
                                               context={**task.context, "provider_alias": alias})
-            except Exception as exc:
+            except Exception:
                 response = ProviderResponse(provider=getattr(provider, "name", ""),
                                             model=getattr(provider, "model", ""),
-                                            status="failed", error="network error: %s" % exc,
-                                            attempts=1)
+                                            status="pending", error="TRANSPORT_OUTCOME_UNKNOWN",
+                                            attempts=1, raw={"outcome_unknown": True})
+        if response.status == "failed" and any(token in str(response.error or "").casefold()
+                for token in ("599", "timeout", "network", "connection")):
+            response = replace(response, status="pending", error="TRANSPORT_OUTCOME_UNKNOWN",
+                               raw={**(response.raw or {}), "outcome_unknown": True})
         with self._lock:
             # Provider-level retry attempts are part of the provider's own
             # response envelope; expose them in pool stats as well as pool
             # failover retries.
             stats.retries += max(0, int(response.attempts or 1) - 1)
+            stats.http_attempts += max(0, int(response.attempts))
         response.raw = {**(response.raw or {}), "provider_alias": alias}
         if response.status == "success":
             with self._lock:
                 stats.success += 1
                 stats.state = HEALTHY
             return PoolResult(task.key, response, alias)
+        if response.status == "pending":
+            with self._lock:
+                stats.network_errors += 1
+                stats.state = DEGRADED
+            return PoolResult(task.key, response, alias, source="pending")
         classification = self._retry_class(response)
         with self._lock:
             stats.failed += 1
@@ -162,7 +173,7 @@ class ProviderPool:
 
     def _execute_task(self, task: TranslationTask, first_alias: str) -> PoolResult:
         result = self._call_one(task, first_alias)
-        if result.response.status == "success" or not self.failover or len(self.aliases) == 1:
+        if result.response.status in {"success", "pending"} or not self.failover or len(self.aliases) == 1:
             return result
         # Failover is deliberately bounded to transport/rate-limit classes.
         # A permanent request/configuration failure must not be replayed on a
@@ -266,7 +277,7 @@ class ProviderPool:
                     result = future.result()
                     resolved[key] = result
                     with self._lock:
-                        if result.response.status == "success":
+                        if result.response.status in {"success", "pending"} or result.response.error == "EMPTY_TRANSLATION":
                             self._completed[result.task_key] = result
                         if self._inflight.get(result.task_key) is future:
                             self._inflight.pop(result.task_key, None)
@@ -286,7 +297,7 @@ class ProviderPool:
                 if isinstance(item, Future):
                     result = item.result()
                     with self._lock:
-                        if result.response.status == "success":
+                        if result.response.status in {"success", "pending"} or result.response.error == "EMPTY_TRANSLATION":
                             self._completed[result.task_key] = result
                         if self._inflight.get(result.task_key) is item:
                             self._inflight.pop(result.task_key, None)
@@ -297,7 +308,7 @@ class ProviderPool:
                     result = future.result() if future is not None else resolved[key]
                     if future is not None:
                         with self._lock:
-                            if result.response.status == "success":
+                            if result.response.status in {"success", "pending"} or result.response.error == "EMPTY_TRANSLATION":
                                 self._completed[result.task_key] = result
                             if self._inflight.get(result.task_key) is future:
                                 self._inflight.pop(result.task_key, None)
@@ -309,11 +320,15 @@ class ProviderPool:
             return {alias: vars(stats).copy() for alias, stats in self._stats.items()}
 
     def snapshot(self) -> dict[str, Any]:
-        healthy = sum(1 for stats in self._stats.values() if stats.state == HEALTHY)
-        return {"provider_count": len(self.providers), "max_workers": self.max_workers,
-                "in_flight": len(self._inflight), "completed": len(self._completed),
-                "degraded_to_single_provider": len(self.providers) > 1 and healthy == 1,
-                "providers": self.stats()}
+        with self._lock:
+            healthy = sum(1 for stats in self._stats.values() if stats.state == HEALTHY)
+            return {"provider_count": len(self.providers), "max_workers": self.max_workers,
+                    "in_flight": len(self._inflight),
+                    "completed": sum(result.response.status == "success" for result in self._completed.values()),
+                    "held_pending": sum(result.response.status == "pending" for result in self._completed.values()),
+                    "held_qa_failed": sum(result.response.error == "EMPTY_TRANSLATION" for result in self._completed.values()),
+                    "degraded_to_single_provider": len(self.providers) > 1 and healthy == 1,
+                    "providers": self.stats()}
 
 
 class PoolProviderAdapter(TranslationProvider):
@@ -347,19 +362,66 @@ class PoolProviderAdapter(TranslationProvider):
         return response
 
 
+def preflight_qwen_provider_pool(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Read endpoint facts and credential *presence* only; never read key values."""
+    rows, missing, seen = [], [], set()
+    credential_names = set(os.environ)
+    specs = config.get("providers") or []
+    for spec in specs:
+        alias = str(spec.get("name") or spec.get("alias") or "")
+        key_env = str(spec.get("api_key_env") or "")
+        endpoint_env = str(spec.get("endpoint_env") or "")
+        base_env = str(spec.get("base_url_env") or "")
+        endpoint = spec.get("endpoint") or (os.getenv(endpoint_env) if endpoint_env else None)
+        base = os.getenv(base_env) if base_env else None
+        issues = []
+        if not alias or alias in seen:
+            issues.append("ALIAS_MISSING_OR_DUPLICATED")
+        seen.add(alias)
+        if not key_env or key_env not in credential_names:
+            issues.append("CREDENTIAL_ENV_MISSING")
+        try:
+            endpoint = validate_qwen_endpoint(endpoint) if endpoint else normalize_qwen_base_url(base) if base else None
+        except ValueError as exc:
+            endpoint = None
+            issues.append(str(exc))
+        if not endpoint:
+            issues.append("ENDPOINT_MAPPING_MISSING")
+        row = {"alias": alias, "api_key_env": key_env, "credential_present": key_env in credential_names,
+            "endpoint_env": endpoint_env, "base_url_env": base_env, "endpoint": endpoint,
+            "model": spec.get("model") or os.getenv(str(spec.get("model_env") or "QWEN_MT_MODEL"))
+                     or config.get("model") or "qwen-mt-flash"}
+        rows.append(row)
+        if issues:
+            missing.append({"alias": alias, "issues": issues, "endpoint_env": endpoint_env, "api_key_env": key_env})
+    workers = int(config.get("max_workers", len(rows)))
+    if not rows or not 1 <= workers <= min(3, len(rows)):
+        missing.append({"alias": "POOL", "issues": ["PROVIDER_COUNT_OR_WORKERS_INVALID"]})
+    return {"status": "BLOCKED" if missing else "READY", "providers": rows, "missing": missing,
+        "max_workers": workers, "dispatches": 0, "credential_values_read": False}
+
+
 def build_qwen_provider_pool(config: Mapping[str, Any], *, transport_factory: Any = None) -> ProviderPool:
     """Build a pool from aliases without ever storing credentials in config."""
     specs = config.get("providers") if isinstance(config, Mapping) else None
     if not specs:
-        specs = [{"name": "qwen-a", "type": "qwen-mt", "model": config.get("model", "qwen-mt-flash"),
+        specs = [{"name": "qwen-a", "type": "qwen-mt", "model": config.get("model"),
                   "endpoint_env": "QWEN_API_ENDPOINT", "api_key_env": "QWEN_API_KEY",
                   "rate": config.get("rate", 0.5)}]
+    strict = bool(config.get("strict_provider_mapping"))
+    preflight = preflight_qwen_provider_pool(config) if strict else None
+    if preflight and preflight["status"] != "READY":
+        raise ValueError("PROVIDER_CONFIGURATION_BLOCKED: " + str(preflight["missing"]))
     providers: dict[str, TranslationProvider] = {}
     for spec in specs:
         alias = str(spec.get("name") or spec.get("alias") or "qwen-a")
-        endpoint = os.getenv(str(spec.get("endpoint_env", "QWEN_API_ENDPOINT")))
+        endpoint = (next(row["endpoint"] for row in preflight["providers"] if row["alias"] == alias)
+                    if preflight else spec.get("endpoint") or os.getenv(str(spec.get("endpoint_env", "QWEN_API_ENDPOINT"))))
         api_key = os.getenv(str(spec.get("api_key_env", "QWEN_API_KEY")))
-        kwargs = dict(model=spec.get("model", "qwen-mt-flash"), endpoint=endpoint, api_key=api_key,
+        if strict and not api_key:
+            raise ValueError("PROVIDER_CREDENTIAL_EMPTY: " + alias)
+        model = spec.get("model") or os.getenv(str(spec.get("model_env") or "QWEN_MT_MODEL")) or config.get("model")
+        kwargs = dict(model=model, endpoint=endpoint, api_key=api_key,
                       protocol=spec.get("protocol", config.get("protocol")),
                       rate=float(spec.get("rate", 0.5)), timeout=float(spec.get("timeout", 60)),
                       max_retries=int(spec.get("max_retries", 2)),

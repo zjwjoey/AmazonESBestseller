@@ -57,10 +57,45 @@ configuration file:
 ```
 
 `ProviderPool` uses bounded round-robin assignment with a per-provider request
-lock, in-flight task deduplication, shared successful TM results, retryable
-failed/pending tasks, bounded network failover and provider health states. QA
-failures do not trigger automatic failover; when all providers are unavailable,
-new tasks remain pending for resume.
+lock, in-flight task deduplication, shared successful results, bounded failover
+for received 429/5xx responses and provider health states. QA failures do not
+trigger failover. Timeout, transport exceptions and HTTP 599 have an unknown
+send outcome: preserve pending without internal retry, failover or implicit
+resubmission. Other independent tasks may continue on healthy providers.
+
+### Three existing credential aliases
+
+`configs/translation_v2_three_existing.json` explicitly maps the existing
+credential variable names. It does not contain credentials or infer that keys
+belong to the same host:
+
+| Alias | Credential variable | Endpoint variable | Optional base URL |
+| --- | --- | --- | --- |
+| QWEN_A | QWEN_API_KEY | QWEN_API_ENDPOINT | QWEN_MT_BASE_URL |
+| QWEN_B | DASHSCOPE_API_KEY | DASHSCOPE_API_ENDPOINT | none |
+| QWEN_C | QWEN_THIRD_API_KEY | QWEN_THIRD_API_ENDPOINT | none |
+
+The third endpoint name is a required explicit mapping slot, not evidence that
+it is configured. Missing endpoint mappings block dispatch before key values
+or transports are loaded. Strict dry-run enumerates credential variable names
+only, records non-sensitive missing mappings, and never reads credential values.
+This configuration requests three workers and zero provider-internal retries.
+No system environment variables are changed by loading or preflighting it.
+
+For the single adapter, precedence is explicit endpoint, `QWEN_API_ENDPOINT`,
+`DASHSCOPE_API_ENDPOINT`, `QWEN_MT_BASE_URL`, then the existing public default.
+An explicit model wins over `QWEN_MT_MODEL`, then the default. Strict pool
+aliases use their own explicit endpoint or endpoint variable, then only their
+declared base URL variable; they never fall back to another alias's host.
+Per-alias model, model environment, global configured model, then the default
+are used in that order. Base URL paths `/compatible-mode/v1` and `/v1` append
+`/chat/completions`; a complete chat path remains unchanged. HTTPS, no embedded
+credentials/query/fragment and a recognized path are required. Unknown base
+paths fail closed; host ownership is not inferred or verified by an offline
+preflight. Legacy review and field-closure gates remain necessary before live use.
+Pool stats expose adapter dispatches as `requests` and transport attempts as
+`http_attempts`; retries/failover may make attempts exceed dispatches. A dry-run
+estimate counts unique semantic dispatches before retries, not batches or cost.
 
 ## CLI
 

@@ -28,7 +28,7 @@ class PoolFake(TranslationProvider):
             except threading.BrokenBarrierError:
                 pass
         if self.fail:
-            return ProviderResponse(provider=self.name, model=self.model, status="failed", error="HTTP 599")
+            return ProviderResponse(provider=self.name, model=self.model, status="failed", error="HTTP 500")
         return ProviderResponse(text=self.text_prefix + text, provider=self.name, model=self.model)
 
 
@@ -46,7 +46,7 @@ class ToggleFake(PoolFake):
     def translate(self, text, *, asin, field, source_language="es", target_language="zh-CN", context=None):
         self.calls.append((text, asin, field))
         if self.fail_now:
-            return ProviderResponse(provider=self.name, model=self.model, status="failed", error="HTTP 599")
+            return ProviderResponse(provider=self.name, model=self.model, status="failed", error="HTTP 500")
         return ProviderResponse(text="ok", provider=self.name, model=self.model)
 
 
@@ -151,7 +151,7 @@ def test_duplicate_translation_unit_has_one_provider_call():
     assert pool.snapshot()["completed"] == 1
 
 
-def test_network_failure_fails_over_once_and_marks_provider_degraded():
+def test_known_server_failure_fails_over_once_and_marks_provider_degraded():
     a, b = PoolFake("qwen-mt", fail=True), PoolFake("qwen-mt", text_prefix="B:")
     pool = ProviderPool({"qwen-a": a, "qwen-b": b})
     result = pool.submit([task("one", 1)])[0]

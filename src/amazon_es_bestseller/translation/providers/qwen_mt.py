@@ -12,11 +12,31 @@ import time
 from typing import Any, Callable, Dict, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 from .base import ProviderResponse, TranslationProvider
 
 
 Transport = Callable[[str, Dict[str, str], Dict[str, Any], float], Dict[str, Any]]
+
+
+def validate_qwen_endpoint(value: str) -> str:
+    parts = urlsplit(value)
+    if (parts.scheme != "https" or not parts.hostname or parts.username or parts.password
+            or parts.query or parts.fragment or not parts.path.endswith("/chat/completions")):
+        raise ValueError("QWEN_ENDPOINT_FORMAT_INVALID")
+    return value
+
+
+def normalize_qwen_base_url(value: str) -> str:
+    """Use the existing OpenAI-compatible chat path, never infer a host route."""
+    value = value.rstrip("/")
+    parts = urlsplit(value)
+    if parts.path in {"/compatible-mode/v1", "/v1"}:
+        value += "/chat/completions"
+    elif parts.path not in {"/compatible-mode/v1/chat/completions", "/v1/chat/completions"}:
+        raise ValueError("QWEN_BASE_URL_PATH_INVALID")
+    return validate_qwen_endpoint(value)
 
 
 class QwenMTProvider(TranslationProvider):
@@ -29,15 +49,17 @@ class QwenMTProvider(TranslationProvider):
 
     def __init__(self, *, api_key: Optional[str] = None,
                  endpoint: Optional[str] = None,
-                 model: str = "qwen-mt-flash",
+                 model: Optional[str] = None,
                  protocol: Optional[str] = None,
                  timeout: float = 60.0, max_retries: int = 2,
                  backoff_seconds: float = 5.0,
                  rate: float = 0.5,
                  transport: Optional[Transport] = None):
         self.api_key = api_key or os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
-        self.endpoint = endpoint or os.getenv("QWEN_API_ENDPOINT") or os.getenv(
-            "DASHSCOPE_API_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+        base_url = os.getenv("QWEN_MT_BASE_URL")
+        self.endpoint = (endpoint or os.getenv("QWEN_API_ENDPOINT") or os.getenv("DASHSCOPE_API_ENDPOINT")
+                         or (normalize_qwen_base_url(base_url) if base_url else None)
+                         or "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
         self._model = model or os.getenv("QWEN_MT_MODEL") or "qwen-mt-flash"
         self.protocol = protocol or os.getenv("QWEN_API_PROTOCOL", "openai_compatible")
         self.timeout = timeout
@@ -152,14 +174,22 @@ class QwenMTProvider(TranslationProvider):
             self._wait_for_rate_limit()
             try:
                 response = self.transport(self.endpoint, headers, payload, self.timeout)
-            except Exception as exc:  # injectable transports may surface timeout/HTTP errors
-                response = {"status_code": 599, "error": str(exc)}
+            except Exception:  # The request may already have been billed; never replay it.
+                response = {"status_code": 599}
+            if not isinstance(response, dict):
+                response = {"status_code": 599}
             # Tests and alternate transports may return decoded provider JSON
             # directly instead of the {status_code, body} envelope.
             if isinstance(response, dict) and "status_code" not in response and (
                     "choices" in response or "output" in response or "text" in response):
                 response = {"status_code": 200, "body": response}
-            code = int(response.get("status_code", 200) or 0)
+            try:
+                code = int(response.get("status_code", 200) or 0)
+            except (TypeError, ValueError):
+                code = 599
+            if code == 599:
+                return ProviderResponse(provider=self.name, model=self._model, status="pending",
+                    error="TRANSPORT_OUTCOME_UNKNOWN", attempts=attempt, raw={"outcome_unknown": True})
             body = response.get("body") if isinstance(response, dict) else {}
             text_out = self._extract(body if isinstance(body, dict) else {})
             if 200 <= code < 300 and text_out:
@@ -174,7 +204,7 @@ class QwenMTProvider(TranslationProvider):
                                         attempts=attempt, raw=body or {})
             detail = response.get("error") or (body.get("error") if isinstance(body, dict) else None)
             last_error = "HTTP %s%s" % (code, (": " + str(detail)[:300]) if detail else "")
-            retryable = code == 429 or code >= 500 or code == 599
+            retryable = code == 429 or code >= 500
             if not retryable or attempt > self.max_retries:
                 break
             if self.backoff_seconds:

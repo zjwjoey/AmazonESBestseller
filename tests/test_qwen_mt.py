@@ -62,7 +62,7 @@ def test_qwen_retries_429_then_succeeds():
     assert result.status == "success" and result.attempts == 2
 
 
-def test_qwen_500_and_timeout_are_bounded_failures():
+def test_qwen_500_retries_but_unknown_timeout_is_held():
     for response in ({"status_code": 500, "body": {"error": "server"}},
                      TimeoutError("timeout")):
         def transport(*_, response=response):
@@ -71,7 +71,11 @@ def test_qwen_500_and_timeout_are_bounded_failures():
             return response
         result = QwenMTProvider(api_key="k", transport=transport, max_retries=1,
                                 backoff_seconds=0, rate=0).translate("x", asin="A", field="f")
-        assert result.status == "failed" and result.attempts == 2
+        if isinstance(response, Exception):
+            assert result.status == "pending" and result.attempts == 1
+            assert result.error == "TRANSPORT_OUTCOME_UNKNOWN"
+        else:
+            assert result.status == "failed" and result.attempts == 2
 
 
 def test_qwen_401_malformed_and_empty_do_not_retry_forever():

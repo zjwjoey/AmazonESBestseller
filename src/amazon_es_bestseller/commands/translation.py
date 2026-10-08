@@ -405,9 +405,21 @@ def cmd_translate(args) -> None:
     provider_name = args.provider or config.get('provider', 'qwen-mt')
     if provider_name not in {'qwen-mt', 'qwen_mt'}:
         raise SystemExit('Translation V2 \u5f53\u524d\u53ea\u5141\u8bb8 provider=qwen-mt\uff1b\u65e7 DeepSeek \u8bf7\u7ee7\u7eed\u4f7f\u7528 translate-ds')
-    model = args.model or config.get('model') or 'qwen-mt-flash'
+    preflight = None
+    if config.get('strict_provider_mapping'):
+        from ..translation.pool import preflight_qwen_provider_pool
+        preflight = preflight_qwen_provider_pool(config)
+        if preflight['status'] != 'READY':
+            if args.dry_run:
+                _save_json({'status': 'PROVIDER_CONFIGURATION_BLOCKED', 'provider_preflight': preflight,
+                            'total_records': len(products), 'dispatches': 0, 'http_attempts': 0}, args.out)
+                print('translate dry-run: PROVIDER_CONFIGURATION_BLOCKED (0 dispatches)')
+                return
+            raise SystemExit('PROVIDER_CONFIGURATION_BLOCKED: %s' % preflight['missing'])
+    model = args.model or config.get('model') or os.getenv('QWEN_MT_MODEL') or 'qwen-mt-flash'
     provider = QwenMTProvider(model=model,
-                              endpoint=config.get('endpoint'),
+                              api_key='OFFLINE_DRY_RUN_NO_CREDENTIAL' if preflight and args.dry_run else None,
+                              endpoint=preflight['providers'][0]['endpoint'] if preflight else config.get('endpoint'),
                               protocol=config.get('protocol'),
                               timeout=float(config.get('timeout', config.get('timeout_seconds', 60))),
                               max_retries=int(config.get('max_retries', 2)),
@@ -424,7 +436,7 @@ def cmd_translate(args) -> None:
     parallel_requested = bool(getattr(args, 'parallel_providers', False) or
                               isinstance(config.get('providers'), list) and len(config['providers']) > 1)
     pool = None
-    if parallel_requested:
+    if parallel_requested and not (preflight and args.dry_run):
         from ..translation.pool import build_qwen_provider_pool
         pool_config = dict(config)
         pool_config.setdefault('max_workers', len(config.get('providers', [])) or 2)
@@ -439,6 +451,15 @@ def cmd_translate(args) -> None:
                                                limit=args.limit, repair_partial=args.repair_partial,
                                                repair_failed=args.repair_failed, dry_run=True)
         plan = result['summary']
+        if preflight:
+            plan['provider_preflight'] = preflight
+            plan['pool'] = {'provider_count': len(preflight['providers']), 'max_workers': preflight['max_workers'],
+                            'in_flight': 0, 'completed': 0, 'providers': {}}
+            aliases = [row['alias'] for row in preflight['providers']]
+            total_requests = int(plan.get('estimated_api_requests', 0))
+            plan['estimated_provider_requests'] = {
+                alias: total_requests // len(aliases) + (1 if index < total_requests % len(aliases) else 0)
+                for index, alias in enumerate(aliases)}
         if pool is not None:
             plan['pool'] = result.get('pool', pool.snapshot())
             aliases = [str(item.get('name') or item.get('alias'))
