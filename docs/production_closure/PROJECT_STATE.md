@@ -552,3 +552,48 @@ wiring, formal legacy policy, and Provider-3/API validation remain incomplete.
 - Focused offline verification: `tests/test_translation_structured_contract.py`
   passed (`10 passed`); targeted ruff and diff checks passed. No full suite,
   network, provider API, raw-output rewrite, or Excel export was run.
+
+## Current gate recheck and final offline regression (2026-10-07)
+
+- Current code includes `71ba7ea` (spelled Spanish flow-unit recognition) and
+  the non-release structured dictionary hardening commits `f29f148` and
+  `5412c19`. The latter remains non-release only; it does not authorize
+  ReleaseGate, Excel, Amazon collection, or Qwen.
+- One new immutable current-gate recheck at
+  `outputs/production_closure_20261008T001500Z_current_gate_recheck/` reused
+  the verified T160000 builder parent, builder-decision queue, approved two
+  owner exclusions, and exact 5,478-ASIN scope. It exited `0`, but remains
+  `CANDIDATE_CURRENT_GATE_BLOCKED` / SourceGate `BLOCKED`.
+- The current audit has 14 P1 `SPEC_UNIT_TYPE_MISMATCH` BLOCK findings across
+  12 SKUs, plus 462 P1 `UNIT_SEMANTICS_AMBIGUOUS`, 59 P1
+  `SOURCE_SEMANTIC_CONFLICT`, 17 P1 `MULTILINGUAL_ATTRIBUTE_REVIEW`, and 12
+  P2 `TEXT_REPETITION_REVIEW` findings. These are current evidence records,
+  not historical counts to be summed. No ambiguity was suppressed or promoted.
+- The user approved a narrow source-exclusion policy for this reviewed batch:
+  retain raw evidence and issue history, then exclude only item-bound,
+  evidenced uncertain attributes from derived translation/display. That policy
+  is **APPROVED_NOT_IMPLEMENTED** here. SourceGate remains BLOCKED until a
+  future implementation validates its exclusion manifest and complete coverage
+  binding; it must not delete SKUs, infer values, or mark excluded items PASS.
+- A single full offline regression at HEAD `5412c198` used local
+  `--basetemp`, `-o addopts=''`, and no network/provider call. Its immutable
+  evidence is `outputs/production_closure_20261008T003000Z_final_offline_regression/`:
+  **1117 passed, 6 skipped**, `PROCESS_EXIT=0`; `ruff check src tests`,
+  `compileall src tests`, and `git diff --check` also exited `0`.
+
+## Item-bound owner exclusion checkpoint (2026-10-08)
+
+- The approved exclusion policy is now implemented as a hash-bound manifest
+  derived only from the current raw 5,478-ASIN audit: 552 P1 attribute items
+  across 458 SKUs, with immutable raw evidence and the original issues retained
+  as `EXCLUDED_BY_OWNER` trail rows. It does not delete SKUs or convert raw
+  findings to PASS.
+- Offline gate artifact
+  `outputs/production_closure_20261008T020000Z_current_gate_owner_attribute_exclusions/`
+  exited `0`. Its effective audit remains `REVIEW_REQUIRED` / candidate
+  blocked; it is source-only evidence and does not authorize translation,
+  Qwen, ReleaseGate, or Excel.
+- Structured translation now consumes the verified `eligibleattributes` view
+  for the new owner-attribute policy and fails closed on a hash/trail mismatch;
+  raw excluded values cannot fall back into a structured draft. The historical
+  optional-exclusion path remains supported.

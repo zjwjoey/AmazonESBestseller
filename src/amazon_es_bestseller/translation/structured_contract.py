@@ -54,6 +54,45 @@ def _excluded_trace(record: Mapping) -> list[dict[str, Any]]:
     return trace
 
 
+def _verified_owner_attribute_eligible(record: Mapping) -> tuple[list[Mapping], list[dict[str, Any]]]:
+    """Accept the new derived attribute view only with its exact raw trail."""
+    evidence = record.get("owner_attribute_exclusions")
+    if not isinstance(evidence, Mapping) or evidence.get("schema_version") != "owner-current-source-attribute-exclusion-v1":
+        raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+    raw = record.get("rawattributes_raw")
+    eligible = record.get("eligibleattributes")
+    excluded = evidence.get("excluded_items")
+    if not isinstance(raw, list) or not isinstance(eligible, list) or not isinstance(excluded, list):
+        raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+    if evidence.get("eligible_attributes_hash") != _hash(eligible):
+        raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+    seen = set()
+    trace = []
+    for item in excluded:
+        locator = item.get("locator") if isinstance(item, Mapping) else None
+        if not isinstance(locator, Mapping):
+            raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+        try:
+            position = int(locator.get("position"))
+        except (TypeError, ValueError):
+            raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID") from None
+        if position in seen or position < 0 or position >= len(raw):
+            raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+        source = raw[position]
+        if (not isinstance(source, Mapping) or locator.get("source") != "attributes"
+                or source.get("label_raw") != locator.get("label_raw")
+                or source.get("value_raw") != locator.get("value_raw")):
+            raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+        if any(dict(candidate) == dict(source) for candidate in eligible if isinstance(candidate, Mapping)):
+            raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+        seen.add(position)
+        trace.append({"item_id": _item_id(source, position, prefix="excluded"), "section": _text(source.get("section")),
+                      "position": source.get("position", position), "label_raw": source.get("label_raw"),
+                      "value_raw": source.get("value_raw"), "source_hash": _hash({"kind": "owner_attribute_excluded_raw", "item": dict(source)}),
+                      "admission": "OWNER_EXCLUDED_RAW_TRACE"})
+    return eligible, trace
+
+
 def _detail_item(asin: str, item: Mapping, ordinal: int, *, review_item_ids: set[str], review_evidence_complete: bool) -> dict[str, Any]:
     item_id = _item_id(item, ordinal, prefix="detail")
     label, value = _text(item.get("label_raw")), _text(item.get("value_raw"))
@@ -140,9 +179,12 @@ def build_structured_translation_draft(records: Iterable[Mapping], *, review_ite
         # source; neither branch ever parses a flat display field or raw owner
         # exclusions as a fallback.
         exclusion = raw.get("owner_optional_exclusion")
-        eligible = (raw.get("eligibleattributes") if isinstance(exclusion, Mapping)
-                    else raw.get("canonicalstructuredsource"))
-        excluded = _excluded_trace(raw)
+        if isinstance(raw.get("owner_attribute_exclusions"), Mapping):
+            eligible, excluded = _verified_owner_attribute_eligible(raw)
+        else:
+            eligible = (raw.get("eligibleattributes") if isinstance(exclusion, Mapping)
+                        else raw.get("canonicalstructuredsource"))
+            excluded = _excluded_trace(raw)
         if not isinstance(eligible, list):
             details = _field_fact("product_details", [], excluded_raw_trace=excluded,
                                   evidence_status="STRUCTURED_EVIDENCE_MISSING")

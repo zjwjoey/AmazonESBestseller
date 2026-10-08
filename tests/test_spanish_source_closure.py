@@ -1,6 +1,8 @@
 import hashlib
 import json
 
+import pytest
+
 from amazon_es_bestseller.production.spanish_source_closure import (
     BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN,
     BUILDER_UNRESOLVED_DECISION_RULES_VERSION,
@@ -8,6 +10,7 @@ from amazon_es_bestseller.production.spanish_source_closure import (
     build_spanish_source_candidate,
     candidate_manifest_hash,
     build_current_source_gate_candidate,
+    build_owner_attribute_exclusion_manifest,
     derive_owner_excluded_scope,
     derive_owner_excluded_scope_with_parent_chain,
     load_builder_unresolved_decision_artifact,
@@ -697,3 +700,75 @@ def test_rank_matrix_distinguishes_real_gaps_from_owner_scope_exclusions():
     assert all(item["classification"] == "OUT_OF_EXACT_SCOPE" and item["exclusion"] for item in diagnostic["out_of_exact_scope"])
     real_gap = rank_matrix_diagnostics([_ranking("B000000014", rank=1), _ranking("B07F6LYVT6", rank=3)], exact_scope={"B000000014"}, owner_scope=owner_scope)
     assert real_gap["issues"][0]["issue_code"] == "RANK_GAP"
+
+
+def test_current_gate_owner_attribute_exclusion_is_issue_bound_and_preserves_raw_siblings():
+    """An approved exclusion is item-bound; it cannot become a whole-field bypass."""
+    asins = ["B07F6LYVT6", "B077H1MZ35", "B000000020"]
+    candidates = [_ranking(asin) for asin in asins]
+    details = [_detail(asin) for asin in asins]
+    parents = [dict(item, ranking_contexts=[dict(item)], attributes=[]) for item in candidates]
+    parents[-1]["attributes"] = [
+        {"label_raw": "Capacidad", "value_raw": "2,3 kg"},
+        {"label_raw": "Material", "value_raw": "Acero"},
+    ]
+    scope = derive_owner_excluded_scope(parents, parent_dataset_canonical_hash=_hash(parents))
+    input_hashes = {"candidate_manifest": _hash(candidates), "details": _hash(details), "rankings": _hash(candidates)}
+    baseline = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope, expected_input_hashes=input_hashes,
+        builder_decision_artifact=_builder_artifact(parents),
+    )
+    manifest = build_owner_attribute_exclusion_manifest(
+        parents[2:], baseline["raw_source_audit"], owner_decision="owner-approved-current-source-attribute-exclusion-v1",
+    )
+    result = build_current_source_gate_candidate(
+        candidates, details, candidates, parents, scope, expected_input_hashes=input_hashes,
+        builder_decision_artifact=_builder_artifact(parents),
+        owner_attribute_exclusion_manifest=manifest,
+    )
+    record = next(row for row in result["records"] if row["asin"] == "B000000020")
+    assert record["attributes"] == parents[-1]["attributes"]
+    assert record["eligibleattributes"] == [{"label_raw": "Material", "value_raw": "Acero"}]
+    assert "Capacidad: 2,3 kg" not in record["product_details_es"]
+    assert "Material: Acero" in record["product_details_es"]
+    assert result["source_exclusion_policy"]["raw_dataset_canonical_hash"] == _hash(parents[2:])
+    assert result["source_exclusion_policy"]["excluded_item_count"] == 1
+    assert any(item["status"] == "EXCLUDED_BY_OWNER" for item in result["current_source_audit"]["issues"])
+
+    tampered = json.loads(json.dumps(manifest))
+    tampered["entries"][0]["locator"]["value_raw"] = "invented"
+    with pytest.raises(ValueError, match="exclusion manifest"):
+        build_current_source_gate_candidate(
+            candidates, details, candidates, parents, scope, expected_input_hashes=input_hashes,
+            builder_decision_artifact=_builder_artifact(parents),
+            owner_attribute_exclusion_manifest=tampered,
+        )
+
+    missing = json.loads(json.dumps(manifest))
+    missing["entries"] = []
+    with pytest.raises(ValueError, match="exclusion manifest"):
+        build_current_source_gate_candidate(
+            candidates, details, candidates, parents, scope, expected_input_hashes=input_hashes,
+            builder_decision_artifact=_builder_artifact(parents),
+            owner_attribute_exclusion_manifest=missing,
+        )
+
+
+def test_owner_attribute_manifest_uses_explicit_position_for_duplicate_label_values():
+    record = {"asin": "B000000021", "attributes": [
+        {"section": "overview", "label_raw": "Forma", "value_raw": "??", "position": 0},
+        {"section": "technical", "label_raw": "Forma", "value_raw": "??", "position": 0},
+    ]}
+    issues = []
+    for position, section in enumerate(("overview", "technical")):
+        issues.append({
+            "asin": "B000000021", "field": "attributes", "severity": "P1", "status": "REVIEW",
+            "issue_code": "MULTILINGUAL_ATTRIBUTE_REVIEW",
+            "evidence": {"locator": {"source": "detail_attributes", "label_raw": "Forma", "value_raw": "??",
+                                        "position": position, "section": section, "source_position": 0}},
+        })
+    manifest = build_owner_attribute_exclusion_manifest(
+        [record], {"check": "source_fields", "issues": issues},
+        owner_decision="owner-approved-current-source-attribute-exclusion-v1",
+    )
+    assert sorted(item["locator"]["position"] for item in manifest["entries"]) == [0, 1]

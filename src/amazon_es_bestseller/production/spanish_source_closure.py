@@ -53,6 +53,14 @@ _OWNER_OPTIONAL_ATTRIBUTE_EXCLUSIONS = {
     },
 }
 OWNER_OPTIONAL_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION = "owner-optional-attribute-exclusion-v1"
+OWNER_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION = "owner-current-source-attribute-exclusion-v1"
+OWNER_ATTRIBUTE_EXCLUSION_DECISION = "owner-approved-current-source-attribute-exclusion-v1"
+_OWNER_ATTRIBUTE_EXCLUSION_CODES = {
+    "SPEC_UNIT_TYPE_MISMATCH",
+    "UNIT_SEMANTICS_AMBIGUOUS",
+    "SOURCE_SEMANTIC_CONFLICT",
+    "MULTILINGUAL_ATTRIBUTE_REVIEW",
+}
 _CJK_RE = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 _MOJIBAKE_RE = re.compile(r"\ufffd|(?:Ã.|Â.)")
 _NON_BRAND_BYLINE_RE = re.compile(
@@ -231,6 +239,219 @@ def _owner_optional_exclusion_records(parent_records: Iterable[Mapping], *, pare
         })
         records.append(record)
     return records, repair_log
+
+
+def _attribute_locator(record: Mapping, locator: Mapping) -> dict | None:
+    """Resolve one exact attribute locator or return ``None`` without guessing."""
+    if not isinstance(locator, Mapping) or str(locator.get("source") or "") not in {"attributes", "detail_attributes"}:
+        return None
+    label, value = locator.get("label_raw"), locator.get("value_raw")
+    if label in (None, "") or value in (None, ""):
+        return None
+    matches = [index for index, attr in enumerate(_attrs(record))
+               if attr.get("label_raw") == label and attr.get("value_raw") == value
+               and ("section" not in locator or attr.get("section") == locator.get("section"))
+               and ("source_position" not in locator or attr.get("position") == locator.get("source_position"))]
+    position = locator.get("position")
+    if position not in (None, ""):
+        try:
+            position = int(position)
+        except (TypeError, ValueError):
+            return None
+        if position not in matches:
+            return None
+    elif len(matches) != 1:
+        return None
+    else:
+        position = matches[0]
+    resolved = {"source": "attributes", "label_raw": label, "value_raw": value, "position": position}
+    for key in ("section", "source_position"):
+        if key in locator:
+            resolved[key] = locator[key]
+    return resolved
+
+
+def _owner_attribute_exclusion_entries(parent_records: Iterable[Mapping], raw_audit: Mapping, *,
+                                       owner_decision: str) -> list[dict]:
+    """Derive the only policy entries allowed by the current raw audit."""
+    if owner_decision != OWNER_ATTRIBUTE_EXCLUSION_DECISION:
+        raise ValueError("owner attribute exclusion decision is not approved")
+    records = {normalize_asin(record.get("asin")): dict(record) for record in parent_records
+               if isinstance(record, Mapping) and normalize_asin(record.get("asin"))}
+    entries: list[dict] = []
+    seen = set()
+    for issue in raw_audit.get("issues") or []:
+        if not isinstance(issue, Mapping) or issue.get("issue_code") not in _OWNER_ATTRIBUTE_EXCLUSION_CODES:
+            continue
+        if issue.get("field") != "attributes" or issue.get("severity") != "P1":
+            raise ValueError("approved source issue is not a P1 attribute item")
+        asin = normalize_asin(issue.get("asin"))
+        issue_evidence = issue.get("evidence") or {}
+        locator = _attribute_locator(records.get(asin, {}),
+                                     issue_evidence.get("evidence_locator") or issue_evidence.get("locator") or {})
+        if not locator:
+            raise ValueError(f"approved source issue has no unique attribute locator: {asin} {issue.get('issue_code')}")
+        issue_hash = _hash(dict(issue))
+        if issue_hash in seen:
+            raise ValueError("duplicate approved source issue binding")
+        seen.add(issue_hash)
+        raw_record = records[asin]
+        entries.append({
+            "asin": asin,
+            "field": "attributes",
+            "issue_code": issue["issue_code"],
+            "issue_hash": issue_hash,
+            "issue_evidence_hash": _hash(dict(issue.get("evidence") or {})),
+            "locator": locator,
+            "source_record_hash": _hash(raw_record),
+            "source_attributes_hash": _hash(_attrs(raw_record)),
+            "owner_decision": owner_decision,
+        })
+    if not entries:
+        raise ValueError("owner attribute exclusion manifest requires current approved source issues")
+    return sorted(entries, key=lambda item: (item["asin"], item["issue_code"], item["issue_hash"]))
+
+
+def build_owner_attribute_exclusion_manifest(parent_records: Iterable[Mapping], raw_audit: Mapping, *,
+                                             owner_decision: str = OWNER_ATTRIBUTE_EXCLUSION_DECISION) -> dict:
+    """Build an exact, hash-bound manifest from current raw audit evidence only."""
+    records = [dict(record) for record in parent_records if isinstance(record, Mapping)]
+    if not records:
+        raise ValueError("owner attribute exclusion manifest requires raw parent records")
+    if not isinstance(raw_audit, Mapping) or raw_audit.get("check") != "source_fields":
+        raise ValueError("owner attribute exclusion manifest requires current source_fields audit")
+    entries = _owner_attribute_exclusion_entries(records, raw_audit, owner_decision=owner_decision)
+    return {
+        "schema_version": OWNER_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION,
+        "owner_decision": owner_decision,
+        "raw_dataset_canonical_hash": _hash(records),
+        "raw_audit_hash": canonical_audit_hash(raw_audit),
+        "approved_issue_codes": sorted(_OWNER_ATTRIBUTE_EXCLUSION_CODES),
+        "entries": entries,
+        "entries_canonical_hash": _hash(entries),
+    }
+
+
+def _validated_owner_attribute_exclusion_manifest(parent_records: Iterable[Mapping], raw_audit: Mapping,
+                                                  manifest: Mapping | None) -> dict | None:
+    if manifest is None:
+        return None
+    if not isinstance(manifest, Mapping) or manifest.get("schema_version") != OWNER_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION:
+        raise ValueError("owner attribute exclusion manifest schema is not trusted")
+    records = [dict(record) for record in parent_records if isinstance(record, Mapping)]
+    expected = build_owner_attribute_exclusion_manifest(records, raw_audit,
+                                                         owner_decision=str(manifest.get("owner_decision") or ""))
+    required = ("raw_dataset_canonical_hash", "raw_audit_hash", "approved_issue_codes", "entries", "entries_canonical_hash")
+    if any(manifest.get(key) != expected.get(key) for key in required):
+        raise ValueError("owner attribute exclusion manifest does not exactly bind current raw source evidence")
+    return expected
+
+
+def _base_eligible_attribute_positions(record: Mapping, raw_attributes: list[dict]) -> set[int]:
+    """Map a prior derived eligible view back to raw positions without widening it."""
+    existing = record.get("eligibleattributes")
+    if not isinstance(existing, list):
+        return set(range(len(raw_attributes)))
+    wanted = [dict(item) for item in existing if isinstance(item, Mapping)]
+    positions: set[int] = set()
+    cursor = 0
+    for item in wanted:
+        for index in range(cursor, len(raw_attributes)):
+            if raw_attributes[index] == item:
+                positions.add(index)
+                cursor = index + 1
+                break
+        else:
+            raise ValueError("existing derived attribute view is not bound to raw attributes")
+    return positions
+
+
+def _apply_owner_attribute_exclusions(records: Iterable[Mapping], raw_parent_records: Iterable[Mapping], manifest: Mapping) -> tuple[list[dict], dict]:
+    """Create a derived-only attribute view; raw attributes remain untouched."""
+    raw_by_asin = {normalize_asin(item.get("asin")): dict(item) for item in raw_parent_records
+                   if isinstance(item, Mapping) and normalize_asin(item.get("asin"))}
+    by_asin: dict[str, list[dict]] = defaultdict(list)
+    for entry in manifest["entries"]:
+        by_asin[entry["asin"]].append(entry)
+    result: list[dict] = []
+    changes: list[dict] = []
+    for source in records:
+        record = deepcopy(dict(source))
+        asin = normalize_asin(record.get("asin"))
+        entries = by_asin.get(asin, [])
+        if not entries:
+            result.append(record)
+            continue
+        raw_record = raw_by_asin.get(asin)
+        raw_attributes = _attrs(raw_record or {})
+        if not raw_record:
+            raise ValueError("owner attribute exclusion record is outside raw parent scope")
+        positions = set()
+        for entry in entries:
+            locator = entry["locator"]
+            position = locator["position"]
+            if (_hash(raw_record) != entry["source_record_hash"] or _hash(raw_attributes) != entry["source_attributes_hash"]
+                    or position in positions or position >= len(raw_attributes)
+                    or raw_attributes[position].get("label_raw") != locator["label_raw"]
+                    or raw_attributes[position].get("value_raw") != locator["value_raw"]
+                    or ("section" in locator and raw_attributes[position].get("section") != locator["section"])
+                    or ("source_position" in locator and raw_attributes[position].get("position") != locator["source_position"])):
+                raise ValueError("owner attribute exclusion manifest item no longer binds raw source")
+            positions.add(position)
+        base_positions = _base_eligible_attribute_positions(record, raw_attributes)
+        eligible = [deepcopy(raw_attributes[index]) for index in sorted(base_positions - positions)]
+        before_details = record.get("product_details_es")
+        record["rawattributes_raw"] = deepcopy(raw_attributes)
+        record["eligibleattributes"] = eligible
+        record["product_details_es"] = render_details_es(eligible)
+        evidence = [{key: deepcopy(entry[key]) for key in ("issue_code", "issue_hash", "issue_evidence_hash", "locator", "owner_decision")}
+                    for entry in entries]
+        record["owner_attribute_exclusions"] = {
+            "schema_version": OWNER_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION,
+            "raw_dataset_canonical_hash": manifest["raw_dataset_canonical_hash"],
+            "raw_record_hash": _hash(raw_record),
+            "excluded_items": evidence,
+            "eligible_attributes_hash": _hash(eligible),
+        }
+        changes.append({"asin": asin, "changed_fields": ["eligibleattributes", "product_details_es"],
+                        "product_details_es_changed": before_details != record["product_details_es"],
+                        "excluded_item_count": len(entries), "unaffected_raw_attributes_preserved": True})
+        result.append(record)
+    if sum(len(value) for value in by_asin.values()) != sum(item["excluded_item_count"] for item in changes):
+        raise ValueError("owner attribute exclusion manifest coverage is incomplete")
+    return result, {"records": changes, "excluded_item_count": len(manifest["entries"]), "affected_sku_count": len(changes)}
+
+
+def _audit_eligible_attribute_view(records: Iterable[Mapping]) -> list[dict]:
+    view = []
+    for record in records:
+        item = deepcopy(dict(record))
+        if isinstance(item.get("eligibleattributes"), list):
+            item["attributes"] = deepcopy(item["eligibleattributes"])
+        view.append(item)
+    return view
+
+
+def _append_owner_exclusion_trail(audit: Mapping, raw_audit: Mapping, manifest: Mapping) -> dict:
+    """Retain original P1 findings as exclusion trail, never rewrite them to PASS."""
+    effective = deepcopy(dict(audit))
+    originals = {_hash(dict(issue)): dict(issue) for issue in raw_audit.get("issues") or [] if isinstance(issue, Mapping)}
+    trail = []
+    for entry in manifest["entries"]:
+        issue = originals.get(entry["issue_hash"])
+        if issue is None:
+            raise ValueError("owner attribute exclusion trail lost its original issue")
+        trail.append({"asin": entry["asin"], "field": "attributes", "status": "EXCLUDED_BY_OWNER",
+                      "severity": issue.get("severity"), "issue_code": "EXCLUDED_BY_OWNER",
+                      "original_issue_code": issue.get("issue_code"), "original_issue_hash": entry["issue_hash"],
+                      "owner_decision": entry["owner_decision"], "evidence_locator": deepcopy(entry["locator"])})
+    # Keep these as explicit audit rows (not PASS rows) while SourceGate uses
+    # the independently recomputed remaining SKU statuses.
+    effective.setdefault("issues", []).extend(deepcopy(trail))
+    effective["excluded_by_owner"] = trail
+    effective["summary"] = {**dict(effective.get("summary") or {}), "excluded_by_owner": len(trail),
+                            "issue_count": len(effective.get("issues") or [])}
+    return effective
 
 
 def _has_multilingual_support(detail: Mapping) -> bool:
@@ -580,6 +801,9 @@ def write_spanish_source_candidate(output_dir: str | Path, result: Mapping, *, b
         "candidate_manifest_hash": result.get("candidate_manifest_hash"), "binding_scope": result.get("binding_scope"),
         "source_gate": result.get("source_gate"), "closure_source_gate": result.get("closure_source_gate"),
         "current_source_audit": result.get("source_audit"),
+        "raw_source_audit": result.get("raw_source_audit"),
+        "raw_source_audit_hash": result.get("raw_source_audit_hash"),
+        "source_exclusion_policy": result.get("source_exclusion_policy"),
         "source_audit_history": {"path": historical_path.name, "hash": canonical_audit_hash(result.get("historical_source_audit") or result.get("source_audit") or {})},
         "closure_audit": result.get("closure_audit"),
         "current_source_gate": result.get("current_source_gate"),
@@ -840,12 +1064,13 @@ def _builder_issue(item: Mapping, *, issue_code: str, message: str, locator: Map
 
 
 def _merge_builder_unresolved_decisions(audit: Mapping, records: Iterable[Mapping], decisions: Iterable[Mapping], *, parent_hash: str,
-                                        artifact_state: Mapping) -> tuple[dict, dict]:
+                                        artifact_state: Mapping, excluded_locators: set[tuple[str, str, str]] | None = None) -> tuple[dict, dict]:
     """Carry current builder facts forward under explicit repair/report policy."""
     merged = deepcopy(dict(audit))
     record_map = {normalize_asin(row.get("asin")): row for row in records if isinstance(row, Mapping)}
     queue = [dict(item) for item in decisions if isinstance(item, Mapping)]
     inherited, resolved, reports = [], [], []
+    excluded = excluded_locators or set()
     for item in queue:
         asin = normalize_asin(item.get("asin"))
         if asin not in record_map:
@@ -855,6 +1080,14 @@ def _merge_builder_unresolved_decisions(audit: Mapping, records: Iterable[Mappin
         locator = item.get("evidence_locator") or {}
         record = record_map[asin]
         locator = locator if isinstance(locator, Mapping) else {}
+        normalized_locator = _attribute_locator(record, locator)
+        manifest_locator = normalized_locator or ({
+            "source": "attributes", "label_raw": locator.get("label_raw"),
+            "value_raw": locator.get("value_raw"), "position": locator.get("position"),
+        } if locator.get("source") in {"attributes", "detail_attributes"} else None)
+        if manifest_locator and (asin, classification, _hash(manifest_locator)) in excluded:
+            reports.append({**item, "decision": "EXCLUDED_BY_OWNER", "evidence_locator": manifest_locator})
+            continue
         present = _locator_present(record, locator)
         repair_chain = _approved_optional_repair_chain(record, item, parent_hash=parent_hash)
         if classification == "MULTILINGUAL_ATTRIBUTE_REVIEW" and present:
@@ -891,6 +1124,7 @@ def build_current_source_gate_candidate(
     historical_source_audit: Mapping | None = None, cache_root: str | Path | None = None,
     snapshot_provenance: Mapping | None = None, progress=None,
     builder_decision_artifact: Mapping | None = None,
+    owner_attribute_exclusion_manifest: Mapping | None = None,
 ) -> dict:
     """Revalidate a hash-bound owner subset; history is retained but not authoritative."""
     emit = progress or (lambda *_args, **_kwargs: None)
@@ -928,6 +1162,7 @@ def build_current_source_gate_candidate(
         if asin in expected_scope:
             ranking_contexts[asin].add(_hash(dict(ranking)))
     selected_parent_records = [record for record in parents if normalize_asin(record.get("asin")) in expected_scope]
+    raw_parent_records = [deepcopy(record) for record in selected_parent_records]
     records, owner_optional_repair_log = _owner_optional_exclusion_records(
         selected_parent_records,
         parent_dataset_hash=str(parent.get("dataset_canonical_hash") or ""),
@@ -946,12 +1181,36 @@ def build_current_source_gate_candidate(
             if _text(record.get("parent_asin")):
                 raise ValueError(f"unconfirmed self-parent was retained for {asin}")
     emit("CURRENT_AUDIT_START", records=len(records))
-    current_audit = audit_source_fields(records, ranking_matrix=ranking_rows, progress=emit)
+    raw_audit = audit_source_fields(records, ranking_matrix=ranking_rows, progress=emit)
     parent_hash = str(parent.get("dataset_canonical_hash") or "")
     builder_queue, builder_state = _validated_builder_decision_artifact(
         builder_decision_artifact, parent_hash=parent_hash)
-    current_audit, builder_state = _merge_builder_unresolved_decisions(
-        current_audit, records, builder_queue, parent_hash=parent_hash, artifact_state=builder_state)
+    raw_audit, raw_builder_state = _merge_builder_unresolved_decisions(
+        raw_audit, records, builder_queue, parent_hash=parent_hash, artifact_state=builder_state)
+    exclusion_manifest = _validated_owner_attribute_exclusion_manifest(
+        raw_parent_records, raw_audit, owner_attribute_exclusion_manifest)
+    exclusion_state = None
+    if exclusion_manifest is not None:
+        records, exclusion_changes = _apply_owner_attribute_exclusions(records, raw_parent_records, exclusion_manifest)
+        excluded_locators = {(entry["asin"], entry["issue_code"], _hash(entry["locator"]))
+                             for entry in exclusion_manifest["entries"]}
+        current_audit = audit_source_fields(_audit_eligible_attribute_view(records), ranking_matrix=ranking_rows, progress=emit)
+        current_audit, builder_state = _merge_builder_unresolved_decisions(
+            current_audit, _audit_eligible_attribute_view(records), builder_queue, parent_hash=parent_hash,
+            artifact_state=builder_state, excluded_locators=excluded_locators)
+        current_audit = _append_owner_exclusion_trail(current_audit, raw_audit, exclusion_manifest)
+        exclusion_state = {
+            "schema_version": OWNER_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION,
+            "owner_decision": exclusion_manifest["owner_decision"],
+            "raw_dataset_canonical_hash": exclusion_manifest["raw_dataset_canonical_hash"],
+            "derived_dataset_canonical_hash": _hash(records),
+            "raw_audit_hash": canonical_audit_hash(raw_audit),
+            "effective_audit_hash": canonical_audit_hash(current_audit),
+            "manifest_entries_canonical_hash": exclusion_manifest["entries_canonical_hash"],
+            **exclusion_changes,
+        }
+    else:
+        current_audit, builder_state = raw_audit, raw_builder_state
     emit("CURRENT_AUDIT_DONE", issues=len(current_audit.get("issues") or []))
     current_gate = evaluate_source_gate(current_audit)
     rank_diagnostic = rank_matrix_diagnostics(ranking_rows, exact_scope=expected_scope, owner_scope=owner_scope)
@@ -962,6 +1221,8 @@ def build_current_source_gate_candidate(
         "candidate_manifest_hash": candidate_manifest_hash(candidates),
         "binding_scope": {"count": len(expected_scope), "asins": sorted(expected_scope), "exact_match": True},
         "historical_source_audit": dict(historical_source_audit or {}),
+        "raw_source_audit": raw_audit,
+        "raw_source_audit_hash": canonical_audit_hash(raw_audit),
         "source_audit": current_audit,
         "current_input_hashes": observed_hashes,
         "current_source_audit": current_audit,
@@ -975,6 +1236,7 @@ def build_current_source_gate_candidate(
         "snapshot_provenance": dict(snapshot_provenance or {}),
         "records": records,
         "owner_optional_exclusion_repair_log": owner_optional_repair_log,
+        "source_exclusion_policy": exclusion_state,
         "source_review_queue": queue,
         "builder_unresolved_decisions": builder_state,
     }
@@ -986,5 +1248,6 @@ __all__ = [
     "BUILDER_UNRESOLVED_DECISION_ARTIFACT_DOMAIN", "BUILDER_UNRESOLVED_DECISION_RULES_VERSION",
     "build_spanish_source_candidate", "candidate_manifest_hash", "write_spanish_source_candidate",
     "derive_owner_excluded_scope", "derive_owner_excluded_scope_with_parent_chain", "write_owner_excluded_scope", "rank_matrix_diagnostics",
+    "build_owner_attribute_exclusion_manifest",
     "build_current_source_gate_candidate", "load_builder_unresolved_decision_artifact",
 ]

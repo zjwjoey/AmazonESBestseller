@@ -27,6 +27,8 @@ def main() -> int:
     parser.add_argument("--owner-scope", required=True, type=Path)
     parser.add_argument("--builder-queue", required=True, type=Path)
     parser.add_argument("--builder-manifest", required=True, type=Path)
+    parser.add_argument("--owner-attribute-exclusion-manifest", type=Path,
+                        help="approved, hash-bound derived-attribute exclusion manifest")
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=False)
@@ -55,6 +57,10 @@ def main() -> int:
         parent = load("PARENT", args.parent_root / "spanish_master_5480.json")["records"]
         scope = load("OWNER_SCOPE", args.owner_scope / "owner_exclusions.json")
         history = load("HISTORICAL_AUDIT", args.parent_root / "historical_source_audit.json")
+        owner_attribute_exclusion_manifest = None
+        if args.owner_attribute_exclusion_manifest is not None:
+            owner_attribute_exclusion_manifest = load("OWNER_ATTRIBUTE_EXCLUSION_MANIFEST",
+                                                       args.owner_attribute_exclusion_manifest)
         stage("BUILDER_ARTIFACT_VERIFY_START", queue=str(args.builder_queue), manifest=str(args.builder_manifest))
         builder_artifact = load_builder_unresolved_decision_artifact(args.builder_queue, args.builder_manifest)
         stage("BUILDER_ARTIFACT_VERIFY_DONE", domain=builder_artifact["artifact_domain"],
@@ -68,6 +74,7 @@ def main() -> int:
             candidates, details, rankings, parent, scope, expected_input_hashes=hashes,
             historical_source_audit=history, cache_root=args.production_root, progress=stage,
             builder_decision_artifact=builder_artifact,
+            owner_attribute_exclusion_manifest=owner_attribute_exclusion_manifest,
         )
         try:
             git_sha = subprocess.check_output(

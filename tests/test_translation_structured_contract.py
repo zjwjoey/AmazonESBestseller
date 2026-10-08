@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 
 import pytest
 from types import SimpleNamespace
@@ -63,6 +64,31 @@ def test_structured_details_do_not_fallback_to_display_or_send_owner_excluded_ra
     assert details["excluded_raw_trace"][0]["value_raw"] == "Owner raw only"
     assert "Owner raw only" not in [item["value_raw"] for item in details["translation_tasks"]]
     assert [item["item_id"] for item in details["translation_tasks"]] == ["attr-color"]
+
+
+def test_new_owner_attribute_exclusion_consumes_only_hash_bound_eligible_attributes():
+    excluded = {"section": "Info", "label_raw": "Capacidad", "value_raw": "2,3 kg", "position": 0,
+                "item_id": "capacidad"}
+    sibling = {"section": "Info", "label_raw": "Material", "value_raw": "Acero", "position": 1,
+               "item_id": "material"}
+    record = {"asin": "B000000102", "rawattributes_raw": [excluded, sibling],
+              "canonicalstructuredsource": [excluded, sibling], "eligibleattributes": [sibling],
+              "feature_bullets_raw": [],
+              "owner_attribute_exclusions": {
+                  "schema_version": "owner-current-source-attribute-exclusion-v1",
+                  "eligible_attributes_hash": source_hash(json.dumps([sibling], ensure_ascii=False, sort_keys=True,
+                                                                       separators=(",", ":"))),
+                  "excluded_items": [{"locator": {"source": "attributes", "label_raw": "Capacidad",
+                                                     "value_raw": "2,3 kg", "position": 0}}],
+              }}
+    draft = build_structured_translation_draft([record], review_item_ids=set())
+    values = [item["value_raw"] for item in draft["records"][0]["fields"]["product_details"]["items"]]
+    assert values == ["Acero"]
+
+    tampered = deepcopy(record)
+    tampered["eligibleattributes"] = [excluded, sibling]
+    with pytest.raises(ValueError, match="OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID"):
+        build_structured_translation_draft([tampered], review_item_ids=set())
 
 
 def test_structured_details_preserve_identity_and_block_cjk_or_review_items_without_losing_boundaries():

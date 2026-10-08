@@ -400,18 +400,31 @@ def _allowed_units_for_label(label) -> set[str]:
     return set()
 
 
-def _unit_evidence(row, label, value, field, *, kind, corroborated_by="", corroborated_signature="") -> dict:
+def _unit_evidence(row, label, value, field, *, kind, corroborated_by="", corroborated_signature="", attribute_locator=None) -> dict:
     source = {"label": str(label), "value": str(value), "field": field}
+    if attribute_locator:
+        source["attribute_locator"] = dict(attribute_locator)
     if corroborated_by:
         source["corroborated_by"] = corroborated_by
     if corroborated_signature:
         source["corroborated_signature"] = corroborated_signature
     record_binding = _sf_record_binding(row)
+    locator = dict(attribute_locator or {"source": field, "label_raw": str(label), "value_raw": str(value)})
+    # A source-field finding may be excluded from a derived view only when it
+    # names one exact raw attribute.  Duplicate label/value pairs deliberately
+    # have no position and therefore fail closed in the owner-policy layer.
+    if field == "attributes":
+        positions = [index for index, attr in enumerate(row.get("attributes") or [])
+                     if isinstance(attr, Mapping)
+                     and str(attr.get("label_raw") or attr.get("label") or "") == str(label)
+                     and str(attr.get("value_raw") or attr.get("value") or "") == str(value)]
+        if len(positions) == 1:
+            locator["position"] = positions[0]
     return {
         "match_kind": kind,
         "label": str(label),
         "value": str(value),
-        "evidence_locator": {"source": field, "label_raw": str(label), "value_raw": str(value)},
+        "evidence_locator": locator,
         "source_hash": hashlib.sha256(_json.dumps(source, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
         "attribute_label_value_hash": _sf_hash({"label_raw": str(label), "value_raw": str(value), "field": field}),
         "same_asin_record_binding": record_binding["record_hash"],
@@ -444,14 +457,14 @@ def _corroborated_measure(row, value) -> tuple[str, str]:
     return "", ""
 
 
-def _unit_policy(row, label, value, field) -> tuple[set[str], str | None, dict | None, str | None]:
+def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[set[str], str | None, dict | None, str | None]:
     """Return a conservative label policy without turning ambiguity into PASS."""
     normalized = _semantic_text(label)
     units = _units_for_labeled_value(label, value)
     def evidence(kind, corroborated_by="", corroborated_signature=""):
         return _unit_evidence(
             row, label, value, field, kind=kind, corroborated_by=corroborated_by,
-            corroborated_signature=corroborated_signature)
+            corroborated_signature=corroborated_signature, attribute_locator=attribute_locator)
     if re.search(r"\bcapacidad\s+de\s+la\s+bateria\b", normalized) and units & {"v"}:
         return set(), "battery capacity label conflicts with voltage value", evidence("label_value_conflict"), None
     if re.search(r"\bcapacidad\s+de\s+peso\b", normalized) and units & {"ml", "l"}:
@@ -535,6 +548,25 @@ def _units_for_unit_audit(label, value) -> set[str]:
             if part <= {"g", "kg"}:
                 units -= part
     return units
+
+
+def _structured_attribute_unit_pairs(row) -> list[tuple[str, str, str, dict]]:
+    """Keep attribute occurrence identity for unit-policy audit conclusions."""
+    pairs = []
+    for index, attr in enumerate(row.get("attributes") or []):
+        if not isinstance(attr, Mapping):
+            continue
+        label = attr.get("label_raw") or attr.get("label")
+        value = attr.get("value_raw") or attr.get("value")
+        if label in (None, "") or value in (None, ""):
+            continue
+        locator = {"source": "attributes", "label_raw": str(label), "value_raw": str(value), "position": index}
+        if attr.get("section") not in (None, ""):
+            locator["section"] = attr.get("section")
+        if attr.get("position") not in (None, ""):
+            locator["source_position"] = attr.get("position")
+        pairs.append((str(label), str(value), "attributes", locator))
+    return pairs
 
 
 def _category_leaf_supported(row, provenance, values) -> bool:
@@ -670,16 +702,17 @@ def _sf_semantics(row, asin, issues, fields):
     details = str(row.get("product_details_es") or "")
     if details and re.search(r"\b(?:best sellers rank|m[aá]s vendidos|ranking source url)\b", details, re.I):
         _sf_issue(issues, fields, asin, "FIELD_MISPLACED", MAPPING_MISSED, "P1", "details contain ranking/UI text", "product_details_es")
-    labelled_units = _structured_attribute_pairs(row)
+    labelled_units = _structured_attribute_unit_pairs(row)
     # Structured attributes and compact evidence are independent sources.  A
     # present attribute (for example ``Marca: Acme``) must not make a malformed
     # compact specification invisible.  Keep the pairs separate and audit the
     # union; do not flatten unrelated attribute fields into specification text.
-    labelled_units.extend(_labelled_text_pairs(spec, "specification"))
-    labelled_units.extend(_labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
-                                               "selected_variation_raw"))
-    for label, value, field in labelled_units:
-        allowed, review_reason, unit_evidence, explanation = _unit_policy(row, label, value, field)
+    labelled_units.extend((*pair, None) for pair in _labelled_text_pairs(spec, "specification"))
+    labelled_units.extend((*pair, None) for pair in _labelled_text_pairs(str(row.get("selected_variation_raw") or ""),
+                                                                          "selected_variation_raw"))
+    for label, value, field, locator in labelled_units:
+        allowed, review_reason, unit_evidence, explanation = _unit_policy(
+            row, label, value, field, attribute_locator=locator)
         if review_reason:
             code = ("SOURCE_SEMANTIC_CONFLICT" if unit_evidence and
                     unit_evidence.get("match_kind") == "label_value_conflict"
@@ -693,7 +726,8 @@ def _sf_semantics(row, asin, issues, fields):
             continue
         units = _units_for_unit_audit(label, value)
         if units and not units <= allowed:
-            evidence = dict(unit_evidence or {})
+            evidence = dict(unit_evidence or _unit_evidence(
+                row, label, value, field, kind="unit_type_mismatch", attribute_locator=locator))
             evidence.update({"units": sorted(units), "allowed": sorted(allowed)})
             _sf_issue(issues, fields, asin, "SPEC_UNIT_TYPE_MISMATCH", MAPPING_MISSED, "P1",
                       f"{label} has the wrong unit type", field,
