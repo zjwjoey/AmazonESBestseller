@@ -76,19 +76,29 @@ def test_new_owner_attribute_exclusion_consumes_only_hash_bound_eligible_attribu
               "feature_bullets_raw": [],
               "owner_attribute_exclusions": {
                   "schema_version": "owner-current-source-attribute-exclusion-v1",
+                  "raw_attributes_hash": source_hash(json.dumps([excluded, sibling], ensure_ascii=False, sort_keys=True,
+                                                                  separators=(",", ":"))),
                   "eligible_attributes_hash": source_hash(json.dumps([sibling], ensure_ascii=False, sort_keys=True,
                                                                        separators=(",", ":"))),
                   "excluded_items": [{"locator": {"source": "attributes", "label_raw": "Capacidad",
                                                      "value_raw": "2,3 kg", "position": 0}}],
               }}
-    draft = build_structured_translation_draft([record], review_item_ids=set())
+    authority = {"asin": "B000000102", "attributes": [excluded, sibling]}
+    record["owner_attribute_exclusions"]["raw_record_hash"] = source_hash(json.dumps(authority, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+    with pytest.raises(ValueError, match="AUTHORITY_REQUIRED"):
+        build_structured_translation_draft([record], review_item_ids=set())
+    draft = build_structured_translation_draft([record], review_item_ids=set(), authority_records=[authority])
     values = [item["value_raw"] for item in draft["records"][0]["fields"]["product_details"]["items"]]
     assert values == ["Acero"]
 
     tampered = deepcopy(record)
     tampered["eligibleattributes"] = [excluded, sibling]
     with pytest.raises(ValueError, match="OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID"):
-        build_structured_translation_draft([tampered], review_item_ids=set())
+        build_structured_translation_draft([tampered], review_item_ids=set(), authority_records=[authority])
+
+    bad_authority = deepcopy(authority); bad_authority["attributes"][0]["section"] = "changed"
+    with pytest.raises(ValueError, match="AUTHORITY_REQUIRED"):
+        build_structured_translation_draft([record], review_item_ids=set(), authority_records=[bad_authority])
 
 
 def test_structured_details_preserve_identity_and_block_cjk_or_review_items_without_losing_boundaries():

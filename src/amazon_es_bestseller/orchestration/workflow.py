@@ -636,7 +636,8 @@ class ProductionWorkflow:
                     translation_payload["translation_batch_master"],
                     translation_payload["translation_batch_source_audit"],
                     translation_payload["translation_batch_source_gate"], review,
-                    prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest)
+                      prompt_version=service.prompt_version, dictionary_manifest=dictionary_manifest,
+                      parent_authority_records=translation_payload.get("translation_batch_parent_authority_records"))
                 structured = execute_formal_structured_translation(
                     formal, translation_payload["translation_batch_master"],
                     translation_payload["translation_batch_source_audit"],

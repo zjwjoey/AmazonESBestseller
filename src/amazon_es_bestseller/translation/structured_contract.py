@@ -54,7 +54,7 @@ def _excluded_trace(record: Mapping) -> list[dict[str, Any]]:
     return trace
 
 
-def _verified_owner_attribute_eligible(record: Mapping) -> tuple[list[Mapping], list[dict[str, Any]]]:
+def _verified_owner_attribute_eligible(record: Mapping, authority: Mapping | None) -> tuple[list[Mapping], list[dict[str, Any]]]:
     """Accept the new derived attribute view only with its exact raw trail."""
     evidence = record.get("owner_attribute_exclusions")
     if not isinstance(evidence, Mapping) or evidence.get("schema_version") != "owner-current-source-attribute-exclusion-v1":
@@ -63,6 +63,12 @@ def _verified_owner_attribute_eligible(record: Mapping) -> tuple[list[Mapping], 
     eligible = record.get("eligibleattributes")
     excluded = evidence.get("excluded_items")
     if not isinstance(raw, list) or not isinstance(eligible, list) or not isinstance(excluded, list):
+        raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+    if not isinstance(authority, Mapping) or evidence.get("raw_record_hash") != _hash(dict(authority)):
+        raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_AUTHORITY_REQUIRED")
+    if authority.get("attributes") != raw:
+        raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
+    if evidence.get("raw_attributes_hash") != _hash(raw):
         raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
     if evidence.get("eligible_attributes_hash") != _hash(eligible):
         raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
@@ -81,7 +87,9 @@ def _verified_owner_attribute_eligible(record: Mapping) -> tuple[list[Mapping], 
         source = raw[position]
         if (not isinstance(source, Mapping) or locator.get("source") != "attributes"
                 or source.get("label_raw") != locator.get("label_raw")
-                or source.get("value_raw") != locator.get("value_raw")):
+                or source.get("value_raw") != locator.get("value_raw")
+                or ("section" in locator and source.get("section") != locator.get("section"))
+                or ("source_position" in locator and source.get("position") != locator.get("source_position"))):
             raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
         if any(dict(candidate) == dict(source) for candidate in eligible if isinstance(candidate, Mapping)):
             raise ValueError("OWNER_ATTRIBUTE_EXCLUSION_BINDING_INVALID")
@@ -163,10 +171,12 @@ def _field_fact(field: str, items: list[dict[str, Any]], *, excluded_raw_trace: 
     }
 
 
-def build_structured_translation_draft(records: Iterable[Mapping], *, review_item_ids: Iterable[str] | None = None) -> dict[str, Any]:
+def build_structured_translation_draft(records: Iterable[Mapping], *, review_item_ids: Iterable[str] | None = None,
+                                       authority_records: Iterable[Mapping] | None = None) -> dict[str, Any]:
     """Create closure-only item facts; never inspect flat display detail text."""
     review_evidence_complete = review_item_ids is not None
     review_ids = {str(item) for item in (review_item_ids or ())}
+    authorities = {str(item.get("asin") or "").upper(): item for item in (authority_records or ()) if isinstance(item, Mapping)}
     output = []
     for raw in records:
         if not isinstance(raw, Mapping):
@@ -180,7 +190,7 @@ def build_structured_translation_draft(records: Iterable[Mapping], *, review_ite
         # exclusions as a fallback.
         exclusion = raw.get("owner_optional_exclusion")
         if isinstance(raw.get("owner_attribute_exclusions"), Mapping):
-            eligible, excluded = _verified_owner_attribute_eligible(raw)
+            eligible, excluded = _verified_owner_attribute_eligible(raw, authorities.get(asin))
         else:
             eligible = (raw.get("eligibleattributes") if isinstance(exclusion, Mapping)
                         else raw.get("canonicalstructuredsource"))
@@ -260,7 +270,7 @@ def _verify_master_gate(master: Mapping, source_audit: Mapping, source_gate: Map
 def bind_formal_structured_translation_input(
         verified_master: Mapping, source_audit: Mapping, source_gate: Mapping,
         review_snapshot: Mapping, *, prompt_version: str,
-        dictionary_manifest: Mapping[str, Any]) -> dict[str, Any]:
+        dictionary_manifest: Mapping[str, Any], parent_authority_records: Iterable[Mapping] | None = None) -> dict[str, Any]:
     """Bind closure details to the existing verified Master/SourceGate chain."""
     _verify_master_gate(verified_master, source_audit, source_gate)
     if not isinstance(review_snapshot, Mapping) or review_snapshot.get("schema_version") != "structured-review-snapshot-v1":
@@ -272,8 +282,14 @@ def bind_formal_structured_translation_input(
         raise ValueError("STRUCTURED_REVIEW_DECISIONS_MISSING")
     review_ids = {str(item.get("item_id")) for item in decisions if isinstance(item, Mapping)
                   and str(item.get("status") or "").upper() != "APPROVED"}
+    policy_asins = {str(row.get("asin") or "").upper() for row in verified_master.get("records") or []
+                    if isinstance(row, Mapping) and isinstance(row.get("owner_attribute_exclusions"), Mapping)}
+    authority = list(parent_authority_records or ())
+    authority_asins = {str(row.get("asin") or "").upper() for row in authority if isinstance(row, Mapping)}
+    if policy_asins and not policy_asins <= authority_asins:
+        raise ValueError("STRUCTURED_PARENT_AUTHORITY_MISSING")
     draft = build_structured_translation_draft(
-        verified_master.get("records") or [], review_item_ids=review_ids)
+        verified_master.get("records") or [], review_item_ids=review_ids, authority_records=authority)
     item_ids = _all_item_ids(draft)
     if sorted(str(value) for value in review_snapshot.get("item_ids") or ()) != item_ids:
         raise ValueError("STRUCTURED_REVIEW_ITEM_SET_MISMATCH")

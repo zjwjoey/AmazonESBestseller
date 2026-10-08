@@ -410,6 +410,7 @@ def _apply_owner_attribute_exclusions(records: Iterable[Mapping], raw_parent_rec
             "schema_version": OWNER_ATTRIBUTE_EXCLUSION_SCHEMA_VERSION,
             "raw_dataset_canonical_hash": manifest["raw_dataset_canonical_hash"],
             "raw_record_hash": _hash(raw_record),
+            "raw_attributes_hash": _hash(raw_attributes),
             "excluded_items": evidence,
             "eligible_attributes_hash": _hash(eligible),
         }
