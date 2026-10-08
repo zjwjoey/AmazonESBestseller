@@ -1,12 +1,104 @@
-# Production Closure State — Canonical Normalization Patch
+# Production Closure State
 
-Run ID: `20261007T000000Z_price_self_parent`
+Initial historical run ID: `20261007T000000Z_price_self_parent`
 
 ## Scope
 
-This isolated development worktree contains narrowly scoped closure patches.
-It does not change production outputs, raw evidence, candidate data, Excel
-export, provider behavior, brand derivation, category mapping, or CLI behavior.
+This isolated development worktree contains closure patches and offline
+candidate artifacts. Historical checkpoints below retain their original
+counts and gate decisions. The latest checkpoint is authoritative for current
+code and candidate state; it does not rewrite frozen production/raw evidence,
+old Excel or historical outputs, or establish formal production readiness.
+
+## Latest checkpoint (2026-10-08; code a8f6088)
+
+- Code HEAD: `a8f608802d928bad74d06b90506dd3a93d520943` before this
+  documentation update. V1 remains **NOT_READY_FOR_MERGE**; no release, Excel,
+  Amazon collection or real provider translation was executed in this work.
+- Latest independent source authority is the 5,478-ASIN candidate at
+  `outputs/production_closure_20261008T024600Z_derived_l3_628ba74/candidate/`.
+  Its saved audit is **SOURCE_READY** (audit hash
+  `0f747b4373dbe85aa97d75a19592ab9e497640757ea0fce4c647fc8c1af6126a`).
+  Producer parent artifact, byte hash, canonical hash, exact ASIN scope, raw
+  attribute hashes and structured eligibility binding are verified by the
+  actual loader/caller. This checkpoint did not recompute the source audit.
+- Raw owner-excluded evidence remains 552 items across 458 SKUs. The approved
+  builder-queue bridge preserves 17 `EXCLUDED_BY_OWNER` items across 11 sample
+  ASINs, with original issues retained; it is not a new all-batch review.
+  Source P2 repetition review remains 10 items.
+- Reviewed L3 derivation applied 2,965 changes. Missing L3 fell from 5,014 to
+  2,049 (2,040 without a proposal and 9 conflicts retained). No hierarchy was
+  inferred to fill the remaining empty fields.
+- One full preclean at `b451fabe` reduced the review queue from 1,142 to
+  **833 rows / 797 ASINs**. Subsequent work reused that immutable preparation;
+  neither full preclean nor the 5,478-record workload plan was repeated.
+- The real legacy formal gate accepted **47 CODEX agent-reviewed reference
+  fields** from the hash-pinned v2 review artifact. Independent run cache and
+  reference overlay: `outputs/runtime_legacy_47_admission/`. Provenance is
+  `provider=unknown`, `legacy-reviewed-reference`, never Qwen or human gold;
+  global dictionary/TM writes and automatic promotion are zero. The other
+  **20 legacy fields** remain held (9 REVIEW, 3 REJECT, 8 QA-failed hold).
+  Partial field admission does not mark the whole batch formally complete.
+- The fixed 40-SKU eligible plan has **851 unique semantic adapter dispatches
+  before retries**, not batches, HTTP attempts or a monetary estimate. The
+  count is unchanged because all 67 legacy fields were already excluded from
+  provider dispatch; 47 are now resolved through the separate reference
+  overlay. Remaining held fields stay outside dispatch. The global 833-row
+  queue is retained, not a new requirement that every global row pass before
+  an eligible subset experiment.
+- Three explicit aliases and max_workers=3 load from
+  `configs/translation_v2_three_existing.json`. A uses the configured
+  `QWEN_MT_BASE_URL` with validated chat path. B/C endpoint ownership mappings
+  remain pending; they do not fall back to A's host. Actual strict CLI dry-run
+  reports BLOCKED and zero dispatch/HTTP attempts at
+  `outputs/runtime_three_alias_preflight/`. Existing credential variable names
+  are present; offline preflight never reads their values or changes system env.
+- Timeout/unknown send outcomes remain pending without retry/failover/resend;
+  QA failures do not fail over. Shared claim/TM prevents repeated source sends.
+  Real Qwen work remains waiting for the parent's live task after subset field,
+  configuration and no-repeat preparation gates. This offline task does not
+  redefine or deny authorization granted in earlier user conversation.
+- One full offline regression against `a8f6088` completed with **1,204 passed,
+  5 failed, 6 skipped**, pytest exit `1`, in 226.48 seconds. `ruff check src
+  tests`, `compileall src tests`, and `git diff --check` exited `0`. This is
+  not a green full regression. Logs/progress/exit receipt:
+  `outputs/runtime_full_offline_a8f6088/`.
+- All five failures reach `monitoring/snapshot.py:512` while copying fake ACP
+  evidence to 260-character Windows destination paths. The source and target
+  parent exist; `shutil.copytree` raises `Errno 2` for the target file. A single
+  minimal rerun of these five cases with short worktree-local `--basetemp=.p8r1`
+  passes (5 passed, exit `0`), with unchanged production code. No second full
+  suite was started. This isolates the path-length boundary but does not fix
+  long-path support or convert the failed full invocation into green.
+- The six skips are two explicitly opt-in live collection tests and four
+  generated historical scale-artifact tests whose artifacts are absent.
+
+Failed cases (all in `tests/test_post_merge_integration_hardening.py`):
+
+- `test_live_v2_recomputes_identity_after_acp_before_promotion`
+- `test_live_v2_missing_acp_identity_blocks_final_promotion`
+- `test_live_v2_identity_conflict_blocks_even_when_ranking_is_complete`
+- `test_live_v2_complete_ranking_with_incomplete_final_identity_blocks`
+- `test_two_page_live_v2_replay_equality_uses_saved_page_context`
+
+### Issue delta for this checkpoint
+
+- Closed by real producer/loader/caller tests: missing structured parent
+  authority, legacy `SOURCE_BINDING_REVERIFY_REQUIRED`, 75 specification
+  planner omissions (60 unique units), and pending-attempt planner replay.
+- Closed offline: explicit three-alias mapping support, BASE_URL/model
+  compatibility, credential-free strict dry-run, unknown-outcome replay and
+  empty-translation QA replay. Mapping support does not prove B/C endpoints.
+- Newly established bounded reference state: 47 agent reference fields
+  admitted, 20 held. No global semantic pass or dictionary promotion inferred.
+- Open: B/C endpoint ownership mapping; held subset fields and remaining
+  global review evidence; real provider/live evidence and formal release.
+- New regression delta: Windows ACP evidence copy fails at the 260-character
+  destination-path boundary under the full invocation's long basetemp.
+  Five-case short-basetemp reproduction passes; no production fix or whole
+  suite rerun is claimed. Latest full result remains exit `1`.
+
+## Historical checkpoints
 
 ## Base and workspace
 
