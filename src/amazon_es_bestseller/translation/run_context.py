@@ -187,6 +187,25 @@ class TranslationRunContext:
         else:
             self.cache = TranslationCache(manifest['snapshot']['path'])
             self.cache.path = self.run_cache_path
+        self._add_missing_snapshot_evidence()
+
+    def _add_missing_snapshot_evidence(self) -> bool:
+        """Append bound history to the view; preserve every existing identity."""
+        changed = False
+        for namespace in ('entries', 'results', 'memory', 'memory_results'):
+            destination = getattr(self.cache, namespace)
+            def identity(key, value):
+                return ('|'.join(key.split('|')[:6]) if namespace.startswith('memory') else
+                        TranslationCache.result_key(value.get('asin'), value.get('field'), value.get('source_hash')))
+            existing = {identity(key, value) for key, value in destination.items()}
+            for key, value in self.snapshot.get(namespace, {}).items():
+                stable = identity(key, value)
+                if stable in existing:
+                    continue
+                destination[key] = deepcopy(value)
+                existing.add(stable)
+                changed = True
+        return changed
 
     def _validate_extension(self, manifest, products):
         authority = read_bound(manifest['extension_authorization'])
@@ -206,6 +225,30 @@ class TranslationRunContext:
             read_bound(parent_manifest[key])
         for binding in parent_manifest['historical_caches']:
             read_bound(binding)
+        # Later increments retain the root marker and explicitly bind every
+        # completed child already registered against that same root.
+        parent_scope = set(parent_manifest['selected_asins'])
+        membership_path = self.run_cache_path.with_name(self.run_cache_path.name + '.extensions.jsonl')
+        memberships = ([json.loads(line) for line in membership_path.read_text(encoding='utf-8').splitlines()]
+                       if membership_path.exists() else [])
+        for reference in authority.get('prior_completed_runs', []):
+            prior = read_bound(reference)
+            authorization = read_bound(prior['extension_authorization'])
+            membership = {'parent': authority['parent'], 'child': reference,
+                          'authorization': prior['extension_authorization']}
+            prior_products = read_bound(prior['products'])['records']
+            prior_scope = set(prior['selected_asins'])
+            if (membership not in memberships or authorization['parent'] != authority['parent']
+                    or prior['source_manifest'] != parent_manifest['source_manifest']
+                    or prior['run_cache_path'] != parent_manifest['run_cache_path']
+                    or prior_scope & parent_scope
+                    or sorted(row['asin'] for row in prior_products) != prior['selected_asins']
+                    or any(prior[k] != parent_manifest[k] for k in
+                           ('service_contract', 'provider_identity', 'fields', 'reference_overlay',
+                            'legacy_candidates', 'legacy_policy', 'available_asins'))):
+                raise ValueError('RUN_CONTEXT_PRIOR_COMPLETED_RUN_INVALID')
+            parent_scope.update(prior_scope)
+            parent_products += prior_products
         overlay = read_bound(parent_manifest['reference_overlay'])
         if overlay['authority']['selected_asins'] != parent_manifest['selected_asins']:
             raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_REFERENCE_SCOPE')
@@ -213,7 +256,7 @@ class TranslationRunContext:
                 or authority['source_manifest'] != manifest['source_manifest']
                 or manifest['source_manifest'] != parent_manifest['source_manifest']
                 or authority['selected_asins'] != manifest['selected_asins']
-                or set(manifest['selected_asins']) & set(parent_manifest['selected_asins'])
+                or set(manifest['selected_asins']) & parent_scope
                 or any(manifest[k] != parent_manifest[k] for k in
                        ('service_contract', 'provider_identity', 'fields', 'reference_overlay',
                         'legacy_candidates', 'legacy_policy', 'available_asins'))):
@@ -225,7 +268,7 @@ class TranslationRunContext:
                 if current.get(namespace, {}).get(key) != value:
                     raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_CACHE_CHANGED')
         parent_result = read_bound(authority['parent_result'])
-        if set(parent_result) != set(parent_manifest['selected_asins']):
+        if set(parent_result) != parent_scope:
             raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_RESULT_SCOPE')
         for envelope in overlay['reference_envelopes']:
             if parent_result[envelope['asin']].get('fields', {}).get(envelope['target_field']) != envelope:
@@ -240,7 +283,7 @@ class TranslationRunContext:
             if not events or events[-1].get('event') != 'CANARY_PROCESS_FINISHED' or events[-1].get('exit_code') != 0:
                 raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_UNCLOSED')
             entries = [event for event in events if event.get('event') == 'PROVIDER_ENTRY']
-            if any(event.get('asin') not in parent_manifest['selected_asins'] for event in entries):
+            if any(event.get('asin') not in parent_scope for event in entries):
                 raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_PARENT_SCOPE')
             self.excluded_attempts.update('|'.join(event['canonical_dispatch_key'].split('|')[:6])
                 for event in entries)
@@ -278,6 +321,12 @@ class TranslationRunContext:
             with self.marker.open('x', encoding='utf-8') as handle:
                 json.dump(self.reference, handle)
         self._verify_marker()
+        # This mutation belongs only to execution, never CLI dry-run. Reload
+        # under the same advisory claim lock before adding absent evidence.
+        with self.cache._claim_lock():
+            self.cache.load()
+            if self._add_missing_snapshot_evidence():
+                self.cache.save()
         if self.extension:
             membership = {'parent': self.parent_reference, 'child': self.reference,
                           'authorization': self.manifest['extension_authorization']}

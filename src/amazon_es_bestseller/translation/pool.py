@@ -11,6 +11,7 @@ import os
 import json
 from pathlib import Path
 import threading
+import time
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field, replace
@@ -80,7 +81,8 @@ class ProviderPool:
 
     def __init__(self, providers: Mapping[str, TranslationProvider], *, max_workers: Optional[int] = None,
                  failover: bool = True, tm: Optional[dict[str, PoolResult]] = None,
-                 stop_on_rate_limit: bool = False, halt_path: Optional[Path] = None):
+                 stop_on_rate_limit: bool = False, halt_path: Optional[Path] = None,
+                 shared_rate: Optional[float] = None):
         if not providers:
             raise ValueError("ProviderPool requires at least one provider")
         self.providers = dict(providers)
@@ -99,6 +101,33 @@ class ProviderPool:
         self._transient_failures: dict[str, set[str]] = {}
         self._cursor = 0
         self._stats = {alias: ProviderStats(alias=alias) for alias in self.aliases}
+        if shared_rate is not None and float(shared_rate) <= 0:
+            raise ValueError('shared_rate must be positive')
+        self.shared_rate = float(shared_rate) if shared_rate is not None else None
+        self._send_lock = threading.Lock()
+        self._last_send_at: Optional[float] = None
+        if self.shared_rate is not None:
+            for provider in self.providers.values():
+                if not isinstance(provider, QwenMTProvider):
+                    raise ValueError('shared_rate requires a transport send gate')
+                provider.before_send = self._wait_shared_send
+
+    def _wait_shared_send(self) -> bool:
+        """Pace actual adapter sends together, after each adapter's own wait."""
+        with self._send_lock:
+            while True:
+                with self._lock:
+                    if self._halted or (self.halt_path and self.halt_path.exists()):
+                        self._halted = True
+                        return False
+                now = time.monotonic()
+                remaining = (0.0 if self._last_send_at is None else
+                             self._last_send_at + 1.0 / self.shared_rate - now)
+                if remaining <= 0:
+                    self._last_send_at = now
+                    return True
+                # Recheck both memory and durable halt during the wait.
+                time.sleep(min(remaining, 0.1))
 
     def _choose_alias(self, excluded: set[str] | None = None) -> str:
         excluded = excluded or set()
@@ -179,10 +208,15 @@ class ProviderPool:
                     self._halted = True
                     if self.halt_path:
                         self.halt_path.parent.mkdir(parents=True, exist_ok=True)
-                        with self.halt_path.open('x', encoding='utf-8') as stream:
-                            json.dump({'reason':'HTTP429', 'alias':alias, 'key':task.key}, stream)
-                            stream.flush()
-                            os.fsync(stream.fileno())
+                        try:
+                            with self.halt_path.open('x', encoding='utf-8') as stream:
+                                json.dump({'reason':'HTTP429', 'alias':alias, 'key':task.key}, stream)
+                                stream.flush()
+                                os.fsync(stream.fileno())
+                        except FileExistsError:
+                            # Another already-inflight response has persisted
+                            # the first stop; retain it and finish this result.
+                            pass
             elif classification == DEGRADED:
                 error = str(response.error or "").casefold()
                 if any(token in error for token in ("599", "timeout", "network", "connection")):
@@ -468,4 +502,4 @@ def build_qwen_provider_pool(config: Mapping[str, Any], *, transport_factory: An
         providers, max_workers=min(len(providers), int(config.get("max_workers", len(providers)))),
         failover=bool(config.get("failover", True)),
         stop_on_rate_limit=bool(config.get("stop_on_rate_limit", False)),
-        halt_path=config.get("rate_limit_halt_path"))
+        halt_path=config.get("rate_limit_halt_path"), shared_rate=config.get("shared_rate"))

@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import hashlib
 from copy import deepcopy
 
 import pytest
@@ -97,4 +98,49 @@ def test_extension_tampering_rejected(tmp_path,monkeypatch,damage):
     manifest['extension_authorization']=save(tmp_path/'authorization.json',a)
     save(config,{'fields':manifest['fields'],'run_context':save(tmp_path/'child_run.json',manifest)})
     with pytest.raises(ValueError):invoke(products,config,manifest,tmp_path/'plan.json',dry=True)
+
+
+@pytest.mark.parametrize('damage', [None, 'unregistered', 'overlap', 'foreign_result'])
+def test_second_increment_binds_completed_child_and_both_ledgers(tmp_path, monkeypatch, damage):
+    products, config, child_manifest, rows, parent, old_key = extension(tmp_path, monkeypatch)
+    child_reference = json.loads(config.read_text(encoding='utf-8'))['run_context']
+    child = TranslationRunContext(child_reference, products_path=products, products=rows, cache_path=parent.cache.path)
+    if damage != 'unregistered':
+        child.prepare_execution()
+    loaded = load_source_candidate(parent.manifest['source_manifest']['path'], manifest_hash=parent.manifest['source_manifest']['sha256'], available_asins=parent.manifest['available_asins'])
+    prior_record = deepcopy(loaded['records'][0]); prior_record['asin'] = rows[0]['asin']
+    loaded['records'].append(prior_record)
+    record = deepcopy(loaded['records'][0]); record['asin'] = 'B07F6LYVT7'
+    loaded['records'].append(record)
+    monkeypatch.setattr('amazon_es_bestseller.translation.run_context.load_source_candidate', lambda *a, **k: loaded)
+    new_rows = audit_records(records_for_preclean(build_production_input([record])))['translation_input_records']
+    new_products = tmp_path / 'second_products.json'
+    new_binding = save(new_products, {'records': new_rows})
+    authority = json.loads(Path(child_manifest['extension_authorization']['path']).read_text(encoding='utf-8'))
+    result = json.loads(Path(authority['parent_result']['path']).read_text(encoding='utf-8'))
+    result[rows[0]['asin']] = {'asin': rows[0]['asin'], 'fields': {}, 'translation_status': 'partial'}
+    if damage == 'foreign_result':
+        result['FOREIGN'] = {}
+    ledger = tmp_path / 'child_ledger.jsonl'
+    new_key = old_key.replace(old_key.split('|')[0], 'child-source-hash')
+    ledger.write_text(json.dumps({'event': 'PROVIDER_ENTRY', 'canonical_dispatch_key': new_key, 'asin': rows[0]['asin']}) + '\n' + json.dumps({'event': 'CANARY_PROCESS_FINISHED', 'exit_code': 0}) + '\n', encoding='utf-8')
+    authority.update(products=new_binding, selected_asins=[record['asin']], prior_completed_runs=[child_reference], parent_result=save(tmp_path/'cumulative_result.json', result), expected_attempted_units=2)
+    authority['attempt_ledgers'].append({'path': str(ledger), 'sha256': hashlib.sha256(ledger.read_bytes()).hexdigest()})
+    second = deepcopy(child_manifest)
+    if damage == 'overlap':
+        new_rows = rows
+        new_binding = save(new_products, {'records': new_rows})
+        authority.update(products=new_binding, selected_asins=[rows[0]['asin']])
+    second.update(products=new_binding, selected_asins=authority['selected_asins'], extension_authorization=save(tmp_path/'second_authority.json', authority))
+    service = TranslationService(FakeProvider(), parent.cache, **second['service_contract'])
+    second['snapshot'] = build_run_cache_snapshot(second['historical_caches'], new_rows, service, tmp_path/'second_snapshot.json')
+    reference = save(tmp_path/'second_manifest.json', second)
+    if damage:
+        with pytest.raises(ValueError):
+            TranslationRunContext(reference, products_path=new_products, products=new_rows, cache_path=parent.cache.path)
+    else:
+        context = TranslationRunContext(reference, products_path=new_products, products=new_rows, cache_path=parent.cache.path)
+        assert set(context.parent_result) == {'B000000020', 'B07F6LYVT6'}
+        assert len(context.excluded_attempts) == 2
+        assert context.cache.claim_memory(new_key.replace('|v1', '|changed'), {'translation_status': 'pending'})[0] is False
 

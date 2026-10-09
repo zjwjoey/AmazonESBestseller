@@ -99,6 +99,7 @@ class QwenMTProvider(TranslationProvider):
         self._min_interval = 1.0 / self.rate if self.rate else 0.0
         self._last_request_at: Optional[float] = None
         self.transport = transport or self._http_transport
+        self.before_send = None
 
     @property
     def model(self) -> str:
@@ -200,6 +201,9 @@ class QwenMTProvider(TranslationProvider):
         last_error = "provider request failed"
         for attempt in range(1, self.max_retries + 2):
             self._wait_for_rate_limit()
+            if self.before_send is not None and not self.before_send():
+                return ProviderResponse(provider=self.name, model=self._model, status="pending",
+                                        attempts=attempt - 1, error="PROVIDER_HALTED_BEFORE_SEND")
             try:
                 response = self.transport(self.endpoint, headers, payload, self.timeout)
             except Exception:  # The request may already have been billed; never replay it.
