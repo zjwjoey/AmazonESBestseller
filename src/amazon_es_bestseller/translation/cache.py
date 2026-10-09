@@ -31,6 +31,7 @@ class TranslationCache:
         self.corruption_error: Optional[str] = None
         self._corruption_preserved = False
         self._lock = threading.RLock()
+        self.resume_admission = None
         self.load()
 
     @contextmanager
@@ -149,7 +150,7 @@ class TranslationCache:
                     and snapshot.get("resolution_source") != "immutable_cache_namespace_reuse"):
                 self.results[identity] = deepcopy(snapshot)
 
-    def claim(self, key: str, pending: Dict[str, Any]) -> tuple[bool, Dict[str, Any]]:
+    def claim(self, key: str, pending: Dict[str, Any], *, resume_key: str = "") -> tuple[bool, Dict[str, Any]]:
         """Durably publish an uncertain provider attempt before any send.
 
         ``False`` means another process or a previous crashed attempt already
@@ -159,6 +160,10 @@ class TranslationCache:
             self.load()
             existing = self.entries.get(key)
             if isinstance(existing, dict):
+                if resume_key and self.resume_eligible(resume_key):
+                    # Field rendering is shared; the semantic claim below is
+                    # the atomic one-use ownership boundary. Keep this field.
+                    return True, deepcopy(existing)
                 return False, deepcopy(existing)
             snapshot = deepcopy(pending)
             snapshot.setdefault("translation_status", "pending")
@@ -213,6 +218,10 @@ class TranslationCache:
     def put_memory(self, key: str, value: Dict[str, Any]) -> None:
         with self._lock:
             snapshot = deepcopy(value)
+            existing = self.memory.get(key) or {}
+            for marker in ('resume_prior_claim', 'resume_admission_id', 'claim_id'):
+                if marker in existing:
+                    snapshot.setdefault(marker, deepcopy(existing[marker]))
             self.memory[key] = snapshot
             # The first six components are the canonical TM context.  It does
             # not include ASIN by design, but it does include field type and
@@ -224,18 +233,29 @@ class TranslationCache:
                 if not isinstance(prior, dict) or prior.get("translation_status") == "pending":
                     self.memory_results[identity] = deepcopy(snapshot)
 
+    def resume_eligible(self, key: str) -> bool:
+        admission = self.resume_admission
+        return bool(admission and admission.allows(
+            key, self.memory.get(key), self.memory_results.get('|'.join(key.split('|')[:6]))))
+
     def claim_memory(self, key: str, pending: Dict[str, Any], *, replace_terminal: bool = False) -> tuple[bool, Dict[str, Any]]:
         """Durably reserve one canonical TM unit before provider entry."""
         with self._lock, self._claim_lock():
             self.load()
             existing = self.memory.get(key)
+            resuming = self.resume_eligible(key)
             if (isinstance(existing, dict) and not (replace_terminal and
-                    existing.get("translation_status") in {"partial", "failed", "qa_failed"})):
+                    existing.get("translation_status") in {"partial", "failed", "qa_failed"}) and not resuming):
                 return False, deepcopy(existing)
+            if self.resume_admission and not resuming:
+                return False, deepcopy(existing or {})
             snapshot = deepcopy(pending)
             snapshot.setdefault("translation_status", "pending")
             snapshot.setdefault("attempt_state", "claimed")
             snapshot.setdefault("claim_id", uuid.uuid4().hex)
+            if resuming:
+                snapshot['resume_prior_claim'] = deepcopy(existing)
+                snapshot['resume_admission_id'] = self.resume_admission.identity
             self.memory[key] = snapshot
             self.save()
             return True, deepcopy(snapshot)

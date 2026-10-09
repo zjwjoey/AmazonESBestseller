@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import json
+from pathlib import Path
 import threading
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
@@ -77,7 +79,8 @@ class ProviderPool:
     """Round-robin provider pool with in-flight dedupe and bounded failover."""
 
     def __init__(self, providers: Mapping[str, TranslationProvider], *, max_workers: Optional[int] = None,
-                 failover: bool = True, tm: Optional[dict[str, PoolResult]] = None):
+                 failover: bool = True, tm: Optional[dict[str, PoolResult]] = None,
+                 stop_on_rate_limit: bool = False, halt_path: Optional[Path] = None):
         if not providers:
             raise ValueError("ProviderPool requires at least one provider")
         self.providers = dict(providers)
@@ -86,6 +89,9 @@ class ProviderPool:
         if self.max_workers < 1 or self.max_workers > len(self.aliases):
             raise ValueError("max_workers must be between 1 and provider count")
         self.failover = failover
+        self.stop_on_rate_limit = stop_on_rate_limit
+        self.halt_path = Path(halt_path) if halt_path else None
+        self._halted = bool(self.halt_path and self.halt_path.exists())
         self._lock = threading.RLock()
         self._provider_locks = {alias: threading.Lock() for alias in self.aliases}
         self._inflight: dict[str, Future[PoolResult]] = {}
@@ -97,6 +103,8 @@ class ProviderPool:
     def _choose_alias(self, excluded: set[str] | None = None) -> str:
         excluded = excluded or set()
         with self._lock:
+            if self._halted:
+                raise RuntimeError("provider pool persistently halted")
             for _ in range(len(self.aliases)):
                 alias = self.aliases[self._cursor % len(self.aliases)]
                 self._cursor += 1
@@ -116,23 +124,30 @@ class ProviderPool:
         return HEALTHY
 
     def _call_one(self, task: TranslationTask, alias: str) -> PoolResult:
+        with self._provider_locks[alias]:
+            with self._lock:
+                if self._halted or self._stats[alias].state != HEALTHY:
+                    return PoolResult(task.key, ProviderResponse(status="pending", attempts=0,
+                        error="PROVIDER_HALTED_BEFORE_SEND"), alias, source="pending")
+            return self._call_locked(task, alias)
+
+    def _call_locked(self, task: TranslationTask, alias: str) -> PoolResult:
         provider = self.providers[alias]
         stats = self._stats[alias]
         with self._lock:
             stats.requests += 1
         # A provider lock gives each endpoint one active request at a time,
         # even when the shared executor has work queued for that alias.
-        with self._provider_locks[alias]:
-            try:
-                response = provider.translate(task.text, asin=task.asin, field=task.field,
-                                              source_language=task.context.get("source_language", "es"),
-                                              target_language=task.context.get("target_language", "zh-CN"),
-                                              context={**task.context, "provider_alias": alias})
-            except Exception:
-                response = ProviderResponse(provider=getattr(provider, "name", ""),
-                                            model=getattr(provider, "model", ""),
-                                            status="pending", error="TRANSPORT_OUTCOME_UNKNOWN",
-                                            attempts=1, raw={"outcome_unknown": True})
+        try:
+            response = provider.translate(task.text, asin=task.asin, field=task.field,
+                                          source_language=task.context.get("source_language", "es"),
+                                          target_language=task.context.get("target_language", "zh-CN"),
+                                          context={**task.context, "provider_alias": alias})
+        except Exception:
+            response = ProviderResponse(provider=getattr(provider, "name", ""),
+                                        model=getattr(provider, "model", ""),
+                                        status="pending", error="TRANSPORT_OUTCOME_UNKNOWN",
+                                        attempts=1, raw={"outcome_unknown": True})
         if response.status == "failed" and any(token in str(response.error or "").casefold()
                 for token in ("599", "timeout", "network", "connection")):
             response = replace(response, status="pending", error="TRANSPORT_OUTCOME_UNKNOWN",
@@ -160,6 +175,14 @@ class ProviderPool:
             if classification == RATE_LIMITED:
                 stats.rate_limited += 1
                 stats.state = RATE_LIMITED
+                if self.stop_on_rate_limit:
+                    self._halted = True
+                    if self.halt_path:
+                        self.halt_path.parent.mkdir(parents=True, exist_ok=True)
+                        with self.halt_path.open('x', encoding='utf-8') as stream:
+                            json.dump({'reason':'HTTP429', 'alias':alias, 'key':task.key}, stream)
+                            stream.flush()
+                            os.fsync(stream.fileno())
             elif classification == DEGRADED:
                 error = str(response.error or "").casefold()
                 if any(token in error for token in ("599", "timeout", "network", "connection")):
@@ -205,7 +228,7 @@ class ProviderPool:
         # endpoints are unavailable those tasks must remain pending.
         task_keys = {task.key for task in tasks}
         with self._lock:
-            if task_keys and all(key in self._transient_failures for key in task_keys):
+            if not self._halted and task_keys and all(key in self._transient_failures for key in task_keys):
                 for stats in self._stats.values():
                     if stats.state in {DEGRADED, RATE_LIMITED}:
                         stats.state = HEALTHY
@@ -443,4 +466,6 @@ def build_qwen_provider_pool(config: Mapping[str, Any], *, transport_factory: An
         providers[alias] = QwenMTProvider(**kwargs)
     return ProviderPool(
         providers, max_workers=min(len(providers), int(config.get("max_workers", len(providers)))),
-        failover=bool(config.get("failover", True)))
+        failover=bool(config.get("failover", True)),
+        stop_on_rate_limit=bool(config.get("stop_on_rate_limit", False)),
+        halt_path=config.get("rate_limit_halt_path"))

@@ -437,6 +437,12 @@ def cmd_translate(args) -> None:
                               rate=float(args.rate if args.rate is not None
                                          else config.get('rate', 0.5)))
     cache = run_context.cache if run_context else TranslationCache(args.cache)
+    if config.get('resume_admission'):
+        from ..translation.resume_admission import ResumeAdmission
+        if args.repair_partial or args.repair_failed:
+            raise ValueError('RESUME_ADMISSION_REPAIR_FLAGS_FORBIDDEN')
+        cache.resume_admission = ResumeAdmission.from_file(config['resume_admission'],
+            cache_path=cache.path, products_path=args.products)
     fields = args.field or ([args.fields] if args.fields else None) or config.get('fields') or None
     if fields:
         fields = [item.strip() for value in fields for item in str(value).split(',') if item.strip()]

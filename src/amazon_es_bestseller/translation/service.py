@@ -116,6 +116,8 @@ class TranslationService:
         dictionary/schema namespace to issue an identical provider request.
         """
         current = self._memory_get(key) or self.cache.get_memory(key)
+        if self.cache.resume_eligible(key):
+            return None
         if current:
             return current
         historic = self.cache.find_memory_result(
@@ -573,6 +575,12 @@ class TranslationService:
         # A custom field can be passed by its already-Chinese target/source name.
         return selected
 
+    def _field_resume_eligible(self, record, source, text):
+        items = self._structured_items(source, self._prepared_value(record, source))
+        keys = ([self._memory_key(value, canonical_translation_unit_field(source, label=label))
+                 for label, value in items] if items is not None else [self._memory_key(text, source)])
+        return any(self.cache.resume_eligible(key) for key in keys)
+
     def plan(self, records: Sequence[Dict[str, Any]], *, fields: Optional[Sequence[str]] = None,
              offset: int = 0, limit: Optional[int] = None,
              repair_partial: bool = False, repair_failed: bool = False) -> Dict[str, Any]:
@@ -620,6 +628,8 @@ class TranslationService:
                 if deterministic is not None:
                     continue
                 cached = self.cache.get(key) or self.cache.find_result(asin, source, digest)
+                if self._field_resume_eligible(record, source, text):
+                    cached = None
                 memory = None
                 bypass_memory = False
                 if cached and cached.get("translation_status") == "pending":
@@ -666,6 +676,8 @@ class TranslationService:
                         unique_requests.add(self._memory_key(text, source))
                 rows.append({"asin": asin, "source_field": source, "target_field": target,
                              "source_hash": digest, "source_chars": len(text)})
+        if self.cache.resume_admission:
+            unique_requests = {key for key in unique_requests if self.cache.resume_eligible(key)}
         return {"schema_version": self.schema_version, "provider": self.provider.name,
                 "model": self.provider.model, "total_records": len(subset),
                 "total_fields": len(rows), "cache_hits": cache_hits,
@@ -694,6 +706,9 @@ class TranslationService:
                 output_fields[target] = deterministic_result
                 continue
             cached = self.cache.get(key)
+            resuming_field = self._field_resume_eligible(record, source_field, text)
+            if resuming_field:
+                cached = None
             if cached and cached.get("resolution_source") == "immutable_cache_namespace_reuse":
                 output_fields[target] = cached
                 continue
@@ -716,6 +731,8 @@ class TranslationService:
             # of a prior provider attempt. Closure no-repeat must surface it
             # for offline re-render/re-QA, never silently call again.
             prior = self.cache.find_result(asin, source_field, digest)
+            if resuming_field:
+                prior = None
             if prior:
                 reused = self._namespace_review(prior)
                 self._stamp_dictionary_version(reused)
@@ -801,7 +818,8 @@ class TranslationService:
             else:
                 claimed, existing_claim = self.cache.claim(
                     key, self._pending_field(asin=asin, source_field=source_field,
-                                             target=target, text=text, digest=digest))
+                                             target=target, text=text, digest=digest),
+                    resume_key=memory_key if resuming_field else "")
                 if not claimed:
                     existing_claim["qa_status"] = "review_required"
                     output_fields[target] = existing_claim
