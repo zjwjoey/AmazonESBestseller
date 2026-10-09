@@ -144,3 +144,16 @@ def test_unknown_provider_entry_without_response_excluded(tmp_path):
     cache.resume_admission=ResumeAdmission.from_file(binding,cache_path=cache.path)
     assert not cache.resume_eligible(keys[0])
     assert not cache.claim_memory(keys[0],{'translation_status':'pending'})[0]
+
+
+def test_old_settlement_without_claim_id_uses_full_envelope_binding(tmp_path):
+    _,cache,_,_,keys,_,binding=setup(tmp_path)
+    cache.memory[keys[0]].pop('claim_id')
+    cache.save()
+    data=json.loads(Path(binding['path']).read_text(encoding='utf-8'))
+    data['bindings']['cache']['sha256']=hashlib.sha256(cache.path.read_bytes()).hexdigest()
+    binding=write(Path(binding['path']),data)
+    cache.resume_admission=ResumeAdmission.from_file(binding,cache_path=cache.path)
+    assert cache.resume_eligible(keys[0])
+    assert cache.claim_memory(keys[0],{'translation_status':'pending'})[0]
+    assert not cache.claim_memory(keys[0],{'translation_status':'pending'})[0]

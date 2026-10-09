@@ -63,7 +63,10 @@ class ResumeAdmission:
         for key in set(claimed) - set(entered):
             current = cache.get('memory', {}).get(key, {})
             prior = cache.get('memory_results', {}).get('|'.join(key.split('|')[:6]), {})
-            if (current.get('translation_status') != 'pending' or not current.get('claim_id')
+            # Older settlement payloads dropped claim_id. The unique fsynced
+            # claim event plus the hash-bound full pending envelope is the
+            # evidence boundary; never infer unsent from pending status alone.
+            if (current.get('translation_status') != 'pending'
                     or prior.get('translation_status', 'pending') != 'pending'):
                 raise ValueError('RESUME_ADMISSION_CACHE_STATE')
             claim_ids[key] = cls.fingerprint(current)
