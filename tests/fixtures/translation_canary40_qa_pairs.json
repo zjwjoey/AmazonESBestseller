@@ -1,0 +1,1091 @@
+[
+  {
+    "canonical_key": "349fa59cfb36dcf7fc27f85627e1a686e98c0b88acfd48c5f536624e846d9b50|es|zh-CN|title|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F1968H9W",
+    "field": "title_es_raw",
+    "target_field": "title_zh",
+    "label": null,
+    "source": "ARREGUI CR601-B2 Cubo de Basura y Reciclaje de Acero de 4 Compartimentos | 23+11+17+17 L (68 L) | Cubos de Basura de Cocina | Contenedores de Reciclaje para Casa | con Cubo 24 L para Envases | blanco",
+    "brand": "ARREGUI",
+    "allowed_residual": [
+      "ARREGUI"
+    ],
+    "rendered": "CR601-B2 4格钢制垃圾与回收桶 | 23+11+17+17L (68L) | 厨房垃圾桶 | 家用回收容器 | 配有用于包装的24L垃圾桶 | 白色",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "c1bc77998fdee051fe2882dff85f859cc5f7e403b489202c36ec3188a081c8e8|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B09CH5Z79K",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "✅ 【PROTECCIÓN PERFECTA】: este producto está hecho de tela Oxford, que puede proteger los muebles de la lluvia, la nieve, el polvo, la suciedad y el óxido. Puede proteger sus muebles incluso en entornos hostiles. La capa interior tiene un revestimiento de PU plateado, que bloquea eficazmente los rayos ultravioleta y refleja el calor.",
+    "brand": "Aipwerer",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "✅ 【完美防护】：本产品采用牛津布制成，可有效保护家具免受雨雪、灰尘、污垢及锈蚀的侵害，在恶劣环境下亦能为您的家具提供周全守护。内层涂有银色PU涂层，能够高效阻隔紫外线并反射热量。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "b85da3910a58672d9475f9dd7c90dcd407574ea71556b25fc10225185a9e6789|es|zh-CN|variation|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F1968H9W",
+    "field": "selected_variation_raw",
+    "target_field": "selected_variation_zh",
+    "label": null,
+    "source": "Blanco / 23+11+17+17 L (68 L)",
+    "brand": "ARREGUI",
+    "allowed_residual": [
+      "ARREGUI"
+    ],
+    "rendered": "白色 / 23+11+17+17L (68L)",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "86543761d1eab28bc1ed83a26724cc5606baf0ea7ab4f4a7ba5deb477efa6e07|es|zh-CN|product_details:dimensiones del articulo (largo x ancho x alto)|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F1968H9W",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del artículo (largo x ancho x alto)",
+    "source": "24,5l. x 58,5an. x 90,5al. centímetros",
+    "brand": "ARREGUI",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "24.5厘米（长）× 58.5厘米（宽）× 90.5厘米（高）",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "797edc3baf0807ff70f89118355106ed3a96a0740f5edf77f20041a6a6bcec4c|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F1968H9W",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "PARA INTERIOR: robusto y resistente, fabricado en acero. Válido para interiores. Se suministra de una sola pieza, no necesita montaje.",
+    "brand": "ARREGUI",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "适用于室内：坚固耐用，采用钢材制造。适用于室内环境。整件交付，无需组装。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "fc6f70669d790bc38ee5fc495cb75321319f0b12eb811ffd64adfee59e990511|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F1968H9W",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "APOYADO EN EL SUELO O FIJADO A PARED: se puede colocar apoyado en el suelo (tiene una gran estabilidad) o colgado de la pared. Dispone de 3 agujeros en la parte trasera por si se desea fijar o colgar (tornillos incluidos).",
+    "brand": "ARREGUI",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "可立于地面或壁挂：既可放置于地面（稳定性极佳），也可悬挂在墙上。背面设有三个安装孔，便于固定或悬挂（附带螺钉）。",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "a4e89334e28bf752c7e3539296dac4b63431239aba694b296aeb8c4893cf0321|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F28PMHMB",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Tamaño Perfecto: El marcos para cuadros está diseñado para albergar tus recuerdos más preciados en un tamaño de fotografía estándar. Destaca la imagen sin opacarla.",
+    "brand": "Giftgarden",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "完美尺寸：这款相框专为标准尺寸的照片而设计，可妥善珍藏您最珍贵的回忆，既凸显画面，又不使其黯然失色。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "2248c3e1f4303a0865b62d650651a76a24e2091cca73e1b6b9deaed608ddcd21|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0F28PMHMB",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Solo para Colgar en La Pared: El marco para póster de 40x50 cm viene con accesorios de montaje para una fácil presentación horizontal y vertical. Un clip metálico giratorio en la parte trasera del marco facilita la adición o el intercambio de fotos de manera fácil y conveniente. Por favor, tenga en cuenta que el marco no incluye un soporte y solo puede colgarse o apoyarse contra una pared.",
+    "brand": "Giftgarden",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "仅用于墙面悬挂：40x50cm海报框配有安装配件，可轻松实现横竖两种展示方式。框架背面的金属旋转夹扣，让照片的添加与更换更加便捷。请注意，该框架不带支架，只能悬挂或靠墙放置。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "a60f16159c65a0175b870174798ca8df8022e263524e0387dcba73579126db68|es|zh-CN|description|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CH8W3YRP",
+    "field": "product_description",
+    "target_field": "description_zh",
+    "label": null,
+    "source": "Descripción del producto Solo hay un STABILO BOSS ORIGINAL. La forma única y distintiva es reconocida en todo el mundo y evita que el subrayador se caiga del escritorio, por lo que siempre estará donde lo dejaste. Este subrayador es sinónimo de calidad alemana en la que puedes confiar desde 1971. El STABILO BOSS ORIGINAL tiene tinta de fluorescencia superalta, y la larga vida útil lo convierte en la opción número uno. No te preocupes si olvidas reemplazar la tapa, puedes dejarla quitada hasta 4 horas y el subrayador se regenerará una vez que se reemplace la tapa; y si alguna vez te quedas sin tinta, todos los tonos neón del BOSS ORIGINAL se pueden rellenar.",
+    "brand": "STABILO",
+    "allowed_residual": [
+      "STABILO"
+    ],
+    "rendered": "产品描述：只有一款STABILO BOSS ORIGINAL。其独特而醒目的造型享誉全球，能有效防止荧光笔从桌面滑落，让你随时找到它。这款荧光笔堪称值得信赖的德国品质，源自1971。STABILO BOSS ORIGINAL采用超高荧光度墨水，超长使用寿命，是您的首选之选。即使忘记盖上笔帽，也可敞开长达4小时，待重新盖上后即可自动恢复；若不慎用尽墨水，BOSS ORIGINAL的所有霓虹色系均可轻松补充。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "ec47ee20049748f6b37db9080011ea7950753d64c591c6cdb57aab675458f5d9|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CJVG1QBM",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Limpieza fácil y sin complicaciones – Con pocas piezas y superficies lisas, este cubo de basura cocina alto se limpia cómodamente y se mantiene en buen estado con el uso diario.",
+    "brand": "Tatay",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "清洁轻松无烦恼——由于部件少、表面光滑，这款高款厨房垃圾桶日常使用后也能轻松清洁，保持良好状态。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "1f1236214c6ba989991adb6d9b50b30d31f516cc62f192f51adca6f9a8a6fd53|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CJVG1QBM",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Material resistente y duradero – Fabricado en plástico de alta calidad libre de BPA, que resiste al paso del tiempo y mantiene su buen aspecto con el uso diario y es perfecto como cubo basura cocina interior o cubo de basura exterior.",
+    "brand": "Tatay",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "坚固耐用的材质——采用高品质无BPA塑料制成，经久耐用，日常使用仍保持美观，非常适合作为室内厨房垃圾桶或室外垃圾箱。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "ab75b7b7d7990cb5612288e0b0c01f3b8328a562067cca23aaae75a628788989|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B08GVXR7V9",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Libre de polvo por lo que es una excelente opción para gatos y personas con alergias",
+    "brand": "Catit",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "无粉尘，因此是猫和过敏人群的绝佳选择",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "cc9c6e9e5f51ca6916b5ac6f37c04bb43bb2a2f0665aed8bfdbb85a8330e05d7|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CTHK76FV",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "MÁXIMA EFICACIA: KH-7 Sin Manchas es un quitamanchas pre lavado que te permitirá eliminar las manchas más difíciles, incluso aquellas que los detergentes habituales no consiguen eliminar. Bastará con pulverizar sobre la prenda para eliminar con máxima eficacia las manchas a combatir",
+    "brand": "KH-7",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "卓越去污力：KH-7 “无痕”是一款预洗型去渍剂，能轻松去除最顽固的污渍，连日常洗涤剂都难以清除的污渍也能一并搞定。只需喷洒在衣物上，即可高效去除各类顽固污渍。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "a32d6871748f1903830e6e5f75644ec927434c9bc6027cd0c3e94a74ba974d09|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CTHK76FV",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "FORMATO MULTIUSOS: KH-7 Sin Manchas es un limpiador versátil que te permitirá eliminar todo tipo de manchas. Conseguirás eliminar las manchas de aceite, grasa, tomate, chocolate, vino, sangre, maquillaje e incluso los roces en el cuello y puños de la camisa",
+    "brand": "KH-7",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "多用途配方：KH-7 “无痕”是一款多功能清洁剂，可轻松去除各类污渍。无论是油渍、油脂、番茄酱、巧克力、红酒、血迹、化妆品，还是衬衫领口与袖口上的摩擦痕迹，都能一并清除。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "8fd98111bcb3d13ed7fc4a0ed282be8dc94ab87c5bb99951aaf82935f272eb3e|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CTHK76FV",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "RESPETUOSO CON TEJIDOS: KH-7 Sin Manchas, gracias a su formulación, destaca por su cuidado con los tejidos, no producirá daños en las superficies ni decolorará tus prendas. CÓMODO Y PRÁCTICO: KH-7 Sin Manchas presenta un cómodo pulverizador, deberás aplicar directamente sobre la mancha incrustada dejando actuar durante 5 minutos",
+    "brand": "KH-7",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "温和呵护织物：KH-7 无残留污渍，得益于其配方，对织物格外温和，不会损伤表面，也不会使衣物褪色。舒适又实用：KH-7 无残留污渍配备便捷的喷雾器，直接喷于顽固污渍处，静置5分钟即可。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "d873055d58af66240c2cfecf575befd01066811ed0afe50a32529d67b11170e4|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CTHK76FV",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "INSTRUCCIONES: En primer lugar, se recomienda leer atentamente el dorsal de la etiqueta y seguir las instrucciones de lavado de la prenda. 1 - Pulverizar el producto directamente sobre la mancha. 2 - Dejar actuar 5 minutos, evitando que se seque en la prenda. 3 - Lavar la prenda ya sea a mano o máquina",
+    "brand": "KH-7",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "使用说明：首先，请仔细阅读标签上的洗涤标识，并按照衣物的洗涤要求进行操作。1 - 将本品直接喷洒于污渍处。2 - 静置5分钟，避免在衣物上干燥。3 - 请用手或机洗方式清洗衣物。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "e6ba489a497097d2cb3c9ea9fe486e52af83abe7c8309583f26a93480b707cf9|es|zh-CN|specification|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0H26LB25S",
+    "field": "specification_es",
+    "target_field": "specification_zh",
+    "label": null,
+    "source": "Dimensiones del producto: 6f. x 6an. x 9al. centímetros / Número de artículos: 2",
+    "brand": "Suright",
+    "allowed_residual": [
+      "Suright"
+    ],
+    "rendered": "产品尺寸：6厘米 x 6宽 x 9高 厘米 / 商品数量：2",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "e24fdba914ace226933c0db3b1453a98a953c922b1f327a44cd702178e1523ca|es|zh-CN|product_details:componentes incluidos|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0H26LB25S",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Componentes incluidos",
+    "source": "Sin control remoto",
+    "brand": "Suright",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "无遥控器",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "7a9c587468bcc730157b7c4f60c358f1d2ae6029ea5d2e69b5fc02afe3721ca0|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0H26LB25S",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "[3 Modos de Funcionamiento Sencillos]: AUTOMÁTICO, ENCENDIDO y APAGADO. El modo AUTOMÁTICO garantiza un funcionamiento autónomo gracias al sensor de luz. El modo ENCENDIDO mantiene una iluminación constante en cualquier circunstancia. El modo APAGADO permite apagar la luz nocturna por completo sin desenchufarla, para un mayor ahorro de energía diario.❌️Sin control remoto;❌️🏃Sin detección de movimiento",
+    "brand": "Suright",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【3种简单操作模式】：自动、常亮和关灯。自动模式借助光线传感器实现自主运行；常亮模式在任何情况下均保持持续照明；关灯模式则可在不拔插头的情况下彻底关闭夜灯，进一步节省日常用电。❌️无遥控器；❌️🏃无运动检测",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "fc348d1d2ee73dfe30b79ffac7c5bdb6b85e8ae5504cf5a1a40e51c9f468e953|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0H26LB25S",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "[Modo Auto]: Sistema de detección de luz autónomo. Esta luz nocturna se enciende automáticamente al anochecer y se apaga naturalmente al amanecer. Proporciona una iluminación estable y uniforme en diferentes habitaciones, 𝐬𝐢𝐧 𝐧𝐞𝐜𝐞𝐬𝐢𝐝𝐚𝐝 𝐝𝐞 𝐮𝐧 𝐬𝐞𝐧𝐬𝐨𝐫 𝐝𝐞 𝐦𝐨𝐯𝐢𝐦𝐢𝐞𝐧𝐭𝐨❌️🏃𝐍𝐨𝐭𝐚: 𝐄𝐬𝐭𝐞 𝐩𝐫𝐨𝐝𝐮𝐜𝐭𝐨 𝐧𝐨 𝐫𝐞𝐬𝐩𝐨𝐧𝐝𝐞 𝐚𝐥 𝐦𝐨𝐯𝐢𝐦𝐢𝐞𝐧𝐭𝐨.",
+    "brand": "Suright",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【自动模式】：独立式光线感应系统。这款夜灯在黄昏时自动开启，黎明时自然关闭。可在不同房间提供稳定、均匀的照明，无需安装运动传感器❌️🏃请注意：本产品不支持感应人体移动。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5745b9e40a659f2991e3f1cd18f64480b27f2a74b9fada53b20d9086bae84220|es|zh-CN|product_details:dimensiones del producto|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B07W48YG15",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del producto",
+    "source": "22,9l. x 2an. x 8,9al. centímetros",
+    "brand": "Amazon Basics",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "22.9长×2宽×8.9高厘米",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5745b9e40a659f2991e3f1cd18f64480b27f2a74b9fada53b20d9086bae84220|es|zh-CN|product_details:dimensiones del articulo (largo x ancho x alto)|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B07W48YG15",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del artículo (largo x ancho x alto)",
+    "source": "22,9l. x 2an. x 8,9al. centímetros",
+    "brand": "Amazon Basics",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "22.9长×2宽×8.9高厘米",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "52113f02cde77c4cf5f75875d5b8fad922d1e00ed2f27921a950547928b9219f|es|zh-CN|specification|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B07K1PPVBW",
+    "field": "specification_es",
+    "target_field": "specification_zh",
+    "label": null,
+    "source": "Capacidad: 550 ml / Peso Artículo: 1,79 Gramos / Dimensiones del artículo (ancho x alto): 9,9an. x 24al. centímetros / Tamaño: 6 Unidad (Paquete de 1) / Número de Artículos: 5",
+    "brand": "Krosno",
+    "allowed_residual": [
+      "Krosno"
+    ],
+    "rendered": "容量：550ml / 商品重量：1,79克 / 商品尺寸（宽×高）：9.9厘米×24厘米 / 规格：6件装（1件） / 商品数量：5",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "7c67d8f21b47b44cf388c942d2b6ecf73391c70c7c643e5520dda6d8e4e8dc4c|es|zh-CN|product_details:sin tipo de material|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B07K1PPVBW",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Sin tipo de material",
+    "source": "Sin Plomo",
+    "brand": "Krosno",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "无铅",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "1b4302c48995a4be3d9d7a3396badd150f390abc35f8454bf5cbdb45c3bb2702|es|zh-CN|variation|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B08HHFRLR1",
+    "field": "selected_variation_raw",
+    "target_field": "selected_variation_zh",
+    "label": null,
+    "source": "1 unidad (Paquete de 1) / Multicolor",
+    "brand": "Catrice Cosmetics",
+    "allowed_residual": [
+      "Catrice Cosmetics"
+    ],
+    "rendered": "1件（1件）/ 多色",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "60a128f0982e4a9d53e0cea459c5c4c01657a57b49ff61be08ed847e10aeaef0|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B08HHFRLR1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Alta cobertura y acabado natural: el corrector True Skin combina una cobertura excelente con un acabado mate y natural de larga duración, sin efecto máscara, para lograr un aspecto fresco e impecable",
+    "brand": "Catrice Cosmetics",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "高遮瑕，妆效自然：是 Skin遮瑕膏兼具卓越遮瑕力与持久哑光自然妆效，不显假面感，令肌肤呈现清新无瑕的妆容。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "6665ca556fc1cc20994f13e40e767792413225da38dd3aa3da342bd8b0a11715|es|zh-CN|product_details:caracteristicas especiales|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Características especiales",
+    "source": "★1,6L taza de recogida de polvo de gran capacidad ★Múltiples accesorios ★Soporte de pared para carga inalámbrica, ★Pantalla interactiva inteligente LED ★Tres modos de succión ★Tecnología GreenSight™ ★6 cabezales de luz LED, ★Sistema antienredos doble ★Diseño de cepillo de suelo y peine de dientes en forma de V, ★Sistema de filtración de alta eficacia de 8 capas ★Cartucho filtrante ciclónico multicono ★Pértiga telescópica ajustable, ★Sistema de gestión de la batería de doble celda ★Motor sin escobillas HyperCore™ Pro de 600 W",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "★1,6L 大容量集尘杯 ★多种配件 ★无线充电壁挂支架 ★智能交互显示屏 LED ★三种吸力模式 ★GreenSight™ 技术 ★6 个照明头 LED，★双重防缠绕系统 ★V 型地板刷与梳齿设计，★8 层高效过滤系统 ★多锥旋风滤芯 ★可调节伸缩杆，★双电池管理系统 ★600W HyperCore™ Pro 无刷电机",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "f8ebffb38df786533f9c4a097fe9427553d9eb5fe627dea371224a52dc4e139b|es|zh-CN|product_details:tipo de cama o colchones|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Tipo de Cama o Colchones",
+    "source": "Aspiradora sin Cable",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "无线吸尘器",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "7a16331f2debce743ccd163fbc97d485104d57bbf4fb06ec0fe6ed39994035cc|es|zh-CN|product_details:dimensiones del articulo (largo x ancho x alto)|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del artículo (largo x ancho x alto)",
+    "source": "27l. x 19an. x 44al. centímetros",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "27长×19宽×44高厘米",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "cc217d7f4174efd13ba4714bb77b2c1de1f284be7a604ff913a89f774a64f234|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Excelente Filtración: Aspirador está equipado con tecnología de aire MultiVortex, que separa eficazmente el polvo y el aire mediante una fuerza centrífuga 7 veces mayor, y un sistema de filtración de 8 capas que captura con precisión el polvo microscópico con una eficacia de filtración del 99,99%, eliminando fácilmente el polvo, el polen y los alérgenos. El innovador diseño Ηepa de carbón activado permite la filtración secundaria del aire en la salida de aire, creando un ambiente sano y fresco en el hogar.",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "卓越过滤：吸尘器搭载MultiVortex气旋技术，通过高达7倍的离心力高效分离灰尘与空气，并配备八重过滤系统，可精准捕捉微米级粉尘，过滤效率达99,99%，轻松去除灰尘、花粉及各类过敏原。创新的活性炭HEPA滤网设计可在出风口实现二次空气净化，为您营造健康清新的居家环境。",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "98e771238032595874d331125f69192875c6fe03ff1f1a9a9d006f0971a95735|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "600W HyperCore Pro Motor sin Escobillas: La aspiradora sin cable está equipada con un nuevo motor HyperCore Pro de 600 W sin escobillas con tecnología especial de reducción de ruido (<62 dB) para un funcionamiento silencioso que no molestará a su familia ni a sus mascotas. La potencia de aspiración máxima de la aspiradora, de hasta 55 kPa, elimina la suciedad más incrustada y las partículas más difíciles de alfombras, suelos y grietas para una limpieza potente y constante.",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "600W HyperCore Pro 无刷电机：这款无线吸尘器搭载了全新的 600W 无刷 HyperCore Pro 电机，采用特殊降噪技术（<62dB），运行安静，不会打扰您的家人和宠物。吸力最高可达 55 kPa，能够彻底清除地毯、地板及缝隙中顽固的污垢与细小颗粒，带来强劲而持久的清洁效果。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "4cd35a59fe3af40be918fafd5a6a366bc47de3af9e8caf23d8006729edbe5012|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "DualCore Sistema de Gestión de la Batería: Aspirador sin cable adopta una placa de protección de doble núcleo y una tecnología de equilibrado dinámico de la carga para optimizar la gestión de la batería y garantizar una potencia de succión estable. Admite varios modos de limpieza: Modo Suelo (70 minutos), Modo Alfombra (40 minutos), Modo Turbo (20 minutos), que satisface las necesidades de limpieza de diferentes familias y le permite limpiar sin preocupaciones.",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "双核电池管理系统：这款无线吸尘器采用双核保护电路与动态均衡充电技术，优化电池管理，确保吸力稳定。支持多种清洁模式：地面模式（70分钟）、地毯模式（40分钟）、涡轮模式（20分钟），满足不同家庭的清洁需求，让您安心无忧地进行清洁。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "cf622bf65aa574cac29e528a680318a1e01b58113e539c33a8660da9e2699c26|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Pantalla Interactiva Inteligente LED: Escoba aspiradora sin cable está equipado con una pantalla táctil LED HD inteligente que puede manejarse con una sola mano, lo que facilita el ajuste de la potencia de succión, la supervisión del estado de la batería y el seguimiento preciso del progreso de la limpieza. Con 9 funciones de monitorización inteligente, como la advertencia de error de carga, la monitorización de la temperatura, el recordatorio de polvo lleno y el recordatorio de atasco, puede realizar un seguimiento del estado del dispositivo, localizar los problemas y disfrutar de una experiencia de limpieza eficiente e inteligente.",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "智能交互屏LED：这款无线吸尘器配备了一块高清智能触控屏LED，可单手操作，轻松调节吸力、查看电池状态，并精准追踪清洁进度。它还具备9项智能监测功能，包括充电异常提示、温度监控、集尘盒满载提醒以及堵塞提醒等，让您随时掌握设备状态、快速定位问题，尽享高效智能的清洁体验。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "498bac28987c436ab63534abf9b0598d73736c5f913fd00a42d13b5dd03ee741|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GBWFF4N1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Accesorios de Limpieza Multi-Scene:Aspiradora está equipado con una amplia gama de accesorios de limpieza para satisfacer las necesidades de limpieza de toda la casa en múltiples escenarios: el cepillo para sofás está especialmente diseñado para sofás, eliminando fácilmente el pelo de las mascotas y las migas de los aperitivos; el cepillo 2 en 1 se puede cambiar entre un cepillo para pelusas cortas y una boquilla de succión dura y ancha para adaptarse a diferentes superficies; y la boquilla para hendiduras penetra profundamente en las grietas de los muebles, con la succión que aumenta la presión para garantizar que no haya lugar para que se escondan el polvo y los pelos.",
+    "brand": "VACTechPro",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "多场景清洁配件：本吸尘器配备丰富多样的清洁配件，可满足全屋多种场景的清洁需求：沙发刷专为沙发设计，轻松去除宠物毛发与零食碎屑；二合一刷头可在短毛刷与宽大硬质吸嘴之间自由切换，适应不同材质表面；而缝隙吸嘴则能深入家具缝隙，通过增强吸力确保灰尘与毛发无处藏身。",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "7c74c560904a0d75921f39cb70818e53842482d7072a8a709b90f609d0769878|es|zh-CN|product_details:total del paquete segun la medida elegida para referenciar precio|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CBJVSMFM",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Total del paquete según la medida elegida para referenciar precio",
+    "source": "1.00 Pies cuadrados",
+    "brand": "Shayson",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "1.00 平方英尺",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "68ba3c1134cc9d8780190f701a288e4f4ab55ecf95ab7e132d68dcf75622eb98|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0D3PYHDDG",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "✔️ PRIVACIDAD Y SEGURIDAD: La billetera para hombre protege su tarjeta contra escaneos no autorizados con tecnología avanzada de bloqueo RFID. Con esta billetera para hombre, su información personal y financiera está segura.",
+    "brand": "TENBST",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "✔️ 隐私与安全：这款男士钱包采用先进的防扫描技术，可有效保护您的卡片免遭未经授权的读取RFID。有了这款男士钱包，您的个人及财务信息将得到妥善保护。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "47e84b8e5fa5dae7c1c79ec566877739cd0a1714aa41158b1a148a154b29f498|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0921NX1WJ",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "✔【Hecho 100% de madera de acacia y fácil de instalar】 La madera de acacia es el símbolo de la durabilidad y la estabilidad, ya que absorbe muy poca humedad. La superficie lisa protege las bisagras y mantiene afiladas las hojas de los cuchillos. Las 2 formas de instalación para la instalación con tornillos y la instalación con cinta adhesiva le permiten fijarlo en la pared o pegarlo en una superficie brillante como un azulejo brillante.",
+    "brand": "HOSHANHO",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "✔【采用100%相思木制成，安装简便】相思木以其耐久性和稳定性著称，因为它几乎不吸收水分。光滑的表面既能保护铰链，又能使刀刃保持锋利。提供两种安装方式：螺丝固定与胶带粘贴，可将其固定于墙面，或粘贴于瓷砖等光亮表面。",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "cb0bceed12d3fca71573bcd3cf52fa604b2df95cbd169197ff456411828d830f|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0C9MCCCS4",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Superbrillante y Compacta】Esta foco led recargable cuenta con LED de alta calidad que proporcionan una iluminación ultrabrillante para garantizar una visibilidad clara incluso en los entornos más oscuros. Además, es ligera y compacta, por lo que resulta fácil de guardar y transportar.",
+    "brand": "DANCINGBOAR",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【超亮且紧凑】这款可充电手电筒采用高品质LED灯珠，提供超亮照明，即使在最黑暗的环境中也能确保清晰可见。此外，它轻巧紧凑，便于收纳与携带。",
+    "previous_codes": [
+      "PROTECTED_TOKEN_MISSING"
+    ]
+  },
+  {
+    "canonical_key": "f7bbf23b91f7b22cec8c8f936382c0e0fcc9b089db4793e3e6cb9481bce6a410|es|zh-CN|product_details:volumen del producto|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GS97T2MV",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Volumen del producto",
+    "source": "1,69 Onzas de líquido",
+    "brand": "celimax",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "1.69 液体盎司",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "f7bbf23b91f7b22cec8c8f936382c0e0fcc9b089db4793e3e6cb9481bce6a410|es|zh-CN|product_details:volumen articulo|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GS97T2MV",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Volumen Artículo",
+    "source": "1,69 Onzas de líquido",
+    "brand": "celimax",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "1.69 液体盎司",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "e201cc59669f774edc33e04ebed375d1750de1ab906b8a2c4c105e603fa018c6|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GS97T2MV",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Avoid contact with eyes, and wash your hands thoroughly after application. This product is for Night Time use only, and sunscreen must be applied the following day. Applying too much at once may cause skin irritation.",
+    "brand": "celimax",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "请避免接触眼睛，使用后务必彻底洗手。本品仅供夜间使用，次日须涂抹防晒产品。一次用量过多可能导致皮肤刺激。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "9586787eb58a93e1db3e7d7c4ddff08baeafcaad6cc56716cf6c2496bcb619af|es|zh-CN|specification|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DLVWY1HD",
+    "field": "specification_es",
+    "target_field": "specification_zh",
+    "label": null,
+    "source": "Volumen de almacenamiento: 27 litros / Dimensiones del artículo (profundidad x ancho x alto): 20,3f. x 30,5an. x 44,5al. centímetros / Tamaño: 15.6\" / Cantidad de compartimentos: 14",
+    "brand": "LOVEVOOK",
+    "allowed_residual": [
+      "LOVEVOOK"
+    ],
+    "rendered": "储物容积：27升 / 商品尺寸（深×宽×高）：20,3厘米 × 30.5厘米 × 44.5厘米 / 尺寸：15.6英寸 / 格层数：14",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "bfdedbae7012c46cfc545960e41399b6d280bc6f2ce649d613c4fc9d1a394d92|es|zh-CN|product_details:tela elastica para ropa|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DLVWY1HD",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Tela elástica para ropa",
+    "source": "Sin elasticidad",
+    "brand": "LOVEVOOK",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "无弹性",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "059986c8d085f9ac07bb5be22250496743fbd192465ab3134acbecd014f027fb|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DLVWY1HD",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Diseño de vaso de gran capacidad】: Correa elástica ajustable diseñada para mayor comodidad, especialmente adecuada para vasos de gran capacidad. Con este bolsillo para botella de agua, transporta fácilmente tu vaso, mantén las manos libres y lleva tus accesorios para botellas de agua sin esfuerzo. Mochila bien pensada para mujer.",
+    "brand": "LOVEVOOK",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【大容量水杯设计】：可调节弹性绑带，佩戴更舒适，特别适合大容量水杯。配备这款水瓶袋，轻松收纳水杯，解放双手，随心携带各类水瓶配件。专为女性打造的贴心背包。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "b722e5c6d54ff27cb2764a022cd80609e4b3f687777e5e097528ff0f77f4ea9b|es|zh-CN|product_details:nombre tipo articulo|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B000KJP6AA",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Nombre Tipo Artículo",
+    "source": "Set de 8 Marcadores Fluorescentes",
+    "brand": "STAEDTLER",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "8支荧光记号笔套装",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "449bf6396fc8d360e498f98e8c69e2ed79c72898985a72479ef41d2dd0e063ba|es|zh-CN|product_details:dimensiones del articulo (profundidad x ancho x alto)|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B000KJP6AA",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del artículo (profundidad x ancho x alto)",
+    "source": "1,9f. x 19,3an. x 14al. centímetros",
+    "brand": "STAEDTLER",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "1,9厘米 × 19.3宽 × 14高 厘米",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "833ca05fe9c1309ece35d80fa529ca167bf00af69198302f3231e576162e7a4f|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B000KJP6AA",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "TRAZOS NÍTIDOS Y PRECISOS: El marcador fluorescente con punta biselada de 1-5 mm traza líneas limpias y definidas sobre papel, fax y papel carbón – ideal para colegio, oficina y el día a día, sin que la tinta se corra ni emborrone",
+    "brand": "STAEDTLER",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "线条清晰精准：1-5毫米斜尖荧光记号笔可在纸张、传真纸和复写纸上画出干净利落、轮廓分明的线条——非常适合学校、办公室及日常使用，且墨水不会晕染或模糊。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "3f70a4cd25ca2cc8a8e4d8a04c0907f113d3cc7a97af87b32ea061832a1cbd7e|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B000KJP6AA",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "CÓMODO DE USAR: La tapa giratoria se abre sin esfuerzo y el cuerpo encaja con firmeza en la mano – este marcador Staedtler está pensado para largas sesiones de subrayado sin fatiga, día tras día",
+    "brand": "STAEDTLER",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "使用舒适：旋转式笔盖开合轻松，笔身握感稳固——这款施德楼荧光笔专为长时间划线而设计，让您日复一日、毫不疲倦。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "64eeb32d2c3105051d2efae8d498f6fc0a7b40fb88daf7538f020837a93ede1d|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B000KJP6AA",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "DISEÑO FUNCIONAL Y DISCRETO: El set de 4 marcadores en tonos grises y pastel se integra de forma natural en cualquier entorno – cuerpo y tapa fabricados en PP, con punta suave al tacto para resultados precisos",
+    "brand": "STAEDTLER",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "功能与低调设计：这套由4支灰色与柔和色调的记号笔组成的套装，能够自然融入任何使用场景——笔身与笔盖均采用PP材质，笔尖触感柔滑，确保书写精准流畅。",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "18a93f196a980f617f6100029647ee0b489aa95e974965c282821c2123c7fd87|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B086GTG1D8",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【High Speed Printing】PLA+ satisface las demandas de las impresoras de alta velocidad y mantiene un rendimiento excepcional a altas velocidades. Y también mantiene todas las ventajas de PLA, fácil de imprimir, baja contracción, sin deformación, sin grietas, alta precisión de impresión. El buen rendimiento de la unión de capas satisface sus demandas de impresión de piezas funcionales con mayor dureza.",
+    "brand": "eSUN",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【高速打印】PLA+ 满足高速打印机的需求，并在高打印速度下保持卓越的性能。同时，它还保留了PLA的所有优势：易于打印、收缩率低、不易变形、无裂纹，且具有极高的打印精度。优异的层间结合性能，可满足您对硬度更高、功能性强的零部件的打印需求。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5d94d07faa61dbeaf14005cbf379e8b6704c1e8eeef2b78706343aaaed5ef95e|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B086GTG1D8",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Tolerancia Dimensional +/- 0.03mm】eSUN PLA+ filamento de impresora 3D se producen con una especificación más precisa, sin burbujas, menos trefilado. Tolerancia mínima y baja deformación para asegurar una alimentación consistente e impresiones estables.",
+    "brand": "eSUN",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【尺寸公差 +/- 0.03mm】eSUN PLA+ 3D 打印耗材采用更精密的规格制造，无气泡、缩丝更少。公差极小、变形率低，确保供料稳定、打印可靠。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "f43c799bd36893c39622fdae7978ba28a31b7e0539c35efc0091e22bcb1e9400|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B086GTG1D8",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Sin Obstruccion】Longitud Total: 340-350m. Carrete completo de filamento de impresora 3D de 1KG, buen bobinado, no se superpone ni se enreda. Fundir bien, alimentar suavemente y constantemente sin obstruir la boquilla o el extrusor, alta tasa de impresión exitosa.",
+    "brand": "eSUN",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【无堵塞】总长度：340-350m。3D打印耗材整卷，规格为1kg，绕线整齐，不重叠、不缠绕。熔融顺畅，供料平稳且持续，不会堵塞喷嘴或挤出机，打印成功率高。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "87c371bb8418648cae614d5da3d1bcf3828cb9256dcba6f56b8f03e877dd8472|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B00U7EF8FQ",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "𝗦𝗜𝗦𝗧𝗘𝗠𝗔 𝗗𝗘 𝗔𝗥𝗥𝗔𝗡𝗤𝗨𝗘 𝗜𝗡𝗠𝗘𝗗𝗜𝗔𝗧𝗢: Motosierra eléctrica con cable; más silenciosa que otras motosierras estándar; certificado UL, garantía Oregon de 3 años",
+    "brand": "Oregon",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "即插即用系统：有线电动链锯；比其他标准链锯更安静；通过UL认证，享有Oregon三年质保",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "10dc89441964d585c8c7b210131ffe1230f1f291c914f19710d217de6bd790da|es|zh-CN|product_details:clasificacion en los mas vendidos de amazon|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CBCPB2T1",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Clasificación en los más vendidos de Amazon",
+    "source": "nº17 en Videojuegos ( Ver el Top 100 en Videojuegos ) nº2 en Ratones para gamers para PC",
+    "brand": "Razer",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "游戏类第17名（查看游戏类百强）；PC电竞鼠标第2名",
+    "previous_codes": [
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "38e9cb47a6dbc085c06dd5e513c4279025d499331f92156cff2bbd5cd46f2848|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CBCPB2T1",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Switches mecánicos para ratón Razer de 2.ª generacion;durabilidad y consistencia de clic mejoradas; con una vida útil de 60 millones de clics, los switches incorporan puntos de contacto chapados en oro para una mayor resistencia al desgaste, de modo que puedas disfrutar de una ejecución precisa que te resultará muy útil",
+    "brand": "Razer",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "鼠标机械轴Razer，属于2代；点击手感的耐用性和一致性均得到提升；其使用寿命高达6000万次点击，采用镀金触点设计，进一步增强抗磨损性能，让你尽享精准操控，助你事半功倍。",
+    "previous_codes": [
+      "ADDED_NUMBER",
+      "NUMERIC_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5b263a8fa20a7428adc9383f400380b67d5488457f8776da7885422c7f29492f|es|zh-CN|product_details:dimensiones del producto|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0C8HNKW1R",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del producto",
+    "source": "30,5f. x 30,5an. x 101,6al. centímetros",
+    "brand": "Lifewit",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "30,5厘米 × 30.5宽 × 101.6高 厘米",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5625af76c2149cdc60eabb8f41318def518a23dfc6ed0b0e1785006c525d75cc|es|zh-CN|product_details:acabado|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0C8HNKW1R",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Acabado",
+    "source": "Sin acabado",
+    "brand": "Lifewit",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "无饰面",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5b263a8fa20a7428adc9383f400380b67d5488457f8776da7885422c7f29492f|es|zh-CN|product_details:dimensiones del articulo (profundidad x ancho x alto)|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0C8HNKW1R",
+    "field": "product_details",
+    "target_field": "product_details_zh",
+    "label": "Dimensiones del artículo (profundidad x ancho x alto)",
+    "source": "30,5f. x 30,5an. x 101,6al. centímetros",
+    "brand": "Lifewit",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "30,5厘米 × 30.5宽 × 101.6高 厘米",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "5de42537a90c4288ca11a401a74f202854c4461b1db1cd5c943d5ef6a3f21cec|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CKPLQ83G",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "Ligero y duradero: Hechas con material impermeable IPX6 y una carcasa de aleación de aluminio de alta resistencia, además de un puerto de carga USB de silicona, nuestras luces de bicicleta mantienen su rendimiento en todo tipo de clima adverso, asegurando una conducción sin preocupaciones incluso bajo la lluvia. La poderosa capacidad anti-filtraciones asegura además una fiabilidad a largo plazo",
+    "brand": "Vinabo",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "轻便耐用：采用防水材质IPX6与高强度铝合金外壳，并配备硅胶充电接口USB，我们的自行车灯在各类恶劣天气下都能保持稳定性能，即使在雨天也能让您安心骑行。强大的防渗漏能力更确保了产品的长期可靠性。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "30fc9872c9badb8c984c642845ae97b6f252c5eb2d981b85f642e69d4666215a|es|zh-CN|title|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DBHST62V",
+    "field": "title_es_raw",
+    "target_field": "title_zh",
+    "label": null,
+    "source": "Reloj Despertador Analógico, Silencioso sin Tictac con Luz Nocturna, Funciona con Batería, Reloj Despertador de Metal Redondo de Moda para Oficina, Dormitorio, Ancianos, Adultos, Niños,",
+    "brand": "YouJabz",
+    "allowed_residual": [
+      "YouJabz"
+    ],
+    "rendered": "模拟式静音闹钟，无滴答声，带夜灯，电池供电，时尚圆形金属闹钟，适用于办公室、卧室、老人、成人及儿童。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "ead15494f3d0430970d3a7e3dfb5a861d0395525ca8f60a713fdf14bc6fff139|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DBHST62V",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Quiet momentos, sueño tranquilo】 El reloj despertador analógico sin tictac gracias a la tecnología ultra silenciosa, el tiempo pasa en silencio, creando un ambiente de sueño tranquilo que garantiza una noche de descanso y un despertar fresco",
+    "brand": "YouJabz",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【静谧时刻，安睡无忧】这款模拟式闹钟采用超静音技术，无滴答声，时光悄然流逝，营造出宁静的睡眠氛围，让您一夜好眠，清晨神清气爽。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "679b2622c1862df4367321f2a39548c36de919ed65ddcaac81a65c6ba27d759e|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DBHST62V",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Warm night light, easy on the eyes】La suave luz nocturna se enciende inmediatamente al tocarla y aporta calidez a tus veladas. Su luz suave y sin reflejos protege tus ojos y te acompaña en cada noche tranquila",
+    "brand": "YouJabz",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【温馨夜灯，呵护双眼】轻柔的夜灯一触即亮，为您的夜晚增添温馨。柔和无眩光的光线呵护您的眼睛，伴您度过每一个宁静的夜晚。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "6fe027031613d82ba43b9ac73a2a650cf88cbf6e929dcecef714e861c31fe3e8|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DBHST62V",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Elegante alarma, configuración sin esfuerzo】Equipado con una alarma clara, fuerte y melodiosa que suena hasta 30 minutos, el funcionamiento con un solo botón hace que despertarse por la mañana sea pan comido",
+    "brand": "YouJabz",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【优雅闹钟，轻松设置】配备清晰、响亮且悦耳的闹铃，最长可持续鸣响30分钟；一键操作，让清晨起床变得轻而易举。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "07952f0c632d6f00c15525808845a8600b65659dfcfc062f10d6d3d3ab884df1|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0DBHST62V",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "【Ideal Gift】Compacto y portátil, alimentado por una sola batería AA (no incluida), es la elección perfecta para niños, adultos y ancianos por igual. Ya sea como un regalo para Navidad, Día del Niño o la matrícula escolar, que transmite su profunda calidez y cuidado",
+    "brand": "YouJabz",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "【理想之礼】小巧便携，单节AA电池供电（不包含），是儿童、成人与老人的完美之选。无论是作为圣诞礼物、儿童节礼物，还是开学季的贴心礼品，都能传递您浓浓的关怀与温暖。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "4d4aad56b298ab16543b88c3e4e5c6fd9ca6fbb93e5395064d172f14eb3dd6cd|es|zh-CN|specification|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0CX23H3G6",
+    "field": "specification_es",
+    "target_field": "specification_zh",
+    "label": null,
+    "source": "Capacidad: 2 litros / Peso Artículo: 3,74 Kilogramos / Dimensiones del producto: 20,5f. x 19,4an. x 47,7al. centímetros / Potencia: 1200 vatios / Tensión: 220.0",
+    "brand": "PHILIPS",
+    "allowed_residual": [
+      "PHILIPS"
+    ],
+    "rendered": "容量：2升 / 商品重量：3,74千克 / 产品尺寸：20,5厘米 × 19.4宽 × 47.7高 厘米 / 功率：1200W / 电压：220.0",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "0a5ddbd6eef11114bd13551b08457896172062037e658ae7b3ca48a633ff406d|es|zh-CN|title|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GL7YKN85",
+    "field": "title_es_raw",
+    "target_field": "title_zh",
+    "label": null,
+    "source": "TIATUA Walkie Talkie Niños Video, Pack de 2 Recargable, Azul y Rosa",
+    "brand": "TIATUA",
+    "allowed_residual": [
+      "TIATUA"
+    ],
+    "rendered": "儿童对讲机视频版，2只装可充电，蓝色与粉色",
+    "previous_codes": [
+      "UNIT_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "95bd4a704ad5790f4873c62ddc5e1b8b425d279884f8e31c4fdb5fd181ea3b8d|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GL7YKN85",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "CONEXIÓN SEGURA Y SIN INTERFERENCIAS : Cuenta con una transmisión inalámbrica punto a punto cifrada que mantiene una comunicación privada y estable entre ambos dispositivos. Listo para usar nada más encenderlo, ofrece un alcance fluido para el hogar y el jardín.",
+    "brand": "TIATUA",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "安全无干扰的连接：采用点对点加密无线传输，确保两台设备之间通信私密且稳定。开机即用，为家庭与庭院提供流畅的覆盖范围。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  },
+  {
+    "canonical_key": "16b389f9f95ed1a18ffa5ba1fb520f993b1a4830d6f9eac0a365e0cc046fce39|es|zh-CN|feature_bullets|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "asin": "B0GL7YKN85",
+    "field": "feature_bullets",
+    "target_field": "feature_bullets_zh",
+    "label": null,
+    "source": "BATERÍA RECARGABLE Y DISEÑO RESISTENTE : La batería integrada recargable mediante cable evita el gasto continuo en pilas desechables. Su cuerpo ergonómico con bordes redondeados y materiales anticaídas está pensado específicamente para un agarre seguro por manos pequeñas.",
+    "brand": "TIATUA",
+    "allowed_residual": [
+      "para"
+    ],
+    "rendered": "可充电电池与坚固设计：内置的可充电电池通过数据线充电，免去频繁更换一次性电池的麻烦。其符合人体工学的机身采用圆润边角与防摔材质，专为小手安全握持而设计。",
+    "previous_codes": [
+      "NEGATION_MISMATCH"
+    ]
+  }
+]

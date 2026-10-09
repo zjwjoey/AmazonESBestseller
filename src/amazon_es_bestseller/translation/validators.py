@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import re
 import json
+import unicodedata
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, List
 
 from .protection import ProtectedText, restore
 from .zh import dedupe_technical_units
+
+VALIDATOR_RULE_VERSION = "canary40-offline-qa-20261009-v1"
 
 # Do not count digits embedded in model/technical identifiers (``V16``,
 # ``BAL-V16-GEO-1``). Those are protected tokens and are checked separately.
@@ -33,6 +36,8 @@ _UNIT_NAME_RE = (
     r"mm|cm|km|m|w|kw|v|(?-i:A)|hz|mhz|ghz|bar|psi|°c|%|"
     r"毫升|毫克|厘?米|毫米|公里|千米|英寸|千克|公斤|克|瓦特|瓦|千瓦|伏特|伏|安(?![\u4e00-\u9fff])|赫兹|升|流明|分贝|件|毫安时|摄氏度|磅|盎司|英尺"
 )
+_UNIT_NAME_RE = (r"pies\s+cuadrados|onzas?\s+de\s+l[ií]quido|平方英尺|液体盎司|"
+                 + _UNIT_NAME_RE.replace("unidades?", "unidad(?:es)?") + r"|个单位|只|支")
 UNIT_RE = re.compile(
     # ``\w`` treats adjacent Chinese characters as word characters and would
     # miss ``9V已包含``. Only letters/digits should block a unit.
@@ -96,6 +101,10 @@ UNIT_ALIASES = {
     "ghz": "ghz", "gigahercio": "ghz", "gigahercios": "ghz",
 }
 
+UNIT_ALIASES.update({'pies cuadrados':'ft2', '平方英尺':'ft2',
+                     'onza de líquido':'fl_oz', 'onzas de líquido':'fl_oz',
+                     '液体盎司':'fl_oz', '个单位':'pcs', '只':'pcs', '支':'pcs'})
+
 _SPANISH_MONTHS = {
     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5,
     "junio": 6, "julio": 7, "agosto": 8, "septiembre": 9,
@@ -120,17 +129,103 @@ _TARGET_NEGATION_RE = re.compile(
 )
 
 
+_QA_DIMENSION_UNIT = r"cent[ií]metros?|cm|mil[ií]metros?|mm|metros?|m|pulgadas?|inches?|inch|英寸|厘米|毫米|米"
+_QA_DIMENSION_RE = re.compile(
+    r"(?P<sequence>(?<![A-Za-z0-9])\d+(?:[.,]\d+)?\s*(?:" + _QA_DIMENSION_UNIT + r")?"
+    r"(?:\s*[x×*]\s*\d+(?:[.,]\d+)?\s*(?:" + _QA_DIMENSION_UNIT + r")?)+)(?![A-Za-z])", re.I)
+_QA_MODEL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+\b")
+
+
+def _zh_count(value: str) -> int:
+    digits = dict(zip('零一二三四五六七八九', range(10)))
+    digits['两'] = 2
+    total = current = 0
+    for char in value:
+        if char in '十百':
+            total += (current or 1) * {'十':10, '百':100}[char]
+            current = 0
+        else:
+            current = digits[char]
+    return total + current
+
+
+def _qa_fact_text(text: str, count_values=None) -> str:
+    """QA-only equivalents, never mutate source/candidate/display evidence."""
+    # Keep nº17 intact: blanket NFKC turns it into no17 and hides the rank.
+    value = str(text or '')
+    value = re.sub(r'(\d+(?:[.,]\d+)?)\s+millones\b',
+                   lambda m: str(_number_key(m[1]) * 1000000), value, flags=re.I)
+    value = re.sub(r'(\d+(?:[.,]\d+)?)万', lambda m: str(_number_key(m[1]) * 10000), value)
+    value = re.sub(r'(?<![\d.,])(\d{1,3})[ \u00a0](\d{3})(?=\s+horas?\b)',
+                   lambda m: m[1] + m[2], value, flags=re.I)
+    value = re.sub(r'([一二两三四五六七八九十百]+)合([一二两三四五六七八九十百]+)',
+                   lambda m: str(_zh_count(m[1])) + '合' + str(_zh_count(m[2])), value)
+    return re.sub(r'[一二两三四五六七八九十百]+(?=种|个|条|层|重|年|强|台|只|支)',
+                  lambda m: m[0] if value[max(0,m.start()-1):m.start()] == '每'
+                  or (count_values is not None and _number_key(str(_zh_count(m[0]))) not in count_values)
+                  else ' ' + str(_zh_count(m[0])), value)
+
+
+def _qa_dimension_text(text: str, count_values=None) -> str:
+    value = _DIMENSION_AXIS_RE.sub('', _qa_fact_text(text, count_values))
+    value = re.sub(r'[（(](?:长|宽|高|深|L|H|P)[）)]', '', value)
+    return re.sub(r'(?<=\d)(?:长|宽|高|深)(?=[×x*，,\s]|厘米|毫米|英寸|米|$)', '', value)
+
+
+def _dimension_axis_mismatch(source: str, target: str) -> bool:
+    """Compare explicit axes only; absent labels never invent geometry."""
+    axes = {'l.':'长', 'f.':'深', 'an.':'宽', 'al.':'高'}
+    expected = {}
+    for number, axis in re.findall(r'(\d+(?:[.,]\d+)?)\s*(l\.|f\.|an\.|al\.)', source, re.I):
+        expected.setdefault(axes[axis.casefold()], set()).add(_number_key(number))
+    for number, axis in re.findall(r'(\d+(?:[.,]\d+)?)\s*(?:' + _QA_DIMENSION_UNIT + r')\s*\(([LHP])\)', source):
+        expected.setdefault({'L':'长','H':'高','P':'深'}[axis], set()).add(_number_key(number))
+    if len(expected) < 2:
+        return False
+    labelled = [(axis, number) for number, axis in re.findall(
+        r'(\d+(?:[.,]\d+)?)\s*(?:' + _QA_DIMENSION_UNIT + r')?\s*[（(](长|宽|高|深)[）)]', target, re.I)]
+    labelled += re.findall(r'(长|宽|高|深)\s*(\d+(?:[.,]\d+)?)', target)
+    labelled += [(axis, number) for number, axis in re.findall(r'(\d+(?:[.,]\d+)?)(长|宽|高|深)', target)]
+    return any(axis not in expected or _number_key(number) not in expected[axis] for axis, number in labelled)
+
+
+def _negation_mismatch(source: str, target: str) -> bool:
+    source = unicodedata.normalize('NFKC', source)
+    source_negative = bool(_SOURCE_NEGATION_RE.search(source) or re.search(
+        r'(?i)\bno\s+(?:necesita|incluid[oa])\b', source))
+    if (re.search(r'(?i)\b(?:evita(?:ndo)?|avoid)\b', source)
+            and re.search(r'免去|避免', target)):
+        source_negative = True
+    target_negative = bool(_TARGET_NEGATION_RE.search(target) or (source_negative and re.search(
+        r'不(?:包含|附带|带|使|会|显|支持|占|重叠|缠绕|晕染|模糊|易)|免去|免遭|避免|毫不|'
+        r'无(?:线|刷|BPA|铅|粉尘|遥控|运动检测|弹性|饰面|气泡|裂纹|滴答|干扰|眩光|忧|烦恼|痕|堵塞)', target, re.I)))
+    if re.search(r'(?i)\bno\s+autorizad[oa]s?\b', source):
+        source_negative = True
+    if re.search(r'(?i)\bproteger\b', source) and re.search(r'免受|免遭', target):
+        source_negative = True
+    equivalents = [(r'sin\s+esfuerzo', r'轻松|简便'), (r'sin\s+riesgo', r'放心'),
+                   (r'sin\s+preocupaciones', r'安心|无忧'), (r'sin\s+complicaciones', r'轻松|无烦恼'),
+                   (r'sin\s+fatiga', r'毫不疲倦'), (r'sin\s+efecto\s+m[aá]scara', r'不显假面'),
+                   (r'no\s+consiguen', r'难以'), (r'no\s+te\s+preocupes', r'即使')]
+    for pattern, equivalent in equivalents:
+        if re.search(pattern, source, re.I) and re.search(equivalent, target):
+            target_negative = True
+    # A different negative phrase must never conceal a lost material absence.
+    if re.search(r'(?i)(?:libre\s+de|sin|no\s+(?:contiene|incluye))\s+BPA\b', source):
+        return not bool(re.search(r'(?:不含|无|不包含|没有|未添加)\s*(?:BPA|双酚\s*A)', target, re.I))
+    return source_negative != target_negative
+
+
 def _identity_key(value: str) -> str:
     """Normalize an identity token for the title no-brand policy only."""
     return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
 
 
-def _units(text: str) -> List[tuple[str, str]]:
-    value = _DIMENSION_AXIS_RE.sub("", str(text or ""))
+def _units(text: str, count_values=None) -> List[tuple[str, str]]:
+    value = _qa_dimension_text(text, count_values)
     units: List[tuple[str, str]] = []
     dimension_spans = []
-    matches = list(_DIMENSION_COMPACT_RE.finditer(value))
-    matches.extend(_DIMENSION_PER_AXIS_RE.finditer(value))
+    matches = list(_QA_DIMENSION_RE.finditer(value))
     for match in matches:
         sequence = match.group("sequence")
         unit_matches = re.findall(
@@ -139,6 +234,11 @@ def _units(text: str) -> List[tuple[str, str]]:
             sequence,
         )
         if not unit_matches:
+            continue
+        names = {_DIMENSION_UNIT_ALIASES.get(unit.casefold(), unit.casefold()) for unit in unit_matches}
+        if len(names) != 1:
+            # Keep incompatible cm/in/mm facts separate so unit corruption
+            # cannot disappear behind one final dimension sentinel.
             continue
         dimension_spans.append(match.span())
         canonical = _DIMENSION_UNIT_ALIASES.get(unit_matches[-1].casefold(),
@@ -154,6 +254,14 @@ def _units(text: str) -> List[tuple[str, str]]:
         ordinary_text = ordinary_text[:start] + " " * (end - start) + ordinary_text[end:]
     units.extend((number.replace(",", "."), UNIT_ALIASES.get(unit.casefold(), unit.casefold()))
                  for number, unit in UNIT_RE.findall(ordinary_text))
+    units.extend((number.replace(',', '.'), '%') for number in
+                 re.findall(r'(\d+(?:[.,]\d+)?)%(?=[A-Za-z])', ordinary_text))
+    units.extend((number.replace(',', '.'), 'in') for number in
+                 re.findall(r'(?<!["\w])(\d+(?:[.,]\d+)?)"', ordinary_text))
+    for number in re.findall(r'(?i)\b(?:deskset|set)\s+of\s+(\d+)\s+x\b|\b(\d+)\s+marcador(?:es)?\b', ordinary_text):
+        fact = (next(part for part in number if part), 'pcs')
+        if fact not in units:
+            units.append(fact)
     # Packaging quantities are written as a noun-first phrase, unlike the
     # normal number+unit form.  Keep this in QA only; normalization/business
     # package-count rules still decide whether a generic package of one is a
@@ -161,9 +269,9 @@ def _units(text: str) -> List[tuple[str, str]]:
     for number in re.findall(
             r"(?i)\b(?:paquete|pack|set|conjunto)\s+de\s+(\d+(?:[.,]\d+)?)\b",
             value):
-        if not any(_number_key(existing) == _number_key(number) and unit == "pcs"
-                   for existing, unit in units):
-            units.append((number, "pcs"))
+        fact = (number, "pcs")
+        if fact not in units or not re.search(r"(?i)\b" + re.escape(number) + r"\s+marcador(?:es)?\b", value):
+            units.append(fact)
     # Amazon titles sometimes glue a size series and item count together,
     # e.g. ``6/8/10/12mm8pcs``.  It is intentionally a narrow full-pattern
     # rule, not a generic relaxation of adjacent number/unit validation.
@@ -199,13 +307,14 @@ def _normalized_numbers(values: Iterable[str]) -> List[Any]:
     return [_number_key(value) for value in values]
 
 
-def _fact_numbers(text: str) -> List[str]:
+def _fact_numbers(text: str, count_values=None) -> List[str]:
     """Extract standalone and unit-bound numbers without double counting."""
-    normalized_text = _DIMENSION_AXIS_RE.sub("", str(text or ""))
+    normalized_text = _qa_dimension_text(text, count_values)
     compact_dimensions = re.compile(
         r"(?<![A-Za-z0-9])\d+(?:[.,]\d+)?(?:\s*[×x*]\s*\d+(?:[.,]\d+)?)+"
         r"(?:\s*(?:mm|cm|m))?(?![A-Za-z])", re.I)
-    dimension_matches = list(compact_dimensions.finditer(normalized_text))
+    dimension_matches = list(_QA_DIMENSION_RE.finditer(normalized_text))
+    model_matches = list(_QA_MODEL_RE.finditer(normalized_text))
     standalone = Counter()
     # Dimension tuples are counted as complete occurrences below. Exclude
     # their individual axes from the generic number pass so repeated tuples
@@ -213,12 +322,17 @@ def _fact_numbers(text: str) -> List[str]:
     number_matches = list(NUMBER_RE.finditer(normalized_text))
     for number_match in number_matches:
         if any(match.start() <= number_match.start() < match.end()
-               for match in dimension_matches):
+               for match in dimension_matches + model_matches):
             continue
         standalone[_number_key(number_match.group(0))] += 1
-    unit_numbers = Counter(_normalized_numbers(
-        number for number, _ in _units(text) if number != _DIMENSION_SENTINEL))
-    observed = standalone + (unit_numbers - standalone)
+    observed = standalone
+    # Count each unit-bound occurrence omitted by NUMBER_RE, rather than
+    # taking max(counter): max loses a repeated final17 in23+11+17+17L.
+    for match in UNIT_RE.finditer(normalized_text):
+        if any(span.start() <= match.start() < span.end() for span in dimension_matches + model_matches):
+            continue
+        if not any(span.start() == match.start() for span in number_matches):
+            observed[_number_key(match.group(1))] += 1
     # NUMBER_RE intentionally ignores digits adjacent to letters.  A compact
     # dimension such as ``10x15cm`` is nevertheless a user-visible numeric
     # fact, so add its axes explicitly without double-counting standalone
@@ -277,6 +391,8 @@ def _protected_token_is_equivalent(token: str, source: str, translated: str) -> 
     ``9V``. Technical units are allowed to translate; identity/model tokens
     still require literal preservation.
     """
+    if str(token).casefold() == 'led':
+        return bool(re.search(r'(?<![A-Za-z])LED(?![A-Za-z])', translated, re.I))
     # Compact Amazon dimension markers such as ``3,5Grosor`` are protected as
     # unit-like tokens.  Their faithful Chinese form is a dimension axis, so
     # compare the numeric fact rather than requiring the same isolated unit
@@ -351,7 +467,7 @@ def validate_translation(protected: ProtectedText, translated: str,
     # final display value is normalized back to ``5200 mAh``.
     restored = dedupe_technical_units(restored)
     source_numbers = _fact_numbers(str(source or ""))
-    result_numbers = _fact_numbers(restored)
+    result_numbers = _fact_numbers(restored, count_values=set(_normalized_numbers(source_numbers)))
     source_number_keys = Counter(_normalized_numbers(source_numbers))
     result_number_keys = Counter(_normalized_numbers(result_numbers))
     allowed_numbers = source_number_keys + _date_month_allowance(source)
@@ -366,7 +482,7 @@ def validate_translation(protected: ProtectedText, translated: str,
             issues.append({"code": "ADDED_NUMBER", "numbers": [str(x) for x in added]})
         issues.append({"code": "NUMERIC_MISMATCH", "source": source_numbers, "result": result_numbers})
     source_units_raw = _units(source)
-    result_units_raw = _units(restored)
+    result_units_raw = _units(restored, count_values=set(_normalized_numbers(source_numbers)))
     unit_mismatch = Counter(_unit_keys(source_units_raw)) != Counter(_unit_keys(result_units_raw))
     # Spanish often expresses a count through the product noun (``5 juguetes``)
     # while Chinese uses the explicit classifier ``5件``. This is a faithful
@@ -380,10 +496,15 @@ def validate_translation(protected: ProtectedText, translated: str,
                        "result": result_units_raw})
     source_is_negative = bool(_SOURCE_NEGATION_RE.search(str(source or "")))
     target_is_negative = bool(_TARGET_NEGATION_RE.search(restored))
-    if source_is_negative != target_is_negative:
+    if _negation_mismatch(str(source or ''), restored):
         issues.append({"code": "NEGATION_MISMATCH",
                        "source_negative": source_is_negative,
                        "result_negative": target_is_negative})
+    if _dimension_axis_mismatch(str(source or ''), restored):
+        issues.append({'code':'DIMENSION_AXIS_MISMATCH'})
+    if (re.search(r'(?i)\bPVC\b', source) and re.search(r'(?i)\bcolor\s+madera\b', source)
+            and re.search(r'材质\s*[:：]?\s*木|木材|实木|木制', restored)):
+        issues.append({'code':'COLOR_MATERIAL_MISMATCH'})
     if field in {"feature_bullets", "feature_bullets_es", "feature_bullets_raw", "features_es"}:
         def bullet_count(value: str) -> int:
             try:
