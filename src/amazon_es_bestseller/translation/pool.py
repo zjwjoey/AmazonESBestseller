@@ -441,4 +441,6 @@ def build_qwen_provider_pool(config: Mapping[str, Any], *, transport_factory: An
         if transport_factory is not None:
             kwargs["transport"] = transport_factory(alias)
         providers[alias] = QwenMTProvider(**kwargs)
-    return ProviderPool(providers, max_workers=min(len(providers), int(config.get("max_workers", len(providers)))))
+    return ProviderPool(
+        providers, max_workers=min(len(providers), int(config.get("max_workers", len(providers)))),
+        failover=bool(config.get("failover", True)))
