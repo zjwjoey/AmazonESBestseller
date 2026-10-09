@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List
 from .protection import ProtectedText, restore
 from .zh import dedupe_technical_units
 
-VALIDATOR_RULE_VERSION = "canary40-offline-qa-20261009-v1"
+VALIDATOR_RULE_VERSION = "increment110-offline-qa-20261009-v2"
 
 # Do not count digits embedded in model/technical identifiers (``V16``,
 # ``BAL-V16-GEO-1``). Those are protected tokens and are checked separately.
@@ -132,7 +132,9 @@ _TARGET_NEGATION_RE = re.compile(
 _QA_DIMENSION_UNIT = r"cent[ií]metros?|cm|mil[ií]metros?|mm|metros?|m|pulgadas?|inches?|inch|英寸|厘米|毫米|米"
 _QA_DIMENSION_RE = re.compile(
     r"(?P<sequence>(?<![A-Za-z0-9])\d+(?:[.,]\d+)?\s*(?:" + _QA_DIMENSION_UNIT + r")?"
-    r"(?:\s*[x×*]\s*\d+(?:[.,]\d+)?\s*(?:" + _QA_DIMENSION_UNIT + r")?)+)(?![A-Za-z])", re.I)
+    # A rejected compact unit must not backtrack into a truncated number:
+    # ``25 x 125ml`` is a volume multipack, never the dimension ``25 x 12``.
+    r"(?:\s*[x×*]\s*\d+(?:[.,]\d+)?\s*(?:" + _QA_DIMENSION_UNIT + r")?)+)(?![A-Za-z0-9])", re.I)
 _QA_MODEL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+\b")
 
 

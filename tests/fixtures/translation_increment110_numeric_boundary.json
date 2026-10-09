@@ -1,0 +1,16 @@
+[
+  {
+    "asin": "B096ZDDGFF",
+    "source_es": "25 x 125 ml",
+    "translation_zh": "25 x 125ml",
+    "canonical_key": "084902cfa18d7ee342d4d879251e0e4bf71d72d7a905b198168a0ae851787c01|es|zh-CN|product_details:tamano|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "response_evidence": "F:\\AmazonESBestseller\\.worktrees\\translation-production-closure-v1\\outputs\\runtime_increment110_A_20261009\\responses\\084902cfa18d7ee342d4d879251e0e4bf71d72d7a905b198168a0ae851787c01_627.json"
+  },
+  {
+    "asin": "B096ZDDGFF",
+    "source_es": "25 x 125 ml",
+    "translation_zh": "25 x 125ml",
+    "canonical_key": "084902cfa18d7ee342d4d879251e0e4bf71d72d7a905b198168a0ae851787c01|es|zh-CN|variation|qwen-mt|qwen-mt-flash|0||translation-v2.25|translation-structured-input-v2|amazon-es-retail-v2",
+    "response_evidence": "F:\\AmazonESBestseller\\.worktrees\\translation-production-closure-v1\\outputs\\runtime_increment110_A_20261009\\responses\\084902cfa18d7ee342d4d879251e0e4bf71d72d7a905b198168a0ae851787c01_609.json"
+  }
+]
