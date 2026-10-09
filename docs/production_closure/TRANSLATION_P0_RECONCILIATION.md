@@ -135,12 +135,46 @@ Focused tests run before the full Windows offline suite. CI uses the existing
 offline Python 3.10/3.11/3.12 matrix. No production/main merge, live Qwen/Amazon
 request, source promotion, formal Chinese Master or Excel is part of this task.
 
-### Known Windows runtime blocker (not fixed by this foundation)
+### Windows runtime blocker: isolated follow-up repair (2026-10-10)
 
-`budget._FileLock._alive` calls `os.kill(pid, 0)`. On Windows signal zero is
-CTRL_C_EVENT, not a POSIX existence check. The existing cross-process budget test
-interrupts the Windows full suite at this boundary. A separate strict-xfail
-Windows regression forbids signal sending without touching any real process;
-it skips on non-Windows. This is a reported P0 runtime-hardening issue, not a
-reason to silently skip the full-suite result or rewrite production locking here.
-An explicitly deselected diagnostic remainder is NOT a full Windows pass.
+The foundation originally reported `budget._FileLock._alive` calling
+`os.kill(pid, 0)`. On Windows zero is CTRL_C_EVENT, not a POSIX existence check.
+The original full-suite interruptions remain historical evidence; the diagnostic
+remainder was never a full Windows pass.
+
+The authorized follow-up replaces only this lock-owner probe. Windows opens a
+SYNCHRONIZE-only, non-inheritable process handle, uses WaitForSingleObject with a
+zero timeout and closes the handle. It sends no signal and requests no process
+mutation rights. Only a missing valid PID or a confirmed terminated process can
+be classified dead. Invalid PIDs, access denial, unavailable APIs, failed waits
+or uncertain handle cleanup retain the lock. POSIX only classifies
+ProcessLookupError as confirmed absence; permission/other failures stay held.
+The boolean True means ALIVE_OR_UNKNOWN, not certified liveness.
+
+The former strict-xfail is now a normal Windows regression. Fake Win32 tests
+cover error paths on every CI platform; native Windows tests cover the current
+process and an already-exited synthetic child with its process handle retained.
+No live task is signalled, restarted or unlocked. Tests use only temporary locks.
+This repair does not change budget limits, ledger/cache formats, retries, provider
+rates, stop/admission semantics, translations or QA. Passing this repair does not
+authorize production release or live translation resumption.
+
+API references: [Python os.kill](https://docs.python.org/3.12/library/os.html#os.kill),
+[OpenProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess),
+[WaitForSingleObject](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject).
+
+Follow-up Windows verification on 2026-10-10, Python 3.12.10:
+
+- Budget/probe focused: 35 passed (3.42s), including the formerly interrupting
+  cross-process test.
+- Reconciliation/cache/context/pool/structured/budget focused: 120 passed (35.42s).
+- Full offline Windows suite: 1487 passed, 6 skipped (924.70s), zero failures or
+  xfails. Skips are 2 explicitly live collection tests and 4 generated-artifact
+  fixtures absent from the source checkout; no budget test was deselected.
+- Ruff, compileall and diff checks passed. Local receipts are in the isolated
+  worktree's ignored `outputs/budget_windows_liveness_20261010_v1/validation/`,
+  including `red.log`, `budget_focused.junit.xml`, `focused.junit.xml` and
+  `full_windows.junit.xml`. The original interrupted observations remain intact.
+
+This evidence closes the Windows probe blocker only. Stop/admission and cache
+write amplification remain the next reviewed runtime-hardening slice.

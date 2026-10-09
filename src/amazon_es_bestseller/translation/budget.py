@@ -65,8 +65,50 @@ class _FileLock:
     def __init__(self, path: Path, timeout: float = 20.0): self.path, self.timeout = path, timeout
     @staticmethod
     def _alive(pid: int) -> bool:
-        try: os.kill(pid, 0); return True
-        except OSError: return False
+        # True includes UNKNOWN: only confirmed owner death permits reclaim.
+        # Reject special/group PIDs rather than treating bad lock evidence as stale.
+        if type(pid) is not int or not 0 < pid <= 0xFFFFFFFF:
+            return True
+        if os.name == "nt":
+            return _FileLock._windows_alive(pid)
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except (OSError, OverflowError):
+            return True
+
+    @staticmethod
+    def _windows_alive(pid: int) -> bool:
+        """Query a process handle without signals; uncertainty keeps the lock."""
+        if type(pid) is not int or not 0 < pid <= 0xFFFFFFFF:
+            return True
+        import ctypes
+        from ctypes import wintypes
+
+        try:
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel.WaitForSingleObject.restype = wintypes.DWORD
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.CloseHandle.restype = wintypes.BOOL
+            # SYNCHRONIZE only: no terminate, modify or debug privileges.
+            handle = kernel.OpenProcess(0x00100000, False, pid)
+            if not handle:
+                # PID 0 is already rejected; 87 means a missing valid PID.
+                return ctypes.get_last_error() != 87
+            try:
+                waited = kernel.WaitForSingleObject(handle, 0)
+            finally:
+                closed = kernel.CloseHandle(handle)
+            # WAIT_OBJECT_0 is a terminated process. TIMEOUT/FAILED/unknown
+            # results or an unclosed handle must never authorize reclaim.
+            return not (waited == 0 and closed)
+        except (OSError, AttributeError):
+            return True
     def __enter__(self):
         deadline = time.monotonic() + self.timeout
         while True:
