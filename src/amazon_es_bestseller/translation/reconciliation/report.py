@@ -598,7 +598,9 @@ def reconcile(config: dict, output: str | Path) -> dict:
     _csv(out / "provider_http_ledger.csv", rec.http, ["batch_id", "semantic_key", "http_attempt"])
     with (out / "evidence_conflicts.jsonl").open("w", encoding="utf-8") as handle:
         for row in reader.conflicts:
-            handle.write(json.dumps(scrub(row), ensure_ascii=False) + "\n")
+            handle.write(json.dumps(scrub({**row, "report_code_head": code["head"],
+                "observation_state": stability, "observation_started_at": start,
+                "input_evidence_manifest": str(out / "manifest.json")}), ensure_ascii=False) + "\n")
     for name, asins in config.get("cohorts", {}).items():
         if Path(name).name != name:
             raise ValueError("COHORT_NAME_INVALID")
@@ -609,6 +611,8 @@ def reconcile(config: dict, output: str | Path) -> dict:
         _csv(directory / "parent_field_ledger.csv", [row for row in rec.fields if row["asin"] in selected], ["asin", "source_field"])
         _csv(directory / "structured_item_ledger.csv", [row for row in rec.items if row["asin"] in selected], ["asin", "item_id"])
         _json(directory / "summary.json", {"selected_skus": len(selected), "scope_asins": sorted(selected),
+            "code": code, "observation_started_at": start,
+            "input_evidence_manifest": str(out / "manifest.json"),
             "observation_state": stability if name != "saved_state" else "SAVED_RESULT_VIEW_NOT_LATEST_QA",
             "sku_state_counts": _counts([row for row in rec.sku_rows if row["asin"] in selected], "completion_state"),
             "parent_state_counts": _counts([row for row in rec.fields if row["asin"] in selected], "completion_state"),
@@ -627,6 +631,8 @@ def reconcile(config: dict, output: str | Path) -> dict:
         "Full input receipts and hashes: manifest.json. Stable reads do not imply a frozen production run."]
     (out / "reconciliation_report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     (out / "cache_shutdown_diagnostics.md").write_text(
+        f"Code HEAD: `{code['head']}`. Observation: {stability}, started {start}.\n"
+        "Input paths/hashes and consistency: manifest.json. This file is a pointer, not a benchmark result.\n"
         "Quantified diagnostics are separate: run python -m amazon_es_bestseller.translation.reconciliation benchmark.\n"
         "This report never modifies a cache or production process.\n", encoding="utf-8")
     _json(out / "manifest.json", {"schema_version": "translation-reconciliation-observation-v1", "code": code,

@@ -46,6 +46,8 @@ class MeasuredCache(TranslationCache):
 def benchmark(output: str | Path, *, sizes=(100, 1000, 5000), operations: int = 3,
               stopped_records: int = 20) -> dict:
     """No real source, live cache, ProviderPool or Qwen configuration is touched."""
+    from .report import _version
+
     out = Path(output).resolve()
     if out.exists():
         raise FileExistsError("DIAGNOSTICS_OUTPUT_ALREADY_EXISTS")
@@ -91,9 +93,13 @@ def benchmark(output: str | Path, *, sizes=(100, 1000, 5000), operations: int = 
     source = Path(__file__).resolve().parents[1]
     report = {"schema_version": "translation-cache-offline-performance-v1", "observed_at": utc(),
               "network_calls": 0, "synthetic_only": True, "rows": rows,
+              "code": _version(), "observation_state": "SYNTHETIC_OFFLINE_DIAGNOSTIC",
+              "input_evidence": "Generated synthetic data only; no production inputs",
               "code_file_hashes": {name: digest((source / name).read_bytes()) for name in ("cache.py", "service.py", "pool.py")}}
     (out / "measurements.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     text = ["# Cache / Stop performance diagnosis", "", "Synthetic only; production cache format is unchanged.", "",
+        f"Code HEAD: `{report['code']['head']}`. Observed at: {report['observed_at']}.",
+        "Inputs: generated synthetic data only. Code hashes, input sizes and measurements: measurements.json.", "",
         "Each claim/settle invokes load(), and save() copies and serializes all four dictionaries,",
         "fsyncs a temporary full JSON file and atomically replaces the old file. Work grows with cache size.",
         "A stopped provider returns pending; TranslationService still traverses later records and structured",

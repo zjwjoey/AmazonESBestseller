@@ -372,3 +372,5 @@ def test_synthetic_performance_diagnostics_have_no_network(tmp_path):
     assert claim["written_bytes"] > claim["starting_cache_bytes"]
     assert report["rows"][1]["http_attempts"] == 0
     assert report["rows"][1]["provider_entries"] == 2
+    assert report["code"]["head"]
+    assert report["observation_state"] == "SYNTHETIC_OFFLINE_DIAGNOSTIC"
