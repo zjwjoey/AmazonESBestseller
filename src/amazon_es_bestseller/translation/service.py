@@ -676,6 +676,8 @@ class TranslationService:
                         unique_requests.add(self._memory_key(text, source))
                 rows.append({"asin": asin, "source_field": source, "target_field": target,
                              "source_hash": digest, "source_chars": len(text)})
+        unique_requests = {key for key in unique_requests
+                           if "|".join(key.split("|")[:6]) not in self.cache.excluded_attempts}
         if self.cache.resume_admission:
             unique_requests = {key for key in unique_requests if self.cache.resume_eligible(key)}
         return {"schema_version": self.schema_version, "provider": self.provider.name,

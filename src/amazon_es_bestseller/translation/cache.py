@@ -32,6 +32,7 @@ class TranslationCache:
         self._corruption_preserved = False
         self._lock = threading.RLock()
         self.resume_admission = None
+        self.excluded_attempts = set()
         self.load()
 
     @contextmanager
@@ -241,6 +242,9 @@ class TranslationCache:
     def claim_memory(self, key: str, pending: Dict[str, Any], *, replace_terminal: bool = False) -> tuple[bool, Dict[str, Any]]:
         """Durably reserve one canonical TM unit before provider entry."""
         with self._lock, self._claim_lock():
+            if "|".join(key.split("|")[:6]) in self.excluded_attempts:
+                return False, {"translation_status": "pending", "qa_status": "review_required",
+                               "qa_issues": [{"code": "PARENT_PROVIDER_ATTEMPT_HOLD"}]}
             self.load()
             existing = self.memory.get(key)
             resuming = self.resume_eligible(key)
@@ -290,6 +294,9 @@ class TranslationCache:
             for key, candidate in self.memory.items():
                 if key.startswith(identity + "|") and isinstance(candidate, dict):
                     return deepcopy(candidate)
+        if identity in self.excluded_attempts:
+            return {"translation_status": "pending", "qa_status": "review_required",
+                    "qa_issues": [{"code": "PARENT_PROVIDER_ATTEMPT_HOLD"}]}
         return None
 
     def save(self) -> None:

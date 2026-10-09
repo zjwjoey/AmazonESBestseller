@@ -130,21 +130,29 @@ class TranslationRunContext:
         if file_hash(source_path) != source_manifest['artifacts'].get(source_path.name):
             raise ValueError('RUN_CONTEXT_SOURCE_MASTER_HASH_MISMATCH')
         source = json.loads(source_path.read_text(encoding='utf-8'))
-        admission = admit_legacy_run_reference_cache(read_bound(manifest['legacy_candidates']),
-            source['source_gate'], read_bound(manifest['legacy_policy']),
-            output_path=Path(reference['path']).with_name('NEVER_WRITTEN_reference_validation.json'), dry_run=True,
-            source_candidate_manifest_path=manifest['source_manifest']['path'],
-            source_candidate_manifest_hash=manifest['source_manifest']['sha256'],
-            available_asins=manifest['available_asins'], selected_asins=selected)
-        overlay = read_bound(manifest['reference_overlay'])
-        if (_hash_json(overlay['authority']) != _hash_json(admission['authority'])
-                or _hash_json(overlay['reference_envelopes']) != _hash_json(admission['reference_envelopes'])):
-            raise ValueError('RUN_CONTEXT_REFERENCE_ADMISSION_MISMATCH')
+        self.extension = None
+        self.excluded_attempts = set()
+        if manifest.get('extension_authorization'):
+            self._validate_extension(manifest, products)
+            admission = {'reference_envelopes': []}
+        else:
+            admission = admit_legacy_run_reference_cache(read_bound(manifest['legacy_candidates']),
+                source['source_gate'], read_bound(manifest['legacy_policy']),
+                output_path=Path(reference['path']).with_name('NEVER_WRITTEN_reference_validation.json'), dry_run=True,
+                source_candidate_manifest_path=manifest['source_manifest']['path'],
+                source_candidate_manifest_hash=manifest['source_manifest']['sha256'],
+                available_asins=manifest['available_asins'], selected_asins=selected)
+            overlay = read_bound(manifest['reference_overlay'])
+            if (_hash_json(overlay['authority']) != _hash_json(admission['authority'])
+                    or _hash_json(overlay['reference_envelopes']) != _hash_json(admission['reference_envelopes'])):
+                raise ValueError('RUN_CONTEXT_REFERENCE_ADMISSION_MISMATCH')
         loaded = load_source_candidate(manifest['source_manifest']['path'],
             manifest_hash=manifest['source_manifest']['sha256'], available_asins=manifest['available_asins'])
-        scoped = [row for row in loaded['records'] if row['asin'] in set(selected)]
+        validation_products = products + (self.parent_products if self.extension else [])
+        validation_asins = {row['asin'] for row in validation_products}
+        scoped = [row for row in loaded['records'] if row['asin'] in validation_asins]
         by_asin = {row['asin']: row for row in records_for_preclean(build_production_input(scoped))}
-        for row in products:
+        for row in validation_products:
             for field, raw in row['raw_fields'].items():
                 value = _source_value(by_asin[row['asin']], field)
                 source_text = (parse_details(value)['source_text'] if field == 'product_details' else
@@ -175,12 +183,77 @@ class TranslationRunContext:
             # Read before TranslationCache.load can recover/rename malformed data.
             json.loads(self.run_cache_path.read_text(encoding='utf-8'))
             self.cache = TranslationCache(self.run_cache_path)
+            self.cache.excluded_attempts = set(self.excluded_attempts)
         else:
             self.cache = TranslationCache(manifest['snapshot']['path'])
             self.cache.path = self.run_cache_path
 
+    def _validate_extension(self, manifest, products):
+        authority = read_bound(manifest['extension_authorization'])
+        if authority.get('version') != 'translation-run-extension-v1':
+            raise ValueError('RUN_CONTEXT_EXTENSION_VERSION')
+        parent_manifest = read_bound(authority['parent'])
+        parent_products = read_bound(parent_manifest['products'])
+        parent_products = parent_products.get('records') if isinstance(parent_products, dict) else parent_products
+        marker = self.run_cache_path.with_name(self.run_cache_path.name + '.run-context.json')
+        if (not marker.exists() or json.loads(marker.read_text(encoding='utf-8')) != authority['parent']
+                or Path(parent_manifest['run_cache_path']).resolve() != self.run_cache_path.resolve()
+                or sorted(row['asin'] for row in parent_products) != parent_manifest['selected_asins']):
+            raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_MARKER')
+        # Preserve the frozen parent's approved references; a later QA rule
+        # must not silently recertify or invalidate that independent envelope.
+        for key in ('snapshot', 'source_manifest', 'legacy_candidates', 'legacy_policy'):
+            read_bound(parent_manifest[key])
+        for binding in parent_manifest['historical_caches']:
+            read_bound(binding)
+        overlay = read_bound(parent_manifest['reference_overlay'])
+        if overlay['authority']['selected_asins'] != parent_manifest['selected_asins']:
+            raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_REFERENCE_SCOPE')
+        if (authority['products'] != manifest['products']
+                or authority['source_manifest'] != manifest['source_manifest']
+                or manifest['source_manifest'] != parent_manifest['source_manifest']
+                or authority['selected_asins'] != manifest['selected_asins']
+                or set(manifest['selected_asins']) & set(parent_manifest['selected_asins'])
+                or any(manifest[k] != parent_manifest[k] for k in
+                       ('service_contract', 'provider_identity', 'fields', 'reference_overlay',
+                        'legacy_candidates', 'legacy_policy', 'available_asins'))):
+            raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_SCOPE_MISMATCH')
+        evidence = read_bound(authority['parent_cache_snapshot'])
+        current = json.loads(self.run_cache_path.read_text(encoding='utf-8'))
+        for namespace in ('entries', 'results', 'memory', 'memory_results'):
+            for key, value in evidence.get(namespace, {}).items():
+                if current.get(namespace, {}).get(key) != value:
+                    raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_CACHE_CHANGED')
+        parent_result = read_bound(authority['parent_result'])
+        if set(parent_result) != set(parent_manifest['selected_asins']):
+            raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_RESULT_SCOPE')
+        for envelope in overlay['reference_envelopes']:
+            if parent_result[envelope['asin']].get('fields', {}).get(envelope['target_field']) != envelope:
+                raise ValueError('RUN_CONTEXT_EXTENSION_PARENT_REFERENCE_CHANGED')
+        if not authority.get('attempt_ledgers'):
+            raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_MISSING')
+        for binding in authority['attempt_ledgers']:
+            path = Path(binding['path'])
+            if file_hash(path) != binding['sha256']:
+                raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_HASH')
+            events = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
+            if not events or events[-1].get('event') != 'CANARY_PROCESS_FINISHED' or events[-1].get('exit_code') != 0:
+                raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_UNCLOSED')
+            entries = [event for event in events if event.get('event') == 'PROVIDER_ENTRY']
+            if any(event.get('asin') not in parent_manifest['selected_asins'] for event in entries):
+                raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_PARENT_SCOPE')
+            self.excluded_attempts.update('|'.join(event['canonical_dispatch_key'].split('|')[:6])
+                for event in entries)
+        if len(self.excluded_attempts) != authority.get('expected_attempted_units'):
+            raise ValueError('RUN_CONTEXT_EXTENSION_LEDGER_COUNT')
+        self.extension = authority
+        self.parent_result = parent_result
+        self.parent_reference = authority['parent']
+        self.parent_products = parent_products
+        self.extension_marker = self.run_cache_path.with_name(self.run_cache_path.name + '.extensions.jsonl')
+
     def _verify_marker(self) -> None:
-        if not self.marker.exists() or json.loads(self.marker.read_text(encoding='utf-8')) != self.reference:
+        if not self.marker.exists() or json.loads(self.marker.read_text(encoding='utf-8')) != (self.parent_reference if self.extension else self.reference):
             raise ValueError('RUN_CONTEXT_RESUME_BINDING_MISMATCH')
 
     def service_kwargs(self) -> dict[str, Any]:
@@ -205,6 +278,13 @@ class TranslationRunContext:
             with self.marker.open('x', encoding='utf-8') as handle:
                 json.dump(self.reference, handle)
         self._verify_marker()
+        if self.extension:
+            membership = {'parent': self.parent_reference, 'child': self.reference,
+                          'authorization': self.manifest['extension_authorization']}
+            existing = [json.loads(line) for line in self.extension_marker.read_text(encoding='utf-8').splitlines()] if self.extension_marker.exists() else []
+            if membership not in existing:
+                with self.extension_marker.open('a', encoding='utf-8') as handle:
+                    handle.write(json.dumps(membership, ensure_ascii=False) + '\n')
 
     def apply_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         plan['provider_masked_review_blocked_including_references'] = plan['review_blocked']
@@ -212,6 +292,10 @@ class TranslationRunContext:
         plan['resolved_reference_fields'] = len(self.references)
         plan['reference_fields'] = deepcopy(self.references)
         plan['run_context'] = self.reference
+        if self.extension:
+            plan['parent_records'] = len(self.parent_result)
+            plan['cumulative_records'] = len(self.parent_result) + plan['total_records']
+            plan['permanent_attempt_exclusions'] = len(self.excluded_attempts)
         return plan
 
     def apply_result(self, result: dict[str, Any], products: list[dict[str, Any]]) -> None:
@@ -236,6 +320,8 @@ class TranslationRunContext:
             record['translation_status'] = ('success' if all(value in {'success', 'cached', 'source_missing'}
                 for value in statuses) else 'partial' if any(value in {'success', 'cached'} for value in statuses)
                 else 'pending')
+        if self.extension:
+            outputs.update(deepcopy(self.parent_result))
         result['summary'] = {'total': len(outputs), **dict(Counter(
             record['translation_status'] for record in outputs.values())),
             'resolved_reference_fields': len(self.references), 'run_context': self.reference}
