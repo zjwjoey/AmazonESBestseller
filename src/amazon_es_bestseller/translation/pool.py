@@ -355,6 +355,14 @@ class PoolProviderAdapter(TranslationProvider):
             schema_version=str((context or {}).get("schema_version", "")),
             prompt_version=str((context or {}).get("prompt_version", "")),
             translation_unit_field=(context or {}).get("translation_unit_field"))
+        # Service callers already own a durable, ASIN-independent semantic
+        # claim before protection replaces source facts with placeholders.
+        # Reuse that identity instead of deduping unlike raw values by their
+        # identical protected templates. This changes only the ephemeral pool
+        # namespace; durable cache keys and existing attempt holds stay intact.
+        # Other callers retain the established TranslationTask key contract.
+        dispatch_key = str((context or {}).get("canonical_dispatch_key") or task.key)
+        task = replace(task, key=dispatch_key, tm_key=dispatch_key)
         task = TranslationTask(task.key, task.text, task.asin, task.field,
                                {**task.context, **(context or {})}, task.tm_key)
         result = self.pool.submit([task])[0]

@@ -376,6 +376,8 @@ class TranslationService:
                             source_language=self.source_language, target_language=self.target_language,
                             context={"target_field": target, "item_index": index,
                                      "label": label, "translation_unit_field": unit_field,
+                                     "canonical_dispatch_key": memory_key,
+                                     "dispatch_identity_version": "canonical-memory-key-v1",
                                      "protected_tokens": list(protected.tokens),
                                      "schema_version": self.schema_version,
                                      "prompt_version": self.prompt_version,
@@ -844,6 +846,8 @@ class TranslationService:
                                                    source_language=self.source_language,
                                                    target_language=self.target_language,
                                                    context={"target_field": target, "protected_tokens": list(protected.tokens),
+                                                   "canonical_dispatch_key": memory_key,
+                                                   "dispatch_identity_version": "canonical-memory-key-v1",
                                                    "schema_version": self.schema_version,
                                                    "prompt_version": self.prompt_version,
                                                    "dictionary_version": self.dictionary_version})
