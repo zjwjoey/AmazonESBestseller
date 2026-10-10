@@ -377,6 +377,7 @@ def execute_formal_structured_translation(
         STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION)
     translated = structured_service.translate_records(
         _service_records(formal), fields=["product_details", "feature_bullets"])
+    not_started_asins = set((translated.get("admission") or {}).get("not_started_asins") or [])
     records: dict[str, Any] = {}
     provider_calls = 0
     for record in formal.get("records") or []:
@@ -404,6 +405,13 @@ def execute_formal_structured_translation(
                                   "provider": result.get("provider"), "provider_alias": result.get("provider_alias"),
                                   "model": result.get("model"), "resolution_source": result.get("resolution_source"),
                                   "attempt_count": result.get("attempt_count"), "last_error": result.get("last_error")})
+                elif item.get("admission") == "TRANSLATION_TASK" and (
+                        asin in not_started_asins or provider_envelope.get("translation_status") == "not_started"):
+                    items.append({**item, "translated_text": "", "candidate_text": "",
+                                  "translation_status": "not_started", "qa_status": "not_started",
+                                  "qa_issues": [], "provider": None, "model": None,
+                                  "resolution_source": "admission_stopped_before_claim",
+                                  "attempt_count": 0, "last_error": "ADMISSION_STOPPED"})
                 elif item.get("admission") == "PRESERVED_IDENTITY":
                     items.append({**item, "translated_text": item.get("value_raw"), "candidate_text": item.get("value_raw"),
                                   "translation_status": "success", "qa_status": "pass", "qa_issues": [],
@@ -420,6 +428,7 @@ def execute_formal_structured_translation(
                                     "excluded_raw_trace": field_fact.get("excluded_raw_trace") or []}
         records[asin] = {"asin": asin, "source_record_hash": record.get("source_record_hash"), "fields": output_fields}
     return {"records": records, "summary": {"records": len(records), "provider_calls": provider_calls},
+            "admission": deepcopy(translated.get("admission") or {}),
             "binding": deepcopy(formal.get("binding") or {}),
             "translation_schema_version": STRUCTURED_TRANSLATION_INPUT_SCHEMA_VERSION,
             "input_hash": _hash(formal.get("records") or [])}

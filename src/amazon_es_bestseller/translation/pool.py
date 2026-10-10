@@ -110,16 +110,43 @@ class ProviderPool:
             for provider in self.providers.values():
                 if not isinstance(provider, QwenMTProvider):
                     raise ValueError('shared_rate requires a transport send gate')
-                provider.before_send = self._wait_shared_send
+        # Even without shared pacing, recheck the durable stop at the actual
+        # send boundary (including adapter retries). Preserve an existing gate.
+        for provider in self.providers.values():
+            if isinstance(provider, QwenMTProvider):
+                if self.stop_on_rate_limit:
+                    provider.stop_on_rate_limit = True
+                prior_gate = provider.before_send
+                def send_gate(prior=prior_gate):
+                    if self.admission_stopped():
+                        return False
+                    if prior is not None and not prior():
+                        return False
+                    return (self._wait_shared_send() if self.shared_rate is not None
+                            else not self.admission_stopped())
+                provider.before_send = send_gate
+
+    def admission_stopped(self) -> bool:
+        """Read stop/health without mutating claims or replaying unknown work.
+
+        A durable halt is latched; deleting its marker cannot resume this pool.
+        Health remains distinct so the existing explicit known-failure probe
+        contract in ``submit`` is unchanged.
+        """
+        with self._lock:
+            try:
+                if self.halt_path and self.halt_path.exists():
+                    self._halted = True
+            except OSError:
+                self._halted = True  # Cannot establish permission to send.
+            return self._halted or not any(s.state == HEALTHY for s in self._stats.values())
 
     def _wait_shared_send(self) -> bool:
         """Pace actual adapter sends together, after each adapter's own wait."""
         with self._send_lock:
             while True:
-                with self._lock:
-                    if self._halted or (self.halt_path and self.halt_path.exists()):
-                        self._halted = True
-                        return False
+                if self.admission_stopped():
+                    return False
                 now = time.monotonic()
                 remaining = (0.0 if self._last_send_at is None else
                              self._last_send_at + 1.0 / self.shared_rate - now)
@@ -132,7 +159,7 @@ class ProviderPool:
     def _choose_alias(self, excluded: set[str] | None = None) -> str:
         excluded = excluded or set()
         with self._lock:
-            if self._halted:
+            if self.admission_stopped():
                 raise RuntimeError("provider pool persistently halted")
             for _ in range(len(self.aliases)):
                 alias = self.aliases[self._cursor % len(self.aliases)]
@@ -155,7 +182,7 @@ class ProviderPool:
     def _call_one(self, task: TranslationTask, alias: str) -> PoolResult:
         with self._provider_locks[alias]:
             with self._lock:
-                if self._halted or self._stats[alias].state != HEALTHY:
+                if self.admission_stopped() or self._stats[alias].state != HEALTHY:
                     return PoolResult(task.key, ProviderResponse(status="pending", attempts=0,
                         error="PROVIDER_HALTED_BEFORE_SEND"), alias, source="pending")
             return self._call_locked(task, alias)
@@ -262,6 +289,7 @@ class ProviderPool:
         # endpoints are unavailable those tasks must remain pending.
         task_keys = {task.key for task in tasks}
         with self._lock:
+            self.admission_stopped()
             if not self._halted and task_keys and all(key in self._transient_failures for key in task_keys):
                 for stats in self._stats.values():
                     if stats.state in {DEGRADED, RATE_LIMITED}:
@@ -386,6 +414,7 @@ class ProviderPool:
                     "completed": sum(result.response.status == "success" for result in self._completed.values()),
                     "held_pending": sum(result.response.status == "pending" for result in self._completed.values()),
                     "held_qa_failed": sum(result.response.error == "EMPTY_TRANSLATION" for result in self._completed.values()),
+                    "admission_stopped": self.admission_stopped(),
                     "degraded_to_single_provider": len(self.providers) > 1 and healthy == 1,
                     "providers": self.stats()}
 
@@ -402,6 +431,9 @@ class PoolProviderAdapter(TranslationProvider):
     @property
     def model(self) -> str:
         return self._model
+
+    def admission_stopped(self) -> bool:
+        return self.pool.admission_stopped()
 
     def translate(self, text: str, *, asin: str, field: str,
                   source_language: str = "es", target_language: str = "zh-CN",

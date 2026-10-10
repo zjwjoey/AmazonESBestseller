@@ -83,7 +83,8 @@ class QwenMTProvider(TranslationProvider):
                  timeout: float = 60.0, max_retries: int = 2,
                  backoff_seconds: float = 5.0,
                  rate: float = 0.5,
-                 transport: Optional[Transport] = None):
+                 transport: Optional[Transport] = None,
+                 stop_on_rate_limit: bool = False):
         self.api_key = api_key or os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
         configured_endpoint, self.endpoint_source, is_base = qwen_endpoint_configuration(
             endpoint=endpoint, allow_public_default=True)
@@ -92,6 +93,7 @@ class QwenMTProvider(TranslationProvider):
         self.protocol = protocol or os.getenv("QWEN_API_PROTOCOL", "openai_compatible")
         self.timeout = timeout
         self.max_retries = max(0, int(max_retries))
+        self.stop_on_rate_limit = bool(stop_on_rate_limit)
         self.backoff_seconds = max(0.0, float(backoff_seconds))
         self.rate = float(rate)
         if self.rate < 0:
@@ -236,7 +238,9 @@ class QwenMTProvider(TranslationProvider):
                                         attempts=attempt, raw=body or {})
             detail = response.get("error") or (body.get("error") if isinstance(body, dict) else None)
             last_error = "HTTP %s%s" % (code, (": " + str(detail)[:300]) if detail else "")
-            retryable = code == 429 or code >= 500
+            # A reviewed stop-on-429 pool must observe the first response,
+            # not wait through this adapter's internal rate-limit retries.
+            retryable = (code == 429 and not self.stop_on_rate_limit) or code >= 500
             if not retryable or attempt > self.max_retries:
                 break
             if self.backoff_seconds:

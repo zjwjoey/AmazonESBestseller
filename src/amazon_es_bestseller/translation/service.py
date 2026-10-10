@@ -10,9 +10,9 @@ import hashlib
 import json
 import re
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from .cache import TranslationCache
 from .protection import ProtectedText, protect, restore
@@ -51,9 +51,11 @@ class TranslationService:
                  prompt_version: str = "v1", max_fields: Optional[Sequence[str]] = None,
                  source_language: str = "es", target_language: str = "zh-CN",
                  dictionary_manifest: Optional[Dict[str, Any]] = None,
-                 structured_schema_version: str = ""):
+                 structured_schema_version: str = "",
+                 stop_requested: Optional[Callable[[], bool]] = None):
         self.provider = provider
         self.cache = cache
+        self.stop_requested = stop_requested
         self.field_map = dict(field_map or DEFAULT_FIELD_MAP)
         self.schema_version = schema_version
         self.prompt_version = prompt_version
@@ -85,6 +87,51 @@ class TranslationService:
         """Narrow test seam for crash-window regression coverage."""
         return None
 
+    def _admission_stopped(self) -> bool:
+        """Fail closed at work boundaries; never interrupt response settlement."""
+        try:
+            return bool((self.stop_requested and self.stop_requested()) or
+                        (getattr(self.provider, "admission_stopped", None) and
+                         self.provider.admission_stopped()))
+        except Exception:
+            return True
+
+    def _call_provider(self, text: str, **kwargs: Any) -> ProviderResponse:
+        # A claim may already exist when a stop races with provider entry.
+        # Preserve that hold; do not delete it or assert a known HTTP outcome.
+        if self._admission_stopped():
+            return ProviderResponse(status="pending", attempts=0,
+                                    error="PROVIDER_HALTED_BEFORE_SEND")
+        try:
+            response = self.provider.translate(text, **kwargs)
+        except Exception:
+            return ProviderResponse(status="pending", attempts=1,
+                                    error="TRANSPORT_OUTCOME_UNKNOWN",
+                                    raw={"outcome_unknown": True})
+        if response.status == "failed" and any(token in str(response.error or "").casefold()
+                for token in ("599", "timeout", "network", "connection")):
+            response.status = "pending"
+            response.error = "TRANSPORT_OUTCOME_UNKNOWN"
+            response.raw = {**(response.raw or {}), "outcome_unknown": True}
+        return response
+
+    def _not_started_field(self, *, asin: str, source_field: str, target: str,
+                           text: str) -> Dict[str, Any]:
+        result = self._pending_field(asin=asin, source_field=source_field,
+                                     target=target, text=text, digest=source_hash(text))
+        result.update(translation_status="not_started", qa_status="not_started",
+                      qa_issues=[], last_error="ADMISSION_STOPPED",
+                      resolution_source="admission_stopped_before_claim")
+        return self._stamp_dictionary_version(result)
+
+    def _admission_report(self, subset: Sequence[Dict[str, Any]],
+                          results: Sequence[Optional[Dict[str, Any]]]) -> Dict[str, Any]:
+        return {"selected": len(subset), "started": sum(r is not None for r in results),
+                "stop_requested": self._admission_stopped(),
+                "not_started_asins": [str(record.get("asin") or "").strip().upper()
+                                      for record, result in zip(subset, results)
+                                      if result is None or result.get("translation_status") == "not_started"]}
+
     def _memory_key(self, text: str, field: str, *, label: Optional[str] = None) -> str:
         return self.cache.memory_key(
             text, self.source_language, self.target_language,
@@ -106,7 +153,7 @@ class TranslationService:
             max_fields=sorted(self.max_fields) if self.max_fields else None,
             source_language=self.source_language, target_language=self.target_language,
             dictionary_manifest=self.dictionary_manifest,
-            structured_schema_version=schema_version)
+            structured_schema_version=schema_version, stop_requested=self.stop_requested)
 
     def _memory_lookup(self, key: str, text: str, field: str, *, label: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Use current namespace first, then immutable cross-namespace TM.
@@ -312,6 +359,20 @@ class TranslationService:
         item_models = []
         item_aliases = []
         for index, (label, value) in enumerate(items):
+            if self._admission_stopped():
+                # Keep untouched siblings explicit without claiming/caching
+                # each one or rendering empty values as translated content.
+                for remaining_index, (remaining_label, remaining_value) in enumerate(items[index:], index):
+                    rendered_items.append({
+                        "item_index": remaining_index,
+                        "item_identity": "%s:%s:%s" % (source_field, remaining_index, source_hash(remaining_value)),
+                        "label": remaining_label, "source_text": remaining_value,
+                        "candidate_text": "", "translated_text": "",
+                        "translation_status": "not_started", "qa_status": "not_started",
+                        "qa_issues": [], "attempt_count": 0,
+                        "resolution_source": "admission_stopped_before_claim"})
+                    statuses.append("not_started")
+                break
             unit_field = canonical_translation_unit_field(source_field, label=label)
             memory_key = self._memory_key(value, unit_field)
             memory = self._memory_lookup(memory_key, value, unit_field, label=label)
@@ -366,6 +427,17 @@ class TranslationService:
                     item_attempts = 0
                     item_resolution = deterministic["resolution_source"]
                 else:
+                    if self._admission_stopped():
+                        rendered_items.append({
+                            "item_index": index,
+                            "item_identity": "%s:%s:%s" % (source_field, index, source_hash(value)),
+                            "label": label, "source_text": value,
+                            "candidate_text": "", "translated_text": "",
+                            "translation_status": "not_started", "qa_status": "not_started",
+                            "qa_issues": [], "attempt_count": 0,
+                            "resolution_source": "admission_stopped_before_claim"})
+                        statuses.append("not_started")
+                        continue
                     brand = self._record_brand(record)
                     protected = protect(value, protected_values=[asin, brand])
                     claimed, prior_claim = self.cache.claim_memory(
@@ -373,7 +445,7 @@ class TranslationService:
                         replace_terminal=(repair_partial or repair_failed))
                     if claimed:
                         provider_memory_claimed = True
-                        response = self.provider.translate(
+                        response = self._call_provider(
                             protected.text, asin=asin, field=source_field,
                             source_language=self.source_language, target_language=self.target_language,
                             context={"target_field": target, "item_index": index,
@@ -486,7 +558,13 @@ class TranslationService:
                 rendered.append("%s：%s" % (label_zh, rendered_value))
             else:
                 rendered.append(rendered_value)
-        if all(status == "success" for status in statuses):
+        if statuses and all(status == "not_started" for status in statuses):
+            overall = "not_started"
+            qa_status = "not_started"
+        elif "not_started" in statuses and "pending" not in statuses:
+            overall = "partial"
+            qa_status = "review_required"
+        elif all(status == "success" for status in statuses):
             overall = "success"
             qa_status = "pass"
         elif any(status == "success" for status in statuses):
@@ -698,6 +776,10 @@ class TranslationService:
                     "error": "missing asin"}
         output_fields: Dict[str, Dict[str, Any]] = {}
         for source_field, target, text in self.selected_fields(record, fields):
+            if self._admission_stopped():
+                output_fields[target] = self._not_started_field(
+                    asin=asin, source_field=source_field, target=target, text=text)
+                continue
             digest = source_hash(text)
             key = self._field_cache_key(asin, source_field, digest)
             deterministic_result = self._resolve_scalar_before_provider(
@@ -752,7 +834,11 @@ class TranslationService:
                     repair_partial=repair_partial, repair_failed=repair_failed)
                 if structured_result:
                     self._stamp_dictionary_version(structured_result)
-                    self.cache.put(key, structured_result)
+                    # An interrupted parent must remain reconstructible from
+                    # settled child TM without a terminal field-cache hold.
+                    if not any(item.get("translation_status") == "not_started"
+                               for item in structured_result.get("items", [])):
+                        self.cache.put(key, structured_result)
                     output_fields[target] = structured_result
                     continue
             memory_key = self._memory_key(text, source_field)
@@ -818,6 +904,10 @@ class TranslationService:
                           "qa_issues": list(memory["qa_issues"]),
                           "translated_at": self._now()}
             else:
+                if self._admission_stopped():
+                    output_fields[target] = self._not_started_field(
+                        asin=asin, source_field=source_field, target=target, text=text)
+                    continue
                 claimed, existing_claim = self.cache.claim(
                     key, self._pending_field(asin=asin, source_field=source_field,
                                              target=target, text=text, digest=digest),
@@ -825,6 +915,14 @@ class TranslationService:
                 if not claimed:
                     existing_claim["qa_status"] = "review_required"
                     output_fields[target] = existing_claim
+                    continue
+                if self._admission_stopped():
+                    # Already-published ownership is evidence, not NOT_STARTED.
+                    # Leave the durable claim intact and expose a manual hold.
+                    held = dict(existing_claim)
+                    held.update(translation_status="pending", qa_status="review_required",
+                                last_error="ADMISSION_STOPPED_AFTER_CLAIM")
+                    output_fields[target] = held
                     continue
                 memory_claimed, existing_memory_claim = self.cache.claim_memory(
                     memory_key, self._pending_memory(asin=asin, source_field=source_field),
@@ -862,7 +960,7 @@ class TranslationService:
                 # are always protected even when translating another field.
                 brand = self._record_brand(record)
                 protected = protect(text, protected_values=[asin, brand])
-                response = self.provider.translate(protected.text, asin=asin, field=source_field,
+                response = self._call_provider(protected.text, asin=asin, field=source_field,
                                                    source_language=self.source_language,
                                                    target_language=self.target_language,
                                                    context={"target_field": target, "protected_tokens": list(protected.tokens),
@@ -996,6 +1094,10 @@ class TranslationService:
             overall = "preclean_blocked" if blocked else "source_missing"
         elif blocked and all(s in {"success", "cached"} for s in actionable_statuses):
             overall = "partial"
+        elif all(s == "not_started" for s in actionable_statuses):
+            overall = "not_started"
+        elif "not_started" in actionable_statuses and "pending" not in actionable_statuses:
+            overall = "partial"
         elif all(s in {"success", "cached"} for s in actionable_statuses):
             overall = "success"
         elif any(s in {"success", "cached"} for s in actionable_statuses):
@@ -1028,16 +1130,21 @@ class TranslationService:
                                                           repair_partial=repair_partial, repair_failed=repair_failed),
                     "qa_report": {"status": "dry_run"}}
         outputs: Dict[str, Dict[str, Any]] = {}
-        for record in subset:
+        results: list[Optional[Dict[str, Any]]] = [None] * len(subset)
+        for index, record in enumerate(subset):
+            if self._admission_stopped():
+                break
             result = self._translate_record(record, fields=fields,
                                              repair_partial=repair_partial, repair_failed=repair_failed)
+            results[index] = result
             if result.get("asin"):
                 outputs[result["asin"]] = result
             self.cache.save()
         summary = {"total": len(outputs)}
         for result in outputs.values():
             summary[result.get("translation_status", "pending")] = summary.get(result.get("translation_status", "pending"), 0) + 1
-        return {"records": outputs, "summary": summary, "qa_report": build_qa_report(outputs.values())}
+        return {"records": outputs, "summary": summary, "qa_report": build_qa_report(outputs.values()),
+                "admission": self._admission_report(subset, results)}
 
     def translate_records_parallel(self, records: Sequence[Dict[str, Any]], pool: Any, *,
                                    fields: Optional[Sequence[str]] = None,
@@ -1048,7 +1155,9 @@ class TranslationService:
 
         Deterministic fields still short-circuit inside ``_translate_record``;
         only unresolved provider units reach the pool.  Cache writes are
-        protected by TranslationCache's shared lock and saved once at the end.
+        protected by TranslationCache's shared lock. Admission is bounded by
+        worker count; stop drains already admitted work without submitting the
+        remaining records or generating their claims.
         """
         if dry_run:
             result = self.translate_records(records, fields=fields, offset=offset, limit=limit,
@@ -1065,15 +1174,27 @@ class TranslationService:
         results: list[Optional[Dict[str, Any]]] = [None] * len(subset)
         try:
             with ThreadPoolExecutor(max_workers=pool.max_workers, thread_name_prefix="translation-record") as executor:
-                futures = {executor.submit(self._translate_record, record, fields=fields,
-                                            repair_partial=repair_partial, repair_failed=repair_failed): index
-                           for index, record in enumerate(subset)}
-                for future in as_completed(futures):
-                    index = futures[future]
-                    results[index] = future.result()
-                    # Persist each completed record so interruption or a later
-                    # worker exception never discards already completed work.
-                    self.cache.save()
+                futures = {}
+                next_index = 0
+                def admit():
+                    nonlocal next_index
+                    while next_index < len(subset) and len(futures) < pool.max_workers:
+                        if self._admission_stopped():
+                            break
+                        future = executor.submit(self._translate_record, subset[next_index], fields=fields,
+                                                 repair_partial=repair_partial, repair_failed=repair_failed)
+                        futures[future] = next_index
+                        next_index += 1
+                admit()
+                while futures:
+                    done, _ = wait(tuple(futures), return_when=FIRST_COMPLETED)
+                    for future in done:
+                        index = futures.pop(future)
+                        results[index] = future.result()
+                        # Never cancel inflight settlement on a stop signal.
+                        self.cache.save()
+                    admit()
+                admission = self._admission_report(subset, results)
         finally:
             self.provider = original_provider
             self.cache.save()
@@ -1090,4 +1211,5 @@ class TranslationService:
             status = result.get("translation_status", "pending")
             summary[status] = summary.get(status, 0) + 1
         return {"records": outputs, "summary": summary,
-                "qa_report": build_qa_report(outputs.values()), "pool": pool.snapshot()}
+                "qa_report": build_qa_report(outputs.values()), "pool": pool.snapshot(),
+                "admission": admission}

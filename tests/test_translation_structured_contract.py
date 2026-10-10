@@ -207,6 +207,25 @@ class _CaptureProvider(TranslationProvider):
         return ProviderResponse(text="红色", provider=self.name, model=self.model, raw={"fixture": True})
 
 
+def test_formal_execution_preserves_stop_as_not_started_not_source_block(tmp_path):
+    formal, master, audit, gate, review = _ready_bound_input()
+    provider = _CaptureProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / "cache.json"),
+                                 prompt_version="structured-test-v1", stop_requested=lambda: True,
+                                 dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"})
+    execution = execute_formal_structured_translation(
+        formal, master, audit, gate, review, service, prompt_version="structured-test-v1",
+        dictionary_manifest={"dictionary_version": "1", "dictionary_hash": "dict-hash"})
+    items = execution["records"]["B000000101"]["fields"]["product_details"]["items"]
+    tasks = [item for item in items if item["admission"] == "TRANSLATION_TASK"]
+    assert tasks and all(item["translation_status"] == "not_started" for item in tasks)
+    assert all(item["qa_issues"] == [] and item["last_error"] == "ADMISSION_STOPPED" for item in tasks)
+    blocked = next(item for item in items if item["item_id"] == "attr-cjk")
+    assert blocked["translation_status"] == "review_required"
+    assert execution["admission"]["not_started_asins"] == ["B000000101"]
+    assert not provider.calls and not service.cache.memory and not service.cache.entries
+
+
 def test_formal_execution_uses_service_item_path_and_never_sends_excluded_or_identity(tmp_path):
     formal, master, audit, gate, review = _ready_bound_input()
     provider = _CaptureProvider()

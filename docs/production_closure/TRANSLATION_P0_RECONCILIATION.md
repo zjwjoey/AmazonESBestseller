@@ -178,3 +178,55 @@ Follow-up Windows verification on 2026-10-10, Python 3.12.10:
 
 This evidence closes the Windows probe blocker only. Stop/admission and cache
 write amplification remain the next reviewed runtime-hardening slice.
+
+### Stop/admission hardening: isolated follow-up (2026-10-10)
+
+This slice stops *new admission*, not already-entered response settlement.
+It remains offline/candidate-only; no original runner, process, stop marker,
+Spanish source, translation text, QA rules, production cache or export is changed.
+
+- `TranslationService(..., stop_requested=callable)` accepts a read-only stop
+  probe. Probe errors fail closed. Structured-schema views retain the probe.
+  A `PoolProviderAdapter` automatically exposes pool stop/health to the service;
+  a serial service using an ordinary provider needs an explicitly bound probe.
+- Parallel record execution maintains at most `pool.max_workers` admitted
+  futures, rather than submitting every selected SKU in advance. Serial record,
+  field and structured-child boundaries also check admission. A stop drains
+  admitted workers; it does not cancel a response after its send.
+- Untouched work is `not_started`, not a persisted `pending` provider claim.
+  The returned `admission` section records selected/admitted (`started`) count,
+  stop observation and untouched ASINs. `summary.total` continues to count
+  returned record results, not the entire selected input. A worker admitted just
+  before stop may return `not_started`; `started` is admission, not HTTP count.
+- Already-published claims are retained as pending/manual review, never removed
+  or labeled untouched. Provider exceptions/ambiguous transport outcomes remain
+  `TRANSPORT_OUTCOME_UNKNOWN`; repeat runs and `repair_failed` do not replay them.
+  Stop is not authority to release or resume a claim.
+- Interrupted structured parents are not stored as terminal field renders.
+  Settled child TM remains durable and a subsequent explicitly authorized run
+  can reconstruct the parent without repeating completed children. Untouched
+  siblings retain source text and item identity, not invented Chinese values.
+- The formal structured execution wrapper propagates `admission` and keeps
+  unscheduled translation tasks `not_started`, separate from source-blocked
+  owner-review items. Identity facts remain deterministic source evidence.
+- Durable pool halt is rechecked at admission, provider-lock acquisition and
+  Qwen's actual send boundary, including retries and independent per-alias
+  pacing. The send gate composes existing callbacks rather than replacing them.
+  A detected durable halt is latched for that pool instance.
+- With `stop_on_rate_limit=True`, the Qwen adapter returns the first HTTP429 to
+  the pool instead of internally retrying it. The pool persists the stop and
+  forbids failover. The default known-response retry/failover policy without
+  that explicit stop policy remains unchanged.
+
+The stop check and a filesystem change are not a cross-process transaction:
+work crossing a claim/send boundary concurrently with stop remains an admitted
+or uncertain attempt and is held conservatively. No new production cache format,
+database, journal migration, rates, provider route count or QA gate is introduced.
+QA report `pass` only means no reported QA issues; it is not COMPLETE or RELEASE_READY.
+The unchanged original 850 runner does not acquire these semantics by editing this
+isolated checkout. Applying this code to that run requires separate approval and
+a reviewed evidence-bound recovery plan; no automatic live restart is performed.
+
+Offline regression fixtures are in `tests/test_translation_stop_admission.py`.
+Fresh local evidence is under `outputs/stop_admission_hardening_20261010_v1/`;
+previous foundation and Windows-budget receipts remain historical evidence.
