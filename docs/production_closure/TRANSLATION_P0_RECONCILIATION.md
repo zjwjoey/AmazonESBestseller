@@ -230,3 +230,47 @@ a reviewed evidence-bound recovery plan; no automatic live restart is performed.
 Offline regression fixtures are in `tests/test_translation_stop_admission.py`.
 Fresh local evidence is under `outputs/stop_admission_hardening_20261010_v1/`;
 previous foundation and Windows-budget receipts remain historical evidence.
+
+### Cache I/O hardening: isolated follow-up (2026-10-10)
+
+This is a bounded offline optimization of VERSION 5 JSON, not a store migration.
+Spanish evidence, translations, QA/dictionaries, provider pacing, production
+processes and existing cache files are untouched. Every changed response still
+flushes and fsyncs a temporary full JSON before atomic replacement. Unknown
+attempts remain pending/held, never automatically released or replayed.
+
+- `save()` now uses the same OS-owned lock as claim/settle. Nested operations
+  reuse that lock. A stale instance adopts independent external changes and
+  merges its own changed keys; overlapping updates fail with
+  `CACHE_CONCURRENT_UPDATE_CONFLICT` without changing disk evidence. External
+  unreadable evidence fails closed instead of being overwritten by a stale save.
+- Unchanged serialized bytes avoid temp-file creation, fsync and replacement.
+  Serialization references the four maps under the instance lock rather than
+  copying every nested envelope. Individual public reads return deep snapshots.
+  Sequential direct map edits remain detected by serialization; concurrent
+  unsynchronized external mutation of those maps is not a supported API.
+- Waiters use file metadata only as a polling hint, reloading changed snapshots.
+  Real ownership/admission always reads bytes under the OS lock, even if size
+  and timestamps appear unchanged. Pending timeout does not permit another send.
+- Successful scalar results settle translation memory once, before publishing
+  the in-process memo and settling the field. This removes a redundant full-cache
+  read/write without postponing response durability.
+- Full JSON reads/serialization remain O(cache size); the retained immutable byte
+  baseline has a memory cost. No promise of production throughput is derived
+  from small synthetic measurements. A journal/database migration needs separate
+  approval and evidence, not a whole-batch durability shortcut.
+
+All cooperating writers must use the new OS lock protocol. Do not deploy mixed
+old/new writers against one shared cache. This isolated branch does not update,
+stop, restart or unlock any existing production runner. Deployment/recovery is a
+separate reviewed step, not authorized by successful offline tests.
+
+Fixtures: `tests/test_translation_cache_performance.py` includes concurrent
+independent processes, stale claims, conflicting writes, unknown outcomes,
+fsync/replace failure, no-op persistence and VERSION 5 byte compatibility.
+Fresh evidence is under `outputs/cache_performance_hardening_20261010_v1/`.
+The original baseline and intentionally failing regressions are preserved.
+Performance report V2 separates save calls from actual replacements and actual
+JSON bytes read; persistent lock-file I/O is not included in those byte counters.
+The opaque stopped fake (without an admission probe) is a negative control;
+the explicit-stop control is separate. Neither sends HTTP or measures a live run.

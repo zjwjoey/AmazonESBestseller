@@ -370,7 +370,10 @@ def test_synthetic_performance_diagnostics_have_no_network(tmp_path):
     claim = report["rows"][0]
     assert claim["loads"] == claim["saves"] == 2
     assert claim["written_bytes"] > claim["starting_cache_bytes"]
+    assert claim["disk_reads"] == claim["physical_writes"] == 2
     assert report["rows"][1]["http_attempts"] == 0
     assert report["rows"][1]["provider_entries"] == 2
+    assert report["rows"][2]["provider_entries"] == report["rows"][2]["physical_writes"] == 0
+    assert report["rows"][2]["admission"]["started"] == 0
     assert report["code"]["head"]
     assert report["observation_state"] == "SYNTHETIC_OFFLINE_DIAGNOSTIC"

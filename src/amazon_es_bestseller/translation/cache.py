@@ -1,6 +1,7 @@
 """Field-level translation cache with atomic writes and safe recovery."""
 from __future__ import annotations
 
+import io
 import json
 import os
 import tempfile
@@ -31,12 +32,37 @@ class TranslationCache:
         self.corruption_error: Optional[str] = None
         self._corruption_preserved = False
         self._lock = threading.RLock()
+        self._claim_depth = 0
+        self._disk_fresh = False
+        self._disk_bytes: Optional[bytes] = None
+        self._disk_signature = None
         self.resume_admission = None
         self.excluded_attempts = set()
         self.load()
 
     @contextmanager
     def _claim_lock(self, *, timeout_seconds: float = 10.0):
+        # Keep lock order consistent even for callers taking this private lock
+        # directly. Nested save() must not acquire a second OS handle/lock.
+        with self._lock:
+            if self._claim_depth:
+                self._claim_depth += 1
+                try:
+                    yield
+                finally:
+                    self._claim_depth -= 1
+                return
+            with self._file_claim_lock(timeout_seconds=timeout_seconds):
+                self._claim_depth = 1
+                self._disk_fresh = False
+                try:
+                    yield
+                finally:
+                    self._claim_depth = 0
+                    self._disk_fresh = False
+
+    @contextmanager
+    def _file_claim_lock(self, *, timeout_seconds: float = 10.0):
         """Take an OS-owned advisory lock for one check-and-claim transition.
 
         The lock file is deliberately persistent.  Its presence is not proof of
@@ -103,21 +129,52 @@ class TranslationCache:
         digest = hashlib.sha256(str(source_text or "").encode("utf-8")).hexdigest()
         return "|".join((digest, source_language, target_language, field_type, provider, model))
 
+    @staticmethod
+    def _signature(stat):
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+    def _read_disk(self):
+        try:
+            with self.path.open("rb") as handle:
+                raw = handle.read()
+                signature = self._signature(os.fstat(handle.fileno()))
+            return raw, signature
+        except FileNotFoundError:
+            return None, None
+
+    @staticmethod
+    def _decode(raw: bytes) -> dict:
+        data = json.loads(raw.decode("utf-8"))
+        if isinstance(data, dict) and "entries" in data:
+            return {name: dict(data.get(name) or {})
+                    for name in ("entries", "memory", "results", "memory_results")}
+        return {"entries": dict(data) if isinstance(data, dict) else {},
+                "memory": {}, "results": {}, "memory_results": {}}
+
+    def _install(self, payload: dict) -> None:
+        for name in ("entries", "memory", "results", "memory_results"):
+            setattr(self, name, payload[name])
+
     def load(self) -> None:
+        with self._lock:
+            self._load_locked()
+
+    def _load_locked(self) -> None:
         if not self.path.exists():
+            self._disk_bytes = None
+            self._disk_signature = None
+            self._disk_fresh = bool(self._claim_depth)
             return
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and "entries" in data:
-                self.entries = dict(data.get("entries") or {})
-                self.memory = dict(data.get("memory") or {})
-                self.results = dict(data.get("results") or {})
-                self.memory_results = dict(data.get("memory_results") or {})
-            else:
-                # Backward-compatible V1 cache shape: old records remain
-                # field entries; no implicit migration is attempted.
-                self.entries = dict(data) if isinstance(data, dict) else {}
-                self.memory = {}
+            raw, signature = self._read_disk()
+            if raw is None:
+                return
+            # load() deliberately discards unsaved local edits (legacy API).
+            # Release its obsolete byte baseline before decoding the new tree.
+            self._disk_bytes = raw
+            self._install(self._decode(raw))
+            self._disk_signature = signature
+            self._disk_fresh = bool(self._claim_depth)
         except (OSError, ValueError, TypeError) as exc:
             self.recovered_from_corruption = True
             self.corruption_error = str(exc)
@@ -132,11 +189,14 @@ class TranslationCache:
                 # could not be moved out of the way.
                 self._corruption_preserved = False
             self.entries = {}
+            self._disk_bytes = None
+            self._disk_signature = None
+            self._disk_fresh = False
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             value = self.entries.get(key)
-            return dict(value) if isinstance(value, dict) else None
+            return deepcopy(value) if isinstance(value, dict) else None
 
     def put(self, key: str, value: Dict[str, Any]) -> None:
         with self._lock:
@@ -214,7 +274,7 @@ class TranslationCache:
     def get_memory(self, key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             value = self.memory.get(key)
-            return dict(value) if isinstance(value, dict) else None
+            return deepcopy(value) if isinstance(value, dict) else None
 
     def put_memory(self, key: str, value: Dict[str, Any]) -> None:
         with self._lock:
@@ -275,7 +335,14 @@ class TranslationCache:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             with self._lock:
-                self.load()
+                # Metadata is a polling hint only, never admission authority.
+                # Claims/settlements always load actual bytes under the OS lock.
+                try:
+                    signature = self._signature(self.path.stat())
+                except FileNotFoundError:
+                    signature = None
+                if signature != self._disk_signature:
+                    self.load()
                 value = self.memory.get(key)
                 if isinstance(value, dict) and value.get("translation_status") != "pending":
                     return deepcopy(value)
@@ -299,21 +366,80 @@ class TranslationCache:
                     "qa_issues": [{"code": "PARENT_PROVIDER_ATTEMPT_HOLD"}]}
         return None
 
+    def _payload(self) -> dict:
+        # The RLock protects serialization; API reads return isolated envelopes.
+        # Only the four outer references are needed, not four whole-tree copies.
+        return {"cache_version": self.VERSION, "entries": self.entries,
+                "memory": self.memory, "results": self.results,
+                "memory_results": self.memory_results}
+
+    @staticmethod
+    def _encode(payload: dict) -> bytes:
+        # Avoid retaining the JSON fragment list, joined Unicode string and
+        # full byte buffer at once. Keep the old text-mode newline bytes.
+        buffer = io.BytesIO()
+        encoder = json.JSONEncoder(ensure_ascii=False, indent=2)
+        for fragment in encoder.iterencode(payload):
+            buffer.write(fragment.replace("\n", os.linesep).encode("utf-8"))
+        return buffer.getvalue()
+
+    def _merge_external(self, external: dict) -> dict:
+        baseline = self._decode(self._disk_bytes) if self._disk_bytes is not None else {
+            name: {} for name in ("entries", "memory", "results", "memory_results")}
+        missing = object()
+        for name in baseline:
+            local = getattr(self, name)
+            previous = baseline[name]
+            remote = external[name]
+            for key in local.keys() | previous.keys():
+                value, prior = local.get(key, missing), previous.get(key, missing)
+                if value == prior:
+                    continue
+                current = remote.get(key, missing)
+                if current != prior and current != value:
+                    # No LWW merge of conflicting attempts, original QA or raw
+                    # candidates. Leave the on-disk evidence unchanged.
+                    raise RuntimeError("CACHE_CONCURRENT_UPDATE_CONFLICT:" + name)
+                if value is missing:
+                    remote.pop(key, None)
+                else:
+                    remote[key] = value
+        return external
+
     def save(self) -> None:
-        with self._lock:
+        with self._lock, self._claim_lock():
             if self.recovered_from_corruption and not self._corruption_preserved and self.path.exists():
                 raise RuntimeError("corrupt translation cache could not be preserved: %s" % self.path)
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {"cache_version": self.VERSION, "entries": deepcopy(self.entries),
-                       "memory": deepcopy(self.memory), "results": deepcopy(self.results),
-                       "memory_results": deepcopy(self.memory_results)}
+            raw, signature = ((self._disk_bytes, self._disk_signature) if self._disk_fresh
+                              else self._read_disk())
+            encoded = self._encode(self._payload())
+            if raw is not None and raw != self._disk_bytes:
+                try:
+                    external = self._decode(raw)
+                except (ValueError, TypeError) as exc:
+                    raise RuntimeError("CACHE_EXTERNAL_EVIDENCE_UNREADABLE") from exc
+                if encoded != self._disk_bytes:
+                    external = self._merge_external(external)
+                self._install(external)
+                self._disk_bytes = raw
+                self._disk_signature = signature
+                encoded = self._encode(self._payload())
+            if encoded == raw:
+                self._disk_bytes = raw
+                self._disk_signature = signature
+                self._disk_fresh = True
+                return
             fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".tmp-", dir=str(self.path.parent))
             try:
-                with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                    json.dump(payload, handle, ensure_ascii=False, indent=2)
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(encoded)
                     handle.flush()
                     os.fsync(handle.fileno())
                 os.replace(temp_name, self.path)
+                self._disk_bytes = encoded
+                self._disk_signature = self._signature(self.path.stat())
+                self._disk_fresh = True
             finally:
                 if os.path.exists(temp_name):
                     os.unlink(temp_name)

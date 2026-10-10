@@ -999,21 +999,6 @@ class TranslationService:
                     result["qa_issues"] = list(qa["issues"])
                     if result["qa_issues"]:
                         result["translation_status"] = "qa_failed"
-                    # Translation memory deduplicates provider calls even when
-                    # the identical source later needs the same QA review.
-                    memory_payload = {
-                        "translated_text": result["translated_text"],
-                        "candidate_text": result.get("candidate_text", result["translated_text"]),
-                        "translation_status": result["translation_status"],
-                        "qa_status": result["qa_status"],
-                        "qa_issues": list(result["qa_issues"]),
-                        "provider": result["provider"],
-                        "provider_alias": result.get("provider_alias"),
-                        "model": result["model"],
-                        "translated_at": result["translated_at"],
-                    }
-                    self._memory_put(memory_key, memory_payload)
-                    self.cache.settle_memory(memory_key, memory_payload)
                 elif response.status == "success":
                     result["translation_status"] = "qa_failed"
                     result["qa_status"] = "qa_failed"
@@ -1026,7 +1011,7 @@ class TranslationService:
                     result["translation_status"] = "failed"
             self._stamp_dictionary_version(result)
             if provider_memory_claimed:
-                self.cache.settle_memory(memory_key, {
+                memory_payload = {
                     "translated_text": result.get("translated_text", ""),
                     "candidate_text": result.get("candidate_text", ""),
                     "translation_status": result.get("translation_status", "pending"),
@@ -1036,7 +1021,10 @@ class TranslationService:
                     "provider_alias": result.get("provider_alias"),
                     "model": result.get("model", self.provider.model),
                     "last_error": result.get("last_error"), "translated_at": result.get("translated_at"),
-                })
+                }
+                self.cache.settle_memory(memory_key, memory_payload)
+                # Publish in-process reuse only after the response is durable.
+                self._memory_put(memory_key, memory_payload)
             self.cache.settle(key, result)
             output_fields[target] = result
         if fields:
