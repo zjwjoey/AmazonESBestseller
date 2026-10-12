@@ -7,6 +7,7 @@ challenge 页绝不空解析（ARCHITECTURE §67）：is_captcha 标记交给上
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import shutil
@@ -20,6 +21,7 @@ from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status
                                require_normal_access)
 from ..identity import asin_from_url, resolve_identity
 from ..models import AccessState
+from ..normalization.brand import brand_from_attributes, brand_from_byline
 from .checkpoints import write_checkpoint
 
 CURRENT_DETAIL_SCHEMA_VERSION = 2
@@ -199,10 +201,15 @@ def _struck_price(soup) -> str:
         parent_classes = " ".join(container.parent.get("class") or []) if container.parent else ""
         if re.search(r"priceperunit|pricePerUnit", classes + " " + parent_classes, re.I):
             continue
-        if re.search(r"basisprice", classes + " " + parent_classes, re.I):
-            context = _clean(container.parent.parent.get_text(" ", strip=True)) if container.parent and container.parent.parent else ""
-            if re.search(r"precio\s+(?:[úu]nico|por\s+unidad)|por\s+(?:kg|g|l|ml)\b", context, re.I):
-                continue
+        # Scope the label to this price, not a grandparent containing several
+        # offers. A struck 'Nuevo precio' is not an original/list price.
+        feature = container.find_parent(class_=re.compile(r"basisprice-feature|basis-price-feature", re.I))
+        context_node = feature or container.parent
+        context = (_clean(context_node.get_text(" ", strip=True)) if context_node is not None
+                   and context_node.get("id") not in {"corePrice_feature_div", "corePriceDisplay_desktop_feature_div", "apex_price"}
+                   else "")
+        if re.search(r"precio\s+(?:[úu]nico|por\s+unidad|nuevo)|nuevo\s+precio|new\s+price|por\s+(?:kg|g|l|ml)\b", context, re.I):
+            continue
         marked = container.get("data-a-strike")
         marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
         offscreen = container.select_one(".a-offscreen")
@@ -437,29 +444,18 @@ def parse_detail_page(html: str, asin: str) -> dict:
                       or bool(re.search(r"Vendido y enviado por Amazon|Vendido por Amazon", buybox_text)))
     fulfilled_by_amazon = bool(re.search(r"Enviado por Amazon|Vendido y enviado por Amazon", buybox_text))
 
-    # 品牌（Byline，剥双前缀）
-    brand_raw = ""
+    # Explicit Marca wins; retain editorial bylines as evidence, not brands.
+    attributes = _collect_attributes(soup)
     byline = soup.select_one("#bylineInfo")
-    if byline is not None:
-        brand_raw = _clean(byline.get_text(" ", strip=True))
-        brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
-        brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
-        brand_raw = _clean(brand_raw)
+    brand_byline_raw = _clean(byline.get_text(" ", strip=True)) if byline is not None else ""
+    brand_raw = brand_from_attributes(attributes)
+    brand_source = "explicit_attribute" if brand_raw else ""
     if not brand_raw:
-        # Some pages omit the byline but expose an explicit Marca row in the
-        # product-overview table.  This is reliable page evidence, unlike a
-        # title-prefix fallback (which is forbidden by the data rules).
-        overview = soup.select_one(_OVERVIEW_SEL)
-        if overview is not None:
-            for row in overview.select("tr"):
-                cells = row.select("td")
-                if len(cells) < 2:
-                    continue
-                label = _clean(cells[0].get_text(" ", strip=True)).casefold()
-                value = _clean(cells[1].get_text(" ", strip=True))
-                if label in {"marca", "brand"} and value:
-                    brand_raw = value
-                    break
+        store_link = byline is not None and any(
+            re.match(r"^(?:https://www\.amazon\.es)?/stores(?:/|\?)", str(link.get("href") or ""), re.I)
+            for link in ([byline] if byline.name == "a" else byline.select("a")))
+        brand_raw = brand_from_byline(brand_byline_raw, allow_plain=store_link)
+        brand_source = "brand_byline" if brand_raw else ""
 
     # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
     selected_variation_raw = _selected_variation(soup)
@@ -480,6 +476,8 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "detail_bsr_raw": detail_bsr_raw,
         "seller_raw": seller_raw,
         "brand_raw": brand_raw,
+        "brand_byline_raw": brand_byline_raw,
+        "brand_evidence_source": brand_source,
         "selected_variation_raw": selected_variation_raw,
         "sold_by_amazon": sold_by_amazon,
         "fulfilled_by_amazon": fulfilled_by_amazon,
@@ -489,7 +487,7 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "image_url": _main_image_url(soup),
         "detail_category_trail": _detail_category_trail(soup),
         # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
-        "attributes": _collect_attributes(soup),
+        "attributes": attributes,
         "feature_bullets_raw": _feature_bullets_raw(soup),
         "product_description_raw": _product_description_raw(soup),
         "detail_bullets_raw": _detail_bullets_raw(soup),
@@ -568,6 +566,22 @@ def _classify_saved_page(html: str, asin: str, meta: dict, *,
         final_url=str(meta.get("final_url") or ""))
     if not parsed.get("title_es_raw") or parsed.get("is_captcha"):
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    variation = parsed.get("variation_evidence")
+    if isinstance(variation, dict) and meta.get("cache_html_path"):
+        path = os.path.abspath(meta["cache_html_path"])
+        try:
+            with open(path, "rb") as handle:
+                content = handle.read()
+            # Text-mode Windows writes/read_text may change CRLF. Bind to
+            # actual bytes only when they represent the HTML just parsed.
+            if content.decode("utf-8").replace("\r\n", "\n") == html.replace("\r\n", "\n"):
+                variation["cache_html_path"] = path
+                variation["cache_html_sha256"] = hashlib.sha256(content).hexdigest()
+        except (OSError, UnicodeError):
+            pass
+        if parsed.get("parent_asin") == asin:
+            from ..normalization.parent_asin import confirmed_self_parent
+            parsed["parent_asin_status"] = "confirmed" if confirmed_self_parent(parsed, asin) else "unconfirmed"
     return "VALID_PRODUCT_PAGE", access_state, parsed
 
 
@@ -615,7 +629,7 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                 except (OSError, ValueError):
                     meta = {}
             classification, state_value, rec = _classify_saved_page(
-                html, asin, meta, parser_version=parser_version)
+                html, asin, {**meta, "cache_html_path": str(path.resolve())}, parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":
                 continue
             if asin in seen_asins:
@@ -906,6 +920,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                           "access_state": meta.get("access_state"),
                           "recovered_from_challenge": meta.get("recovered_from_challenge"),
                           "requested_url": meta.get("requested_url")}
+            cache_meta["cache_html_path"] = os.path.abspath(path)
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, cache_meta, parser_version=parser_version)
             if classification == "CHALLENGE":
@@ -1012,6 +1027,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                              "initial_access_state": initial_state.value,
                              "access_state": state.value,
                              "recovered_from_challenge": recovered,
+                             "cache_html_path": os.path.abspath(path),
                              "requested_url": requested_url},
                 parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":

@@ -28,6 +28,7 @@ HEALTHY = "HEALTHY"
 RATE_LIMITED = "RATE_LIMITED"
 DEGRADED = "DEGRADED"
 DISABLED = "DISABLED"
+REQUEST_REJECTED = "REQUEST_REJECTED"
 
 
 @dataclass(frozen=True)
@@ -142,7 +143,30 @@ class ProviderPool:
         raise RuntimeError("no healthy provider available")
 
     @staticmethod
+    def _is_content_rejection(response: ProviderResponse) -> bool:
+        """A proven request-local refusal is terminal, not endpoint failure.
+
+        Match the structured HTTP400 code, never natural-language content or
+        an arbitrary error substring. Retain the failed response; no replay
+        or failover is authorized for the rejected semantic unit.
+        """
+        raw = response.raw or {}
+        body = raw.get("body")
+        error = body.get("error") if isinstance(body, dict) else None
+        return bool(response.status == "failed" and raw.get("status_code") == 400
+                    and isinstance(error, dict)
+                    and error.get("code") == "data_inspection_failed")
+
+    @classmethod
+    def _cacheable_response(cls, response: ProviderResponse) -> bool:
+        return (response.status in {"success", "pending"}
+                or response.error == "EMPTY_TRANSLATION"
+                or cls._is_content_rejection(response))
+
+    @staticmethod
     def _retry_class(response: ProviderResponse) -> str:
+        if ProviderPool._is_content_rejection(response):
+            return REQUEST_REJECTED
         error = str(response.error or "").casefold()
         if "429" in error or "rate" in error:
             return RATE_LIMITED
@@ -201,7 +225,11 @@ class ProviderPool:
         classification = self._retry_class(response)
         with self._lock:
             stats.failed += 1
-            if classification == RATE_LIMITED:
+            if classification == REQUEST_REJECTED:
+                # Subsequent unrelated fields may still use this endpoint.
+                # The failed field itself is cached terminally below.
+                stats.state = HEALTHY
+            elif classification == RATE_LIMITED:
                 stats.rate_limited += 1
                 stats.state = RATE_LIMITED
                 if self.stop_on_rate_limit:
@@ -226,7 +254,7 @@ class ProviderPool:
                 stats.state = DEGRADED
             if classification in {RATE_LIMITED, DEGRADED}:
                 self._transient_failures.setdefault(task.key, set()).add(alias)
-            else:
+            elif classification != REQUEST_REJECTED:
                 stats.state = DISABLED
         return PoolResult(task.key, response, alias)
 
@@ -336,7 +364,7 @@ class ProviderPool:
                     result = future.result()
                     resolved[key] = result
                     with self._lock:
-                        if result.response.status in {"success", "pending"} or result.response.error == "EMPTY_TRANSLATION":
+                        if self._cacheable_response(result.response):
                             self._completed[result.task_key] = result
                         if self._inflight.get(result.task_key) is future:
                             self._inflight.pop(result.task_key, None)
@@ -356,7 +384,7 @@ class ProviderPool:
                 if isinstance(item, Future):
                     result = item.result()
                     with self._lock:
-                        if result.response.status in {"success", "pending"} or result.response.error == "EMPTY_TRANSLATION":
+                        if self._cacheable_response(result.response):
                             self._completed[result.task_key] = result
                         if self._inflight.get(result.task_key) is item:
                             self._inflight.pop(result.task_key, None)
@@ -367,7 +395,7 @@ class ProviderPool:
                     result = future.result() if future is not None else resolved[key]
                     if future is not None:
                         with self._lock:
-                            if result.response.status in {"success", "pending"} or result.response.error == "EMPTY_TRANSLATION":
+                            if self._cacheable_response(result.response):
                                 self._completed[result.task_key] = result
                             if self._inflight.get(result.task_key) is future:
                                 self._inflight.pop(result.task_key, None)

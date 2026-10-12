@@ -19,12 +19,13 @@ import re
 from typing import Dict, List, Mapping, Optional
 
 from .models import merge_ranking_and_detail, normalize_asin
-from .normalization.brand import clean_brand, normalize_brand_case
+from .normalization.brand import brand_from_attributes, brand_from_byline, normalize_brand_case
 from .normalization.bsr import detail_bsr_segments
 from .normalization.category import category_levels, category_zh
 from .normalization.dates import parse_es_date
 from .normalization.monthly_bought import parse_monthly_bought
-from .normalization.price import CURRENCY, discount_rate, parse_price
+from .normalization.price import CURRENCY, canonical_price_fields
+from .normalization.parent_asin import confirmed_self_parent
 from .normalization.specification import (
     attributes_to_spec_dict, build_spec_es, build_spec_v2,
     translate_spec_es_to_zh)
@@ -80,12 +81,7 @@ def _details_of(prod: Mapping) -> Optional[dict]:
 
 def _brand_from_attributes(attributes) -> str:
     """Return a brand only from an explicit, reliable attribute label."""
-    for attr in attributes or []:
-        label = str(attr.get("label_raw") or "").strip().casefold()
-        value = str(attr.get("value_raw") or "").strip()
-        if label in {"marca", "brand"} and value:
-            return value
-    return ""
+    return brand_from_attributes(attributes)
 
 
 def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> dict:
@@ -104,22 +100,11 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
         out["parent_asin_raw"] = out.get("parent_asin") or ""
     parent = normalize_asin(out.get("parent_asin"))
     parent_status = str(out.get("parent_asin_status") or "").strip().casefold()
-    variation = out.get("variation_evidence")
-    variation_is_confirmed = (
-        isinstance(variation, Mapping)
-        and normalize_asin(variation.get("current_asin")) == asin
-        and normalize_asin(variation.get("parent_asin")) == parent
-        and parent in {normalize_asin(value) for value in (variation.get("family_asins") or [])}
-        and any(
-            normalize_asin(value) and normalize_asin(value) != asin
-            for value in (variation.get("family_asins") or [])
-        )
-    )
     if parent == asin:
         # A status string is caller-provided metadata, not provenance.  Keep
         # a self-parent only when parser-produced variation evidence confirms
         # the family relationship; otherwise make the canonical field empty.
-        if parent_status == "confirmed" and variation_is_confirmed:
+        if parent_status == "confirmed" and confirmed_self_parent(out, asin):
             out["parent_asin"] = parent
             out["parent_asin_status"] = "confirmed"
         else:
@@ -130,22 +115,12 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     else:
         out["parent_asin"] = ""
 
-    cur = parse_price(out.get("current_price_raw"))
-    orig = parse_price(out.get("original_price_raw"))
-    out["current_price"] = cur
-    # A struck/list price at or below the current price is not a valid original
-    # price.  Keep original_price_raw as evidence, but never display the bad number.
-    canonical_original = orig if (cur is None or orig is None or orig > cur) else None
-    out["original_price"] = canonical_original
-    out["currency"] = CURRENCY
-    out["discount_rate"] = discount_rate(cur, canonical_original)
+    out.update(canonical_price_fields(out.get('current_price_raw'),out.get('original_price_raw')))
 
     out["rating"] = _to_rating_num(out.get("rating_raw"))
     out["review_count"] = _to_int_spanish(out.get("review_count_raw"))
 
-    brand = clean_brand(out.get("brand_raw"))
-    if not brand:
-        brand = clean_brand(_brand_from_attributes(out.get("attributes")))
+    brand = brand_from_attributes(out.get("attributes")) or brand_from_byline(out.get("brand_raw"))
     out["brand"] = normalize_brand_case(brand) if brand else ""
 
     dfa = parse_es_date(out.get("date_first_available_raw"))
@@ -197,12 +172,27 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     # use the explicit product-detail breadcrumb as a secondary source; never
     # overwrite a ranking-context value already present.
     detail_trail = out.get("detail_category_trail")
-    if isinstance(detail_trail, (list, tuple)):
+    if isinstance(detail_trail, (list, tuple)) and detail_trail:
         dl1, dl2, dl3, dleaf = category_levels(detail_trail)
-        for key, value in (("category_l1", dl1), ("category_l2", dl2),
-                           ("category_l3", dl3), ("leaf_category", dleaf)):
-            if not out.get(key) and value:
-                out[key] = value
+        levels = (("category_l1", dl1), ("category_l2", dl2), ("category_l3", dl3))
+        def comparable(value):
+            return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+        conflict = any(out.get(key) and comparable(out[key]) != comparable(value)
+                       for key, value in levels)
+        # A real ranking leaf must also lie on the same breadcrumb path.
+        if out.get("leaf_category") and comparable(out["leaf_category"]) not in {
+                comparable(value) for value in detail_trail}:
+            conflict = True
+        out["category_enrichment_status"] = "CONFLICT" if conflict else "COMPATIBLE"
+        if not conflict:
+            for key, value in levels:
+                if not out.get(key) and value:
+                    out[key] = value
+            if dleaf and (not out.get("leaf_category") or comparable(out["leaf_category"]) in {
+                    comparable(dl1), comparable(dl2), comparable(dl3)}):
+                out["leaf_category"] = dleaf
+            out["category_enrichment_evidence"] = {"source": "product_breadcrumb",
+                                                  "path": list(detail_trail)}
 
     # leaf 必须是已知最深的一级。榜单页常只暴露 L1/L2（leaf 因此 = L2），
     # 详情面包屑随后补上 L3；只填空字段会让 leaf 停在 L2，比 L3 还浅

@@ -106,7 +106,12 @@ def repair_cached_products(records: Iterable[Mapping], html_dir: str | Path):
         existing_parent = normalize_asin(target.get("parent_asin"))
         if parsed_parent and parsed_parent != asin and (not existing_parent or existing_parent == asin):
             target["parent_asin"] = parsed_parent
-            target["parent_asin_status"] = "confirmed"
+            # An explicit parent field is an observation, not a verified
+            # variation family. Never manufacture a confirmed status here.
+            target["parent_asin_status"] = "observed"
+            target.setdefault("parent_asin_raw", parsed_parent)
+            target["parent_asin_observation"] = {"value_raw": parsed_parent,
+                                               "source": "saved_detail_html", "path": str(path.resolve())}
             changed += 1
         report["matched_pages"] += 1
         if changed:

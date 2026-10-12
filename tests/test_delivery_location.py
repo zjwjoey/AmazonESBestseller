@@ -164,3 +164,59 @@ def test_browser_session_rejects_invalid_postal_code():
     session = BrowserSession()
     with pytest.raises(DeliveryLocationError, match="5 位数字"):
         session.ensure_spain_delivery("2800")
+
+
+def test_current_page_delivery_setup_never_navigates(monkeypatch):
+    session = BrowserSession()
+    session.page = _FakePage()
+    monkeypatch.setattr(session, "goto", lambda *a, **k: pytest.fail("must reuse current page"))
+    monkeypatch.setattr(session, "wait_for_product_page", lambda **_: None)
+    assert session.ensure_spain_delivery("28001", use_current_page=True).is_spain is True
+
+
+def test_delivery_setup_stops_before_clicking_challenge(monkeypatch):
+    from amazon_es_bestseller.access.detector import AccessStopError
+    session = BrowserSession()
+    session.page = _FakePage()
+    session.page.content = lambda: "Robot Check"
+    monkeypatch.setattr(session, "_visible_locator", lambda *a, **k: pytest.fail("no challenge actions"))
+    with pytest.raises(AccessStopError):
+        session.ensure_spain_delivery("28001", use_current_page=True)
+
+
+def test_delivery_setup_stops_if_challenge_appears_after_opening_modal(monkeypatch):
+    from amazon_es_bestseller.access.detector import AccessStopError
+    session = BrowserSession()
+    session.page = _FakePage()
+    session.page.content = lambda: "Robot Check" if session.page.modal else '<button id="nav-global-location-popover-link">Enviar a Estados Unidos</button>'
+    monkeypatch.setattr(session, "wait_for_product_page", lambda **_: None)
+    with pytest.raises(AccessStopError):
+        session.ensure_spain_delivery("28001", use_current_page=True)
+    assert session.page.modal and not session.page.postal_code and not session.page.applied
+
+
+def test_delivery_confirmation_uses_stable_hecho_button_not_generated_id(monkeypatch):
+    fixture = (Path(__file__).parent / "fixtures" / "delivery_hecho_modal.html").read_text(encoding="utf-8")
+    assert 'name="glowDoneButton"' in fixture and 'id="a-autoid-4-announce"' in fixture
+    class HechoLocator(_FakeLocator):
+        def is_visible(self):
+            if self.selector in ("#a-autoid-67", "#GLUXConfirmClose", "#a-autoid-67-announce"):
+                return False
+            if self.selector == 'button[name="glowDoneButton"]':
+                return self.page.modal and self.page.applied
+            return super().is_visible()
+        def click(self, **kwargs):
+            if self.selector == 'button[name="glowDoneButton"]':
+                self.page.modal = False
+                self.page.done = True
+            else:
+                super().click(**kwargs)
+    class HechoPage(_FakePage):
+        def locator(self, selector):
+            return HechoLocator(self, selector)
+    session = BrowserSession()
+    session.page = HechoPage()
+    monkeypatch.setattr(session, "wait_for_product_page", lambda **_: None)
+    monkeypatch.setattr(session, "_visible_locator", lambda selectors, **_: next(
+        (session.page.locator(s) for s in selectors if session.page.locator(s).is_visible()), None))
+    assert session.ensure_spain_delivery("28001", use_current_page=True).is_spain is True

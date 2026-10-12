@@ -27,6 +27,9 @@ _IDENTITY_ATTRIBUTE_KEYS = frozenset({
     "numero pieza", "numero de pieza", "numero de pieza del fabricante",
     "part number", "oem", "upc", "ean", "asin", "isbn", "gtin",
     "numero de identificacion comercial global",
+    "model", "model name", "model number", "item model number", "manufacturer",
+    "brand", "brand name", "manufacturer part number", "part no", "part number",
+    "global trade identification number", "gtin ean", "serial number",
 })
 
 

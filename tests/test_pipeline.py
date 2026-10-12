@@ -168,7 +168,7 @@ def test_enrich_does_not_trust_confirmed_self_parent_status_without_provenance()
     assert p["parent_asin_raw"] == "B078C6QR1C"
 
 
-def test_enrich_preserves_confirmed_self_parent_with_variation_provenance():
+def test_enrich_rejects_self_parent_with_unbound_variation_dictionary():
     d = dict(
         DETAIL[0], asin="B078C6QR1C", parent_asin="B078C6QR1C",
         parent_asin_status="confirmed",
@@ -179,8 +179,8 @@ def test_enrich_preserves_confirmed_self_parent_with_variation_provenance():
         },
     )
     p = enrich_products(RANKING, [d])[0]
-    assert p["parent_asin"] == "B078C6QR1C"
-    assert p["parent_asin_status"] == "confirmed"
+    assert p["parent_asin"] == ""
+    assert p["parent_asin_status"] == "unconfirmed"
 
 
 def test_enrich_preserves_confirmed_parent_asin():
@@ -294,17 +294,11 @@ def test_real_30_no_rank_bsr_mix():
         assert not prod.get("detail_bsr_segments"), "遗留 BSR 不得进入 detail_bsr_segments"
 
 
-def test_leaf_category_never_regresses_behind_l3():
-    """真实回归（文具/宠物 100 SKU 实采，100/100 命中）：
+def test_conflicting_detail_category_does_not_splice_ranking_levels():
+    """Different L2 labels are not proof of one path, even if they look related.
 
-    榜单页只暴露 L1/L2，leaf 因此等于 L2；详情面包屑随后补上 L3。合并只填
-    空字段，leaf 不被更新，结果 细分类目 比 三级类目 还浅：
-
-        L2   Peces y mascotas acuáticas
-        L3   Accesorios para acuarios
-        leaf Peces y mascotas acuáticas   ← 层级倒退
-
-    leaf 必须是已知最深的一级（category_levels 文档：leaf==L3 是定义使然）。
+    The former test accepted a mixed ranking/detail hierarchy. Preserve the
+    ranking path until an evidence-bound reconciliation resolves this conflict.
     """
     from amazon_es_bestseller.pipeline import normalize_product
     out = normalize_product({
@@ -316,8 +310,9 @@ def test_leaf_category_never_regresses_behind_l3():
                                   "Accesorios para acuarios",
                                   "Tratamientos para el agua"],
     })
-    assert out["category_l3"] == "Accesorios para acuarios"
-    assert out["leaf_category"] == "Accesorios para acuarios"
+    assert not out.get("category_l3")
+    assert out["leaf_category"] == "Peces y mascotas acuáticas"
+    assert out["category_enrichment_status"] == "CONFLICT"
 
 
 def test_leaf_category_kept_when_already_deepest():

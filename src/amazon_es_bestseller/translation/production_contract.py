@@ -153,6 +153,10 @@ def matches_category_filter(record: Mapping[str, Any], query: str) -> bool:
 
 def canonical_value(record: Mapping[str, Any], field: str) -> Any:
     """Return the first present source value without guessing across fields."""
+    # An observed bullet list is authoritative, including an empty source.
+    # Display aliases may flatten internal newlines or contain old summaries.
+    if field == "feature_bullets" and isinstance(record.get("feature_bullets_raw"), list):
+        return record["feature_bullets_raw"]
     for alias in PRODUCTION_FIELD_ALIASES[field]:
         if alias in record and record[alias] not in (None, "", [], {}):
             return record[alias]

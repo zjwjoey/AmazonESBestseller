@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import html as html_module
+
+from bs4 import BeautifulSoup
 
 from ..normalization.text import strip_zero_width
 from .dictionary_service import DictionaryService, is_identity_attribute
@@ -109,8 +112,6 @@ _META_LABELS = (
     "opiniones de los clientes",
 )
 
-
-_TRUNC_MARK = "… Ver más"
 
 #: Amazon 折叠控件的按钮文字（展开/收起），本身不是商品属性内容
 _VER_MAS_RE = re.compile(r"\s*(?:…|\.\.\.)?\s*Ver\s+(?:más|mas|menos)\s*$", re.I)
@@ -220,24 +221,30 @@ def clean_display_zh(text: str) -> str:
     return "\n".join(out)
 
 
-def _prefer(new: str, cur: str) -> bool:
-    """同标签两行值谁该胜出：完整行优先（剔除 ``… Ver más`` 截断行），
-    都完整取较长，都截断取较长（保信息量）。"""
-    new_trunc = _TRUNC_MARK in new
-    cur_trunc = _TRUNC_MARK in cur
-    if new_trunc != cur_trunc:
-        return not new_trunc   # 完整者胜（截断行可能因多出省略号+Ver más 反而更长）
-    return len(new) > len(cur)
+def _append_display_row(rows: list, label: str, value: str, truncated: bool = False) -> None:
+    """Deduplicate identical facts, not labels; replace only proven truncation."""
+    for index, (old_label, old_value, old_truncated) in enumerate(rows):
+        if old_label.casefold() != label.casefold():
+            continue
+        if old_value == value:
+            if old_truncated and not truncated:
+                rows[index] = (old_label, value, False)
+            return
+        if old_truncated and not truncated and value.startswith(old_value):
+            rows[index] = (old_label, value, False)
+            return
+        if truncated and not old_truncated and old_value.startswith(value):
+            return
+    rows.append((label, value, truncated))
 
 
 def _display_rows(attributes) -> list:
-    """展示行：剔除元信息标签；同标签合并——相同值去重，完整行优先，按首次出现顺序。
+    """展示行：剔除元信息；相同事实去重，同标签冲突值均保留。
 
-    productOverview 常带截断后缀 ``… Ver más`` 而 technical_details 是同标签的完整
-    文本；同标签时保留完整行。数据层 attributes 不受影响。
+    productOverview 常带截断后缀 ``… Ver más``；仅在另一个值明确包含该截断
+    前缀时保留完整行。不相关的不同值不能按长度丢弃。原始 attributes 不受影响。
     """
-    best: dict = {}          # label_lower -> (首次序号, 标签原文, 值)
-    order: list = []
+    rows = []
     for a in attributes or []:
         # Amazon 的 technical_details 表在文本前插入 LEFT-TO-RIGHT MARK 等
         # 不可见字符。数据层保留原文，展示层必须剥离——否则不可见字符会被
@@ -249,20 +256,12 @@ def _display_rows(attributes) -> list:
         if label.lower() in _META_LABELS:
             continue
         # 折叠控件：还原完整文本，去掉 "Ver más" 按钮文字
-        value, _ = expand_collapsed_value(value)
+        value, truncated = expand_collapsed_value(value)
         # 零信息占位（"desconocido" / "No aplicable"）不进展示层
         if not value or _is_placeholder(value):
             continue
-        key = label.lower()
-        v = value.strip()
-        if key not in best:
-            best[key] = (len(order), label, v)
-            order.append(key)
-        else:
-            idx, _, cur = best[key]
-            if _prefer(v, cur):
-                best[key] = (idx, label, v)
-    return [(best[k][1], best[k][2]) for k in order]
+        _append_display_row(rows, label, value.strip(), truncated)
+    return [(label, value) for label, value, _ in rows]
 
 
 def detail_bullets_to_attributes(detail_bullets) -> list:
@@ -312,21 +311,35 @@ def render_details_es(attributes) -> str:
     rows = _display_rows(attributes)
     if not rows:
         return ""
-    return "\n".join("%s: %s" % (_humanize_es_label(label), value) for label, value in rows)
+    display = []
+    for label,value in rows:
+        if _humanize_es_label(label).casefold() in {'idioma','idiomas','language','languages'}:
+            tokens = [t.strip() for t in value.split(',')]
+            if len(tokens)>1 and all(tokens) and len({t.casefold() for t in tokens})==1:
+                value = tokens[0]
+        display.append('%s: %s' % (_humanize_es_label(label),value))
+    return '\n'.join(display)
+
+
+def plain_bullet(text: str) -> str:
+    """Strip known literal presentation tags, not unknown product content."""
+    decoded = html_module.unescape(str(text))
+    if re.search(r'</?(?:b|br|strong|em|p|span|div|ul|li)\b',decoded,re.I):
+        decoded = BeautifulSoup(decoded,'html.parser').get_text(' ',strip=True)
+    return re.sub(r'\s+',' ',decoded).strip()
 
 
 def render_details_zh(attributes) -> str:
     """完整商品详情（中文）：标签查字典（未知留西语），值走 translate_value。
 
     多个西语标签映射同一中文标签（如 Función especial / Características especiales
-    → 特殊功能）时，按中文标签合并——完整值优先（剔除 ``… Ver más`` 截断行）。
+    → 特殊功能）时，仅合并相同中文标签且值相同的行，冲突值分别保留。
     西语原文层各标签仍各保留一行。
     """
     rows = _display_rows(attributes)
     if not rows:
         return ""
-    best: dict = {}          # 中文标签小写 -> (首次序号, 显示标签, 值)
-    order: list = []
+    translated_rows = []
     for label, value in rows:
         label = _humanize_es_label(label)
         zh_label = (_DICTIONARY_SERVICE.lookup_attribute_label(label)
@@ -334,20 +347,13 @@ def render_details_zh(attributes) -> str:
         # Identity and legal-entity values are source evidence.  For example,
         # ``Marca: Metal`` is a brand named Metal, not a material value.
         zh_value = value if _identity_value_label(label) else translate_value(value)
-        key = zh_label.lower()
-        if key not in best:
-            best[key] = (len(order), zh_label, zh_value)
-            order.append(key)
-        else:
-            idx, _, cur = best[key]
-            if _prefer(zh_value, cur):
-                best[key] = (idx, zh_label, zh_value)
-    return clean_display_zh("\n".join("%s：%s" % (best[k][1], best[k][2]) for k in order))
+        _append_display_row(translated_rows, zh_label, zh_value)
+    return clean_display_zh("\n".join("%s：%s" % (label, value) for label, value, _ in translated_rows))
 
 
 def render_bullets_es(bullets) -> str:
     """商品卖点（西语原文）：原样多行。"""
-    return "\n".join(str(b).strip() for b in bullets or [] if str(b).strip())
+    return "\n".join(plain_bullet(b) for b in bullets or [] if str(b).strip())
 
 
 def _bullet_zh(b) -> str:

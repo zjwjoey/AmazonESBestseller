@@ -1,0 +1,20 @@
+[
+  {
+    "asin": "B08NC9XGJM",
+    "title_es_raw": "Moritz & Moritz 24 x Pinzas Bolsas Alimentos - Pinzas Cocina Bolsas Clip - Cierra Bolsas Plastico in Caja Transparente - 3 Colores (Menta, Rosado)",
+    "selected_variation_raw": "Colorido",
+    "attributes": [{"section": "technical_details", "label_raw": "Tamaño", "value_raw": "24 Piezas", "position": 18, "source": "prodDetails"}]
+  },
+  {
+    "asin": "B0BS1H1Z2R",
+    "title_es_raw": "Gillette Fusion5 Cuchillas de Afeitar Hombre, Pack de 16",
+    "selected_variation_raw": "16 unidad (Paquete de 1)",
+    "attributes": [{"section": "product_overview", "label_raw": "Nombre del tamaño del paquete", "value_raw": "16 unidades", "position": 7, "source": "productOverview"}]
+  },
+  {
+    "asin": "B07B8Y6M4K",
+    "title_es_raw": "GOURMET Gold Mousse, Comida Húmeda para Gato Adulto, Mousse de Pescado del Océano, Pack de 24 Latas de 85 g",
+    "selected_variation_raw": "85 g (Paquete de 24)",
+    "attributes": [{"section": "product_overview", "label_raw": "Número de unidades", "value_raw": "2040.0 Gramos", "position": 6, "source": "productOverview"}]
+  }
+]

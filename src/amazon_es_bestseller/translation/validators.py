@@ -268,9 +268,17 @@ def _units(text: str, count_values=None) -> List[tuple[str, str]]:
     # normal number+unit form.  Keep this in QA only; normalization/business
     # package-count rules still decide whether a generic package of one is a
     # derived quantity.
-    for number in re.findall(
+    for match in re.finditer(
             r"(?i)\b(?:paquete|pack|set|conjunto)\s+de\s+(\d+(?:[.,]\d+)?)\b",
-            value):
+            ordinary_text):
+        number = match.group(1)
+        # ``Pack de 2 Unidades`` describes one occurrence, already captured
+        # by number+unit matching. Deduplicate that position only; a separate
+        # ``2 Unidades`` elsewhere must remain a separate quantity fact.
+        if any(unit.start(1) == match.start(1)
+               and UNIT_ALIASES.get(unit.group(2).casefold(), unit.group(2).casefold()) == 'pcs'
+               for unit in UNIT_RE.finditer(ordinary_text)):
+            continue
         fact = (number, "pcs")
         if fact not in units or not re.search(r"(?i)\b" + re.escape(number) + r"\s+marcador(?:es)?\b", value):
             units.append(fact)

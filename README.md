@@ -47,6 +47,20 @@ Excel 不需要把全部动态字段展开成几百列。完整动态详情通�
 
 详细状态见 `docs/CURRENT_STATE.md`。
 
+### Worktree-local CLI preflight
+
+Multiple checkouts may share one Python editable install. Run from the intended
+worktree with `python tools/run_local.py --check-runtime` to verify the imported
+CLI path, then use `python tools/run_local.py <existing CLI arguments>`.
+The launcher pins this checkout's `src` and fails on an already imported foreign
+package. It does not change shared pip installs, plans, parser defaults, or gates.
+
+Issue-register source repairs are code-only: explicit brand evidence precedes
+editorial bylines; breadcrumb enrichment requires a compatible path; self-parent
+confirmation is bound to saved HTML and its parsed variation family; distinct
+values sharing a detail label survive both Spanish and Chinese display rendering.
+Historical raw data, frozen manifests, audit outputs, and Excel are not rewritten.
+
 ## 4. Product Detail Strategy
 
 商品详情页应按“全量原始详情”处理，而不是只抽取固定几个规格字段。

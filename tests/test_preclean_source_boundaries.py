@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from amazon_es_bestseller.translation.preclean import audit_records, numeric_profile, parse_details
+from amazon_es_bestseller.translation.preclean import audit_records, clean_text, numeric_profile, parse_details
 from amazon_es_bestseller.translation.production import build_production_input, records_for_preclean
 
 
@@ -56,8 +56,17 @@ def test_production_preclean_uses_items_and_preserves_source_boundaries(sample):
     row = audit["translation_input_records"][0]
     field = row["fields"]["product_details"]
     assert "CONFLICTING_DUPLICATE" not in field["issues"]
-    assert [(x["section"], x["source"], x["position"]) for x in row["details_structured"]] == [
+    # Attributes retain their original surfaces; supplemental detail bullets
+    # now follow them instead of being omitted from the translation input.
+    attribute_count = len(sample["attributes"])
+    assert [(x["section"], x["source"], x["position"]) for x in row["details_structured"][:attribute_count]] == [
         (x["section"], x["source"], x["position"]) for x in sample["attributes"]]
+    assert len(row["details_structured"]) == attribute_count + len(sample["detail_bullets_raw"])
+    for item, source_item in zip(row["details_structured"][:attribute_count], sample["attributes"]):
+        assert item["label"] == clean_text(source_item["label_raw"], field="detail_label")["clean_text"]
+        assert item["value"] == clean_text(source_item["value_raw"], field="detail_value")["clean_text"]
+    for item, bullet in zip(row["details_structured"][attribute_count:], sample["detail_bullets_raw"]):
+        assert item["value"] == clean_text(bullet.split(":", 1)[1].strip(), field="detail_value")["clean_text"]
     assert row["detail_source_evidence"]["detail_bullets_raw"] == sample["detail_bullets_raw"]
     if sample["asin"] == "B07CTK4TH4":
         assert "CROSS_SOURCE_DETAIL_DIFFERENCE" not in field["issues"]
@@ -67,7 +76,11 @@ def test_production_preclean_uses_items_and_preserves_source_boundaries(sample):
         assert not field["translate_allowed"]
         assert audit["review_queue"]
     assert original == snapshot
-    assert production_input["records"][0]["source_record"]["product_details"] == original["product_details_es"]
+    preserved = production_input["records"][0]["source_record"]
+    assert preserved["product_details_es"] == original["product_details_es"]
+    assert preserved["attributes"] == original["attributes"]
+    assert preserved["detail_bullets_raw"] == original["detail_bullets_raw"]
+    assert len(preserved["product_details"]) == attribute_count + len(sample["detail_bullets_raw"])
 
 
 def test_structured_duplicate_conflicts_keep_their_own_surface_and_legacy_still_blocks():
@@ -87,8 +100,11 @@ def test_preclean_does_not_reflow_owner_excluded_attributes():
            "owner_attribute_exclusions": {"schema_version": "owner-current-source-attribute-exclusion-v1"},
            "product_details_es": "Capacidad: 2 kg\nMaterial: Acero"}
     row = records_for_preclean(build_production_input([raw]))[0]
-    assert row["product_details"] == [eligible]
+    assert [{k: v for k, v in item.items() if k != "source_locator"}
+            for item in row["product_details"]] == [eligible]
+    assert row["product_details"][0]["source_locator"] == {"source": "attributes", "index": 0}
     assert row["attributes"] == [excluded, eligible]
+    assert raw["eligibleattributes"] == [eligible]
 
 
 def test_different_capacity_subjects_are_not_compared():

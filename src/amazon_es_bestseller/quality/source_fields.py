@@ -15,7 +15,7 @@ from .models import QualityStatus, check_result, issue
 
 _HTML_TAG = r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+(?:[^<>\s]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?))*\s*/?>"
 _JUNK = re.compile(rf"(?:{_HTML_TAG}|\b(?:javascript|cookie|captcha|robot check)\b)", re.I)
-SOURCE_FIELD_AUDIT_RULES_VERSION = "source-fields-unit-v2"
+SOURCE_FIELD_AUDIT_RULES_VERSION = "source-fields-v14-child-local-widget-scope"
 
 
 def _number(value: object) -> Decimal | None:
@@ -245,7 +245,7 @@ def _sf_absence(row, asin, field, issues, fields):
         _sf_field(fields, asin, field, REVIEW_REQUIRED, "P2", "blank field has no source-exposure evidence")
 
 
-def _sf_identity(row, asin, issues, fields):
+def _sf_identity(row, asin, issues, fields, *, parent_scope_html=None):
     if not is_valid_asin(asin):
         _sf_issue(issues, fields, asin, "IDENTITY_CONFLICT", BLOCKED, "P0", "canonical ASIN is invalid", "asin")
         return
@@ -284,6 +284,44 @@ def _sf_identity(row, asin, issues, fields):
                   "identity evidence is insufficient", "asin", {"resolver": resolved})
     else:
         _sf_field(fields, asin, "asin", PASS, "INFO", "identity is evidence-backed", {"resolver": resolved})
+    from .detail_identity import review_visible_asin_identity
+
+    signals = row.get("detail_identity_signals") or {}
+    # Do not accept a loose, unbound family/parent claim as HTML evidence.
+    bound_hash = (row.get("offline_replay_evidence") or {}).get("html_sha256")
+    if not bound_hash or signals.get("html_sha256") != bound_hash:
+        if signals:
+            _sf_issue(issues, fields, asin, "IDENTITY_EVIDENCE_HASH_MISMATCH", REVIEW_REQUIRED, "P1",
+                      "page identity signals are not bound to the archived HTML bytes", "detail_identity_signals",
+                      {"archived_html_sha256": bound_hash, "identity_html_sha256": signals.get("html_sha256")})
+        signals = {}
+    visible = review_visible_asin_identity(row, signals)
+    if visible["status"] == "IDENTITY_CONFLICT":
+        _sf_issue(issues, fields, asin, "DETAIL_ASIN_CONFLICT", BLOCKED, "P0",
+                  "visible detail or strong page identity differs without source-bound parent evidence", "attributes", visible)
+    elif visible["status"] == "PARENT_DETAIL_REVIEW_REQUIRED":
+        if isinstance(parent_scope_html, (str, bytes)):
+            from .parent_scope import review_parent_scope
+            from .detail_identity import extract_detail_identity_signals
+
+            payload = parent_scope_html if isinstance(parent_scope_html, bytes) else parent_scope_html.encode("utf-8")
+            payload_hash = hashlib.sha256(payload).hexdigest()
+            if payload_hash == bound_hash:
+                try:
+                    actual_signals = extract_detail_identity_signals(payload.decode("utf-8"))
+                    scope = review_parent_scope(payload, row)
+                    scope["identity_signals_match"] = actual_signals == signals
+                    visible["offline_scope_review"] = scope
+                    if scope["all_child_scope_confirmed"] and scope["identity_signals_match"]:
+                        _sf_field(fields, asin, "attributes", PASS, "INFO",
+                                  "all populated detail scope is confirmed by hash-bound exact child tables", visible)
+                        return
+                except (UnicodeError, ValueError, TypeError, KeyError) as exc:
+                    visible["offline_scope_review"] = {"decision": "EVIDENCE_REVIEW_FAILED", "error_type": type(exc).__name__}
+            else:
+                visible["offline_scope_review"] = {"decision": "EVIDENCE_HASH_MISMATCH", "observed_html_sha256": payload_hash}
+        _sf_issue(issues, fields, asin, "PARENT_DETAIL_SCOPE_REVIEW", REVIEW_REQUIRED, "P1",
+                  "parent-related detail identity is explained; child-specific attribute scope remains unconfirmed", "attributes", visible)
 
 
 def _sf_values(row, asin, issues, fields):
@@ -325,8 +363,9 @@ def _semantic_text(value) -> str:
 
 
 def _compound_units(value) -> set[str]:
+    from ..normalization.measure_evidence import RATE, rate_unit
     text = _semantic_text(value)
-    units = set()
+    units = {rate_unit(m.group('unit')) for m in RATE.finditer(text)}
     if re.search(r"\bmetros?\s+cubicos?\s+por\s+horas?\b", text):
         units.add("m3/h")
     if re.search(r"\bmetros?\s+cubicos?\s+por\s+minutos?\b", text):
@@ -356,7 +395,9 @@ def _compound_units(value) -> set[str]:
 
 
 def _without_compound_units(value) -> str:
+    from ..normalization.measure_evidence import RATE
     text = _semantic_text(value)
+    text = RATE.sub('', text)
     text = re.sub(r"\bmetros?\s+cubicos?\s+por\s+(?:horas?|minutos?)\b", "", text)
     text = re.sub(r"\blitros?\s+por\s+(?:minutos?|horas?|segundos?|d(?:i)?as?)\b", "", text)
     text = re.sub(r"\b\d+(?:[.,]\d+)?\s*centimetros?\s+cubicos?\s+por\s+segundos?\b", "", text)
@@ -436,15 +477,29 @@ def _unit_evidence(row, label, value, field, *, kind, corroborated_by="", corrob
 
 
 def _measure_signatures(value) -> set[str]:
-    signatures = set()
+    from ..normalization.measure_evidence import signatures as explicit_signatures, count_signatures
+    signatures = explicit_signatures(value) | count_signatures(value)
     text = _without_compound_units(value)
     for match in _UNIT.finditer(text):
         unit = _UNIT_CANONICAL.get(_semantic_text(match.group("unit")), _semantic_text(match.group("unit")))
+        if unit in {'ml', 'l', 'g', 'kg'}:
+            # The explicit parser handles decimals, options and axis labels.
+            # The legacy fallback must not reintroduce a partial 35 L from
+            # "0, 35 L" or the last volume in a mixed title.
+            continue
+        if unit in {'pcs', 'unidades', 'piezas', 'uds'}:
+            unit = 'pcs'
         number = match.group(0)[:match.group(0).lower().rfind(match.group("unit").lower())].strip().replace(",", ".")
         if number:
+            try:
+                amount = Decimal(number)
+                if unit in {"kg", "l"}:
+                    amount *= 1000
+                    unit = "g" if unit == "kg" else "ml"
+                number = format(amount.normalize(), "f")
+            except InvalidOperation:
+                pass
             signatures.add(f"{number}{unit}")
-    for unit in _compound_units(value):
-        signatures.add(unit)
     return signatures
 
 
@@ -469,10 +524,14 @@ def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[s
         return set(), "battery capacity label conflicts with voltage value", evidence("label_value_conflict"), None
     if re.search(r"\bcapacidad\s+de\s+peso\b", normalized) and units & {"ml", "l"}:
         return set(), "weight-capacity label conflicts with volume value", evidence("label_value_conflict"), None
-    if re.search(r"\bvolumen\s+liquido\b", normalized) and units & {"g", "kg"}:
+    if re.search(r"\bvolumen\s+(?:de\s+)?liquido\b", normalized) and units & {"g", "kg"}:
         return set(), "liquid-volume label conflicts with weight value", evidence("label_value_conflict"), None
     if re.search(r"\bvoltaje(?:\s+maximo)?\b", normalized) and units & {"w"}:
         return set(), "voltage label conflicts with power value", evidence("label_value_conflict"), None
+    if re.search(r'\bcapacidad\s+(?:minima|maxima)\s+(?:de\s+)?peso\b', normalized):
+        return {'g','kg'}, None, evidence('explicit_load_capacity'), None
+    if re.search(r'\bcapacidad\s+de\s+eliminacion\s+de\s+humedad\b', normalized):
+        return {'l/day'}, None, evidence('explicit_dehumidification_rate'), None
     if re.search(r"\b(?:caudal|flujo)\s+de\s+aire\b|\bairflow\b", normalized):
         if "l/day" in units:
             return set(), "dehumidifier rate must not be classified as airflow", evidence("rate_semantics_unresolved"), None
@@ -488,6 +547,27 @@ def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[s
             return set(), "tension weight requires hand-gripper domain evidence", evidence("tension_weight_unresolved"), None
     if re.search(r"\bcantidad\s+de\s+pilas\b", normalized) and units & {"v"}:
         return {"v"}, None, evidence("battery_count_and_voltage"), None
+    if re.fullmatch(r"talla\s*/\s*dimensiones", normalized):
+        # Amazon's combined size/option label can describe a pack, not just
+        # physical dimensions. Require the option's literal numeric tokens in
+        # title/selected evidence, and explicit packaging vocabulary for counts.
+        dimensions = {"mm", "cm", "m"}
+        count_units = {"pcs", "pack", "uds", "unidades", "piezas"}
+        if not units:
+            # A4/Estándar and other unitless option strings provide no typed
+            # measurement to validate. Count conflicts are audited separately.
+            return set(), None, None, None
+        if units and units <= dimensions:
+            return dimensions, None, evidence("explicit_dimension"), None
+        if units and units <= (dimensions | count_units) and units & count_units:
+            numbers = set(re.findall(r"\d+(?:[.,]\d+)?", _semantic_text(value)))
+            for source in ("selected_variation_raw", "title_es_raw"):
+                context = _semantic_text(row.get(source))
+                if (numbers and numbers <= set(re.findall(r"\d+(?:[.,]\d+)?", context))
+                        and re.search(r"\b(?:pack|packs|paquete|paquetes|piezas|unidades|rollos)\b", context)):
+                    return units, None, evidence("pack_option_correlated", source, str(value)), "pack option is corroborated; not a dimension-only field"
+            return set(), "pack option lacks corroborating title/selected evidence", evidence("pack_option_unresolved"), None
+        return set(), "generic size option semantics unresolved", evidence("generic_measure_unresolved"), None
     if re.search(r"\btamano\b", normalized):
         dimensional = units & {"mm", "cm", "m"}
         # ``Tamaño`` is an Amazon option label, not proof that a number is a
@@ -496,6 +576,12 @@ def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[s
         if dimensional and not (units - dimensional):
             return {"mm", "cm", "m"}, None, evidence("explicit_dimension"), None
         if units:
+            from ..normalization.measure_scope import package_quantity_proof
+            proof = package_quantity_proof(row, value)
+            if proof:
+                bound = evidence("generic_package_quantity_correlated", proof["source_field"], proof["signature"])
+                bound["package_proof"] = proof
+                return set(units), None, bound, "generic size is an exactly corroborated package quantity"
             corroborated_by, signature = _corroborated_measure(row, value)
             if corroborated_by:
                 return (set(units), None,
@@ -504,9 +590,35 @@ def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[s
             return (set(), "generic Tamaño value has no unambiguous dimension semantics",
                     evidence("generic_measure_unresolved"), None)
         return set(), None, None, None
-    if re.search(r"\b(?:numero|cantidad)\s+de\s+unidades\b", normalized):
+    if re.fullmatch(r"unidades", normalized.strip()) or re.search(r"\b(?:numero|cantidad)\s+de\s+unidades\b", normalized):
         count_units = {"pcs", "pack", "uds", "unidades", "piezas"}
         if units - count_units:
+            from ..normalization.measure_scope import package_quantity_proof
+            proof = package_quantity_proof(row, value)
+            if proof:
+                bound = evidence("unit_count_package_total_correlated", proof["source_field"], proof["signature"])
+                bound["package_proof"] = proof
+                return set(units), None, bound, "net quantity is the exact explicitly declared pack total"
+            # Units may be a net/price quantity, not a piece count. A proven
+            # single pack with a different amount remains a real conflict.
+            title = _semantic_text(row.get("title_es_raw"))
+            selected = _semantic_text(row.get("selected_variation_raw"))
+            single_pack = bool(re.search(r"\b1\s*[x×]\s*\d|\bpaquete\s+de\s+1\b", title + " " + selected))
+            from ..normalization.measure_evidence import measurements
+            # A shared "1 unidad" cannot corroborate a mass/volume conflict.
+            # Compare only explicit amounts in the same canonical unit family.
+            target_families = {u for _, u, _ in measurements(value)} & {"g", "ml"}
+            def net_signatures(raw):
+                return {format(n.normalize(), "f") + u for n, u, _ in measurements(raw) if u in target_families}
+            measures = net_signatures(value)
+            selected_measures = net_signatures(row.get("selected_variation_raw"))
+            title_measures = net_signatures(row.get("title_es_raw"))
+            net_units = {"g", "kg", "ml", "l"}
+            if single_pack and units and units <= net_units and measures and selected_measures and not (measures & selected_measures) and selected_measures & title_measures:
+                conflict = evidence("quantity_cross_field_conflict")
+                conflict.update({"title_raw": row.get("title_es_raw"), "selected_variation_raw": row.get("selected_variation_raw"),
+                                 "selected_measure_signatures": sorted(selected_measures), "source_measure_signatures": sorted(measures)})
+                return set(), "net quantity conflicts with explicit single-pack title and selected amount", conflict, None
             corroborated_by, signature = _corroborated_measure(row, value)
             if corroborated_by:
                 return (set(units), None,
@@ -517,6 +629,21 @@ def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[s
     generic_capacity = bool(re.search(r"\bcapacidad(?:\s+de\s+salida)?\b", normalized))
     specific_capacity = bool(re.search(r"\bcapacidad\s+de\s+(?:carga|peso|la\s+bateria|perfor)", normalized))
     if generic_capacity and not specific_capacity and units - {"ml", "l"}:
+        domain = _semantic_text(row.get("title_es_raw"))
+        if units and units <= {'g','kg'} and re.search(r'\bmolinillos?\b', domain):
+            from ..normalization.measure_evidence import explicit_capacity_measures, signatures
+            explicit = explicit_capacity_measures(row.get('title_es_raw'))
+            matched = _measure_signatures(value) & {format(n.normalize(),'f')+u for n,u,_ in explicit if u=='g'}
+            if matched and signatures(value):
+                return set(units), None, evidence('grinder_capacity_correlated','title_es_raw',sorted(matched)[0]), 'grinder mass capacity explicitly corroborated by title'
+        if units == {'l/day'} and re.search(r'\bdeshum', domain):
+            corroborated_by, signature = _corroborated_measure(row, value)
+            if corroborated_by:
+                return set(units), None, evidence('dehumidification_rate_correlated',corroborated_by,signature), 'numeric dehumidification rate corroborated by same-ASIN evidence'
+        if units and units <= {"g", "kg"} and re.search(r"\b(?:recambio|recarga|granulado|sal|arena)\b|absorbe\s+humedad", domain):
+            corroborated_by, signature = _corroborated_measure(row, value)
+            if corroborated_by:
+                return set(units), None, evidence("solid_refill_amount_correlated", corroborated_by, signature), "solid refill amount corroborated by product evidence"
         return set(), "generic capacity measure lacks domain evidence", evidence("generic_capacity_unresolved"), None
     return _allowed_units_for_label(label), None, None, None
 
@@ -524,6 +651,11 @@ def _unit_policy(row, label, value, field, *, attribute_locator=None) -> tuple[s
 def _units_for_labeled_value(label, value) -> set[str]:
     units = _compound_units(value)
     dimension_label = bool(re.search(r"\b(?:dimension|dimensiones|tamano)\b", _semantic_text(label)))
+    if dimension_label:
+        from ..normalization.measure_evidence import named_dimension_unit
+        axis_unit = named_dimension_unit(value)
+        if axis_unit:
+            return {axis_unit}
     text = _without_compound_units(value)
     for match in _UNIT.finditer(text):
         raw_unit = _semantic_text(match.group("unit"))
@@ -571,6 +703,25 @@ def _structured_attribute_unit_pairs(row) -> list[tuple[str, str, str, dict]]:
 
 def _category_leaf_supported(row, provenance, values) -> bool:
     """Require provenance to bind to an actual context on this exact record."""
+    if isinstance(provenance, Mapping) and provenance.get("source") == "product_breadcrumb":
+        # Link-first detail candidates use the visible product breadcrumb, not
+        # a fabricated ranking context. A real three-level path has leaf == L3.
+        # Require the exact ASIN/path/HTML capture binding and all four levels.
+        trail = row.get("detail_category_trail")
+        captured_hash = row.get("html_sha256")
+        replay = row.get("offline_replay_evidence") or {}
+        if (not isinstance(trail, list) or len(trail) < 3
+                or not captured_hash or replay.get("html_sha256") != captured_hash
+                or provenance.get("selector") != "#wayfinding-breadcrumbs_feature_div"):
+            return False
+        binding = {key: row.get(key) for key in ("asin", "html_file", "html_sha256", "detail_category_trail")}
+        expected_values = [trail[0], trail[1], trail[2], trail[-1]]
+        levels = provenance.get("levels") or {}
+        return (binding == provenance.get("evidence_binding")
+                and _sf_hash(binding) == provenance.get("evidence_hash")
+                and list(values) == expected_values
+                and all(levels.get(key) == value for key, value in zip(
+                    ("category_l1", "category_l2", "category_l3", "leaf_category"), expected_values)))
     if not isinstance(provenance, Mapping) or str(provenance.get("source") or "") != "ranking_context":
         return False
     l1, l2, l3, leaf = values
@@ -662,7 +813,74 @@ def _text_semantic_finding(row, field: str, text: str):
             "repeated product text requires review but is not treated as UI text", _text_locator(text, match, "repeated_text"))
 
 
+def _sf_measure_conflicts(row, asin, issues, fields):
+    """Review numeric contradictions without modifying or arbitrating raw facts."""
+    from ..normalization.measure_evidence import explicit_capacity_measures, measurements
+    from ..normalization.measure_scope import corroborate_comparison
+    references = []
+    for name in ('selected_variation_raw','title_es_raw'):
+        references.append((name, row.get(name), explicit_capacity_measures(row.get(name), variant=name=='selected_variation_raw')))
+    for number, bullet in enumerate(row.get('feature_bullets_raw') or []):
+        references.append((f'feature_bullets_raw[{number}]',bullet,explicit_capacity_measures(bullet, require_label=True)))
+    for label, value, field, locator in _structured_attribute_unit_pairs(row):
+        normalized = _semantic_text(label)
+        if not re.fullmatch(r'capacidad(?: de salida| de eliminacion de humedad)?|tamano', normalized.strip()):
+            continue
+        value_measures = measurements(value)
+        for amount, unit, _ in value_measures:
+            if len({n for n, u, _ in value_measures if u == unit}) != 1:
+                # Compound packs/compartments are not one comparable amount.
+                continue
+            # A generic size can be a net-volume option, but never compare a
+            # product weight with a grinding/load capacity solely by units.
+            if normalized == 'tamano' and unit == 'g':
+                continue
+            for reference_field, reference_text, measures in references:
+                expected = {n for n,u,_ in measures if u==unit}
+                if len(expected)!=1 or amount in expected:
+                    continue
+                proof = corroborate_comparison(row, amount, unit, reference_field, reference_text)
+                if proof:
+                    source = _unit_evidence(row,label,value,field,kind='quantity_scope_corroborated',attribute_locator=locator)
+                    source.update(reference_field=reference_field, reference_raw=reference_text,
+                                  reference_sha256=_sf_hash({reference_field:reference_text}), scope_proof=proof)
+                    _sf_field(fields,asin,field,PASS,'INFO',
+                              'explicit same-source pack/compartment/notation scope explains the comparison',source)
+                    continue
+                source = _unit_evidence(row,label,value,field,kind='cross_field_measure_conflict',attribute_locator=locator)
+                source.update(reference_field=reference_field, reference_raw=reference_text,
+                              reference_sha256=_sf_hash({reference_field:reference_text}),
+                              source_measure=format(amount.normalize(),'f')+unit,
+                              reference_measure=format(next(iter(expected)).normalize(),'f')+unit)
+                _sf_issue(issues,fields,asin,'SOURCE_SEMANTIC_CONFLICT',REVIEW_REQUIRED,'P1',
+                          'same-ASIN explicit quantity differs across source fields; conditions/variant require review',field,source)
+                break
+
+
 def _sf_semantics(row, asin, issues, fields):
+    _sf_measure_conflicts(row, asin, issues, fields)
+    # Explicit item counts (not net quantity/weight) can contradict a selected
+    # option. Preserve both facts and require review; do not silently replace.
+    for index, attr in enumerate(row.get("attributes") or []):
+        if not isinstance(attr, Mapping):
+            continue
+        label = _semantic_text(attr.get("label_raw"))
+        if not re.fullmatch(r"numero\s+de\s+(?:etiquetas|piezas)", label):
+            continue
+        raw = str(attr.get("value_raw") or "").strip()
+        if not re.fullmatch(r"\d+(?:[.,]0+)?", raw):
+            continue
+        selected = _semantic_text(row.get("selected_variation_raw"))
+        selected_counts = {
+            Decimal(m.group(1).replace(",", ".")) * Decimal((m.group(2) or "1").replace(",", "."))
+            for m in re.finditer(r"(?<![\d.,])(\d+(?:[.,]\d+)?)(?:\s*[x×]\s*(\d+(?:[.,]\d+)?))?\s*(?:piezas|etiquetas)\b", selected)
+        }
+        if len(selected_counts) == 1 and Decimal(raw.replace(",", ".")) not in selected_counts:
+            evidence = _unit_evidence(row, attr.get("label_raw"), raw, "attributes",
+                kind="explicit_item_count_conflict", attribute_locator={"source": "attributes", "position": index})
+            evidence.update(selected_variation_raw=row.get("selected_variation_raw"), selected_counts=sorted(str(n) for n in selected_counts))
+            _sf_issue(issues, fields, asin, "SOURCE_SEMANTIC_CONFLICT", REVIEW_REQUIRED, "P1",
+                "explicit item count contradicts selected option count", "attributes", evidence)
     for field in ("title_es_raw", "brand", "specification", "specification_es", "product_details_es", "feature_bullets_es"):
         _sf_absence(row, asin, field, issues, fields)
         text = str(row.get(field) or "")
@@ -715,7 +933,7 @@ def _sf_semantics(row, asin, issues, fields):
             row, label, value, field, attribute_locator=locator)
         if review_reason:
             code = ("SOURCE_SEMANTIC_CONFLICT" if unit_evidence and
-                    unit_evidence.get("match_kind") == "label_value_conflict"
+                    unit_evidence.get("match_kind") in {"label_value_conflict", "quantity_cross_field_conflict"}
                     else "UNIT_SEMANTICS_AMBIGUOUS")
             _sf_issue(issues, fields, asin, code, REVIEW_REQUIRED, "P1",
                       review_reason, field, unit_evidence or {"label": label, "value": value})
@@ -745,8 +963,20 @@ def _ranking_context_rows(row):
     return contexts if isinstance(contexts, list) else []
 
 
+def _ranking_snapshot_scope(ctx):
+    """Use recorded observation provenance, never invent a current snapshot."""
+    snapshot = ctx.get("snapshot_id") or ctx.get("ranking_snapshot_id")
+    if snapshot:
+        return ("snapshot", str(snapshot))
+    if ctx.get("collection_batch") and ctx.get("collection_time"):
+        return ("batch", str(ctx["collection_batch"]), str(ctx["collection_time"]))
+    observed = ctx.get("collected_at") or ctx.get("observed_at")
+    return ("observed", str(observed)) if observed else None
+
+
 def _sf_rankings(rows, issues, fields, *, ranking_matrix=None):
     slots, slot_count, pages = defaultdict(set), defaultdict(int), defaultdict(set)
+    unscoped = defaultdict(list)
     for row in rows:
         asin = normalize_asin(row.get("asin"))
         contexts = _ranking_context_rows(row)
@@ -765,19 +995,29 @@ def _sf_rankings(rows, issues, fields, *, ranking_matrix=None):
             except (TypeError, ValueError):
                 _sf_issue(issues, fields, asin, "RANK_SLOT_MISSING", PARSER_MISSED, "P1", "ranking slot missing", "bestseller_rank")
                 continue
-            slot = (str(source), page, rank)
+            scope = _ranking_snapshot_scope(ctx)
+            slot = (scope, str(source), page, rank)
             slots[slot].add(asin)
             slot_count[slot] += 1
-            pages[(str(source), page)].add(rank)
+            unscoped[(str(source), page, rank)].append((scope, asin))
+            pages[(scope, str(source), page)].add(rank)
             has_path = bool([part.strip() for part in str(ctx.get("ranking_source_category_path") or "").split(">") if part.strip()])
             if not ctx.get("leaf_category") and not ctx.get("browse_node_id") and not has_path:
                 _sf_issue(issues, fields, asin, "RANK_CATEGORY_EVIDENCE_MISSING", SOURCE_MISSING, "P2", "ranking lacks category/node", "ranking_contexts")
         if row.get("detail_bsr") not in (None, "") and row.get("bestseller_rank") == row.get("detail_bsr"):
             _sf_issue(issues, fields, asin, "RANK_BSR_MIXED", BLOCKED, "P1", "detail BSR cannot populate bestseller rank", "bestseller_rank")
-    for (source, page, rank), asins in slots.items():
-        if len(asins) > 1 or slot_count[(source, page, rank)] > 1:
+    # If any observation lacks a snapshot scope, date separation is unproved.
+    unknown_collisions = {slot: {asin for _, asin in items} for slot, items in unscoped.items()
+                          if len(items) > 1 and any(scope is None for scope, _ in items)}
+    for (scope, source, page, rank), asins in slots.items():
+        if (source, page, rank) in unknown_collisions:
+            continue
+        if len(asins) > 1 or slot_count[(scope, source, page, rank)] > 1:
             for asin in asins:
-                _sf_issue(issues, fields, asin, "DUPLICATE_RANK_SLOT", BLOCKED, "P1", "multiple ASINs occupy rank slot", "bestseller_rank", {"source": source, "page": page, "rank": rank})
+                _sf_issue(issues, fields, asin, "DUPLICATE_RANK_SLOT", BLOCKED, "P1", "multiple records occupy same snapshot rank slot", "bestseller_rank", {"source": source, "page": page, "rank": rank, "snapshot_scope": scope})
+    for (source, page, rank), asins in unknown_collisions.items():
+        for asin in asins:
+            _sf_issue(issues, fields, asin, "DUPLICATE_RANK_SLOT", BLOCKED, "P1", "rank collision lacks snapshot separation evidence", "bestseller_rank", {"source": source, "page": page, "rank": rank})
     # Gap authority must be the complete reviewed ranking matrix.  The current
     # owner scope is a subset, so treating its absent ASINs as missing ranks
     # would manufacture a gap.  Per-record context checks above remain bound
@@ -796,12 +1036,12 @@ def _sf_rankings(rows, issues, fields, *, ranking_matrix=None):
                 continue
             source = str(ctx.get("ranking_source_url") or ctx.get("source_url") or "")
             if source and page >= 1 and rank >= 1:
-                matrix_pages[(source, page)].add(rank)
-    for (source, page), ranks in matrix_pages.items():
+                matrix_pages[(_ranking_snapshot_scope(ctx), source, page)].add(rank)
+    for (scope, source, page), ranks in matrix_pages.items():
         if len(ranks) > 2:
             missing = sorted(set(range(min(ranks), max(ranks) + 1)) - ranks)
             if missing:
-                _sf_issue(issues, fields, "", "RANK_GAP", REVIEW_REQUIRED, "P2", "rank page has gaps", "bestseller_rank", {"source": source, "page": page, "missing": missing})
+                _sf_issue(issues, fields, "", "RANK_GAP", REVIEW_REQUIRED, "P2", "rank page has gaps", "bestseller_rank", {"source": source, "page": page, "missing": missing, "snapshot_scope": scope})
 
 
 def _sf_hash(value) -> str:
@@ -824,8 +1064,13 @@ def _sf_record_binding(row: Mapping) -> dict:
     }
 
 
-def audit_source_fields(products: Iterable[Mapping], *, ranking_matrix: Iterable[Mapping] | None = None, progress=None) -> dict:
-    """Perform the production source audit without network access or mutation."""
+def audit_source_fields(products: Iterable[Mapping], *, ranking_matrix: Iterable[Mapping] | None = None, progress=None,
+                        parent_scope_html: Mapping | None = None) -> dict:
+    """Audit offline without mutation; optional archived HTML must match its source hash.
+
+    Do not accept caller-supplied scope PASS flags. Recompute exact per-occurrence
+    proof from the provided archived bytes and this row's populated raw fields.
+    """
     emit = progress or (lambda *_args, **_kwargs: None)
     # The audit does not mutate source rows; keep only one shallow container.
     rows = [row for row in (products or ()) if isinstance(row, Mapping)]
@@ -837,7 +1082,8 @@ def audit_source_fields(products: Iterable[Mapping], *, ranking_matrix: Iterable
         if index % 100 == 0:
             emit("SOURCE_AUDIT_PROGRESS", records=index)
         asin = normalize_asin(row.get("asin"))
-        _sf_identity(row, asin, issues, fields)
+        _sf_identity(row, asin, issues, fields,
+                     parent_scope_html=(parent_scope_html or {}).get(asin))
         if not is_valid_asin(asin):
             continue
         for name in ("product_url", "requested_url", "final_url", "canonical_url"):

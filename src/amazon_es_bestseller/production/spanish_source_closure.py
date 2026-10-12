@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from ..models import merge_ranking_and_detail, normalize_asin
-from ..normalization.brand import clean_brand, normalize_brand_case
+from ..normalization.brand import brand_from_byline, clean_brand, normalize_brand_case
+from ..normalization.parent_asin import confirmed_self_parent
 from ..pipeline import normalize_product
 from ..quality.source_fields import audit_source_fields
 from ..quality.source_gate import canonical_audit_hash, evaluate_source_gate
@@ -63,9 +64,6 @@ _OWNER_ATTRIBUTE_EXCLUSION_CODES = {
 }
 _CJK_RE = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 _MOJIBAKE_RE = re.compile(r"\ufffd|(?:Ã.|Â.)")
-_NON_BRAND_BYLINE_RE = re.compile(
-    r"(?:^edici[oó]n\s+en\b|^de\b.*\b(?:autor|redactor|traductor|formato)\s*:|\bformato\s*:)", re.I
-)
 _RANKING_CATEGORY_KEYS = ("category_l1", "category_l2", "category_l3", "leaf_category", "browse_node_id")
 
 
@@ -143,7 +141,7 @@ def _explicit_brand(detail: Mapping, asin: str, queue: list[dict]) -> str:
         return normalize_brand_case(brand) if brand else ""
 
     raw_brand = _text(detail.get("brand_raw"))
-    if raw_brand and _NON_BRAND_BYLINE_RE.search(raw_brand):
+    if raw_brand and not brand_from_byline(raw_brand):
         _queue(queue, asin=asin, field="brand", classification="EVIDENCE_UNAVAILABLE",
                reason="brand byline has no explicit Marca/Brand label; canonical brand intentionally blank",
                locator={"asin": asin, "field": "brand", "source": "brand_raw", "value_raw": detail.get("brand_raw")})
@@ -495,22 +493,7 @@ def _spanish_only(record: dict) -> dict:
 
 def _confirmed_self_parent(detail: Mapping, asin: str, cache_root: Path | None) -> bool:
     """Accept self-parent only from parser evidence tied to saved HTML bytes."""
-    evidence = detail.get("variation_evidence")
-    if not isinstance(evidence, Mapping) or str(evidence.get("producer") or "").casefold() != "parser":
-        return False
-    family = {normalize_asin(value) for value in evidence.get("family_asins") or ()}
-    if normalize_asin(evidence.get("current_asin")) != asin or normalize_asin(evidence.get("parent_asin")) != asin:
-        return False
-    if not any(value and value != asin for value in family):
-        return False
-    raw_path = _text(evidence.get("cache_html_path"))
-    expected_hash = _text(evidence.get("cache_html_sha256"))
-    if not raw_path or not re.fullmatch(r"[0-9a-f]{64}", expected_hash.casefold()):
-        return False
-    path = Path(raw_path)
-    if not path.is_absolute() and cache_root is not None:
-        path = cache_root / path
-    return path.is_file() and _file_sha256(path) == expected_hash.casefold()
+    return confirmed_self_parent(detail, asin, cache_root)
 
 
 def _ranking_category_provenance(primary: Mapping) -> dict:

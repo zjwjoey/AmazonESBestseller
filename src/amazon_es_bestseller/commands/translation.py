@@ -79,8 +79,17 @@ def _selected_records(records: list[dict[str, Any]], args: Any) -> tuple[list[di
     return selected, selection
 
 
+def _configured_provider_mode(config: Mapping[str, Any]) -> str:
+    explicit_mode, compatibility_mode = config.get('provider_mode'), config.get('provider')
+    def normalize(value):
+        return str(value).strip().lower().replace('_', '-')
+    if explicit_mode and compatibility_mode and normalize(explicit_mode) != normalize(compatibility_mode):
+        raise ValueError('TRANSLATION_PROVIDER_CONFIGURATION_CONFLICT')
+    return normalize(explicit_mode or compatibility_mode or 'fake')
+
+
 def _service(run_dir: Path, config: Mapping[str, Any], args: Any) -> TranslationService:
-    provider_mode = str(config.get('provider_mode') or 'fake').strip().lower()
+    provider_mode = _configured_provider_mode(config)
     if provider_mode == 'qwen-mt':
         from ..translation.providers.qwen_mt import QwenMTProvider
         from ..translation.budget import BudgetLedger, BudgetedProvider, VerifiedPriceCard
@@ -222,7 +231,7 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         batch_id = shard_batch_id(dataset_hash=str(manifest.get('dataset_hash') or ''), selection=selection,
                                   prompt_version=str(config.get('prompt_version') or 'amazon-es-retail-v2'),
                                   schema_version=str(config.get('schema_version') or TRANSLATION_SCHEMA_VERSION))
-        provider_mode = str(config.get('provider_mode') or 'fake').lower()
+        provider_mode = _configured_provider_mode(config)
         batch_id = shard_batch_id(dataset_hash=str(manifest.get('dataset_hash') or ''), selection=selection,
                                   prompt_version=str(config.get('prompt_version') or 'amazon-es-retail-v2'),
                                   schema_version=str(config.get('schema_version') or TRANSLATION_SCHEMA_VERSION),

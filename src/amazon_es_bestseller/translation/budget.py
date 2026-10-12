@@ -65,8 +65,35 @@ class _FileLock:
     def __init__(self, path: Path, timeout: float = 20.0): self.path, self.timeout = path, timeout
     @staticmethod
     def _alive(pid: int) -> bool:
-        try: os.kill(pid, 0); return True
-        except OSError: return False
+        if pid <= 0:
+            return False
+        if os.name == "nt":
+            # On Windows signal 0 is CTRL_C_EVENT, not POSIX kill(pid, 0).
+            # Query only: never signal/terminate another lock owner.
+            import ctypes
+            from ctypes import wintypes
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel.WaitForSingleObject.restype = wintypes.DWORD
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.CloseHandle.restype = wintypes.BOOL
+            handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE only
+            if not handle:
+                # Invalid PID proves absence; denied/unknown stays fail-closed.
+                return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER
+            try:
+                return kernel.WaitForSingleObject(handle, 0) != 0  # WAIT_OBJECT_0 = exited
+            finally:
+                kernel.CloseHandle(handle)
+        try:
+            os.kill(pid, 0)
+            return True
+        except PermissionError:
+            return True
+        except ProcessLookupError:
+            return False
     def __enter__(self):
         deadline = time.monotonic() + self.timeout
         while True:
@@ -74,7 +101,10 @@ class _FileLock:
                 fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 os.write(fd, json.dumps({"pid": os.getpid(), "created_at": _now()}).encode()); os.close(fd); return self
             except FileExistsError:
-                try: owner = json.loads(self.path.read_text(encoding="utf-8")); stale = not self._alive(int(owner.get("pid", 0)))
+                try:
+                    owner = json.loads(self.path.read_text(encoding="utf-8"))
+                    pid = int(owner.get("pid", 0))
+                    stale = pid > 0 and not self._alive(pid)
                 except (OSError, ValueError, TypeError): stale = False
                 if stale:
                     try: self.path.unlink()

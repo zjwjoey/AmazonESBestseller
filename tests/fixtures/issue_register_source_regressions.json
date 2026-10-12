@@ -1,0 +1,12 @@
+{
+  "source": "production_closure_issue_register_20261007T074352Z; saved detail evidence, minimized offline regressions",
+  "brand_cases": [
+    {"asin": "4861527724", "byline": "Edición en Japonés Formato: Tapa blanda", "explicit_brand": "", "expected": ""},
+    {"asin": "B01NBM854W", "byline": "Bontempi Formato: Juguete", "explicit_brand": "Bontempi", "expected": "Bontempi"},
+    {"asin": "B00XFMY9NE", "byline": "de Hellmann's Formato: Comestibles", "explicit_brand": "", "expected": ""}
+  ],
+  "display_conflicts": [
+    {"label_raw": "Modelo", "value_raw": "AH0003400R", "section": "product_overview", "position": 0, "source": "productOverview"},
+    {"label_raw": "Modelo", "value_raw": "Replacement mechanism Roca", "section": "technical_details", "position": 0, "source": "prodDetails"}
+  ]
+}

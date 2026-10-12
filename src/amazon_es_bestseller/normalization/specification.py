@@ -610,17 +610,50 @@ def _explicit_model_spec_es(attributes) -> str:
     return '%s: %s' % (label, value)
 
 
+_EXPLICIT_DIM_ES_RE = re.compile(
+    r'(?<![\w.,])\d+(?:[.,]\d+)?\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?'
+    r'(?:\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?)?\s*'
+    r'(?:mm|cm|m|milímetros?|centímetros?|metros?)(?!\w)', re.I)
+_EXPLICIT_COUNT_ES_RE = re.compile(
+    r'(?<![\w.,])(\d+)\s*(?:count|conteo|pcs|piezas?|unidades?|uds\.?|artículos?)\b', re.I)
+
+
+def _preferred_es_options(variant, title):
+    """Unambiguous selected size/count, then exact title; retain source text.
+
+    Never interpret a bare model number, net volume or multiple alternatives
+    as a count. A selected single pack prevents falling back to a stale count.
+    """
+    dimension = count = None
+    for field, source in (('selected_variation_raw', variant), ('title_es_raw', title)):
+        text = str(source or '').strip()
+        dimensions = list(_EXPLICIT_DIM_ES_RE.finditer(text))
+        if dimension is None and len(dimensions) == 1:
+            dimension = {'value': dimensions[0].group(), 'source_field': field}
+        units = list(_EXPLICIT_COUNT_ES_RE.finditer(text))
+        packs = list(_COUNT_AFTER_RE.finditer(text))
+        if count is None and (units or packs) and len(units) <= 1 and len(packs) <= 1:
+            total = (int(units[0].group(1)) if units else 1) * (int(packs[0].group(1)) if packs else 1)
+            # Preserve both explicit factors when present, not a fabricated
+            # quantity label. Otherwise keep the exact count fragment.
+            fragment = text if units and packs else (units or packs)[0].group()
+            count = {'value': fragment, 'amount': total, 'source_field': field}
+    return dimension, count
+
+
 def build_spec_es(attributes=None, details=None, variant=None, title_es=None) -> str:
     """Build a compact Spanish core-spec display from explicit page evidence.
 
-    ``attributes`` is preferred because it retains the original Spanish label.
-    ``details`` is a compatibility fallback for legacy normalized records.  A
-    selected variation is only used when no recognized attribute is available;
-    no value is inferred from rank, price, or a translated Chinese summary.
+    Explicit same-family variation/title measures outrank generic attributes.
+    Raw attributes are never changed; the source audit retains contradictions.
+    Other detail fields and legacy fallbacks preserve their verified behavior.
     """
     picked = []          # (组优先级, 页面顺序, 展示文本)
     seen = set()
     seen_groups = set()
+    from .measure_evidence import measurements, preferred_capacity
+    preferred = preferred_capacity(variant,title_es)
+    preferred_dimension, preferred_count = _preferred_es_options(variant, title_es)
     for position, attr in enumerate(attributes or []):
         if not isinstance(attr, dict):
             continue
@@ -630,12 +663,30 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         group = _es_core_group(key)
         if not label or not value or not _is_es_core_key(key) or group is None:
             continue
+        measures = measurements(value)
+        if group in {'capacity','size'} and len(measures)==1:
+            amount, unit, _ = measures[0]
+            choice = preferred.get(unit)
+            if choice and amount!=choice['amount']:
+                if group=='size':
+                    # A conflicting volume option is not a reliable size.
+                    # The original remains in full details and Source Audit.
+                    if 'capacity' in seen_groups:
+                        continue
+                    group, label = 'capacity', 'Capacidad'
+                value = choice['value']
         # Amazon's overloaded "Número de unidades" may describe volume or
         # weight.  Keep it in raw attributes, but never show it as a count in
         # the compact Spanish core specification.
         if key == 'numero_de_unidades' and classify_value_unit(value) in {
                 'capacity', 'weight', 'dimension'}:
             continue
+        if group == 'dimension' and preferred_dimension:
+            value = preferred_dimension['value']
+        if group == 'count' and preferred_count:
+            if preferred_count['amount'] <= 1:
+                continue
+            value = preferred_count['value']
         if group in seen_groups:
             continue
         if _is_generic_one_count(key, value):

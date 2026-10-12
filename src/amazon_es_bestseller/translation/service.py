@@ -26,7 +26,9 @@ from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
 from .field_contract import canonical_translation_field_type, canonical_translation_unit_field
-from .production_contract import CANONICAL_FIELD_TARGETS, PRODUCTION_FIELD_ALIASES
+from .production_contract import CANONICAL_FIELD_TARGETS, PRODUCTION_FIELD_ALIASES, canonical_source_field
+from .source_coverage import detail_translation_input
+from .raw_journal import RawResponseJournal, bind_qwen_journals
 
 DEFAULT_FIELD_MAP = {
     alias: CANONICAL_FIELD_TARGETS[canonical]
@@ -54,6 +56,9 @@ class TranslationService:
                  structured_schema_version: str = ""):
         self.provider = provider
         self.cache = cache
+        cache_path = getattr(cache, "path", None)
+        self.raw_response_required = bind_qwen_journals(provider,
+            cache_path.parent / "raw_responses" if cache_path else None)
         self.field_map = dict(field_map or DEFAULT_FIELD_MAP)
         self.schema_version = schema_version
         self.prompt_version = prompt_version
@@ -185,9 +190,9 @@ class TranslationService:
             rows = []
             for row in value:
                 label = row.get("label_raw") or row.get("label") or row.get("name")
-                raw_value = row.get("value_raw") or row.get("value")
-                if label is not None and raw_value is not None and str(raw_value).strip():
-                    rows.append((str(label), str(raw_value)))
+                raw_value = row.get("value_raw", row.get("value"))
+                if raw_value is not None and str(raw_value).strip():
+                    rows.append((str(label) if label is not None else None, str(raw_value)))
             return rows
         if isinstance(value, str):
             rows = []
@@ -220,7 +225,15 @@ class TranslationService:
             envelope = prepared[source_field]
             if not isinstance(envelope, dict) or not envelope.get("translate_allowed"):
                 return None
+            if canonical_source_field(source_field) == "product_details":
+                coverage = detail_translation_input(record)
+                if coverage["available"]:
+                    return coverage["items"]
             return envelope.get("clean_text") or ""
+        if canonical_source_field(source_field) == "product_details":
+            coverage = detail_translation_input(record)
+            if coverage["available"]:
+                return coverage["items"]
         return record.get(source_field)
 
     @classmethod
@@ -285,7 +298,7 @@ class TranslationService:
         if is_bullet_field:
             bullets = cls._bullet_values(raw_value)
             return [(None, value) for value in bullets] if bullets is not None else None
-        if source_field not in {"product_details", "product_details_es", "detail_attributes_raw"}:
+        if canonical_source_field(source_field) != "product_details":
             return None
         rows = cls._structured_rows(raw_value)
         return list(rows) if rows is not None else None
@@ -315,6 +328,10 @@ class TranslationService:
             unit_field = canonical_translation_unit_field(source_field, label=label)
             memory_key = self._memory_key(value, unit_field)
             memory = self._memory_lookup(memory_key, value, unit_field, label=label)
+            # Product identity is authoritative even when an older cache
+            # contains an incorrectly naturalized model/brand value.
+            if label is not None and is_identity_attribute(label):
+                memory = None
             if memory and ((memory.get("translation_status") == "partial" and repair_partial)
                            or (memory.get("translation_status") in {"failed", "qa_failed"}
                                and repair_failed)):
@@ -322,6 +339,7 @@ class TranslationService:
             item_issues = []
             item_candidate_text = ""
             provider_memory_claimed = False
+            item_raw_refs = []
             if memory:
                 item_status = memory.get("translation_status", "success")
                 item_issues = list(memory.get("qa_issues") or [])
@@ -339,6 +357,7 @@ class TranslationService:
                 item_alias = memory.get("provider_alias")
                 item_model = memory.get("model", self.provider.model)
                 item_attempts = 0
+                item_raw_refs = list(memory.get("raw_response_refs") or [])
             elif label is not None and is_identity_attribute(label):
                 # Identity values (models, OEM/part numbers, company names,
                 # UPC/EAN/ASIN/ISBN) never need machine translation.
@@ -378,6 +397,10 @@ class TranslationService:
                             source_language=self.source_language, target_language=self.target_language,
                             context={"target_field": target, "item_index": index,
                                      "label": label, "translation_unit_field": unit_field,
+                                     "source_hash": source_hash(value),
+                                     "source_record_hash": record.get("source_record_hash") or source_hash(json.dumps(record, ensure_ascii=False, sort_keys=True)),
+                                     "source_schema_version": record.get("source_schema_version", record.get("detail_schema_version", "")),
+                                     "source_locator": raw_value[index].get("source_locator") if isinstance(raw_value, list) and isinstance(raw_value[index], dict) else {"field": source_field, "index": index},
                                      "canonical_dispatch_key": memory_key,
                                      "dispatch_identity_version": "canonical-memory-key-v1",
                                      "protected_tokens": list(protected.tokens),
@@ -395,6 +418,7 @@ class TranslationService:
                     attempts += response.attempts
                     item_provider = response.provider or self.provider.name
                     item_alias = (response.raw or {}).get("provider_alias")
+                    item_raw_refs = list((response.raw or {}).get("raw_response_refs") or [])
                     item_model = response.model or self.provider.model
                     item_candidate_text = response.text or ""
                     item_attempts = response.attempts
@@ -424,6 +448,7 @@ class TranslationService:
                             "qa_issues": list(item_issues),
                             "provider": item_provider,
                             "provider_alias": item_alias,
+                            "raw_response_refs": item_raw_refs,
                             "model": item_model,
                             "translated_at": self._now(),
                         }
@@ -446,6 +471,12 @@ class TranslationService:
                         rendered_value = ""
                         if response.error:
                             errors.append(str(response.error))
+                    elif response.status == "partial":
+                        item_status = "partial"
+                        statuses.append("partial")
+                        rendered_value = response.text or ""
+                        item_issues = [{"code": response.error or "PARTIAL_TRANSLATION"}]
+                        issues.extend({"item_index": index, **issue} for issue in item_issues)
                     else:
                         item_status = "failed"
                         statuses.append("failed")
@@ -461,6 +492,7 @@ class TranslationService:
                                           "qa_failed" if item_status == "qa_failed" else "review_required"),
                             "qa_issues": list(item_issues),
                             "provider": item_provider, "provider_alias": item_alias,
+                            "raw_response_refs": item_raw_refs,
                             "model": item_model, "last_error": response.error,
                             "translated_at": self._now(),
                         })
@@ -477,21 +509,56 @@ class TranslationService:
                                    "qa_issues": list(item_issues),
                                    "provider": item_provider, "model": item_model,
                                    "provider_alias": item_alias,
+                                   "raw_response_refs": item_raw_refs,
                                    "attempt_count": item_attempts,
                                    "resolution_source": item_resolution,
                                    "candidate_text": item_candidate_text})
             if label is not None:
                 label_zh = (self.dictionary.lookup_attribute_label(label.strip())
-                            or LABEL_ES_ZH.get(label.strip().casefold(), label.strip()))
+                            or LABEL_ES_ZH.get(label.strip().casefold())
+                            or {"model": "型号", "brand": "品牌", "manufacturer": "制造商",
+                                "model name": "型号名称", "model number": "型号编号",
+                                "part number": "零件号", "item model number": "商品型号"}.get(label.strip().casefold()))
+                label_result = None
+                if label_zh is None and self.raw_response_required:
+                    # One initial label translation, with the same durable
+                    # cache/claim/raw-journal contract; no QA-driven retranslation.
+                    label_service = TranslationService(self.provider, self.cache,
+                        field_map={"detail_label": "detail_label_zh"}, schema_version=self.schema_version,
+                        prompt_version=self.prompt_version, dictionary_manifest=self.dictionary_manifest,
+                        structured_schema_version=self.structured_schema_version)
+                    label_result = label_service._translate_record({"asin": asin, "detail_label": label})["fields"]["detail_label_zh"]
+                    label_zh = label_result.get("translated_text") or label
+                    statuses.append("success" if label_result.get("translation_status") == "cached"
+                                    else label_result.get("translation_status", "pending"))
+                    attempts += label_result.get("attempt_count", 0)
+                    item_providers.append(label_result.get("provider", self.provider.name))
+                    item_models.append(label_result.get("model", self.provider.model))
+                    item_aliases.append(label_result.get("provider_alias"))
+                    issues.extend({"item_index": index, "label_translation": True, **i}
+                                  for i in label_result.get("qa_issues", []))
+                if label_zh is None:
+                    label_zh = label
+                rendered_items[-1].update(label_zh=label_zh,
+                    label_translation_status=label_result.get("translation_status") if label_result else
+                        "unresolved_offline_label" if label_zh == label and not self.dictionary.lookup_attribute_label(label.strip())
+                        else "source_dictionary",
+                    label_translation=label_result)
                 rendered.append("%s：%s" % (label_zh, rendered_value))
             else:
                 rendered.append(rendered_value)
-        if all(status == "success" for status in statuses):
+        if not statuses:
+            overall = "source_missing"
+            qa_status = "source_missing"
+        elif all(status == "success" for status in statuses):
             overall = "success"
             qa_status = "pass"
         elif any(status == "success" for status in statuses):
             overall = "partial"
             qa_status = "qa_failed" if issues else "pending"
+        elif "partial" in statuses:
+            overall = "partial"
+            qa_status = "pending"
         elif any(status == "qa_failed" for status in statuses):
             overall = "qa_failed"
             qa_status = "qa_failed"
@@ -513,6 +580,8 @@ class TranslationService:
                 "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                 "attempt_count": attempts, "last_error": "; ".join(errors) or None,
                 "items": rendered_items,
+                "raw_response_refs": [ref for item in rendered_items for ref in (
+                    item.get("raw_response_refs", []) + (item.get("label_translation") or {}).get("raw_response_refs", []))],
                 "qa_issues": issues, "translated_at": self._now()}
 
     def _deterministic_spec_result(self, *, asin: str, source_field: str,
@@ -647,6 +716,13 @@ class TranslationService:
                 items = self._structured_items(source, self._prepared_value(record, source))
                 if items is not None:
                     for item_label, item_text in items:
+                        if (self.raw_response_required and item_label is not None and not self.dictionary.lookup_attribute_label(item_label.strip())
+                                and not LABEL_ES_ZH.get(item_label.strip().casefold())
+                                and item_label.strip().casefold() not in {
+                                    "model", "brand", "manufacturer", "model name", "model number", "part number", "item model number"}):
+                            label_key = self._memory_key(item_label, "detail_label")
+                            if not self._memory_lookup(label_key, item_label, "detail_label"):
+                                unique_requests.add(label_key)
                         if item_label is not None and is_identity_attribute(item_label):
                             continue
                         if (item_label is not None
@@ -799,6 +875,7 @@ class TranslationService:
                         "qa_issues": list(memory.get("qa_issues") or []),
                         "provider": memory.get("provider", self.provider.name),
                         "model": memory.get("model", self.provider.model),
+                        "raw_response_refs": list(memory.get("raw_response_refs") or []),
                     })
                     self._stamp_dictionary_version(result)
                     self.cache.put(key, result)
@@ -812,6 +889,7 @@ class TranslationService:
                           "qa_status": memory["qa_status"],
                           "provider": memory.get("provider", self.provider.name),
                           "provider_alias": memory.get("provider_alias"),
+                          "raw_response_refs": list(memory.get("raw_response_refs") or []),
                           "model": memory.get("model", self.provider.model),
                           "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                           "attempt_count": 0, "last_error": None,
@@ -840,6 +918,7 @@ class TranslationService:
                                   "qa_status": settled_memory.get("qa_status", "review_required"),
                                   "provider": settled_memory.get("provider", self.provider.name),
                                   "provider_alias": settled_memory.get("provider_alias"),
+                                  "raw_response_refs": list(settled_memory.get("raw_response_refs") or []),
                                   "model": settled_memory.get("model", self.provider.model),
                                   "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                                   "attempt_count": 0, "last_error": settled_memory.get("last_error"),
@@ -866,6 +945,9 @@ class TranslationService:
                                                    source_language=self.source_language,
                                                    target_language=self.target_language,
                                                    context={"target_field": target, "protected_tokens": list(protected.tokens),
+                                                   "source_hash": digest,
+                                                   "source_record_hash": record.get("source_record_hash") or source_hash(json.dumps(record, ensure_ascii=False, sort_keys=True)),
+                                                   "source_locator": {"field": source_field},
                                                    "canonical_dispatch_key": memory_key,
                                                    "dispatch_identity_version": "canonical-memory-key-v1",
                                                    "schema_version": self.schema_version,
@@ -878,6 +960,7 @@ class TranslationService:
                           "candidate_text": response.text or "",
                           "qa_status": "pending", "provider": response.provider or self.provider.name,
                           "provider_alias": (response.raw or {}).get("provider_alias"),
+                          "raw_response_refs": list((response.raw or {}).get("raw_response_refs") or []),
                           "model": response.model or self.provider.model,
                           "schema_version": self.schema_version, "prompt_version": self.prompt_version,
                           "attempt_count": response.attempts, "last_error": response.error,
@@ -911,6 +994,7 @@ class TranslationService:
                         "qa_issues": list(result["qa_issues"]),
                         "provider": result["provider"],
                         "provider_alias": result.get("provider_alias"),
+                        "raw_response_refs": result.get("raw_response_refs", []),
                         "model": result["model"],
                         "translated_at": result["translated_at"],
                     }
@@ -936,6 +1020,7 @@ class TranslationService:
                     "qa_issues": list(result.get("qa_issues") or []),
                     "provider": result.get("provider", self.provider.name),
                     "provider_alias": result.get("provider_alias"),
+                    "raw_response_refs": result.get("raw_response_refs", []),
                     "model": result.get("model", self.provider.model),
                     "last_error": result.get("last_error"), "translated_at": result.get("translated_at"),
                 })
@@ -988,6 +1073,18 @@ class TranslationService:
                 present_targets.add(target)
         for envelope in output_fields.values():
             self._stamp_dictionary_version(envelope)
+            if self.raw_response_required and envelope.get("provider") == "qwen-mt" and envelope.get("translation_status") in {"success", "cached", "qa_failed", "partial"}:
+                if not envelope.get("raw_response_refs") or not all(
+                        RawResponseJournal.verify(ref) for ref in envelope["raw_response_refs"]):
+                    # Historical parsed caches stay visible and are never
+                    # re-requested just to fabricate a new raw response.
+                    envelope["raw_response_status"] = "HISTORICAL_RAW_NOT_TRACEABLE"
+                    envelope["qa_status"] = "review_required"
+                    envelope["qa_issues"] = list(envelope.get("qa_issues") or []) + [{"code": "RAW_RESPONSE_NOT_TRACEABLE"}]
+                    if envelope.get("translation_status") in {"success", "cached"}:
+                        envelope["translation_status"] = "pending"
+                else:
+                    envelope["raw_response_status"] = "ORIGINAL_RESPONSE_REFERENCED"
         statuses = [v.get("translation_status") for v in output_fields.values()]
         blocked = "preclean_blocked" in statuses
         actionable_statuses = [status for status in statuses
@@ -1007,6 +1104,7 @@ class TranslationService:
         else:
             overall = "failed"
         output = {"asin": asin, "fields": output_fields, "translation_status": overall,
+                  "source_coverage": detail_translation_input(record),
                   "source_record_hash": source_hash(json.dumps(record, ensure_ascii=False, sort_keys=True))}
         # Keep a flat display overlay alongside the auditable field envelopes;
         # this lets the existing enrich/export path consume V2 without knowing
@@ -1061,9 +1159,11 @@ class TranslationService:
         if limit is not None:
             subset = subset[:max(0, limit)]
         original_provider = self.provider
+        original_raw_response_required = self.raw_response_required
         self.provider = PoolProviderAdapter(pool, model=getattr(original_provider, "model", "qwen-mt-flash"))
         results: list[Optional[Dict[str, Any]]] = [None] * len(subset)
         try:
+            self.raw_response_required = bind_qwen_journals(self.provider, self.cache.path.parent / "raw_responses")
             with ThreadPoolExecutor(max_workers=pool.max_workers, thread_name_prefix="translation-record") as executor:
                 futures = {executor.submit(self._translate_record, record, fields=fields,
                                             repair_partial=repair_partial, repair_failed=repair_failed): index
@@ -1076,6 +1176,7 @@ class TranslationService:
                     self.cache.save()
         finally:
             self.provider = original_provider
+            self.raw_response_required = original_raw_response_required
             self.cache.save()
         outputs = {result["asin"]: result for result in results if result and result.get("asin")}
         # Keep the same flat display overlay as the serial path for fields

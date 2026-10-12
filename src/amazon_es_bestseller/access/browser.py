@@ -186,7 +186,7 @@ class BrowserSession:
                 time.sleep(0.25)
 
     def ensure_spain_delivery(self, postal_code: str = DEFAULT_SPAIN_POSTAL_CODE,
-                              timeout_ms: int = 45000) -> DeliveryLocation:
+                              timeout_ms: int = 45000, *, use_current_page: bool = False) -> DeliveryLocation:
         """Verify the Amazon header destination and set a Spain postal code.
 
         The check is idempotent for one session.  If the header is not already
@@ -215,8 +215,13 @@ class BrowserSession:
             "confirmation_clicked": False,
             "verified": False,
         }
-        status = self.goto("https://www.amazon.es/", timeout_ms=timeout_ms)
+        status = 200 if use_current_page else self.goto("https://www.amazon.es/", timeout_ms=timeout_ms)
         self.delivery_diagnostics["homepage_status"] = status
+        # Detect restrictions before any UI action or rendering wait.
+        initial_html = self._stable_page_content()
+        initial_state = detect_access_status(status, initial_html)
+        if initial_state in {AccessState.CHALLENGE, AccessState.BLOCKED, AccessState.RATE_LIMITED}:
+            require_normal_access(initial_state, "配送地点检查")
         self.wait_for_product_page(timeout_ms=20000)
 
         # Amazon sometimes returns a normal HTTP 202 shell and fills the
@@ -251,7 +256,9 @@ class BrowserSession:
                     "无法打开 Amazon 配送地点设置；当前页未找到配送地点控件。"
                 )
             self.delivery_diagnostics["location_control_found"] = True
+            self._delivery_ui_access_guard()
             location_button.click(timeout=5000)
+            self._delivery_ui_access_guard()
 
             zip_input = self._visible_locator(("#GLUXZipUpdateInput",))
             if zip_input is None:
@@ -259,23 +266,29 @@ class BrowserSession:
                     "Amazon 配送地点弹窗未提供西班牙邮编输入框。"
                 )
             self.delivery_diagnostics["postal_input_found"] = True
+            self._delivery_ui_access_guard()
             zip_input.fill(code, timeout=5000)
             self.delivery_diagnostics["postal_code_filled"] = True
             apply_button = self._visible_locator(("#GLUXZipUpdate",))
             if apply_button is None:
                 raise DeliveryLocationError("Amazon 配送地点弹窗未找到邮编确认按钮。")
+            self._delivery_ui_access_guard()
             apply_button.click(timeout=5000)
             self.delivery_diagnostics["postal_code_submitted"] = True
+            self._delivery_ui_access_guard()
 
             done_button = self._visible_locator((
-                "#a-autoid-67",
+                'button[name="glowDoneButton"]',
                 "#GLUXConfirmClose",
+                "#GLUXConfirmClose-announce",
+                "#a-autoid-67",
                 "#a-autoid-67-announce",
             ))
             if done_button is None:
                 raise DeliveryLocationError(
                     "Amazon 未确认邮编 %s，无法完成配送地点切换。" % code
                 )
+            self._delivery_ui_access_guard()
             done_button.click(timeout=5000)
             self.delivery_diagnostics["confirmation_clicked"] = True
             self.wait_for_product_page(timeout_ms=5000)
@@ -285,7 +298,7 @@ class BrowserSession:
             # or unresponsive page cannot hang a collection run.
             deadline = time.monotonic() + 5.0
             while True:
-                current = inspect_delivery_location(self._stable_page_content())
+                current = inspect_delivery_location(self._delivery_ui_access_guard())
                 if current.is_spain is True or time.monotonic() >= deadline:
                     break
                 time.sleep(0.2)
@@ -298,7 +311,13 @@ class BrowserSession:
         self._delivery_location_checked = True
         self._delivery_location = current
         self.delivery_diagnostics["verified"] = True
+        self.delivery_diagnostics["final_header_text"] = current.text
         return current
+
+    def _delivery_ui_access_guard(self) -> str:
+        html = self._stable_page_content()
+        require_normal_access(detect_access_status(200, html), "配送地址普通弹窗操作")
+        return html
 
     def wait_for_challenge_clear(self, html: str, status=None):
         """Pause for explicit human handling when manual assist is enabled.

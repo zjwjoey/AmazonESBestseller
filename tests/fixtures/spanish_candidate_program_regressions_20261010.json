@@ -1,0 +1,11 @@
+{
+  "origin": "amazon_es_980links_detail_parallel3_20261010; original visible fields retained",
+  "grinder": {"asin":"B07J6JLW11","title_es_raw":"Bosch - Molinillo de café eléctrico, 180 W, Capacidad 75 gramos, negro, TSM6A013B","selected_variation_raw":"Negro","attributes":[{"label_raw":"Capacidad","value_raw":"80 g"}],"feature_bullets_raw":["Este molinillo cuenta con una capacidad de 75 g permite preparar café suficiente"]},
+  "equivalent_grinder": {"asin":"B0GMH6WS4N","title_es_raw":"VEVOR Molinillo de Especias Comercial Capacidad de 1000 g Molinillo de Cereales Eléctrico 3000 W","attributes":[{"label_raw":"Capacidad","value_raw":"1 kg"},{"label_raw":"Capacidad de salida","value_raw":"1 kg"}]},
+  "dehumidifier": {"asin":"B0DZXKLNVL","title_es_raw":"KNKA Deshumidificador 16L/d Deshumificador de Humedad Doméstico Silencioso","selected_variation_raw":"Blanco 16l","attributes":[{"label_raw":"Capacidad","value_raw":"16 liters_per_day"},{"label_raw":"Capacidad de eliminación de humedad","value_raw":"20 Litros por día"}],"feature_bullets_raw":["El deshumidificador KNKA elimina hasta 16 L de humedad al día (a 35 °C, 90 % RH)"]},
+  "cleaner": {"asin":"B0CBC3BVGP","title_es_raw":"Errecom Clima-Net, Formato Maxi 1 Litro, Detergente para Aires Acondicionados","selected_variation_raw":"Clima Net","attributes":[{"label_raw":"Capacidad","value_raw":"1 litros"},{"label_raw":"Tamaño","value_raw":"1 ml (Paquete de 1)"}]},
+  "package": {"asin":"B07J677FBR","title_es_raw":"Air Wick Eléctrico - Recambios de ambientador, Pack de 6 uinidades","selected_variation_raw":"6 Count","attributes":[{"label_raw":"Nombre del tamaño del paquete","value_raw":"Pack de 6 unidades"}]},
+  "damaged": {"asin":"B08BYLMK7C","title_es_raw":"Proyector de Galaxias y Estrellas Real 19 Temas","attributes":[{"label_raw":"Tipo de altavoz","value_raw":"Port�til"}]},
+  "source_label_conflict": {"asin":"B0DHGR7HCH","title_es_raw":"Papelera Malla Metalica, 12 Litros","attributes":[{"label_raw":"Capacidad","value_raw":"12 litros"},{"label_raw":"Capacidad de peso que puede soportar el producto","value_raw":"12 litros"}]},
+  "language": {"asin":"B07JNP2K6G","attributes":[{"label_raw":"Idioma","value_raw":"Inglés, Inglés, Inglés, Inglés, Inglés"}]}
+}

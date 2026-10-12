@@ -16,6 +16,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from decimal import Decimal
 from pathlib import Path
+from .source_coverage import detail_translation_input
 from typing import Any, Iterable, Mapping
 
 from .dictionary_only import load_records
@@ -207,7 +208,7 @@ def parse_details(value: Any) -> dict[str, Any]:
             provenance.append(item if isinstance(item, Mapping) else {})
             if isinstance(item, Mapping):
                 label = item.get("label_raw") or item.get("label") or item.get("name")
-                raw_value = item.get("value_raw") or item.get("value")
+                raw_value = item.get("value_raw", item.get("value"))
                 iterable.append((label, raw_value))
             else:
                 iterable.append((None, item))
@@ -496,7 +497,9 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             missing_asin += 1
         clean_fields: dict[str, dict[str, Any]] = {}
         raw_fields: dict[str, dict[str, Any]] = {}
-        detail = parse_details(_source_value(record, "product_details"))
+        coverage = detail_translation_input(record)
+        detail_input = coverage["items"] if coverage["available"] else _source_value(record, "product_details")
+        detail = parse_details(detail_input)
         detail_evidence = _detail_source_evidence(record, detail["rows"])
         if any(item["status"] == "CROSS_SOURCE_DETAIL_DIFFERENCE" for item in detail_evidence["comparisons"]):
             detail["issues"] = sorted(set(detail["issues"]) | {"CROSS_SOURCE_DETAIL_DIFFERENCE"})
@@ -505,7 +508,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         record_issues: list[str] = []
         record_identity: list[dict[str, Any]] = []
         for field in AUDIT_FIELDS:
-            raw = _source_value(record, field)
+            raw = detail_input if field == "product_details" else _source_value(record, field)
             source_values = [record.get(alias) for alias in FIELD_ALIASES[field] if alias in record]
             if not source_values or all(value is None for value in source_values):
                 source_presence[field]["null"] += 1
@@ -668,6 +671,9 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                                      "severity": "P1" if status == "BLOCKED" else "P2",
                                      "suggested_action": "人工复核后再进入翻译"})
         translation_input.append({"asin": asin, "clean_schema_version": CLEAN_SCHEMA_VERSION,
+                                  "translation_source_record": {key: record[key] for key in (
+                                      "attributes", "detail_attributes_raw", "detail_bullets_raw",
+                                      "eligibleattributes", "canonicalstructuredsource") if key in record},
                                   "raw_fields": raw_fields, "fields": clean_fields,
                                   "details_structured": detail["rows"], "bullet_items": bullets["items"],
                                   "detail_source_evidence": detail_evidence,

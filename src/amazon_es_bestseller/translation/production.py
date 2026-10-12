@@ -18,6 +18,7 @@ from .production_contract import (
     source_text, target_field_for, translation_candidate_hash,
 )
 from .schemas import TRANSLATION_SCHEMA_VERSION
+from .source_coverage import detail_translation_input
 
 
 PRODUCTION_INPUT_VERSION = "production-translation-input-v1"
@@ -243,6 +244,9 @@ def build_production_input(records: Iterable[Mapping[str, Any]], *,
     seen: set[str] = set()
     for raw in records:
         record = canonical_record(raw)
+        coverage = detail_translation_input(dict(raw))
+        if coverage["available"]:
+            record["product_details"] = coverage["items"]
         asin = record["asin"]
         if not asin:
             raise ValueError("PRODUCTION_INPUT_MISSING_ASIN")
@@ -294,10 +298,9 @@ def records_for_preclean(production_input: Mapping[str, Any]) -> list[dict[str, 
         # Canonical display text can mix attributes and detail bullets. Keep
         # item evidence at the preclean boundary; never reconstruct items from
         # that flattened text when the original structured surface exists.
-        for key in ("eligibleattributes", "canonicalstructuredsource", "attributes", "detail_attributes_raw"):
-            if isinstance(source.get(key), list):
-                row["product_details"] = deepcopy(source[key])
-                break
+        coverage = detail_translation_input(source)
+        if coverage["available"]:
+            row["product_details"] = coverage["items"]
         rows.append(row)
     return rows
 

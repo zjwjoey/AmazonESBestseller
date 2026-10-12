@@ -13,6 +13,31 @@ from .text import collapse_ws, strip_zero_width
 
 _VISITA_RE = re.compile(r"^Visita\s+la\s+tienda\s+de\s+(.+)$", re.IGNORECASE)
 _MARCA_RE = re.compile(r"^Marca:\s*(.*)$", re.IGNORECASE)
+_EDITORIAL_BYLINE_RE = re.compile(
+    r"^edici[oó]n\s+en\b|\bformato\s*:|\((?:autor|autora|redactor|traductor|ilustrador)\)",
+    re.IGNORECASE,
+)
+
+
+def brand_from_byline(value, *, allow_plain: bool = True) -> str:
+    """Reject editorial evidence without blacklisting real brand names."""
+    raw = collapse_ws(strip_zero_width(str(value or "")))
+    if _EDITORIAL_BYLINE_RE.search(raw):
+        return ""
+    if not allow_plain and not (_VISITA_RE.match(raw) or _MARCA_RE.match(raw)):
+        return ""
+    return clean_brand(raw)
+
+
+def brand_from_attributes(attributes) -> str:
+    """Only an explicit brand label can override the byline."""
+    for attr in attributes or []:
+        if not isinstance(attr, dict):
+            continue
+        label = collapse_ws(strip_zero_width(str(attr.get("label_raw") or ""))).casefold()
+        if label in {"marca", "brand"} and attr.get("value_raw"):
+            return clean_brand(attr["value_raw"])
+    return ""
 
 #: 显式品牌规范大小写表。仅收录有把握的品牌，不做推断。
 BRAND_CANON = {

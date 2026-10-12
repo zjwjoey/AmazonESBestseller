@@ -1,3 +1,5 @@
+import pytest
+
 from amazon_es_bestseller.translation.protection import ProtectedText, protect
 from amazon_es_bestseller.translation.qa import build_qa_report, qa_field
 from amazon_es_bestseller.translation.full_detail import render_details_zh
@@ -84,6 +86,21 @@ def test_unit_aliases_cover_amazon_spanish_and_chinese_variants():
     assert qa_field(protect("2 Unidades"), "2包装", "2 Unidades")["qa_status"] == "pass"
     assert qa_field(protect("3,5Grosor centímetros"), "3.5厘米厚", "3,5Grosor centímetros")["qa_status"] == "pass"
     assert qa_field(protect("Pack x2"), "2个装", "Pack x2")["qa_status"] == "pass"
+
+
+@pytest.mark.parametrize('source,target,expected',[
+    ('Pack de 2 Unidades (XL)', '2\u4ef6\u88c5\uff08XL\uff09', 'pass'),
+    ('Paquete de 2 piezas (XL)', '2\u4ef6\u88c5\uff08XL\uff09', 'pass'),
+    ('Pack de 2 Unidades (XL)', '3\u4ef6\u88c5\uff08XL\uff09', 'qa_failed'),
+    ('Pack de 2 Unidades (XL)', '2\u4ef6\u88c5', 'qa_failed'),
+    ('Pack de 2 Unidades (XL)', '2\u4ef6\u88c5\uff08L\uff09', 'qa_failed'),
+    ('Pack de 2 Unidades (XL)', '2\u6beb\u5347\uff08XL\uff09', 'qa_failed'),
+    ('Pack de 2 Unidades (XL), 500 ml', '2\u4ef6\u88c5\uff08XL\uff09 250\u6beb\u5347', 'qa_failed'),
+    ('Pack de 2 Unidades (XL), 500 ml', '2\u4ef6\u88c5\uff08XL\uff09 500\u514b', 'qa_failed'),
+    ('Pack de 2 Unidades (XL), 2 Unidades', '2\u4ef6\u88c5\uff08XL\uff09', 'qa_failed'),
+])
+def test_noun_first_pack_counts_once_and_preserves_quantity_size_and_units(source,target,expected):
+    assert qa_field(protect(source,protected_values=['XL']),target,source)['qa_status']==expected
 
 
 def test_lowercase_spanish_preposition_is_not_ampere_unit():

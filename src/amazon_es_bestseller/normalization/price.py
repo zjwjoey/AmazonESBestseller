@@ -53,3 +53,11 @@ def discount_rate(current, original) -> Optional[float]:
     if orig <= cur:
         return None
     return round((orig - cur) / orig, 4)
+
+
+def canonical_price_fields(current_raw, original_raw) -> dict:
+    """Shared derived price contract. Never change captured source strings."""
+    current, original = parse_price(current_raw), parse_price(original_raw)
+    valid_original = original if original is not None and (current is None or original > current) else None
+    return {'current_price':current,'original_price':valid_original,'currency':CURRENCY,
+            'discount_rate':discount_rate(current,valid_original)}

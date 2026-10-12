@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+import hashlib
+import re
 
 from ..identity import IDENTITY_MATCH, MATCH_BY_EXTERNAL_EVIDENCE, PARENT_ASIN_MATCH, VARIATION_RELATED, resolve_identity
 from ..models import normalize_asin
@@ -9,6 +11,82 @@ from .models import QualityStatus, check_result, issue
 
 
 _ACCEPTED = {IDENTITY_MATCH, PARENT_ASIN_MATCH, VARIATION_RELATED, MATCH_BY_EXTERNAL_EVIDENCE, "MATCH"}
+
+DETAIL_IDENTITY_REVIEW_VERSION = "visible-asin-roles-v1"
+_DIRECTION_CONTROLS = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def normalized_identity_value(value: object) -> str:
+    """Normalize only the comparison value; never rewrite the raw source."""
+    return _DIRECTION_CONTROLS.sub("", str(value or "")).strip().upper()
+
+
+def extract_detail_identity_signals(html: str) -> dict:
+    """Collect typed signals from archived HTML, excluding recommendation ASINs."""
+    from lxml import html as lxml_html
+
+    dom = lxml_html.fromstring(html)
+    inputs = dom.xpath('//input[@id="ASIN" or @name="ASIN" or @id="productAsin"]/@value')
+    canonicals = dom.xpath('//link[contains(concat(" ", normalize-space(@rel), " "), " canonical ")]/@href')
+    from ..identity import asin_from_url
+
+    def valid(values):
+        return sorted({normalized_identity_value(v) for v in values
+                       if re.fullmatch(r"[A-Z0-9]{10}", normalized_identity_value(v))})
+
+    scripts = "\n".join(dom.xpath('//script/text()'))
+    return {"producer": "saved_html_identity_review", "rules_version": DETAIL_IDENTITY_REVIEW_VERSION,
+            "html_sha256": hashlib.sha256(html.encode("utf-8")).hexdigest(),
+            "input_asins": valid(inputs), "canonical_asins": valid(asin_from_url(v) for v in canonicals),
+            "current_asins": valid(re.findall(r'"currentAsin"\s*:\s*"([A-Z0-9]{10})"', scripts, re.I)),
+            "parent_asins": valid(re.findall(r'"parentAsin"\s*:\s*"([A-Z0-9]{10})"', scripts, re.I))}
+
+
+def review_visible_asin_identity(row: Mapping, signals: Mapping | None = None) -> dict:
+    """Distinguish exact values, source-proven parent values and contradictions.
+
+    A parent difference remains REVIEW: a shared detail table does not prove
+    every measurement belongs to the selected child. A bare parent field or
+    matching endpoint must never mask unrelated strong page signals.
+    """
+    asin = normalized_identity_value(row.get("asin"))
+    signals = signals or {}
+    occurrences = []
+    for index, attr in enumerate(row.get("attributes") or []):
+        if isinstance(attr, Mapping) and normalized_identity_value(attr.get("label_raw")) == "ASIN":
+            occurrences.append({"field": "attributes", "index": index, "raw": attr.get("value_raw")})
+    for index, bullet in enumerate(row.get("detail_bullets_raw") or []):
+        match = re.match(r"^\s*ASIN\s*[:：]\s*(.+)$", _DIRECTION_CONTROLS.sub("", str(bullet)), re.I)
+        if match:
+            occurrences.append({"field": "detail_bullets_raw", "index": index,
+                                "raw": re.split(r"[:：]", str(bullet), maxsplit=1)[1]})
+    values = [normalized_identity_value(o["raw"]) for o in occurrences]
+    parent_set = set(signals.get("parent_asins") or [])
+    child_signals = set(signals.get("input_asins") or []) | set(signals.get("current_asins") or [])
+    # Require an unambiguous child anchor and one explicit parent in HTML.
+    parent_proven = len(parent_set) == 1 and child_signals == {asin} and parent_set != {asin}
+    allowed = {asin} | (parent_set if parent_proven else set())
+    strong_conflicts = [dict(source=k, asin=v) for k in ("input_asins", "current_asins", "canonical_asins")
+                        for v in signals.get(k, [])
+                        if v not in ({asin} if k != "canonical_asins" else allowed)]
+    conflicts = [v for v in values if v not in allowed]
+    related = sorted(set(values) & (parent_set if parent_proven else set()))
+    # A canonical parent remains reviewable even if a visible ASIN is absent.
+    related = sorted(set(related) | (set(signals.get("canonical_asins") or []) & (parent_set if parent_proven else set())))
+    normalized = [o for o, v in zip(occurrences, values) if str(o["raw"] or "").strip().upper() != v]
+    if conflicts or strong_conflicts:
+        status = "IDENTITY_CONFLICT"
+    elif related:
+        status = "PARENT_DETAIL_REVIEW_REQUIRED"
+    elif occurrences or child_signals:
+        status = "EXACT_ASIN"
+    else:
+        status = "NO_DETAIL_ASIN"
+    return {"rules_version": DETAIL_IDENTITY_REVIEW_VERSION, "asin": asin, "status": status,
+            "occurrences": occurrences, "normalized_only": normalized,
+            "conflicts": conflicts, "strong_signal_conflicts": strong_conflicts,
+            "parent_related_values": related, "signals": dict(signals),
+            "child_attribute_scope_confirmed": status == "EXACT_ASIN"}
 
 
 def _family(row: Mapping) -> list[str]:

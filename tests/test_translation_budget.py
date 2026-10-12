@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import multiprocessing
+import os
+import json
+import subprocess
+import sys
 import pytest
 
 from amazon_es_bestseller.translation.budget import (
@@ -8,6 +12,7 @@ from amazon_es_bestseller.translation.budget import (
     BudgetLedger,
     BudgetedProvider,
     VerifiedPriceCard,
+    _FileLock,
 )
 from amazon_es_bestseller.translation.providers.base import ProviderResponse, TranslationProvider
 
@@ -18,6 +23,40 @@ def _card():
         "input_per_million_cny": "500000", "output_per_million_cny": "1000000",
         "verified_at": "2026-10-05T00:00:00Z", "source": "https://help.aliyun.com/pricing/qwen-mt",
     }, provider="test", model="test-model")
+
+
+def test_lock_liveness_query_never_sends_a_signal(monkeypatch):
+    if os.name != 'nt':
+        pytest.skip('Windows process-query regression')
+    def forbidden(*args):
+        raise AssertionError('liveness query must not call os.kill on Windows')
+    monkeypatch.setattr(os, 'kill', forbidden)
+    assert _FileLock._alive(os.getpid()) is True
+
+
+def test_lock_liveness_does_not_terminate_owned_live_child():
+    # Restrict the reproduction to this test's child, never another user PID.
+    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    try:
+        assert _FileLock._alive(child.pid) is True
+        assert child.poll() is None
+    finally:
+        if child.poll() is None:
+            child.terminate()
+        child.wait(timeout=5)
+    assert _FileLock._alive(child.pid) is False
+    assert _FileLock._alive(0) is False
+
+
+@pytest.mark.parametrize('pid', [0, -1])
+def test_invalid_lock_owner_is_not_proof_of_stale_lock(tmp_path, pid):
+    path = tmp_path / 'invalid-owner.lock'
+    original = json.dumps({'pid': pid})
+    path.write_text(original, encoding='utf-8')
+    with pytest.raises(BudgetBlocked, match='BUDGET_LEDGER_LOCK_TIMEOUT'):
+        with _FileLock(path, timeout=.02):
+            pytest.fail('invalid owner must not be stolen')
+    assert path.read_text(encoding='utf-8') == original
 
 
 class _Provider(TranslationProvider):

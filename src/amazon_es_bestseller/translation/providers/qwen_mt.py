@@ -9,12 +9,17 @@ from __future__ import annotations
 import json
 import os
 import time
+import hashlib
+from contextvars import ContextVar
 from typing import Any, Callable, Dict, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
 
 from .base import ProviderResponse, TranslationProvider
+from ..raw_journal import RawJournalError
+
+_RAW_BINDING: ContextVar[dict] = ContextVar("qwen_raw_binding", default={})
 
 
 Transport = Callable[[str, Dict[str, str], Dict[str, Any], float], Dict[str, Any]]
@@ -70,6 +75,7 @@ def normalize_qwen_base_url(value: str) -> str:
 
 class QwenMTProvider(TranslationProvider):
     name = "qwen-mt"
+    supports_raw_response_journal = True
     _LANGUAGE_NAMES = {
         "es": "Spanish", "spanish": "Spanish",
         "zh": "Chinese", "zh-cn": "Chinese", "zh_cn": "Chinese",
@@ -83,7 +89,7 @@ class QwenMTProvider(TranslationProvider):
                  timeout: float = 60.0, max_retries: int = 2,
                  backoff_seconds: float = 5.0,
                  rate: float = 0.5,
-                 transport: Optional[Transport] = None):
+                 transport: Optional[Transport] = None, response_journal=None):
         self.api_key = api_key or os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
         configured_endpoint, self.endpoint_source, is_base = qwen_endpoint_configuration(
             endpoint=endpoint, allow_public_default=True)
@@ -100,6 +106,7 @@ class QwenMTProvider(TranslationProvider):
         self._last_request_at: Optional[float] = None
         self.transport = transport or self._http_transport
         self.before_send = None
+        self.response_journal = response_journal
 
     @property
     def model(self) -> str:
@@ -111,17 +118,38 @@ class QwenMTProvider(TranslationProvider):
                           headers=headers, method="POST")
         try:
             with urlopen(request, timeout=timeout) as response:  # nosec B310 - configured endpoint
-                body = response.read().decode("utf-8")
-                return {"status_code": response.status, "body": json.loads(body)}
+                raw = response.read()
+                ref = self._archive(raw, response.status, representation="http_bytes")
+                body = raw.decode("utf-8", errors="replace")
+                try:
+                    parsed = json.loads(body)
+                except ValueError:
+                    parsed = {"unparsed_body": body}
+                return {"status_code": response.status, "body": parsed, "_raw_ref": ref}
         except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
+            raw = exc.read()
+            ref = self._archive(raw, exc.code, representation="http_bytes")
+            body = raw.decode("utf-8", errors="replace")
             try:
                 parsed = json.loads(body)
             except ValueError:
-                parsed = {"error": body[:500]}
-            return {"status_code": exc.code, "body": parsed}
+                parsed = {"error": body}
+            return {"status_code": exc.code, "body": parsed, "_raw_ref": ref}
         except (URLError, TimeoutError, OSError) as exc:
-            return {"status_code": 599, "error": str(exc)}
+            # Exception strings can include credential-bearing URLs or headers.
+            return {"status_code": 599, "error_type": type(exc).__name__}
+
+    def _archive(self, response, status_code, *, representation="transport_object"):
+        if self.response_journal is None:
+            return None
+        state = _RAW_BINDING.get()
+        try:
+            return self.response_journal.save(response=response, status_code=status_code,
+                binding=state.get("binding", {}), request=state.get("request", {}),
+                representation=representation)
+        except Exception as exc:
+            self.response_journal.halted.set()
+            raise RawJournalError("RAW_RESPONSE_PERSISTENCE_FAILED") from exc
 
     def _wait_for_rate_limit(self) -> None:
         """Keep serial attempts at or below the configured calls/second rate."""
@@ -164,8 +192,9 @@ class QwenMTProvider(TranslationProvider):
     @staticmethod
     def _extract(body: Dict[str, Any]) -> str:
         choices = body.get("choices") if isinstance(body, dict) else None
-        if choices and isinstance(choices[0], dict):
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
             message = choices[0].get("message") or {}
+            message = message if isinstance(message, dict) else {}
             content = message.get("content")
             if isinstance(content, list):
                 content = "".join(str(x.get("text", "")) if isinstance(x, dict) else str(x)
@@ -175,8 +204,9 @@ class QwenMTProvider(TranslationProvider):
         output = body.get("output") if isinstance(body, dict) else None
         if isinstance(output, dict):
             choices = output.get("choices")
-            if choices and isinstance(choices[0], dict):
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
                 message = choices[0].get("message") or {}
+                message = message if isinstance(message, dict) else {}
                 content = message.get("content")
                 if content:
                     return str(content).strip()
@@ -199,15 +229,44 @@ class QwenMTProvider(TranslationProvider):
         headers = {"Authorization": "Bearer " + self.api_key,
                    "Content-Type": "application/json"}
         last_error = "provider request failed"
+        refs = []
         for attempt in range(1, self.max_retries + 2):
+            if self.response_journal is not None and self.response_journal.halted.is_set():
+                return ProviderResponse(provider=self.name, model=self.model, status="pending",
+                                        error="RAW_JOURNAL_HALTED", attempts=attempt - 1,
+                                        raw={"raw_response_refs": refs})
             self._wait_for_rate_limit()
             if self.before_send is not None and not self.before_send():
                 return ProviderResponse(provider=self.name, model=self._model, status="pending",
                                         attempts=attempt - 1, error="PROVIDER_HALTED_BEFORE_SEND")
+            safe_context = {k: v for k, v in (context or {}).items() if k in {
+                "target_field", "item_index", "label", "translation_unit_field", "canonical_dispatch_key",
+                "dispatch_identity_version", "schema_version", "prompt_version", "dictionary_version",
+                "source_hash", "source_record_hash", "source_locator", "source_schema_version"}}
+            token = _RAW_BINDING.set({"binding": {"asin": asin, "field": field,
+                "attempt": attempt, "model": self.model, "context": safe_context,
+                "input_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()}, "request": payload})
             try:
-                response = self.transport(self.endpoint, headers, payload, self.timeout)
-            except Exception:  # The request may already have been billed; never replay it.
-                response = {"status_code": 599}
+                try:
+                    response = self.transport(self.endpoint, headers, payload, self.timeout)
+                except RawJournalError:
+                    raise
+                except Exception as exc:  # Unknown billing outcome: do not replay.
+                    response = {"status_code": 599, "error_type": type(exc).__name__}
+                # Preserve legacy journal wrappers' explicit status/body shape.
+                if isinstance(response, tuple) and len(response) == 2:
+                    response = {"status_code": response[0], "body": response[1]}
+                ref = response.get("_raw_ref") if isinstance(response, dict) else None
+                if not ref:
+                    ref = self._archive(response, response.get("status_code") if isinstance(response, dict) else None)
+                if ref:
+                    refs.append(ref)
+            except RawJournalError:
+                return ProviderResponse(provider=self.name, model=self.model, status="pending",
+                    attempts=attempt, error="RAW_RESPONSE_PERSISTENCE_FAILED",
+                    raw={"outcome_unknown": True, "raw_response_refs": refs})
+            finally:
+                _RAW_BINDING.reset(token)
             if not isinstance(response, dict):
                 response = {"status_code": 599}
             # Tests and alternate transports may return decoded provider JSON
@@ -221,19 +280,27 @@ class QwenMTProvider(TranslationProvider):
                 code = 599
             if code == 599:
                 return ProviderResponse(provider=self.name, model=self._model, status="pending",
-                    error="TRANSPORT_OUTCOME_UNKNOWN", attempts=attempt, raw={"outcome_unknown": True})
+                    error="TRANSPORT_OUTCOME_UNKNOWN", attempts=attempt,
+                    raw={"outcome_unknown": True, "raw_response_refs": refs})
             body = response.get("body") if isinstance(response, dict) else {}
             text_out = self._extract(body if isinstance(body, dict) else {})
             if 200 <= code < 300 and text_out:
+                output = body.get("output") if isinstance(body, dict) else None
+                choices = body.get("choices") or (output.get("choices") if isinstance(output, dict) else None)
+                finish_reason = choices[0].get("finish_reason") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
+                truncated = finish_reason in {"length", "max_tokens"}
                 return ProviderResponse(text=text_out, provider=self.name,
-                                        model=self._model, attempts=attempt, raw=body or {})
+                                        model=self._model, attempts=attempt,
+                                        status="partial" if truncated else "success",
+                                        error="TRUNCATED_RESPONSE" if truncated else None,
+                                        raw={**(body if isinstance(body, dict) else {}), "raw_response_refs": refs})
             if 200 <= code < 300 and not text_out:
                 # An HTTP success without translated content is a QA failure,
                 # not a transport failure.  Keep the marker so the service can
                 # persist it and expose it in the field-closure report.
                 return ProviderResponse(provider=self.name, model=self._model,
                                         status="failed", error="EMPTY_TRANSLATION",
-                                        attempts=attempt, raw=body or {})
+                                        attempts=attempt, raw={**(body if isinstance(body, dict) else {}), "raw_response_refs": refs})
             detail = response.get("error") or (body.get("error") if isinstance(body, dict) else None)
             last_error = "HTTP %s%s" % (code, (": " + str(detail)[:300]) if detail else "")
             retryable = code == 429 or code >= 500
@@ -242,4 +309,5 @@ class QwenMTProvider(TranslationProvider):
             if self.backoff_seconds:
                 time.sleep(self.backoff_seconds * (2 ** (attempt - 1)))
         return ProviderResponse(provider=self.name, model=self._model, status="failed",
-                                error=last_error, attempts=attempt, raw=response if isinstance(response, dict) else {})
+                                error=last_error, attempts=attempt,
+                                raw={**(response if isinstance(response, dict) else {}), "raw_response_refs": refs})

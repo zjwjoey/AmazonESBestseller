@@ -1,0 +1,8 @@
+{
+  "bidi_asin": {"asin": "B0CMY7VF71", "attributes": [{"label_raw": "ASIN", "value_raw": "‎B0CMY7VF71"}], "detail_bullets_raw": ["ASIN ‏ : ‎ B0CMY7VF71"]},
+  "parent_detail": {"asin": "B000CRBEJ2", "parent_asin": "B0D7MQ7BFB", "attributes": [{"label_raw": "ASIN", "value_raw": "B0D7MQ7BFB"}]},
+  "parent_html": "<input id='ASIN' value='B000CRBEJ2'><link rel='canonical' href='https://www.amazon.es/dp/B0D7MQ7BFB'><script>{\"currentAsin\":\"B000CRBEJ2\",\"parentAsin\":\"B0D7MQ7BFB\"}</script>",
+  "nori": {"asin": "B0943QDPBC", "title_es_raw": "Allgroo Alga marina Nori Gold, 1 x 25 g con 10 hojas", "selected_variation_raw": "25 g (Paquete de 1)", "attributes": [{"label_raw": "Unidades", "value_raw": "‎250.0 Gramos"}, {"label_raw": "Peso del producto", "value_raw": "‎25 g"}]},
+  "refill": {"asin": "B0CSP8DBVR", "title_es_raw": "Aquafloow 12x Bolsa Recambio Absorbe Humedad 280 g", "selected_variation_raw": "12x 280g", "attributes": [{"label_raw": "Capacidad", "value_raw": "280 g"}]},
+  "bin": {"asin": "B08JJ8LJDS", "title_es_raw": "CABLEPELADO Cubo de Basura, 78 cm alto x 48.5 cm Diámetro superior, Capacidad 100 Litros", "attributes": [{"label_raw": "Capacidad de peso que puede soportar el producto", "value_raw": "100 litros"}]}
+}

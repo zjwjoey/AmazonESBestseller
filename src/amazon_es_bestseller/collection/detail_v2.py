@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from html import unescape
 
@@ -72,7 +73,8 @@ def _variation_evidence(html: str) -> dict:
     for asin, selected_values in display.items():
         products.append({"asin": str(asin).upper(), "values": selected_values,
                          "is_current": str(asin).upper() == current})
-    return {"current_asin": current or None, "parent_asin": parent or None,
+    return {"producer": "parser", "cache_html_sha256": hashlib.sha256(html.encode("utf-8")).hexdigest(),
+            "current_asin": current or None, "parent_asin": parent or None,
             "family_asins": sorted(family), "dimensions": dimension_rows,
             "products": products, "count": len(products)}
 
