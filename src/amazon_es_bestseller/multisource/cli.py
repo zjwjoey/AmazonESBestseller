@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import uuid
 from pathlib import Path
 
 from .contracts import SOURCE_ROOTS, ORIGINS, PHASE_TARGETS, timestamp
@@ -86,6 +87,11 @@ def _execute(manager, args, spec=None):
                 route.continue_()
         session.page.route("**/*", document_scope)
         transport = PlaywrightTransport(session)
+        def save_aborted_native_contract(evidence):
+            immutable_json(manager._run_dir(run_id) / "native_acp_contracts" / (uuid.uuid4().hex + ".json"),
+                {**evidence, **timestamp(), "run_id": run_id,
+                 "note": "Native request was aborted before transmission; not a successful response or a metered network attempt."})
+        transport.install_bounded_acp_capture(on_capture=save_aborted_native_contract)
         return manager.run(plan, sources, run_id=run_id,
             snapshot_id=snapshot_id, origin=origin, pages=pages,
             authorization=authorization, transport=transport, resume=args.operation == "resume")
@@ -131,7 +137,7 @@ def dispatch(args):
     if operation == "reparse":
         return manager.reparse(args.run_id, version=args.version)
     if operation == "verify":
-        bundle = manager.load(args.run_id)
+        bundle = manager.load(args.run_id, version=args.version)
         results = []
         for source in bundle["manifest"]["sources"]:
             if args.source_id and source["source_id"] not in args.source_id:

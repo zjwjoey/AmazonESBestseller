@@ -190,6 +190,11 @@ class SnapshotManager:
             "parent_page_url": (descriptor or {}).get("referer"),
             "access_status": state, "approval_id": authorization["approval_id"], "error": error,
             "transport_evidence": raw}
+        if kind == "ACP" and descriptor:
+            envelope["request_contract_source"] = descriptor.get("request_contract_source")
+            envelope["request_contract_parent_page_url"] = descriptor.get("parent_page_url")
+            if descriptor.get("native_payload_sha256"):
+                envelope["native_payload_sha256"] = descriptor["native_payload_sha256"]
         path = directory / "requests" / (request_id + ".json")
         immutable_json(path, sealed(envelope))
         self.budget.finish_request(request_id, state)
@@ -333,12 +338,39 @@ class SnapshotManager:
                         page_url=url, page_number=page_input.get("page_number"), observed_at=captured,
                         evidence_path=str(evidence_path), http_status=http_status, origin=origin)
                     result = get_adapter(source["source_type"]).parse(html, acp_responses=acp_responses, **parse_args)
+                    needs_context = getattr(transport, "requires_ajax_page_context", None)
+                    if (origin == "LIVE_CAPTURE" and result["page"].get("acp_pending")
+                            and authorization["sources"][source["source_id"]].get("allow_acp")
+                            and callable(needs_context) and needs_context(url)):
+                        # A crash-resumed browser starts at about:blank. Old
+                        # HTML neither establishes its origin nor renews the
+                        # page-specific ACP token. Fetch the exact approved
+                        # page through the ordinary budget/access gate and
+                        # preserve both responses instead of replaying a token.
+                        response, envelope, request_path = self._request(
+                            transport=transport, source=source, url=url, kind="PAGE",
+                            authorization=authorization, plan=plan, directory=directory)
+                        html, http_status, captured = response.text, response.status_code, envelope["observed_at"]
+                        raw_bytes = html.encode("utf-8")
+                        evidence_path = self.root / "html" / (digest(raw_bytes) + ".html")
+                        immutable_bytes(evidence_path, raw_bytes)
+                        request_paths = [request_path]
+                        acp_responses = []
+                        capture_metadata = None
+                        parse_args.update(observed_at=captured, evidence_path=str(evidence_path), http_status=http_status)
+                        result = get_adapter(source["source_type"]).parse(html, acp_responses=[], **parse_args)
                     acp_attempts = set()
                     while origin == "LIVE_CAPTURE" and result["page"].get("acp_pending"):
                         descriptor = result["page"]["acp_pending"]
                         if isinstance(descriptor, list):
                             descriptor = descriptor[0] if descriptor else None
                         if descriptor and authorization["sources"][source["source_id"]].get("allow_acp"):
+                            prepare = getattr(transport, "prepare_ajax_descriptor", None)
+                            if callable(prepare):
+                                validate_authorization(plan, authorization, [source], self._gate())
+                                if self._paused(directory):
+                                    raise ValueError("RUN_PAUSED")
+                                descriptor = prepare(descriptor, referer=url)
                             signature = digest([descriptor["url"], descriptor.get("payload")])
                             if signature in acp_attempts:
                                 result["page"].setdefault("flags", []).append("ACP_NO_PROGRESS")

@@ -165,7 +165,9 @@ def discover_sources(html: str, source_type: str, page_url: str, *,
     if source_type_from_url(page_url) != source_type:
         raise ValueError("SOURCE_URL_TYPE_MISMATCH")
     soup = BeautifulSoup(html or "", "lxml")
-    navigation = soup.select("#zg_browseRoot, .zg-browse-root, .zg-browse-group, nav")
+    navigation = soup.select("#zg_browseRoot, .zg-browse-root, .zg-browse-group, nav, "
+        "#zg [class*='p13n-zg-nav-tree-all_style_zg-browse-root__'], "
+        "#zg [class*='p13n-zg-nav-tree-all_style_zg-browse-group__']")
     # The existing saved Best Sellers pages expose zg_browseRoot. A document
     # without navigation may still expose explicitly marked category links.
     anchors = [anchor for nav in navigation for anchor in nav.select("a[href]")]
@@ -175,6 +177,10 @@ def discover_sources(html: str, source_type: str, page_url: str, *,
     result, seen = [], set()
     for anchor in anchors:
         raw_href = str(anchor.get("href") or "")
+        # Keyboard shortcut links are not category evidence. Normalizing a
+        # fragment-only URL would otherwise produce a spurious root source.
+        if not raw_href.strip() or raw_href.strip().startswith("#"):
+            continue
         url = normalize_source_url(raw_href, base_url=page_url)
         label = anchor.get_text(" ", strip=True)
         if source_type_from_url(url) != source_type or not label or url in seen:

@@ -253,6 +253,24 @@ def test_cli_replay_status_pause_resume_report_and_legacy_registration(tmp_path,
     assert manager.budget.counters("OFFLINE_FIXTURE")["observation_count"] == 2
 
 
+def test_cli_report_and_verify_use_requested_reparse_version(tmp_path, capsys, monkeypatch):
+    manager, source, plan, pages = setup(tmp_path)
+    manager.run(plan, [source], run_id="versioned", pages=pages)
+    manager.reparse("versioned", version="v2")
+    common = ["--root", str(manager.root), "--run-id", "versioned", "--version", "v2"]
+    assert main(["multisource", "report", *common, "--out", str(tmp_path / "reports")]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(Path(result["json"]).read_text(encoding="utf-8"))["manifest"]["version"] == "v2"
+    seen = []
+    original = SnapshotManager.load
+    def track(self, run_id, **kwargs):
+        seen.append(kwargs.get("version", "v1"))
+        return original(self, run_id, **kwargs)
+    monkeypatch.setattr(SnapshotManager, "load", track)
+    assert main(["multisource", "verify", *common]) == 0
+    assert seen == ["v2"]
+
+
 def test_store_and_run_ids_cannot_overwrite_unrelated_files(tmp_path):
     (tmp_path/"production.json").write_text("protected")
     with pytest.raises(ValueError,match="DEDICATED_EMPTY"):
@@ -317,6 +335,70 @@ def test_explicit_new_human_authorization_can_resume_restricted_page(tmp_path,mo
     assert len(result["observations"]) == 2 and fake.calls==2
     assert manager.status("human")["checkpoint"]["access_state"] == "NORMAL"
     assert manager.budget.counters("LIVE_CAPTURE")["request_count"]==2
+
+
+def test_acp_resume_in_fresh_browser_refreshes_only_uncommitted_page(tmp_path, monkeypatch):
+    from test_multisource_sources import acp_page
+    manager, source, plan, _ = setup(tmp_path)
+    plan["live_enabled"] = True
+    old = approval(source, plan)
+    old["sources"][source["source_id"]]["allow_acp"] = True
+    monkeypatch.setattr("amazon_es_bestseller.multisource.snapshots.time.sleep", lambda _: None)
+    class Fake:
+        page_calls = acp_calls = 0
+        current_url = "about:blank"
+        def requires_ajax_page_context(self, url):
+            return self.current_url != url
+        def fetch_page(self, url):
+            self.page_calls += 1
+            self.current_url = url
+            return TransportResponse(200, url, acp_page().replace("'token'", "'token-%d'" % self.page_calls))
+        def fetch_ajax(self, url, **kwargs):
+            assert self.current_url == URL, "saved HTML cannot establish browser origin"
+            self.acp_calls += 1
+            if self.acp_calls == 1:
+                return TransportResponse(400, url, "Documento no encontrado")
+            assert kwargs["headers"]["x-amz-acp-params"] == "token-2"
+            return TransportResponse(200, url, "<div id='gridItemRoot' data-asin='B000000002'><span class='zg-bdg-text'>#2</span><a href='/dp/B000000002'>Cuchara</a></div>")
+    fake = Fake()
+    pages = [{"source_id": source["source_id"], "page_url": URL, "page_number": 1}]
+    with pytest.raises(ValueError, match="ACCESS_STOP: UNKNOWN"):
+        manager.run(plan, [source], run_id="fresh-context", origin="LIVE_CAPTURE", pages=pages, authorization=old, transport=fake)
+    receipts = {path: path.read_bytes() for path in (manager._run_dir("fresh-context") / "requests").glob("*.json")}
+    fake.current_url = "about:blank"
+    new = approval(source, plan, approval_id="new-human-review", clear_access_gate=True)
+    new["sources"][source["source_id"]]["allow_acp"] = True
+    bundle = manager.run(plan, [source], run_id="fresh-context", origin="LIVE_CAPTURE", pages=pages, authorization=new, transport=fake, resume=True)
+    assert fake.page_calls == fake.acp_calls == 2
+    assert manager.budget.counters("LIVE_CAPTURE")["request_count"] == 4
+    assert len(bundle["observations"]) == 2
+    assert all(path.read_bytes() == body for path, body in receipts.items())
+
+
+def test_scheduler_uses_captured_native_acp_descriptor_before_metered_request(tmp_path, monkeypatch):
+    from test_multisource_sources import acp_page
+    manager, source, plan, _ = setup(tmp_path)
+    plan["live_enabled"] = True
+    auth = approval(source, plan)
+    auth["sources"][source["source_id"]]["allow_acp"] = True
+    monkeypatch.setattr("amazon_es_bestseller.multisource.snapshots.time.sleep", lambda _: None)
+    class Fake:
+        prepared = False
+        def fetch_page(self, url):
+            return TransportResponse(200, url, acp_page())
+        def prepare_ajax_descriptor(self, descriptor, *, referer):
+            assert referer == URL
+            self.prepared = True
+            return {**descriptor, "payload": "native-body", "headers": {"content-type": "native-type"}}
+        def fetch_ajax(self, url, **kwargs):
+            assert self.prepared
+            assert kwargs["payload"] == "native-body"
+            assert kwargs["headers"] == {"content-type": "native-type"}
+            return TransportResponse(200, url, "<div id='gridItemRoot' data-asin='B000000002'><span class='zg-bdg-text'>#2</span><a href='/dp/B000000002'>Cuchara</a></div>")
+    pages = [{"source_id": source["source_id"], "page_url": URL, "page_number": 1}]
+    result = manager.run(plan, [source], run_id="native-contract", origin="LIVE_CAPTURE", pages=pages, authorization=auth, transport=Fake())
+    assert len(result["observations"]) == 2
+    assert manager.budget.counters("LIVE_CAPTURE")["request_count"] == 2
 
 
 def test_saved_unreviewed_redirect_cannot_pass_on_resume(tmp_path,monkeypatch):

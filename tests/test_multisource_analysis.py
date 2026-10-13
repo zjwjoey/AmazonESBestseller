@@ -1,6 +1,7 @@
 """Offline assertions for evidence closure, time series and entity quotas."""
 from copy import deepcopy
 import json
+from pathlib import Path
 
 import pytest
 
@@ -45,6 +46,37 @@ def bundle(tmp_path, day="2026-10-01", ids=("p1", "p2"), *, source="BEST_SELLERS
 
 def codes(result):
     return {row["code"] for row in result["findings"]}
+
+
+def test_empty_page_budget_preserves_batch_but_report_remains_serializable(tmp_path):
+    """P0 saved pages can have no cards: their batch has no source identity."""
+    ledger = BudgetLedger(tmp_path / "empty_page_budget")
+    assert ledger.accept("empty_root_page", [], origin="OFFLINE_FIXTURE", phase="P0")
+    assert not ledger.accept("empty_root_page", [], origin="OFFLINE_FIXTURE", phase="P0")
+    rows = [{"observation_id": "real_card", "source_type": "BEST_SELLERS"}]
+    assert ledger.accept("populated_page", rows, origin="OFFLINE_FIXTURE", phase="P0")
+    counters = ledger.counters("OFFLINE_FIXTURE")
+    assert counters["observation_count"] == 1
+    assert counters["source_counts"] == {"BEST_SELLERS": 1}
+    snapshot = bundle(tmp_path, ids=(None,))
+    snapshot["manifest"]["budget"] = counters
+    report = SnapshotReportExporter().build(snapshot)
+    result = SnapshotReportExporter().export(report, tmp_path / "reports")
+    saved = json.loads(Path(result["json"]).read_text(encoding="utf-8"))
+    assert saved["manifest"]["budget"]["source_counts"] == {"BEST_SELLERS": 1}
+    assert len(ledger._load()["observation_batches"]) == 2
+
+
+def test_empty_live_batch_does_not_block_reviewed_budget_adjustment(tmp_path):
+    from amazon_es_bestseller.multisource.contracts import SOURCE_BUDGETS
+    ledger = BudgetLedger(tmp_path / "empty_live_budget")
+    ledger.accept("empty", [], origin="LIVE_CAPTURE", phase="P0")
+    ledger.adjust(dict(SOURCE_BUDGETS), actor="reviewer", reason="Keep reviewed caps",
+        approved=True, replacement_sources=[{"source_id": "reviewed_source", "source_type": "BEST_SELLERS",
+            "research_category": "厨房用品", "verification_evidence": "saved proof",
+            "review_evidence": "approval", "page_urls": [SOURCE_ROOTS["BEST_SELLERS"]],
+            "quantity": 1, "tier": 1}])
+    assert ledger.counters("LIVE_CAPTURE")["adjustments"][0]["actual_completed"] == {}
 
 
 def qa(value):

@@ -27,7 +27,7 @@ from .sources import (browse_node_id, discover_sources, normalize_source_url,
                       same_source_category, source_type_from_url, source_type_value)
 from .storage import digest
 
-ADAPTER_VERSION = "ranking_adapters_v1.1"
+ADAPTER_VERSION = "ranking_adapters_v1.1.p0.1"
 
 
 def _fold(text: str) -> str:
@@ -83,7 +83,11 @@ class RankingAdapter:
     def recognize(self, html: str, page_url: str) -> dict:
         soup = BeautifulSoup(html or "", "lxml")
         # Navigation mentions other lists on the same page. Match headings only.
-        visible = soup.select("#zg_banner_text, .zg-banner-text") or soup.select("h1")
+        # Modern landing pages separate the marketing banner (e.g. 'Ideas
+        # para regalos') from the actual list H1. Its scoped structural class
+        # is evidence; arbitrary secondary H1s and footer copy are not.
+        visible = (soup.select("#zg h1[class*='p13n-zg-banner-landing-page-header_style_zgH1Tag__']")
+                   or soup.select("#zg_banner_text, .zg-banner-text") or soup.select("h1"))
         # A stale document title cannot overrule the actual list header. SVG
         # and product recommendation titles also must not become page headers.
         headings = [_text(node) or "" for node in (visible[:1] or soup.select("head > title"))]
@@ -216,6 +220,15 @@ class RankingAdapter:
 
         soup = BeautifulSoup(html or "", "lxml")
         recs, acp_metadata = _recs_metadata(html)
+        if acp_metadata:
+            # Preserve both distinct server offsets and full recommendation
+            # objects. Neither field proves the site's outbound POST contract;
+            # bounded browser transport obtains that from a native request.
+            grid = soup.select_one("[data-client-recs-list]")
+            if grid is not None:
+                acp_metadata["index_offset_raw"] = grid.get("data-index-offset")
+                acp_metadata["offset_raw"] = grid.get("data-offset")
+                acp_metadata["client_recs_raw"] = grid.get("data-client-recs-list")
         expected, expected_proof = _positive_attr(soup, "data-expected-count")
         if expected_proof:
             marker = re.search(r"data-expected-count\s*=\s*(['\"])\d+\1", html)
@@ -416,7 +429,7 @@ class BestSellersAdapter(RankingAdapter):
 
 class MoversShakersAdapter(RankingAdapter):
     source_type = "MOVERS_SHAKERS"
-    heading_patterns = (r"\blos productos del momento\b", r"\bmovers (?:and|&) shakers\b",
+    heading_patterns = (r"\b(?:los )?productos del momento\b", r"\bmovers (?:and|&) shakers\b",
                         r"\bmovimientos y tendencias\b")
     alternate_contexts = ("#movers-and-shakers", ".zg-movers-shakers")
 

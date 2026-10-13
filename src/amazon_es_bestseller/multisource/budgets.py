@@ -27,6 +27,11 @@ class BudgetLedger:
         batches = [b for b in data["observation_batches"].values() if b["origin"] == origin]
         sources = Counter()
         for batch in batches:
+            # Empty page batches are retained for immutable/idempotent replay,
+            # but carry source_type=None and consume no observation quota.
+            # Counter[None] += 0 otherwise creates a non-string JSON key.
+            if not batch["observation_ids"]:
+                continue
             sources[batch["source_type"]] += len(batch["observation_ids"])
         return {"request_count": len(requests), "page_visit_count": sum(r["kind"] == "PAGE" for r in requests),
                 "reserved_request_count": sum(r["state"] == "RESERVED" for r in requests),
@@ -116,7 +121,7 @@ class BudgetLedger:
             data = self._load()
             completed = Counter()
             for batch in data["observation_batches"].values():
-                if batch["origin"] == "LIVE_CAPTURE":
+                if batch["origin"] == "LIVE_CAPTURE" and batch["observation_ids"]:
                     completed[batch["source_type"]] += len(batch["observation_ids"])
             if any(source_budgets.get(k, 0) < v for k, v in completed.items()):
                 raise ValueError("BUDGET_BELOW_ALREADY_COMPLETED")
