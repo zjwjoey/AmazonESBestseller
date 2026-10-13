@@ -155,7 +155,7 @@ class RunStore:
         gate = read_sealed(path) if path.exists() else {"state": "NORMAL"}
         if gate.get("state") != "NORMAL":
             return gate
-        handled=set(gate.get("human_handled_request_ids",[]))
+        handled=set(gate.get("human_handled_request_ids",[])) | set(gate.get("agent_handled_request_ids",[]))
         for row in self.db.execute("SELECT request_id,run_id FROM requests WHERE status='RESERVED'"):
             if row["request_id"] in handled:
                 continue
@@ -349,6 +349,8 @@ class RunStore:
         if indexed and indexed[0] == str(journal_path):
             return
         rows = value["observations"]
+        source_eligible = (page.get("access_status") == "NORMAL"
+            and page.get("source_type_verified") is True and page.get("source_context_valid") is True)
         existing_count = self.db.execute("SELECT count(*) FROM observations WHERE run_id=?", (run_id,)).fetchone()[0]
         history_count = self.db.execute("SELECT count(*) FROM observations").fetchone()[0]
         with self._transaction():
@@ -390,9 +392,12 @@ class RunStore:
                     else:
                         status = "UNIQUE_LINK_CANDIDATE"
                     observed = raw.get("observed_at", page.get("observed_at", timestamp()["observed_at"]))
-                    self.db.execute("INSERT INTO run_candidates VALUES(?,?,?,?,?,1) ON CONFLICT(run_id,candidate_id) DO UPDATE SET "
-                        "last_seen=max(last_seen,excluded.last_seen),observation_count=observation_count+1",
-                        (run_id, cid, oid, observed, observed))
+                    if source_eligible:
+                        self.db.execute("INSERT INTO run_candidates VALUES(?,?,?,?,?,1) ON CONFLICT(run_id,candidate_id) DO UPDATE SET "
+                            "last_seen=max(last_seen,excluded.last_seen),observation_count=observation_count+1",
+                            (run_id, cid, oid, observed, observed))
+                    else:
+                        status = "IDENTITY_UNCONFIRMED"
                 row_data = {**raw, "observation_id": oid, "run_id": run_id,
                     "origin": raw.get("origin", page.get("origin", plan.get("origin", "OFFLINE_FIXTURE"))),
                     "snapshot_id": raw.get("snapshot_id", plan.get("snapshot_id", run_id)),
@@ -407,6 +412,8 @@ class RunStore:
                     "dedup_status": status, "normalization_reason": normalized.get("reason"),
                     "evidence_path": raw.get("evidence_path", page.get("evidence_path")),
                     "raw_sha256": raw_hash, "parent_observation_id": parent_oid}
+                row_data["source_evidence_eligible"] = source_eligible
+                row_data["source_binding_status"] = "VERIFIED_LIST_SOURCE" if source_eligible else "UNCONFIRMED_LIST_SOURCE"
                 self.db.execute("INSERT INTO observations VALUES(?,?,?,?,?,?,?)",
                     (oid, run_id, page_key, cid, str(url or ""), status, _json(row_data)))
             self.db.execute("INSERT INTO pages VALUES(?,?,?,?) ON CONFLICT(run_id,page_key) DO UPDATE SET "
@@ -493,14 +500,21 @@ class RunStore:
 
     def iter_observations(self, run_id):
         views = {c["candidate_id"]:c for c in self.iter_candidates(run_id)}
-        for row in self.db.execute("SELECT data_json FROM observations WHERE run_id=? ORDER BY rowid", (run_id,)):
+        pages={p["page_key"]:p for p in self.pages(run_id)}
+        for row in self.db.execute("SELECT data_json,page_key FROM observations WHERE run_id=? ORDER BY rowid", (run_id,)):
             value=json.loads(row[0]); view=views.get(value.get("candidate_id"))
+            if "source_evidence_eligible" not in value:
+                page=pages.get(row[1],{})
+                value["source_evidence_eligible"]=(page.get("access_status") == "NORMAL" and
+                    page.get("source_type_verified") is True and page.get("source_context_valid") is True)
             if view:
                 value.update({k:view[k] for k in ("possible_duplicate_key","target_group_key","target_eligible",
                     "url_identity_status","final_product_url")})
                 if view["url_identity_status"] == "VERIFIED_SAME_DESTINATION":
                     value["original_dedup_status"]=value["dedup_status"]
                     value["dedup_status"]="VERIFIED_SAME_DESTINATION"
+            if value["source_evidence_eligible"] is False:
+                value["target_eligible"]=False
             yield value
 
     def _base_candidates(self, run_id):

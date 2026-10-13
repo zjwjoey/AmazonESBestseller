@@ -107,8 +107,11 @@ def audit_run(store, run_id):
             value = normalize_product_url(row.get("raw_product_url"), base_url=row.get("source_url") or "https://www.amazon.es")
             if value["is_valid"]:
                 url = value["normalized_product_url"]
-                normalized.add(url)
-                groups.add(value.get("possible_duplicate_key") or url)
+                if row.get("source_evidence_eligible") is not False:
+                    normalized.add(url)
+                    groups.add(value.get("possible_duplicate_key") or url)
+                else:
+                    fail("UNCONFIRMED_SOURCE_OBSERVATION_EXCLUDED_FROM_TARGET", observation_id=row["observation_id"])
                 if row.get("candidate_id") != candidate_id(url) or row.get("normalized_product_url") != url:
                     fail("CANDIDATE_KEY_NOT_LINK_DERIVED", observation_id=row["observation_id"])
             elif row.get("candidate_id"):

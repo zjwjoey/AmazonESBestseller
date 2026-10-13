@@ -24,6 +24,23 @@ def write_rows(path, rows):
     immutable_bytes(path, b"".join(canonical_bytes(row)+b"\n" for row in rows))
     return reference(path)
 
+def save_native_contract(store, plan, value):
+    """Attach an immutable proof reference to the transport's captured object."""
+    directory = store.root / "native_acp_contracts"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / (uuid.uuid4().hex+".json")
+    payload = value.get("payload", "")
+    observed = {**value, "run_id": plan["run_id"], "captured_at": utc_text(),
+        "request_payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+        "request_contract_parent_page_url": value.get("parent_page_url"),
+        "note": "Actual aborted native browser contract; not a successful response."}
+    immutable_json(path, observed)
+    value.update(request_contract_parent_page_url=value.get("parent_page_url"),
+        request_payload_sha256=observed["request_payload_sha256"], run_id=plan["run_id"],
+        native_contract_evidence_path=str(path.resolve()),
+        native_contract_evidence_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+    return reference(path)
+
 def export_gate(store, run_id, output, *, authorization_path=None):
     from .quality import audit_run
     from .reports import eligible_candidate_ids
@@ -94,7 +111,7 @@ def _run_live_locked(args, store, plan, approval, *, entry_time):
         def load_lazy_ranking_content(self, *a, **kw):
             return None
     startup = time.perf_counter()
-    with BoundedSession(headless=not args.headful) as session:
+    with BoundedSession(headless=not args.headful, profile_dir=getattr(args, "profile_dir", None)) as session:
         store.append_event(plan["run_id"], {"kind": "BROWSER_START", "stage": "browser_start",
             "duration_seconds": time.perf_counter()-startup})
         allowed = {url for scope in approval["sources"].values() for url in scope.get("page_urls", [])}
@@ -107,9 +124,7 @@ def _run_live_locked(args, store, plan, approval, *, entry_time):
         transport = PlaywrightTransport(session)
         (store.root / "native_acp_contracts").mkdir(parents=True, exist_ok=True)
         def save_contract(value):
-            immutable_json(store.root / "native_acp_contracts" / (uuid.uuid4().hex+".json"),
-                {**value, "run_id": plan["run_id"], "captured_at": utc_text(),
-                 "note": "Aborted native contract, no successful network response."})
+            save_native_contract(store, plan, value)
         transport.install_bounded_acp_capture(on_capture=save_contract)
         return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True)
 
@@ -202,6 +217,7 @@ def register(subparsers):
             op.add_argument("--authorization")
             op.add_argument("--live", action="store_true")
             op.add_argument("--headful", action="store_true")
+            op.add_argument("--profile-dir", help="One fixed normal browser profile for this run and its recovery; no rotation")
         if name in {"report", "gate-export", "renormalize"}:
             op.add_argument("--out", required=True)
         if name in {"gate-export", "gate-recover"}:

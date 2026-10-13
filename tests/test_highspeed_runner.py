@@ -59,6 +59,7 @@ class Store:
         receipt = {**response, "kind": reservation["kind"], "html_path": str(path), "evidence_path": str(path)}
         self.responses.append(receipt); return receipt
     def commit_page(self, run_id, key, page, observations):
+        if any(existing==page for existing in self.saved_pages): return
         self.saved_pages.append(page); self.observations.extend(observations)
     def append_event(self, run_id, event): self.events.append(event)
     def candidate_count(self, run_id): return len(self.observations)
@@ -402,18 +403,96 @@ def test_new_run_honors_previous_global_request_interval(tmp_path):
     make_runner(s, clock=lambda: current[0], sleep=sleep, parser=parser, gate_reader=lambda: {"state": "NORMAL"}).run(p, authorization=a, transport=Normal())
     assert waits == [3] and fetch_times == [NOW+timedelta(seconds=3)]
 
+def test_shared_source_proof_hashed_once_per_validation_and_rechecked_next_call(tmp_path, monkeypatch):
+    p = plan(tmp_path, "T1"); a = approval(p, tmp_path)
+    p["sources"].append({**p["sources"][0], "source_id": "second", "page_urls": [URL+"?pg=2"]})
+    a["sources"]["second"] = {**a["sources"]["home"], "page_urls": [URL+"?pg=2"]}
+    proof_path = Path(a["sources"]["home"]["evidence"]["path"]).resolve()
+    original = Path.read_bytes; reads = []
+    def tracked(path):
+        if path.resolve() == proof_path:
+            reads.append(path)
+        return original(path)
+    monkeypatch.setattr(Path, "read_bytes", tracked)
+    validate_authorization(p, a, {"state": "NORMAL"}, now=NOW)
+    assert len(reads) == 1
+    proof_path.write_text("changed proof", encoding="utf-8")
+    with pytest.raises(ValueError, match="SOURCE_PROOF_HASH_MISMATCH"):
+        validate_authorization(p, a, {"state": "NORMAL"}, now=NOW)
+    assert len(reads) == 2
+
+def test_prepare_contract_error_preserves_normal_base_cards_before_stop(tmp_path):
+    p=plan(tmp_path,"T1"); a=approval(p,tmp_path); a["sources"]["home"]["allow_native_acp"]=True
+    s=Store(tmp_path/"store")
+    class NoNative:
+        def fetch_page(self,url): return {"status_code":200,"url":url,"text":"normal base cards"}
+        def prepare_ajax_descriptor(self,descriptor,*,referer):
+            raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
+    def pending_parser(html,**kwargs):
+        result=parser(html,**kwargs)
+        result["page"]["acp_pending"]={"url":None,"request_contract":"NATIVE_REQUEST_DISCOVERY_REQUIRED"}
+        return result
+    result=make_runner(s,clock=lambda:NOW,parser=pending_parser,gate_reader=lambda:{"state":"NORMAL"}).run(p,authorization=a,transport=NoNative())
+    assert len(s.observations)==1 and len(s.requests)==1
+    assert s.saved_pages[0]["status"]=="PARTIAL" and not s.saved_pages[0]["page_complete"]
+    assert result["run"]["stop_reason"]=="ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED"
+    assert any(e["kind"]=="ACP_PREPARE" and e["success"] is False for e in s.events)
+
+@pytest.mark.parametrize("failure,normal,continues", [
+    ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",True,True),
+    ("ACP_NATIVE_BATCH_PROOF_INVALID",True,False),
+    ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",False,False)])
+def test_saved_real_missing_endpoint_prefix_can_advance_only_when_verified_normal(tmp_path,failure,normal,continues):
+    from amazon_es_bestseller.highspeed.adapters import parse_page
+    fixture=Path(__file__).parent/"fixtures/highspeed/night5000_page2_missing_acp_path.html"
+    pg2="https://www.amazon.es/gp/bestsellers/kitchen/2822691031?ie=UTF8&pg=2"
+    p=plan(tmp_path,"T1")
+    p["sources"][0].update(actual_source_url=pg2,page_urls=[pg2])
+    p["sources"].append({"source_id":"next","source_type":"BEST_SELLERS","research_category":"home","actual_source_url":URL,"page_urls":[URL]})
+    a=approval(p,tmp_path); a["sources"]["home"].update(page_urls=[pg2],allow_native_acp=True)
+    a["sources"]["next"]={**a["sources"]["home"],"page_urls":[URL]}
+    s=Store(tmp_path/"store"); fetched=[]; current=[NOW]
+    leaf="<h1>Los más vendidos</h1><div data-expected-count='2'><div data-ranking-card='true'><span class='zg-bdg-text'>#1</span><a href='/dp/new-one'>One</a></div><div data-ranking-card='true'><span class='zg-bdg-text'>#2</span><a href='/dp/new-two'>Two</a></div></div>"
+    class NoNative:
+        def fetch_page(self,url):
+            fetched.append(url)
+            return {"status_code":200,"url":url,"text":fixture.read_text(encoding="utf-8") if url==pg2 else leaf}
+        def prepare_ajax_descriptor(self,descriptor,*,referer): raise ValueError(failure)
+    def actual_parser(html,**kwargs):
+        result=parse_page(html,**kwargs)
+        if kwargs["page_url"]==pg2 and not normal: result["page"]["access_status"]="UNKNOWN"
+        return result
+    runner=make_runner(s,clock=lambda:current[0],sleep=lambda seconds:current.__setitem__(0,current[0]+timedelta(seconds=seconds)),
+        parser=actual_parser,gate_reader=lambda:{"state":"NORMAL"})
+    result=runner.run(p,authorization=a,transport=NoNative())
+    assert s.saved_pages[0]["status"]=="PARTIAL" and not s.saved_pages[0]["page_complete"]
+    if continues:
+        assert fetched==[pg2,URL] and len(s.observations)==32
+        assert s.saved_pages[0]["continuation_unavailable"] is True
+        assert s.saved_pages[0]["terminal_for_snapshot"] is True and s.saved_pages[0]["completeness"]=="UNKNOWN"
+        assert any(e["kind"]=="SOURCE_CONTINUATION_UNAVAILABLE" for e in s.events)
+        assert result["run"]["quality_gate_passed"] is False
+        runner.run(p,authorization=a,transport=NoNative(),resume=True)
+        assert fetched==[pg2,URL] and len(s.requests)==2
+    else:
+        assert fetched==[pg2] and len(s.observations)==30
+        assert result["run"]["stop_reason"]==failure
+        assert not s.saved_pages[0].get("terminal_for_snapshot")
+
 def test_runner_with_durable_real_store_resume_and_raw_receipts(tmp_path):
     from amazon_es_bestseller.highspeed.store import RunStore
     p = plan(tmp_path)
+    html="<h1>Los más vendidos</h1><div data-expected-count='1'><div data-ranking-card='true'><span class='zg-bdg-text'>#1</span><a href='/dp/visible-real'>Real ranked fixture item</a></div></div>"
+    Path(p["sources"][0]["offline_pages"][URL]).write_text(html,encoding="utf-8")
     store = RunStore(tmp_path / "durable")
     try:
-        first = make_runner(store, parser=parser).run(p)
-        second = make_runner(store, parser=parser).run(p, resume=True)
+        first = make_runner(store).run(p)
+        second = make_runner(store).run(p, resume=True)
         assert first["manifest"]["requests"] == second["manifest"]["requests"] == 1
         assert second["manifest"]["observations"] == 1
         assert second["manifest"]["unique_links"] == 1
         receipt = second["responses"][0]
-        assert Path(receipt["html_path"]).read_text(encoding="utf-8") == "<html>real card fixture</html>"
+        assert Path(receipt["html_path"]).read_text(encoding="utf-8") == html
         assert receipt["origin"] == "OFFLINE_FIXTURE"
     finally:
         store.close()

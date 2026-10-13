@@ -26,6 +26,15 @@ def source_navigation_only(source, url, parsed):
         and set(page.get("flags", [])) == {"PAGE_CONTENT_MISSING"}
         and not (parsed.get("acp_pending") or page.get("acp_pending")))
 
+def continuation_unavailable(parsed, receipt, reason, gate):
+    """A bounded native discovery miss is source incompleteness, not success."""
+    page = parsed["page"]
+    return bool(reason == "ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED"
+        and receipt.get("status_code") == 200 and receipt.get("access_state") == "NORMAL"
+        and gate.get("state") == "NORMAL" and page.get("access_status") == "NORMAL"
+        and page.get("source_type_verified") is True and page.get("source_context_valid") is True
+        and parsed.get("observations") and page.get("actual_count", 0) > 0)
+
 class HighSpeedRunner:
     def __init__(self, store, *, clock=None, sleep=None, parser=None, gate_reader=None, progress=None, qa_auditor=None):
         self.store = store
@@ -81,7 +90,8 @@ class HighSpeedRunner:
                 started = utc_text(self.clock())
                 self.store.update_run(run_id, started_at=started)
             bundle = self.store.load_run(run_id)
-            committed = {p["page_key"] for p in bundle.get("pages", []) if p.get("status", p.get("completeness")) != "PARTIAL"}
+            committed = {p["page_key"] for p in bundle.get("pages", [])
+                if p.get("status", p.get("completeness")) != "PARTIAL" or p.get("terminal_for_snapshot") is True}
             cached = {}
             for receipt in bundle.get("responses", []):
                 if receipt.get("access_state") == "NORMAL" and receipt.get("kind", receipt.get("request_kind", "PAGE")) == "PAGE":
@@ -126,16 +136,45 @@ class HighSpeedRunner:
                             pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
                         while pending and origin == "LIVE_CAPTURE":
                             descriptor = pending[0] if isinstance(pending, list) else pending
-                            if not authorization["sources"][source["source_id"]].get("allow_acp"):
+                            scope = authorization["sources"][source["source_id"]]
+                            if not (scope.get("allow_acp") or scope.get("allow_native_acp")):
                                 break
                             prepare = getattr(transport, "prepare_ajax_descriptor", None)
                             if callable(prepare):
-                                validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
                                 prepare_start = time.perf_counter()
-                                descriptor = prepare(descriptor, referer=url)
-                                self.store.append_event(run_id, {"kind": "ACP_PREPARE", "stage": "acp_prepare",
-                                    "duration_seconds": time.perf_counter()-prepare_start,
-                                    "source_type": source["source_type"], "research_category": source.get("research_category")})
+                                prepare_success = False
+                                try:
+                                    validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
+                                    descriptor = prepare(descriptor, referer=url)
+                                    if isinstance(descriptor.get("payload"), str):
+                                        descriptor["request_payload_sha256"] = hashlib.sha256(descriptor["payload"].encode("utf-8")).hexdigest()
+                                    prepare_success = True
+                                except Exception as exc:
+                                    # The initial normal page is real evidence even
+                                    # when its lazy request contract is unavailable.
+                                    prepare_error = str(exc) if isinstance(exc, ValueError) else "ACP_PREPARE_FAILED:"+type(exc).__name__
+                                    parsed["page"].update(status="PARTIAL", completeness="PARTIAL", page_complete=False)
+                                    parsed["page"].setdefault("flags", []).append(prepare_error)
+                                    unavailable = continuation_unavailable(parsed, receipt, prepare_error, self._gate(plan))
+                                    if unavailable:
+                                        parsed["page"].update(completeness="UNKNOWN", continuation_unavailable=True,
+                                            terminal_for_snapshot=True)
+                                    self.store.commit_page(run_id, page_key,
+                                        {**parsed["page"], "page_key": page_key, "source": source,
+                                         "evidence_path": receipt["html_path"], "origin": origin}, parsed["observations"])
+                                    if unavailable:
+                                        self.store.append_event(run_id, {"kind":"SOURCE_CONTINUATION_UNAVAILABLE",
+                                            "stage":"source_incompleteness", "source_id":source["source_id"],
+                                            "source_type":source["source_type"], "page_url":url,
+                                            "actual_cards":parsed["page"]["actual_count"], "reason":prepare_error,
+                                            "note":"Saved prefix retained PARTIAL; no endpoint/body invented. Continue the frozen approved queue."})
+                                        pending = None
+                                        break
+                                    raise ValueError(prepare_error) from exc
+                                finally:
+                                    self.store.append_event(run_id, {"kind": "ACP_PREPARE", "stage": "acp_prepare",
+                                        "duration_seconds": time.perf_counter()-prepare_start, "success": prepare_success,
+                                        "source_type": source["source_type"], "research_category": source.get("research_category")})
                             key = json.dumps(descriptor, sort_keys=True, default=str)
                             if key in attempted:
                                 parsed["page"].setdefault("flags", []).append("ACP_NO_PROGRESS")
@@ -279,9 +318,13 @@ class HighSpeedRunner:
             research_category=source.get("research_category"), final_url=response.get("url"),
             request_method="GET" if kind == "PAGE" else descriptor["method"],
             request_payload=None if descriptor is None else descriptor.get("payload"))
+        if descriptor is not None:
+            response["native_acp_descriptor"] = dict(descriptor)
         sensitive = {"authorization", "cookie", "proxy-authorization", "set-cookie"}
         for field in ("headers", "request_headers"):
             response[field] = {str(k): str(v) for k,v in (response.get(field) or {}).items() if str(k).casefold() not in sensitive}
+        if response.get("native_acp_descriptor"):
+            response["native_acp_descriptor"]["headers"] = {str(k):str(v) for k,v in (descriptor.get("headers") or {}).items() if str(k).casefold() not in sensitive}
         save_start = aware_time(self.clock())
         receipt = self.store.save_response(plan["run_id"], reservation, response)
         self.store.append_event(plan["run_id"], {"kind": "HTMLSAVE", "stage": "html_save",

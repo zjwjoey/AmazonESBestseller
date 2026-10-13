@@ -23,7 +23,7 @@ def renormalize_run(store, run_id, output_root):
         cid = candidate_id(value["normalized_product_url"]) if value["is_valid"] else None
         pair = (cid, captured.get("raw_product_url"))
         status = "INVALID_PRODUCT_LINK"
-        if cid:
+        if cid and captured.get("source_evidence_eligible") is not False:
             status = ("EXACT_DUPLICATE" if pair in raw_seen else "NORMALIZED_DUPLICATE") if cid in candidates else "UNIQUE_LINK_CANDIDATE"
             raw_seen.add(pair)
             first = candidates.setdefault(cid, {"candidate_id": cid,
@@ -37,9 +37,13 @@ def renormalize_run(store, run_id, output_root):
                 label = captured.get(raw_field)
                 if label is not None and label not in first[field]:
                     first[field].append(label)
+        elif cid:
+            status="IDENTITY_UNCONFIRMED"
         row = {**captured, **value, "candidate_id": cid, "dedup_status": status,
             "parent_run_id": run_id, "parent_observation_id": captured["observation_id"],
             "normalizer_version": NORMALIZER_VERSION, "is_derivation": True}
+        if captured.get("source_evidence_eligible") is False:
+            row["target_eligible"]=False
         rows.append(row)
         counts[status] += 1
     groups = {}

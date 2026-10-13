@@ -109,6 +109,37 @@ def test_real_native_carousel_fixture_preserves12localrankedcards():
     assert all(r["amazon_category"] for r in result["observations"])
 
 
+def test_real_page2_missing_path_still_requires_native_continuation():
+    fixture = Path(__file__).parent / "fixtures" / "highspeed" / "night5000_page2_missing_acp_path.html"
+    html = fixture.read_text(encoding="utf-8")
+    url = "https://www.amazon.es/gp/bestsellers/kitchen/2822691031?ie=UTF8&pg=2"
+    result = parse_page(html, source={"source_id": "furniture", "source_type": "BEST_SELLERS", "actual_source_url": url},
+        run_id="night", page_url=url, page_number=2, observed_at="2026-10-13T15:00:00Z", evidence_path=str(fixture))
+    assert len(result["observations"]) == 30
+    assert [r["ranking_position"] for r in result["observations"]] == list(range(51, 81))
+    descriptor = result["acp_pending"][0]
+    assert descriptor["url"] is None
+    assert descriptor["metadata"]["path"] is None
+    assert descriptor["offset"] == 30 and descriptor["count"] == 20
+    assert descriptor["metadata"]["index_offset_raw"] == "30"
+    assert len(descriptor["metadata"]["entries"]) == 50
+    assert descriptor["request_contract"] == "NATIVE_REQUEST_DISCOVERY_REQUIRED"
+    assert result["page"]["page_complete"] is False
+
+
+def test_page2_saved_rendered_continuation_finishes_local50_not_absolute100():
+    fixture = Path(__file__).parent / "fixtures" / "highspeed" / "night5000_page2_missing_acp_path.html"
+    url = "https://www.amazon.es/gp/bestsellers/kitchen/2822691031?ie=UTF8&pg=2"
+    body = "".join('<div class="ranking-card"><span class="zg-bdg-text">#' + str(rank) + '</span><a href="/product/opaque-' + str(rank) + '">Item</a></div>' for rank in range(81, 101))
+    result = parse_page(fixture.read_text(encoding="utf-8"), source={"source_id": "furniture", "source_type": "BEST_SELLERS", "actual_source_url": url},
+        run_id="night", page_url=url, page_number=2, observed_at="2026-10-13T15:00:00Z", evidence_path=str(fixture),
+        acp_responses=[{"body": body, "evidence_path": "saved-continuation.html"}])
+    assert result["page"]["actual_count"] == result["page"]["expected_count"] == 50
+    assert result["page"]["status"] == "COMPLETE"
+    assert not result["acp_pending"]
+    assert [r["ranking_position"] for r in result["observations"]] == list(range(51, 101))
+
+
 def test_acp_metadata_never_constructs_links_and_native_request_required():
     entries = [{"id": "opaque-one"}, {"id": "opaque-two"}]
     html = '<h1>Los más vendidos</h1><div id="zg" data-acp-path="/acp/native/"><div class="p13n-desktop-grid" data-client-recs-list=\'' + json.dumps(entries) + '\' data-index-offset="1" data-offset="2"><div class="ranking-card"><span class="zg-bdg-text">#1</span><a href="/product/direct-link">Item</a></div></div></div>'

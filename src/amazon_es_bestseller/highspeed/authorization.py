@@ -215,9 +215,9 @@ def verified_stage_artifact(reference, expected_stage):
             if not aware_time(stage_approval["reviewed_at"]) <= observed < aware_time(stage_approval["expires_at"]):
                 raise ValueError("PRIOR_STAGE_RECEIPT_OUTSIDE_APPROVAL_WINDOW")
             authorize_request(receipt["request_url"], source, stage_approval, kind=receipt.get("kind", "PAGE"),
-                descriptor={"method": receipt.get("request_method"), "payload": receipt.get("request_payload")})
+                descriptor=receipt.get("native_acp_descriptor") or {"method": receipt.get("request_method"), "payload": receipt.get("request_payload")})
             authorize_request(receipt["final_url"], source, stage_approval, kind=receipt.get("kind", "PAGE"),
-                descriptor={"method": receipt.get("request_method"), "payload": receipt.get("request_payload")})
+                descriptor=receipt.get("native_acp_descriptor") or {"method": receipt.get("request_method"), "payload": receipt.get("request_payload")})
             received.append((receipt, body.decode("utf-8", errors="replace"), source))
         from .adapters import parse_page
         for receipt, body, source in received:
@@ -279,6 +279,7 @@ def validate_authorization(plan, authorization, gate, *, now=None, store_root=No
         raise ValueError("V2_SERIAL_ZERO_COOLDOWN_REVIEW_REQUIRED")
     if authorization.get("request_pacing_seconds") != plan["request_pacing_seconds"]:
         raise ValueError("PACING_REVIEW_REQUIRED")
+    proof_hash_cache = {}
     for source in plan["sources"]:
         scope = authorization.get("sources", {}).get(source["source_id"])
         if not scope or scope.get("source_type") != source["source_type"] or scope.get("research_category") != source.get("research_category"):
@@ -286,7 +287,10 @@ def validate_authorization(plan, authorization, gate, *, now=None, store_root=No
         proof = scope.get("evidence", {})
         if proof.get("reviewed") is not True or not proof.get("path") or not proof.get("sha256"):
             raise ValueError("SOURCE_PROOF_REQUIRED")
-        if hashlib.sha256(Path(proof["path"]).read_bytes()).hexdigest() != proof["sha256"]:
+        proof_path = Path(proof["path"]).resolve()
+        if proof_path not in proof_hash_cache:
+            proof_hash_cache[proof_path] = hashlib.sha256(proof_path.read_bytes()).hexdigest()
+        if proof_hash_cache[proof_path] != proof["sha256"]:
             raise ValueError("SOURCE_PROOF_HASH_MISMATCH")
         for url in source.get("page_urls", []):
             if not amazon_url(url) or url not in scope.get("page_urls", []):
@@ -307,10 +311,41 @@ def authorize_request(url, source, authorization, *, kind="PAGE", descriptor=Non
         if url not in scope.get("page_urls", []):
             raise ValueError("UNREVIEWED_PAGE_URL")
     elif kind == "ACP":
-        if not scope.get("allow_acp") or url not in scope.get("acp_urls", []):
-            raise ValueError("UNREVIEWED_ACP_URL")
         if not descriptor or not descriptor.get("payload") or descriptor.get("method") != "POST":
             raise ValueError("OPAQUE_NATIVE_ACP_CONTRACT_REQUIRED")
+        if scope.get("allow_acp") and url in scope.get("acp_urls", []):
+            return
+        if scope.get("allow_native_acp") is not True:
+            raise ValueError("UNREVIEWED_ACP_URL")
+        validate_native_acp(url, descriptor, scope, authorization)
     else:
         raise ValueError("UNREVIEWED_REQUEST_KIND")
+
+def validate_native_acp(url, descriptor, scope, authorization):
+    """Dynamic endpoints require the saved aborted browser contract as proof."""
+    parent = descriptor.get("request_contract_parent_page_url")
+    target, origin = urlsplit(url), urlsplit(str(parent))
+    if (parent not in scope.get("page_urls", []) or not amazon_url(parent)
+            or target.netloc != origin.netloc or not target.path.startswith("/acp/")
+            or not target.path.endswith("/nextPage") or descriptor.get("url") != url):
+        raise ValueError("NATIVE_ACP_PARENT_OR_ENDPOINT_NOT_APPROVED")
+    if descriptor.get("request_contract_source") not in {"NATIVE_BROWSER_REQUEST_ABORTED", "NATIVE_BROWSER_CONTRACT_DERIVED_BATCH"}:
+        raise ValueError("NATIVE_ACP_TRANSPORT_PROOF_REQUIRED")
+    payload = descriptor.get("payload")
+    if not isinstance(payload, str) or hashlib.sha256(payload.encode("utf-8")).hexdigest() != descriptor.get("request_payload_sha256"):
+        raise ValueError("NATIVE_ACP_ACTUAL_PAYLOAD_HASH_MISMATCH")
+    _, native_raw = _verified_reference({"path": descriptor.get("native_contract_evidence_path"),
+        "sha256": descriptor.get("native_contract_evidence_sha256")}, "NATIVE_ACP_CAPTURE_EVIDENCE")
+    native = json.loads(native_raw)
+    if (native.get("request_contract_source") != "NATIVE_BROWSER_REQUEST_ABORTED"
+            or native.get("run_id") != authorization.get("run_id") or native.get("parent_page_url") != parent
+            or native.get("url") != url or native.get("method") != "POST"
+            or native.get("resource_type") not in {"xhr", "fetch"} or not native.get("payload")
+            or not native.get("headers", {}).get("x-amz-acp-params")):
+        raise ValueError("NATIVE_ACP_CAPTURE_CONTEXT_INVALID")
+    from ..transport.playwright import PlaywrightTransport
+    rebuilt = PlaywrightTransport._native_batch_descriptor(descriptor, native)
+    if (rebuilt.get("payload") != payload or rebuilt.get("method") != descriptor["method"]
+            or rebuilt.get("url") != url or rebuilt.get("headers") != descriptor.get("headers")):
+        raise ValueError("NATIVE_ACP_BODY_NOT_BOUND_TO_BROWSER_CAPTURE")
 

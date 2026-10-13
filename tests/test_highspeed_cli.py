@@ -32,6 +32,8 @@ def test_help_registers_new_mode_and_preserves_old_mode():
     parser = build_parser()
     assert parser.parse_args(["--offline", "highspeed", "plan", "--run-id", "new"]).operation == "plan"
     assert parser.parse_args(["--offline", "multisource", "status", "--root", "old", "--run-id", "old"]).operation == "status"
+    selected = parser.parse_args(["highspeed", "resume", "--root", "isolated", "--plan", "reviewed.json", "--profile-dir", "fixed-night-profile"])
+    assert selected.profile_dir == "fixed-night-profile"
 
 def test_saved_html_run_resume_qa_report_gate_export(tmp_path):
     path, plan = offline_fixture(tmp_path)

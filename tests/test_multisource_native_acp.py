@@ -213,6 +213,51 @@ def test_native_proven_batches_advance_without_replaying_initial_eight():
         assert d["request_contract_source"]=="NATIVE_BROWSER_CONTRACT_DERIVED_BATCH"
         assert len(d["native_payload_sha256"])==64
 
+class GridSentinelPage(Page):
+    """Saved grid ends before a large footer; jumping to footer misses observer."""
+    def __init__(self, native):
+        super().__init__(); self.native=native; self.url=native["source_page_url"]
+        self.inject=False; self.footer_jumps=0
+        from bs4 import BeautifulSoup
+        fixture=Path(__file__).parent/"fixtures/multisource/native_grid_before_footer.html"
+        self.dom=BeautifulSoup(fixture.read_text(encoding="utf-8"),"lxml")
+    def evaluate(self, code, data=None):
+        if data is not None:
+            return super().evaluate(code,data)
+        self.scrolls+=1
+        if "scrollIntoView" not in code:
+            self.footer_jumps+=1
+            return
+        assert len(self.dom.select('#gridItemRoot'))==30
+        assert self.dom.select_one('footer') is not None
+        route=Route(self.native['url'],self.native['payload'])
+        route.request.headers=self.native['headers']
+        self.callback(route); self.routes.append(route)
+
+def sentinel_transport():
+    native=json.loads((Path(__file__).parent/"fixtures/multisource/p0_furniture_acp_native_request.json").read_text(encoding="utf-8"))
+    raw=json.loads((Path(__file__).parent/"fixtures/multisource/p0_furniture_acp_metadata.json").read_text(encoding="utf-8"))
+    page=GridSentinelPage(native); transport=PlaywrightTransport(SimpleNamespace(page=page))
+    transport.install_bounded_acp_capture()
+    metadata={"entries":json.loads(raw["grid_attributes"]["data-client-recs-list"]),
+        "index_offset_raw":"30","offset_raw":"50","faceout":"GeneralFaceout","reftag":"zg_bs_g_2822691031"}
+    return transport,page,native,metadata
+
+def test_native_contract_trigger_visits_last_saved_card_not_footer():
+    transport,page,native,metadata=sentinel_transport()
+    descriptor=transport.prepare_ajax_descriptor({'url':native['url'],'metadata':metadata,'offset':30,'count':20},referer=page.url)
+    assert descriptor['payload']==native['payload']
+    assert page.footer_jumps==0 and page.scrolls==1
+    assert page.routes[0].aborted and not page.routes[0].continued
+
+def test_missing_endpoint_discovers_only_real_metadata_matched_native_post():
+    transport,page,native,metadata=sentinel_transport()
+    descriptor=transport.prepare_ajax_descriptor({'url':None,'native_discovery':True,
+        'metadata':metadata,'offset':30,'count':20},referer=page.url)
+    assert descriptor['url']==native['url'] and descriptor['payload']==native['payload']
+    assert descriptor['request_contract_source']=='NATIVE_BROWSER_REQUEST_ABORTED'
+    assert all(route.aborted and not route.continued for route in page.routes)
+
 @pytest.mark.parametrize("invalid",["missing", "recs", "offset", "count", "unaligned"])
 def test_native_batch_derivation_requires_exact_saved_metadata_proof(invalid):
     t,p,f,m=native_furniture_setup()

@@ -214,17 +214,25 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
         # Metadata entries are opaque request evidence, never product candidates.
         distinct = {(r["rank_context"], r["ranking_position"]) for r in rows if r["ranking_position"] is not None}
         actual = len(distinct) if rows and all(r["ranking_position"] is not None for r in rows) else len(rows)
-        if root and (expected is None or actual < expected):
-            path = str(root.get("data-acp-path") or "")
-            endpoint = urljoin(page_url, path.rstrip("/") + "/nextPage")
+        if (root is not None or entries) and (expected is None or actual < expected):
+            # Modern second pages may expose the full opaque client-rec list
+            # without data-acp-path. Missing endpoint is a native-discovery
+            # requirement, never proof that the incomplete prefix is final.
+            path = str(root.get("data-acp-path") or "") if root is not None else None
+            endpoint = urljoin(page_url, path.rstrip("/") + "/nextPage") if path else None
             grid = soup.select_one(".p13n-desktop-grid") or recs_node
-            metadata = {"path": path, "params": root.get("data-acp-params") or "",
+            metadata = {"path": path, "params": root.get("data-acp-params") or "" if root is not None else "",
                 "faceout": grid.get("data-faceoutkataname") if grid else None,
                 "reftag": grid.get("data-reftag") if grid else None, "entries": entries,
                 "index_offset_raw": recs_node.get("data-index-offset") if recs_node else None,
                 "offset_raw": recs_node.get("data-offset") if recs_node else None,
                 "client_recs_raw": recs_node.get("data-client-recs-list") if recs_node else None}
-            if path and normalize_source_url(endpoint):
+            if endpoint is None and entries:
+                pending.append({"url": None, "method": "POST", "metadata": metadata,
+                    "offset": actual, "count": max(0, expected - actual) if expected is not None else None,
+                    "request_contract": "NATIVE_REQUEST_DISCOVERY_REQUIRED", "evidence_path": evidence_path})
+                page["flags"].append("ACP_NATIVE_ENDPOINT_UNDISCOVERED")
+            elif path and normalize_source_url(endpoint):
                 pending.append({"url": endpoint, "method": "POST", "metadata": metadata,
                     "offset": actual, "count": max(0, expected - actual) if expected is not None else None,
                     "request_contract": "NATIVE_REQUEST_REQUIRED", "evidence_path": evidence_path})

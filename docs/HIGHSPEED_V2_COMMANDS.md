@@ -34,6 +34,8 @@ Live execution is a separate human-approved action. Review each stage independen
 
 Approval must bind the exact absolute `store_root` and `shared_access_gate_path`; changing stores or using a fresh gate cannot reuse another approval. The store lock and shared gate-directory live lock are held across browser setup and all requests. Daily usage and the latest request timestamp remain shared across runs in one store.
 
+ACP endpoints contain page-specific dynamic tokens. A reviewed source may explicitly set `allow_native_acp=true` instead of inventing an endpoint URL in advance. This permits only an actually captured and aborted browser-native POST from the exact approved parent page to its same-origin `/acp/.../nextPage` endpoint. The immutable native contract, payload hash and headers are verified before transmission. Later batches must rebuild from that original opaque contract and the saved page metadata; unrelated XHR endpoints and guessed bodies remain forbidden. Existing explicitly reviewed `acp_urls` scopes also remain supported.
+
 ```powershell
 # Only after explicit approval and actual review; these files are not supplied as approved.
 ./scripts/Invoke-HighSpeed.ps1 highspeed run --root $v2Root --plan T1.plan.approved.json --authorization T1.authorization.approved.json --live
@@ -44,3 +46,10 @@ Approval must bind the exact absolute `store_root` and `shared_access_gate_path`
 Do not combine `--offline` with live stages. All access restrictions and network failures stop new requests and retain evidence. The CLI never clears gates automatically or schedules automatic retries. Navigation-only verified root pages may continue to the next already approved URL but retain FAILED QA and never contribute product capacity. No discovery URL is automatically followed.
 
 `gate-recover --root <store> --authorization <explicit-human-handling.json>` is an offline, manually requested local recovery operation. Its artifact must identify the exact prior gate, store, human handling, approval identity and validity window. It never changes the inherited shared project gate and never resumes network requests.
+
+
+A task-specific controller may use `highspeed.recovery.recheck_network_error` only with an explicit, current delegation bound to the exact NETWORK_ERROR gate fingerprint, store, run and approved source. It performs one charged source load and at most one refresh, preserves prior gate and response evidence, and clears the gate only after HTTP 200/NORMAL plus verified source context and real product cards. It records agent handling honestly. Restrictions and unexplained UNKNOWN are never cleared by this recovery.
+
+When a NORMAL source page contains real cards but a bounded native-continuation observation yields `ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED`, V2 preserves the prefix as PARTIAL/UNKNOWN and proceeds to the next frozen approved source. Resume skips that terminal partial page; it never marks completeness or stage acceptance as passed. Other preparation failures preserve the raw prefix and stop. Only NORMAL pages with verified list type and source context contribute accepted target candidates.
+
+For a task using an existing normal browser profile, pass the same `--profile-dir <absolute-path>` to run and resume. A process ID file alone is not evidence that the worker remains alive; check the Windows process and current SQLite run state before starting any resume.

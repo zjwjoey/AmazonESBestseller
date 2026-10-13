@@ -142,23 +142,57 @@ class PlaywrightTransport:
         expected = str(descriptor.get("url") or "")
         expected_parts = urlsplit(expected)
         parent = urlsplit(referer)
-        if (expected_parts.scheme != "https" or expected_parts.netloc != parent.netloc
+        discover = not expected and (descriptor.get("native_discovery") is True
+            or descriptor.get("request_contract") == "NATIVE_REQUEST_DISCOVERY_REQUIRED")
+        metadata = descriptor.get("metadata") or {}
+        if discover and (parent.scheme != "https" or parent.hostname != "www.amazon.es"
+                or not isinstance(metadata.get("entries"), list) or not metadata["entries"]
+                or type(descriptor.get("offset")) is not int or type(descriptor.get("count")) is not int
+                or descriptor["count"] <= 0):
+            raise ValueError("ACP_NATIVE_DISCOVERY_METADATA_REQUIRED")
+        if not discover and (expected_parts.scheme != "https" or expected_parts.netloc != parent.netloc
                 or not expected_parts.path.startswith("/acp/") or not expected_parts.path.endswith("/nextPage")):
             raise ValueError("ACP_NATIVE_CAPTURE_ENDPOINT_INVALID")
         expected_params = (descriptor.get("headers") or {}).get("x-amz-acp-params")
         for attempt in range(7):
             for captured in self._native_acp_requests:
                 actual_parts = urlsplit(captured["url"])
-                if ((actual_parts.scheme, actual_parts.netloc, actual_parts.path)
-                        == (expected_parts.scheme, expected_parts.netloc, expected_parts.path)
+                endpoint_matches = (actual_parts.scheme == "https" and actual_parts.netloc == parent.netloc
+                    and actual_parts.path.startswith("/acp/") and actual_parts.path.endswith("/nextPage")) if discover else (
+                        (actual_parts.scheme, actual_parts.netloc, actual_parts.path)
+                        == (expected_parts.scheme, expected_parts.netloc, expected_parts.path))
+                if (endpoint_matches
                         and captured["method"] == "POST"
                         and captured["parent_page_url"] == referer
                         and captured["payload"] and captured["headers"].get("x-amz-acp-params")
                         and (not expected_params or captured["headers"]["x-amz-acp-params"] == expected_params)):
-                    return self._native_batch_descriptor(descriptor, captured)
+                    try:
+                        return self._native_batch_descriptor(dict(descriptor, url=captured["url"]), captured)
+                    except ValueError:
+                        if not discover:
+                            raise
+                        # Another ACP widget on this page is not this saved grid.
+                        # Discovery requires the complete opaque rec/index proof.
+                        continue
             if attempt == 6:
                 break
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            expected_path = metadata.get("path") or (expected_parts.path.removesuffix("nextPage") if expected else None)
+            expected_recs = metadata.get("client_recs_raw")
+            page.evaluate("""(() => {
+                const expectedPath = """ + json.dumps(expected_path) + """;
+                const expectedRecs = """ + json.dumps(expected_recs) + """;
+                const containers = Array.from(document.querySelectorAll('[data-acp-path], [data-client-recs-list]'));
+                const grid = containers.find(el => expectedPath && el.getAttribute('data-acp-path') === expectedPath)
+                    || containers.find(el => expectedRecs && el.getAttribute('data-client-recs-list') === expectedRecs)
+                    || document.querySelector('#zg, #bestsellers, .zg-list') || document;
+                const cards = grid.querySelectorAll('#gridItemRoot, [id^="p13n-asin-index-"], .zg-grid-general-faceout, [data-ranking-card="true"]');
+                if (cards.length) {
+                    cards[cards.length - 1].scrollIntoView({block:'end', inline:'nearest', behavior:'instant'});
+                    window.scrollBy(0, Math.max(80, Math.floor(window.innerHeight * 0.35)));
+                } else {
+                    window.scrollBy(0, Math.max(80, Math.floor(window.innerHeight * 0.8)));
+                }
+            })()""")
             page.wait_for_timeout(500)
         raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
 

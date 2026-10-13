@@ -222,3 +222,16 @@ def test_pending_budget_journal_blocks_quality_even_with_prior_complete_page(tmp
     assert any(f["code"] == "RAW_PAGE_JOURNALS_NOT_YET_INDEXED" for f in qa["findings"])
     view=renormalize_run(store,"run",tmp_path/"derived")
     assert view["unindexed_preserved_raw_observations"] == 2
+
+def test_valid_url_from_unverified_list_source_is_preserved_but_not_counted(tmp_path):
+    store,p,s=setup(tmp_path)
+    parsed=page(store,p,s,["/product/confirmed"])
+    unconfirmed={**parsed["page"],"source_type_verified":False}
+    raw={**parsed["observations"][0],"observation_id":"unconfirmed-slot",
+        "raw_product_url":"/product/unknown-source"}
+    store.commit_page("run","unconfirmed",unconfirmed,[raw])
+    assert store.summary("run")["observations"] == 2
+    assert store.candidate_count("run") == 1
+    rows=list(store.iter_observations("run"))
+    assert rows[-1]["candidate_id"] and not rows[-1]["source_evidence_eligible"] and not rows[-1]["target_eligible"]
+    assert not audit_run(store,"run")["gate_passed"]
