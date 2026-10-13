@@ -68,5 +68,22 @@ def renormalize_run(store, run_id, output_root):
         "dedup_counts": dict(counts), "artifacts": files,
         "identity_reviews_applied": False,
         "capture_times_preserved": True, "live_requests": 0}
+    # Budget-stopped journals remain separate raw evidence. They must not be
+    # silently promoted into the accepted candidate target by this operation.
+    pending = store.summary(run_id).get("pending_page_journals", [])
+    if pending:
+        from ..multisource.storage import read_sealed
+        preserved=[]
+        for reference in pending:
+            journal=read_sealed(reference["journal_path"])
+            preserved.extend({**row,"unindexed_raw_evidence":True,
+                "parent_run_id":run_id,"target_eligible":False,
+                "journal_path":reference["journal_path"]} for row in journal["observations"])
+        path=directory/"unindexed_preserved_observations.jsonl"
+        with path.open("x",encoding="utf-8") as handle:
+            for row in preserved:
+                handle.write(json.dumps(row,ensure_ascii=False,allow_nan=False)+"\n")
+        manifest.update(pending_page_journals=pending,unindexed_preserved_raw_observations=len(preserved))
+        manifest["artifacts"]["unindexed_preserved_observations"]={"path":str(path.resolve()),"sha256":digest(path.read_bytes())}
     immutable_json(directory / "manifest.json", sealed(manifest))
     return {"directory": str(directory.resolve()), **manifest}

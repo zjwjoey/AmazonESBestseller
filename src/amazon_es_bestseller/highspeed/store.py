@@ -244,7 +244,7 @@ class RunStore:
             raise ValueError("CONTROLLED_REQUEST_KIND_REQUIRED")
         with self._transaction():
             count = self.db.execute("SELECT count(*) FROM requests WHERE run_id=?", (run_id,)).fetchone()[0]
-            daily = self.db.execute("SELECT count(*) FROM requests WHERE run_id=? AND local_day=?", (run_id, day)).fetchone()[0]
+            daily = self.db.execute("SELECT count(*) FROM requests WHERE local_day=?", (day,)).fetchone()[0]
             page_count = self.db.execute("SELECT count(*) FROM requests WHERE run_id=? AND kind='PAGE'", (run_id,)).fetchone()[0]
             if count >= limits["max_requests_per_run"]:
                 raise ValueError("RUN_REQUEST_BUDGET_EXHAUSTED")
@@ -294,6 +294,10 @@ class RunStore:
         for row in self.db.execute("SELECT data_json,status FROM requests WHERE run_id=? ORDER BY observed_at,request_id", (run_id,)):
             result.append({**json.loads(row["data_json"]), "status": row["status"]})
         return result
+
+    def latest_request_time(self):
+        row=self.db.execute("SELECT max(observed_at) FROM requests").fetchone()
+        return row[0]
 
     def iter_responses(self, run_id, *, with_body=False):
         for row in self.db.execute("SELECT data_json FROM responses WHERE run_id=?", (run_id,)):
@@ -439,6 +443,11 @@ class RunStore:
         existing = self._review_projection(run_id)
         if set(existing) & set(projection):
             raise ValueError("IDENTITY_REVIEW_ALREADY_EXISTS_FOR_CANDIDATE")
+        for new in projection.values():
+            for old in existing.values():
+                if new["final_product_url"] == old["final_product_url"] and (
+                        new["review_evidence"].get("selection_evidence") != old["review_evidence"].get("selection_evidence")):
+                    raise ValueError("IDENTITY_CONFLICT_AT_VERIFIED_DESTINATION")
         value = {"run_id":run_id,"review":review,"projection":projection}
         path = self._directory(run_id)/"reviews"/(digest(review["review_id"])[:24]+".json")
         immutable_json(path,sealed(value))
@@ -510,15 +519,23 @@ class RunStore:
             yield from values
             return
         parent={c["target_group_key"]:c["target_group_key"] for c in values}
+        by_url={c["normalized_product_url"]:c for c in values}
         def find(key):
             parent.setdefault(key,key)
             if parent[key] != key: parent[key]=find(parent[key])
             return parent[key]
         for c in values:
             proof=reviews.get(c["candidate_id"])
+            if proof and proof["url_identity_status"] == "VERIFIED_INDEPENDENT_PURCHASABLE":
+                direct=by_url.get(proof["final_product_url"])
+                if direct:
+                    parent[find(direct["target_group_key"])]=find(c["target_group_key"])
             if proof and proof["url_identity_status"] == "VERIFIED_SAME_DESTINATION":
                 key="verified_destination:"+proof["verified_destination_key"]
                 parent[find(c["target_group_key"])]=find(key)
+                direct=by_url.get(proof["final_product_url"])
+                if direct:
+                    parent[find(direct["target_group_key"])]=find(key)
         independent={}
         for c in values:
             proof=reviews.get(c["candidate_id"])
@@ -554,7 +571,8 @@ class RunStore:
 
     def summary(self, run_id):
         requests = self.db.execute("SELECT count(*) FROM requests WHERE run_id=?", (run_id,)).fetchone()[0]
-        days = dict(self.db.execute("SELECT local_day,count(*) FROM requests WHERE run_id=? GROUP BY local_day", (run_id,)).fetchall())
+        days = dict(self.db.execute("SELECT local_day,count(*) FROM requests GROUP BY local_day").fetchall())
+        run_days = dict(self.db.execute("SELECT local_day,count(*) FROM requests WHERE run_id=? GROUP BY local_day", (run_id,)).fetchall())
         page_requests = self.db.execute("SELECT count(*) FROM requests WHERE run_id=? AND kind='PAGE'", (run_id,)).fetchone()[0]
         counts = dict(self.db.execute("SELECT dedup_status,count(*) FROM observations WHERE run_id=? GROUP BY dedup_status", (run_id,)).fetchall())
         raw = sum(counts.values())
@@ -565,6 +583,7 @@ class RunStore:
         pending=[{"journal_path":r["journal_path"],"raw_observations":r["raw_count"]} for r in
             self.db.execute("SELECT * FROM pending_pages WHERE run_id=?",(run_id,))]
         return {"requests": requests, "request_count": requests, "requests_by_day": days,
+            "run_requests_by_day":run_days,"daily_budget_scope":"ALL_RUNS_IN_ISOLATED_V2_STORE",
             "pending_page_journals":pending,"unindexed_preserved_raw_observations":sum(r["raw_observations"] for r in pending),
             "page_requests": page_requests, "page_count": len(self.pages(run_id)),
             "observations": raw, "raw_count": raw, "raw_observation_count": raw,

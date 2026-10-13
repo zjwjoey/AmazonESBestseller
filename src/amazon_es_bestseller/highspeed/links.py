@@ -40,7 +40,8 @@ def normalize_product_url(raw_url, base_url="https://www.amazon.es") -> dict:
         parts = urlsplit(absolute)
         result["absolute_product_url"] = absolute
         if (parts.scheme not in {"http", "https"} or parts.hostname not in {"amazon.es", "www.amazon.es"}
-                or parts.username or parts.password or parts.port not in {None, 80, 443}):
+                or parts.username or parts.password
+                or parts.port not in {None, 80 if parts.scheme == "http" else 443}):
             result["reason"] = "PRODUCT_URL_NOT_AMAZON_ES"
             return result
         redirect = bool(_REDIRECT_PATH.search(parts.path))

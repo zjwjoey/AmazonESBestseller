@@ -183,3 +183,40 @@ def test_explicit_human_gate_recovery_does_not_hide_new_restriction(tmp_path):
     store.save_response("run",req,{"text":"Denied","access_state":"BLOCKED","origin":"LIVE_CAPTURE","observed_at":now.isoformat()})
     assert store.get_gate()["state"] == "BLOCKED"
     with pytest.raises(ValueError,match="EXACT_VALID"): store.recover_gate(approval)
+
+def test_daily_budget_cannot_reset_by_creating_second_run(tmp_path):
+    store,p,s=setup(tmp_path,max_requests_per_day=1)
+    store.reserve_request("run",{"kind":"PAGE","url":URL,"observed_at":TIME})
+    second=new_plan("second",sources=[s],max_requests_per_day=1)
+    store.begin_run(second)
+    assert store.summary("second")["requests_by_day"] == {"2026-10-13":1}
+    assert store.summary("second")["run_requests_by_day"] == {}
+    assert store.latest_request_time().startswith("2026-10-13T08:00:00")
+    with pytest.raises(ValueError,match="DAILY_REQUEST_BUDGET_EXHAUSTED"):
+        store.reserve_request("second",{"kind":"PAGE","url":URL,"observed_at":TIME})
+
+@pytest.mark.parametrize("independent",[False,True])
+def test_verified_destination_already_in_pool_never_gets_extra_target_slot(tmp_path,independent):
+    from test_highspeed_reviews import example
+    options={"decision":"VERIFIED_INDEPENDENT_PURCHASABLE",
+        "finals":["https://www.amazon.es/dp/final-blue","https://www.amazon.es/dp/final-red"]} if independent else {}
+    review,candidates,receipts=example(tmp_path,**options)
+    store,p,s=setup(tmp_path,origin="HISTORICAL_REPLAY")
+    urls=[c["normalized_product_url"] for c in candidates]+[r["final_url"] for r in receipts]
+    page(store,p,s,urls)
+    assert store.candidate_count("run") == (3 if independent else 2)
+    store.apply_review("run",review)
+    assert store.candidate_count("run") == (2 if independent else 1)
+    assert len(list(store.iter_candidates("run"))) == (4 if independent else 3)
+    assert audit_run(store,"run")["gate_passed"]
+
+def test_pending_budget_journal_blocks_quality_even_with_prior_complete_page(tmp_path):
+    store,p,s=setup(tmp_path,max_raw_observations_per_run=1)
+    page(store,p,s,["/product/a"])
+    with pytest.raises(ValueError,match="RAW_OBSERVATION"):
+        page(store,p,s,["/product/a","/product/b"])
+    qa=audit_run(store,"run")
+    assert not qa["gate_passed"]
+    assert any(f["code"] == "RAW_PAGE_JOURNALS_NOT_YET_INDEXED" for f in qa["findings"])
+    view=renormalize_run(store,"run",tmp_path/"derived")
+    assert view["unindexed_preserved_raw_observations"] == 2

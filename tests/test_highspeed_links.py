@@ -28,7 +28,8 @@ def test_product_tokens_without_identity(url):
 
 
 @pytest.mark.parametrize("url", [None, "", "#top", "javascript:alert(1)", "https://evil.example/dp/token",
-    "https://www.amazon.es@evil.example/dp/token", "/gp/bestsellers", "/s?k=toy", "https://www.amazon.es:123/dp/token"])
+    "https://www.amazon.es@evil.example/dp/token", "/gp/bestsellers", "/s?k=toy", "https://www.amazon.es:123/dp/token",
+    "https://www.amazon.es:80/dp/token", "http://www.amazon.es:443/dp/token"])
 def test_invalid_links_not_synthesized(url):
     row = normalize_product_url(url)
     assert not row["is_valid"] and row["normalized_product_url"] is None
