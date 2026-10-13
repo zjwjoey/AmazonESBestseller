@@ -14,7 +14,7 @@ from ..multisource.storage import file_lock, read_sealed, atomic_json, immutable
 from .authorization import authorize_request, validate_authorization
 from .budgets import aware_time, budget_reason, utc_text, validate_plan
 from .performance import RollingProgress
-from .links import NORMALIZER_VERSION
+from .links import NORMALIZER_VERSION, normalize_product_url
 from ..multisource.contracts import SOURCE_ROOTS, canonical_page_url
 
 def source_navigation_only(source, url, parsed):
@@ -69,6 +69,33 @@ def empty_continuation_unavailable(parsed, receipt, reason, gate):
         and page.get("source_type_verified") is True and page.get("source_context_valid") is True
         and not parsed.get("observations") and page.get("actual_count")==0
         and page.get("raw_card_count")==0 and (parsed.get("acp_pending") or page.get("acp_pending")))
+
+def explicit_source_empty(parsed):
+    """Accept only the documented official wished-list empty component."""
+    page=parsed["page"]
+    if (page.get("source_type")!="MOST_WISHED_FOR" or page.get("status")!="FAILED"
+            or page.get("access_status")!="NORMAL" or page.get("source_type_verified") is not True
+            or page.get("source_context_valid") is not True or parsed.get("observations")
+            or page.get("actual_count")!=0 or page.get("raw_card_count")!=0
+            or page.get("expected_count") is not None or parsed.get("acp_pending") or page.get("acp_pending")
+            or set(page.get("flags",[]))!={"PAGE_CONTENT_MISSING"}):
+        return False
+    try:
+        html=Path(page["evidence_path"]).read_text(encoding="utf-8")
+        if hashlib.sha256(html.encode("utf-8")).hexdigest()!=page.get("evidence_sha256"):return False
+        soup=BeautifulSoup(html,"lxml")
+        grids=soup.select("#zg-right-col .p13n-desktop-grid")
+        if len(grids)!=1:return False
+        grid=grids[0]
+        if json.loads(grid.get("data-client-recs-list","null"))!=[]:return False
+    except (OSError,UnicodeError,ValueError,KeyError):
+        return False
+    message="Lo sentimos, no hay productos de los más deseados disponibles en esta categoría. Vuelve más tarde."
+    if (not any(h.get_text(" ",strip=True)==message for h in grid.find_all("h4",recursive=False))
+            or grid.select_one("#endOfList") is None
+            or grid.select_one("[data-expected-count], [data-acp-path], .zg-bdg-text, [data-ranking-card], .ranking-card, #gridItemRoot")):
+        return False
+    return not any(normalize_product_url(a["href"],base_url=page["page_url"])["is_valid"] for a in grid.select("a[href]"))
 
 class HighSpeedRunner:
     def __init__(self, store, *, clock=None, sleep=None, parser=None, gate_reader=None, progress=None, qa_auditor=None):
@@ -150,7 +177,8 @@ class HighSpeedRunner:
             # cached failure must not repeatedly refresh the same source forever.
             for page in bundle.get("pages", []):
                 if (page.get("seed_provenance_path") or page.get("status") not in {"FAILED","PARTIAL"}
-                        or "ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED" not in page.get("flags",[])
+                        or not ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED" in page.get("flags",[])
+                            or set(page.get("flags",[]))=={"PAGE_CONTENT_MISSING"})
                         or page.get("actual_count")!=0 or page.get("raw_card_count")!=0
                         or page.get("access_status")!="NORMAL" or page.get("source_type_verified") is not True
                         or page.get("source_context_valid") is not True):
@@ -170,14 +198,18 @@ class HighSpeedRunner:
                         evidence_path=page["evidence_path"],http_status=receipt.get("status_code"),origin=page["origin"])
                 except (OSError,ValueError,KeyError):
                     continue
-                if empty_continuation_unavailable(checked,receipt,"ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",self._gate(plan)):
+                official_empty=(receipt.get("status_code")==200 and receipt.get("access_state")=="NORMAL"
+                    and explicit_source_empty(checked))
+                native_empty=("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED" in page.get("flags",[])
+                    and empty_continuation_unavailable(checked,receipt,"ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",self._gate(plan)))
+                if self._gate(plan).get("state")=="NORMAL" and (official_empty or native_empty):
                     if not (page.get("terminal_for_snapshot") is True and page.get("status")=="FAILED"):
                         page={**page,"status":"FAILED","completeness":"UNKNOWN","page_complete":False,
-                            "continuation_unavailable":True,"terminal_for_snapshot":True}
+                            "continuation_unavailable":native_empty,"source_empty":official_empty,"terminal_for_snapshot":True}
                         self.store.commit_page(run_id,page["page_key"],{k:v for k,v in page.items() if k!="journal_path"},[])
-                        self.store.append_event(run_id,{"kind":"SOURCE_CONTINUATION_UNAVAILABLE","stage":"source_incompleteness",
+                        self.store.append_event(run_id,{"kind":"SOURCE_EMPTY" if official_empty else "SOURCE_CONTINUATION_UNAVAILABLE","stage":"source_incompleteness",
                             "page_url":page["page_url"],"source_id":source["source_id"],"source_type":source["source_type"],
-                            "actual_cards":0,"reason":"ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","cached_failure_reaudited":True,
+                            "actual_cards":0,"reason":"OFFICIAL_EMPTY_STATE" if official_empty else "ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","cached_failure_reaudited":True,
                             "note":"Zero capacity retained FAILED; frozen approved queue continues without re-requesting this source."})
                     committed.add(page["page_key"])
             last_request = max((aware_time(r["observed_at"]) for r in bundle.get("requests", []) if r.get("observed_at")), default=None)
@@ -316,12 +348,19 @@ class HighSpeedRunner:
                                 break
                         persist_start = aware_time(self.clock())
                         navigation_only = source_navigation_only(source, url, parsed)
+                        official_empty = (receipt.get("status_code")==200 and receipt.get("access_state")=="NORMAL"
+                            and self._gate(plan).get("state")=="NORMAL" and explicit_source_empty(parsed))
                         if historical:
                             imported = seed_cache[url]["imported_page"]
                             parsed["page"] = {k:v for k,v in imported.items() if k != "journal_path"}
                             parsed["observations"] = read_sealed(imported["journal_path"])["observations"]
                         if navigation_only:
                             parsed["page"]["source_navigation_only"] = True
+                        if official_empty:
+                            parsed["page"].update(source_empty=True,terminal_for_snapshot=True,completeness="UNKNOWN",page_complete=False)
+                            self.store.append_event(run_id,{"kind":"SOURCE_EMPTY","stage":"source_incompleteness",
+                                "source_id":source["source_id"],"source_type":source["source_type"],"page_url":url,
+                                "actual_cards":0,"reason":"OFFICIAL_EMPTY_STATE","evidence_path":receipt["html_path"]})
                         self.store.commit_page(run_id, page_key,
                             {**parsed["page"], "page_key": page_key, "source": source,
                              "evidence_path": receipt["html_path"], "origin": "HISTORICAL_REPLAY" if historical else origin}, parsed["observations"])
@@ -329,7 +368,7 @@ class HighSpeedRunner:
                             "duration_seconds": (aware_time(self.clock())-persist_start).total_seconds(),
                             "source_type": source["source_type"], "research_category": source.get("research_category")})
                         if parsed["page"].get("status") in {"FAILED", "BLOCKED"}:
-                            if parsed["page"].get("status")=="FAILED" and parsed["page"].get("terminal_for_snapshot") is True and parsed["page"].get("continuation_unavailable") is True:
+                            if parsed["page"].get("status")=="FAILED" and parsed["page"].get("terminal_for_snapshot") is True and (parsed["page"].get("continuation_unavailable") is True or official_empty):
                                 pass
                             elif navigation_only:
                                 self.store.append_event(run_id, {"kind": "SOURCE_NAVIGATION_ONLY", "stage": "source_navigation",

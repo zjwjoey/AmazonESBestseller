@@ -562,6 +562,45 @@ def test_zero_card_native_unavailable_is_terminal_failed_only_with_normal_source
         assert fetched==[empty] and result["run"]["stop_reason"]==failure
         assert not s.saved_pages[0].get("terminal_for_snapshot")
 
+@pytest.mark.parametrize("damage",[None,"message_removed","nonempty_recs","product_link","unknown_access"])
+def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_path,damage):
+    from amazon_es_bestseller.highspeed.adapters import parse_page
+    empty="https://www.amazon.es/gp/most-wished-for/dvd"
+    body=(Path(__file__).parent/"fixtures/highspeed/continue30000_wished_dvd_explicit_empty.html").read_text(encoding="utf-8")
+    from bs4 import BeautifulSoup
+    soup=BeautifulSoup(body,"lxml");grid=soup.select_one('.p13n-desktop-grid')
+    if damage=="message_removed":grid.select_one('h4').decompose()
+    if damage=="nonempty_recs":grid['data-client-recs-list']='[{"opaque":"not-empty"}]'
+    if damage=="product_link":
+        link=soup.new_tag('a',href='/product/unparsed-product');link.string='Product';grid.append(link)
+    body=str(soup)
+    p=plan(tmp_path,"T1");p["sources"][0].update(source_type="MOST_WISHED_FOR",actual_source_url=empty,page_urls=[empty])
+    p["sources"].append({"source_id":"next","source_type":"BEST_SELLERS","research_category":"home","actual_source_url":URL,"page_urls":[URL]})
+    a=approval(p,tmp_path);a["sources"]["home"].update(source_type="MOST_WISHED_FOR",page_urls=[empty])
+    a["sources"]["next"]={**a["sources"]["home"],"source_type":"BEST_SELLERS","page_urls":[URL]}
+    s=Store(tmp_path/"store");fetched=[];current=[NOW]
+    class Normal:
+        def fetch_page(self,url):
+            fetched.append(url)
+            return {"status_code":200,"url":url,"text":body if url==empty else "<h1>Los más vendidos</h1><div data-expected-count='1'><div class='ranking-card'><span class='zg-bdg-text'>#1</span><a href='/product/next'>Next</a></div></div>"}
+    def actual(html,**kwargs):
+        parsed=parse_page(html,**kwargs)
+        if kwargs["page_url"]==empty and damage=="unknown_access":parsed['page']['access_status']='UNKNOWN'
+        return parsed
+    runner=make_runner(s,clock=lambda:current[0],sleep=lambda seconds:current.__setitem__(0,current[0]+timedelta(seconds=seconds)),
+        parser=actual,gate_reader=lambda:{"state":"NORMAL"})
+    result=runner.run(p,authorization=a,transport=Normal())
+    assert fetched==([empty,URL] if damage is None else [empty])
+    assert s.saved_pages[0]['status']=='FAILED' and s.saved_pages[0]['actual_count']==0
+    if damage is None:
+        assert s.saved_pages[0]['source_empty'] is True and s.saved_pages[0]['terminal_for_snapshot'] is True
+        assert s.saved_pages[0]['completeness']=='UNKNOWN' and result['run']['quality_gate_passed'] is False
+        s.saved_pages[0].update(source_empty=False,terminal_for_snapshot=False)
+        runner.run(p,authorization=a,transport=Normal(),resume=True)
+        assert fetched==[empty,URL] and len(s.requests)==2
+        assert s.saved_pages[-1]['source_empty'] is True
+    else:assert not s.saved_pages[0].get('terminal_for_snapshot')
+
 @pytest.mark.parametrize("failure,normal,continues", [
     ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",True,True),
     ("ACP_NATIVE_BATCH_PROOF_INVALID",True,False),
