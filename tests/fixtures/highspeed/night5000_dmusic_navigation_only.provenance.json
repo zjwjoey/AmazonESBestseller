@@ -1,0 +1,9 @@
+{
+  "origin": "LIVE_CAPTURE",
+  "source_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\62\\622b6a4e9fa2b677a05a9e6bac4160a47d3b8f5bfef6970b44413d70a7d849d2.html",
+  "sha256": "622b6a4e9fa2b677a05a9e6bac4160a47d3b8f5bfef6970b44413d70a7d849d2",
+  "request_url": "https://www.amazon.es/gp/bestsellers/dmusic",
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "fixture_copy_only": true
+}

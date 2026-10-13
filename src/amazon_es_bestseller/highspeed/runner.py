@@ -7,6 +7,8 @@ import time
 import uuid
 from datetime import datetime, timezone
 from contextlib import nullcontext, ExitStack
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
 from ..access.detector import detect_access_status
 from ..multisource.storage import file_lock, read_sealed, atomic_json, immutable_json, sealed
 from .authorization import authorize_request, validate_authorization
@@ -19,12 +21,34 @@ def source_navigation_only(source, url, parsed):
     page = parsed["page"]
     actual = canonical_page_url(url).rstrip("/")
     root = SOURCE_ROOTS.get(source.get("source_type"), "").rstrip("/")
-    return bool(actual == root and page.get("status") == "FAILED"
+    eligible = bool(page.get("status") == "FAILED"
         and page.get("access_status") == "NORMAL" and page.get("source_type_verified") is True
         and page.get("source_context_valid") is True and not parsed.get("observations")
         and page.get("raw_card_count", 0) == 0
         and set(page.get("flags", [])) == {"PAGE_CONTENT_MISSING"}
+        and page.get("expected_count") is None
         and not (parsed.get("acp_pending") or page.get("acp_pending")))
+    if not eligible:
+        return False
+    if actual == root:
+        return True
+    # A category landing page needs affirmative, saved navigation evidence.
+    # Missing cards alone must never suppress an ordinary leaf parser failure.
+    try:
+        html = Path(page["evidence_path"]).read_text(encoding="utf-8")
+    except (OSError, KeyError, UnicodeError):
+        return False
+    if hashlib.sha256(html.encode("utf-8")).hexdigest() != page.get("evidence_sha256"):
+        return False
+    soup = BeautifulSoup(html, "lxml")
+    left, right = soup.select_one("#zg-left-col"), soup.select_one("#zg-right-col")
+    if (left is None or right is None or right.find(True) is not None
+            or right.get_text(strip=True)
+            or soup.select_one("[data-expected-count], [data-client-recs-list], [data-acp-path]")):
+        return False
+    return any(anchor.get_text(strip=True)
+        and canonical_page_url(urljoin(url, anchor["href"])).rstrip("/").startswith(actual+"/")
+        for anchor in left.select("a[href]"))
 
 def continuation_unavailable(parsed, receipt, reason, gate):
     """A bounded native discovery miss is source incompleteness, not success."""
@@ -91,7 +115,10 @@ class HighSpeedRunner:
                 self.store.update_run(run_id, started_at=started)
             bundle = self.store.load_run(run_id)
             committed = {p["page_key"] for p in bundle.get("pages", [])
-                if p.get("status", p.get("completeness")) != "PARTIAL" or p.get("terminal_for_snapshot") is True}
+                if p.get("status") == "COMPLETE"
+                or (p.get("status") == "PARTIAL" and p.get("terminal_for_snapshot") is True)
+                or (p.get("status") == "FAILED" and p.get("source_navigation_only") is True
+                    and source_navigation_only(p.get("source", {}), p.get("page_url", ""), {"page":p}))}
             cached = {}
             for receipt in bundle.get("responses", []):
                 if receipt.get("access_state") == "NORMAL" and receipt.get("kind", receipt.get("request_kind", "PAGE")) == "PAGE":
@@ -203,6 +230,9 @@ class HighSpeedRunner:
                                 parsed["page"].setdefault("flags", []).append("ACP_NO_PROGRESS")
                                 break
                         persist_start = aware_time(self.clock())
+                        navigation_only = source_navigation_only(source, url, parsed)
+                        if navigation_only:
+                            parsed["page"]["source_navigation_only"] = True
                         self.store.commit_page(run_id, page_key,
                             {**parsed["page"], "page_key": page_key, "source": source,
                              "evidence_path": receipt["html_path"], "origin": origin}, parsed["observations"])
@@ -210,11 +240,11 @@ class HighSpeedRunner:
                             "duration_seconds": (aware_time(self.clock())-persist_start).total_seconds(),
                             "source_type": source["source_type"], "research_category": source.get("research_category")})
                         if parsed["page"].get("status") in {"FAILED", "BLOCKED"}:
-                            if source_navigation_only(source, url, parsed):
+                            if navigation_only:
                                 self.store.append_event(run_id, {"kind": "SOURCE_NAVIGATION_ONLY", "stage": "source_navigation",
                                     "source_id": source["source_id"], "source_type": source["source_type"],
                                     "page_url": url, "evidence_path": receipt["html_path"],
-                                    "note": "Known root has no cards; quality remains FAILED. Continue only the frozen approved URL queue."})
+                                    "note": "Verified navigation page has no cards; quality remains FAILED. Continue only the frozen approved URL queue."})
                             else:
                                 raise ValueError("PAGE_PARSE_OR_ACCESS_FAILED")
                         committed.add(page_key)

@@ -226,10 +226,25 @@ def export_report(store, run_id, output_root, source_registry=None, metrics=None
             event = dict(event)
             event.setdefault("stage", event.get("operation") or event.get("request_kind") or event.get("event_type") or event.get("kind", "unknown"))
             events.append(event)
+        finished_at = None
+        if run.get("status") not in {"RUNNING", "CREATED", "NEW"}:
+            start = datetime.fromisoformat((run.get("started_at") or run["created_at"]).replace("Z", "+00:00"))
+            endings = []
+            for name in ("finished_at", "completed_at", "ended_at"):
+                value = run.get(name)
+                if value:
+                    try:
+                        instant = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                        if instant.tzinfo is not None and instant >= start:
+                            endings.append((instant, str(value)))
+                    except (ValueError, TypeError):
+                        pass
+            if endings:
+                finished_at = max(endings, key=lambda item: item[0])[1]
         metrics = summarize_metrics(events, raw_count=len(observations),
             valid_link_count=sum(bool(r.get("candidate_id")) for r in observations),
             unique_count=len(eligible_candidate_ids(candidates)), started_at=run.get("started_at") or run["created_at"],
-            finished_at=run.get("ended_at") or run.get("completed_at"),
+            finished_at=finished_at,
             target=run.get("target_unique_links", run.get("plan", {}).get("target_unique_links", 30000)))
     else:
         observations, candidates = list(store.iter_observations(run_id)), list(store.iter_candidates(run_id))

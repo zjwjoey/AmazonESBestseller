@@ -367,6 +367,54 @@ def test_wrong_type_root_still_stops_before_approved_leaf(tmp_path):
     assert fetched == [root]
     assert not any(e["kind"] == "SOURCE_NAVIGATION_ONLY" for e in s.events)
 
+@pytest.mark.parametrize("damage", [None, "missing_navigation", "expected_count", "nonempty_content"])
+def test_saved_dmusic_navigation_root_continues_but_malformed_leaf_stops(tmp_path, damage):
+    from bs4 import BeautifulSoup
+    root = "https://www.amazon.es/gp/bestsellers/dmusic"
+    leaf = root+"/digital-music-track"
+    body = (Path(__file__).parent/"fixtures/highspeed/night5000_dmusic_navigation_only.html").read_text(encoding="utf-8")
+    soup = BeautifulSoup(body,"lxml")
+    if damage == "missing_navigation":
+        soup.select_one("#zg-left-col").decompose()
+    elif damage == "expected_count":
+        soup.select_one("#zg-right-col")["data-expected-count"]="50"
+    elif damage == "nonempty_content":
+        soup.select_one("#zg-right-col").append(soup.new_tag("div"))
+    body = str(soup)
+    p=plan(tmp_path,"T1"); p["sources"][0].update(actual_source_url=root,page_urls=[root])
+    p["sources"].append({"source_id":"track","source_type":"BEST_SELLERS","research_category":"home",
+        "actual_source_url":leaf,"page_urls":[leaf]})
+    a=approval(p,tmp_path); a["sources"]["home"]["page_urls"]=[root]
+    a["sources"]["track"]={**a["sources"]["home"],"page_urls":[leaf]}
+    s=Store(tmp_path/"store"); current=[NOW]; fetched=[]
+    class Normal:
+        def fetch_page(self,url):
+            fetched.append(url)
+            text=body if url == root else "<h1>Los más vendidos en Canciones</h1><div data-expected-count='1'><div data-ranking-card='true'><span class='zg-bdg-text'>#1</span><a href='/dp/visible-track'>Track</a></div></div>"
+            return {"status_code":200,"url":url,"text":text}
+    result=make_runner(s,clock=lambda:current[0],sleep=lambda seconds:current.__setitem__(0,current[0]+timedelta(seconds=seconds)),
+        gate_reader=lambda:{"state":"NORMAL"}).run(p,authorization=a,transport=Normal())
+    assert fetched == ([root,leaf] if damage is None else [root])
+    assert s.saved_pages[0]["status"] == "FAILED"
+    assert len(s.observations) == (1 if damage is None else 0)
+    assert any(e["kind"] == "SOURCE_NAVIGATION_ONLY" for e in s.events) == (damage is None)
+    assert result["run"]["quality_gate_passed"] is False
+    # Simulate the pre-fix checkpoint: FAILED, without a navigation decision.
+    s.saved_pages[0].pop("source_navigation_only",None)
+    fetched.clear()
+    resumed=make_runner(s,clock=lambda:current[0],gate_reader=lambda:{"state":"NORMAL"}).run(
+        p,authorization=a,transport=Normal(),resume=True)
+    assert fetched == []  # Reparse the saved normal receipt, never re-request it.
+    if damage is None:
+        assert any(page.get("source_navigation_only") is True for page in s.saved_pages)
+        # A saved, proven navigation-only decision may subsequently be skipped.
+        pages_before=len(s.saved_pages)
+        make_runner(s,clock=lambda:current[0],gate_reader=lambda:{"state":"NORMAL"}).run(
+            p,authorization=a,transport=Normal(),resume=True)
+        assert len(s.saved_pages) == pages_before and fetched == []
+    else:
+        assert resumed["run"]["stop_reason"] == "PAGE_PARSE_OR_ACCESS_FAILED"
+
 @pytest.mark.parametrize("independent", [False, True])
 def test_gate_target_accounting_revalidates_journals_and_keeps_unknown_alias_conservative(tmp_path, independent):
     from test_highspeed_reviews import example

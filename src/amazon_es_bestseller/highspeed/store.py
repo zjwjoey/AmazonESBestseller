@@ -141,8 +141,15 @@ class RunStore:
         metadata = dict(run.get("metadata", {}))
         row = self.db.execute("SELECT metadata_json FROM runs WHERE run_id=?", (run_id,)).fetchone()
         metadata.update(json.loads(row["metadata_json"]))
+        explicit_end = "ended_at" in fields
         ended, status = fields.pop("ended_at", run.get("ended_at")), fields.pop("status", run["status"])
-        if fields.get("finished_at") and not ended:
+        if status == "RUNNING":
+            if not explicit_end:
+                ended = None
+            # A stopped attempt is not this resumed attempt's completion.
+            for name in ("finished_at", "completed_at"):
+                metadata.pop(name, None)
+        elif not explicit_end and fields.get("finished_at"):
             ended = fields["finished_at"]
         metadata.update(fields)
         with self._transaction():
