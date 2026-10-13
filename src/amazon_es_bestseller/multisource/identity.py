@@ -1,0 +1,420 @@
+"""Snapshot-only identity governance; production ASIN keys are untouched.
+
+Raw observations and the review journal are immutable. The checkpoint is a
+rebuildable view, never the authority for an identity or a manual review.
+"""
+from __future__ import annotations
+
+from copy import deepcopy
+import json
+from pathlib import Path
+import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import uuid
+
+from bs4 import BeautifulSoup
+
+from ..access.detector import detect_access_status
+from ..monitoring.ranking_identity.urls import asin_from_product_url, is_valid_asin, normalize_asin
+from .contracts import timestamp
+from .storage import atomic_json, digest, file_lock, immutable_json, read_sealed, sealed
+
+_NAMESPACE = uuid.UUID("0b53c3c7-9666-4e1d-b559-f0c19d3145ad")
+_TRACKING = {"ref", "ref_", "tag", "ascsubtag", "linkcode", "linkid", "creative", "camp"}
+
+
+def normalize_product_url(value: str | None) -> str | None:
+    """Remove only known tracking parameters; preserve variant/identity queries."""
+    if not value:
+        return None
+    parts = urlsplit(value)
+    path = re.sub(r"/ref=[^/]*$", "", parts.path)
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+                       if k.lower() not in _TRACKING])
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, query, parts.fragment))
+
+
+def _amazon_url(value) -> bool:
+    try:
+        parts = urlsplit(str(value or ""))
+        return parts.scheme == "https" and parts.hostname in {"amazon.es", "www.amazon.es"} and not parts.username
+    except ValueError:
+        return False
+
+
+def _asin(value) -> str | None:
+    return normalize_asin(value) if is_valid_asin(value) else None
+
+
+class IdentityEvidenceResolver:
+    """Require independent page evidence, rather than counting URL rewrites."""
+
+    @staticmethod
+    def _detail(proof: dict) -> tuple[dict | None, str | None]:
+        required = ("evidence_path", "evidence_sha256", "requested_url", "final_url", "observed_at", "access_status")
+        if any(not proof.get(key) for key in required):
+            return None, "DETAIL_PROOF_METADATA_MISSING"
+        if proof["access_status"] != "NORMAL" or not all(_amazon_url(proof[key]) for key in ("requested_url", "final_url")):
+            return None, "DETAIL_PROOF_ACCESS_OR_URL_INVALID"
+        try:
+            observed = timestamp(proof["observed_at"])
+            data = Path(proof["evidence_path"]).read_bytes()
+            if digest(data) != proof["evidence_sha256"]:
+                return None, "DETAIL_PROOF_CHECKSUM_MISMATCH"
+            html = data.decode("utf-8")
+        except (OSError, UnicodeError, ValueError):
+            return None, "DETAIL_PROOF_INVALID"
+        if detect_access_status(proof.get("http_status", 200), html).value != "NORMAL":
+            return None, "DETAIL_PROOF_ACCESS_RESTRICTED"
+        soup = BeautifulSoup(html, "lxml")
+        asins = set()
+        # Deliberately avoid recommendation widgets and arbitrary data-asin.
+        for element in soup.select("input#ASIN, #buybox input[name=ASIN], #desktop_buybox input[name=ASIN]"):
+            if candidate := _asin(element.get("value")):
+                asins.add(candidate)
+        for row in soup.select("#productDetails_detailBullets_sections1 tr, #productDetails_techSpec_section_1 tr, #detailBullets_feature_div li"):
+            text = row.get_text(" ", strip=True)
+            match = re.match(r"^ASIN\s*[:：]?\s*([A-Z0-9]{10})(?:\s|$)", text, re.I)
+            if match:
+                asins.add(match.group(1).upper())
+        if len(asins) != 1:
+            return None, "DETAIL_PRIMARY_ASIN_MISSING_OR_CONFLICTED"
+        actual = next(iter(asins))
+        claimed = _asin(proof.get("asin") or proof.get("asin_observed"))
+        if claimed and claimed != actual:
+            return None, "DETAIL_PROOF_ASIN_NOT_IN_SAVED_PAGE"
+        selected_child = _asin(proof.get("selected_variant_asin") or proof.get("variation_child_asin"))
+        if selected_child and selected_child != actual:
+            return None, "DETAIL_SELECTED_CHILD_PRIMARY_ASIN_CONFLICT"
+        requested = asin_from_product_url(proof["requested_url"])
+        final = asin_from_product_url(proof["final_url"])
+        if not requested or not final or requested != actual or final != actual:
+            return None, "DETAIL_REQUEST_FINAL_PAGE_ASIN_CONFLICT"
+        canonical = soup.select_one('link[rel="canonical"]')
+        canonical_asin = asin_from_product_url(canonical.get("href", "")) if canonical else ""
+        if canonical_asin and canonical_asin != actual:
+            return None, "DETAIL_CANONICAL_PAGE_ASIN_CONFLICT"
+        return {**deepcopy(proof), **observed, "asin": actual, "kind": "DETAIL_PAGE",
+                "evidence_group": "DETAIL_PAGE:" + proof["evidence_sha256"], "verified": True}, None
+
+    def resolve(self, observation: dict) -> dict:
+        row = deepcopy(observation)
+        raw_url = row.get("raw_product_url") or row.get("product_url_raw")
+        row["raw_product_url"] = raw_url
+        row["normalized_product_url"] = normalize_product_url(raw_url)
+        raw_asin = asin_from_product_url(raw_url) or None
+        card = _asin(row.get("asin_from_card"))
+        observed = _asin(row.get("asin_observed") or row.get("observed_asin"))
+        final = asin_from_product_url(row.get("final_product_url")) or _asin(row.get("asin_from_final_url"))
+        canonical = _asin(row.get("canonical_asin_observed"))
+        parent = _asin(row.get("parent_asin_observed"))
+        row.update(asin_from_raw_url=raw_asin, asin_from_card=card, asin_observed=observed,
+                   asin_from_final_url=final, parent_asin_observed=parent)
+        reasons = []
+        evidence = []
+        if raw_url and urlsplit(raw_url).netloc and not _amazon_url(raw_url):
+            reasons.append("RAW_PRODUCT_URL_OUTSIDE_AMAZON_ES")
+        values = {v for v in (raw_asin, card, observed, final, canonical) if v}
+        for key, value, group in (("RAW_URL", raw_asin, "RANKING_URL"), ("CARD", card, "RANKING_CARD"),
+                                  ("OBSERVED", observed, "RANKING_CARD"), ("FINAL_URL", final, "URL_HINT"),
+                                  ("CANONICAL_HINT", canonical, "RANKING_URL")):
+            if value:
+                evidence.append({"kind": key, "asin": value, "evidence_group": group, "verified": False})
+        if len(values) > 1:
+            reasons.append("CARD_URL_OBSERVED_ASIN_CONFLICT")
+        claimed_raw = _asin(observation.get("asin_from_raw_url"))
+        if claimed_raw and claimed_raw != raw_asin:
+            reasons.append("CLAIMED_RAW_URL_ASIN_CONFLICT")
+        details = []
+        for proof in row.get("identity_evidence") or []:
+            if not isinstance(proof, dict):
+                reasons.append("INVALID_IDENTITY_EVIDENCE")
+                continue
+            kind = proof.get("kind") or proof.get("type") or proof.get("source")
+            if kind == "DETAIL_PAGE":
+                verified, error = self._detail(proof)
+                if verified and (proof.get("evidence_sha256") == row.get("evidence_sha256") or
+                    row.get("evidence_path") and Path(proof["evidence_path"]).resolve() == Path(row["evidence_path"]).resolve()):
+                    verified, error = None, "DETAIL_PROOF_NOT_INDEPENDENT_OF_RANKING_PAGE"
+                if error:
+                    reasons.append(error)
+                    evidence.append({**deepcopy(proof), "verified": False, "validation_error": error})
+                else:
+                    evidence.append(verified)
+                    details.append(verified["asin"])
+            elif kind not in {"RAW_URL", "CARD", "OBSERVED", "FINAL_URL", "CANONICAL_HINT"}:
+                evidence.append({**deepcopy(proof), "verified": False})
+        if len(set(details)) > 1 or details and values and set(details) != values:
+            reasons.append("RANKING_DETAIL_ASIN_CONFLICT")
+        # Parent is a family hint and never a purchasable-child identity anchor.
+        if parent and parent in values and row.get("variation_child_asin") and _asin(row["variation_child_asin"]) != parent:
+            reasons.append("PARENT_CHILD_IDENTITY_CONFLATION")
+        confirmed = bool(not reasons and len(values) == 1 and details and set(details) == values and raw_asin)
+        status = "CONFLICT" if reasons else "CONFIRMED" if confirmed else "UNCONFIRMED"
+        row.update(product_id=None, identity_status=status, identity_evidence=evidence,
+                   identity_conflict_reason=sorted(set(reasons)), review_status="PENDING",
+                   confirmed_asin=raw_asin if confirmed else None)
+        return row
+
+
+class ProductIdentityRegistry:
+    """Durable review journal and stable internal entities across restarts."""
+
+    def __init__(self, directory: str | Path):
+        self.directory = Path(directory)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.resolver = IdentityEvidenceResolver()
+        self.checkpoint = self.directory / "checkpoint.json"
+
+    def _load(self):
+        events = []
+        previous = None
+        for index, path in enumerate(sorted((self.directory / "events").glob("*.json")), 1):
+            event = json.loads(path.read_text(encoding="utf-8"))
+            payload = {k: v for k, v in event.items() if k != "event_sha256"}
+            if event.get("schema_version") != 1 or event.get("sequence") != index or event.get("previous_sha256") != previous or digest(payload) != event.get("event_sha256"):
+                raise ValueError("IDENTITY_JOURNAL_CORRUPT: " + str(path))
+            previous = event["event_sha256"]
+            events.append(event)
+        # A checkpoint can be rebuilt after corruption; a missing committed
+        # journal tail cannot be silently treated as an earlier valid history.
+        if self.checkpoint.exists():
+            try:
+                checkpoint = read_sealed(self.checkpoint, recover_backup=True)
+            except ValueError:
+                checkpoint = None
+            if checkpoint and checkpoint.get("event_count", 0) > len(events):
+                raise ValueError("IDENTITY_JOURNAL_TAIL_MISSING")
+            if checkpoint and checkpoint.get("event_count", 0):
+                head = events[checkpoint["event_count"] - 1]["event_sha256"]
+                if head != checkpoint.get("head_sha256"):
+                    raise ValueError("IDENTITY_JOURNAL_CHECKPOINT_HEAD_CONFLICT")
+        observations = {}
+        for event in events:
+            if event["action"] == "INGEST":
+                for item in event["observations"]:
+                    path = self.directory / "observations" / (digest(item["observation_id"]) + ".json")
+                    try:
+                        data = path.read_bytes()
+                        if digest(data) != item["sha256"]:
+                            raise ValueError("IDENTITY_OBSERVATION_CHECKSUM_MISMATCH")
+                        row = json.loads(data)
+                        if row.get("observation_id") != item["observation_id"]:
+                            raise ValueError("IDENTITY_OBSERVATION_ID_MISMATCH")
+                    except (OSError, ValueError) as exc:
+                        raise ValueError("IDENTITY_OBSERVATION_CORRUPT: " + str(path)) from exc
+                    observations[item["observation_id"]] = row
+        return observations, events
+
+    def _append(self, events, payload):
+        event = {"schema_version": 1, "sequence": len(events) + 1,
+                 "previous_sha256": events[-1]["event_sha256"] if events else None,
+                 "event_id": payload.pop("event_id", None) or "review_" + uuid.uuid4().hex,
+                 "recorded_at": timestamp()["observed_at"], **payload}
+        event["event_sha256"] = digest(event)
+        immutable_json(self.directory / "events" / f'{event["sequence"]:09d}.json', event)
+        events.append(event)
+        return event
+
+    @staticmethod
+    def _product(key):
+        return "prod_" + uuid.uuid5(_NAMESPACE, key).hex
+
+    def _materialize(self, observations, events):
+        undone = {e["target_event_id"] for e in events if e["action"] == "undo"}
+        with_evidence = deepcopy(observations)
+        for event in events:
+            if event["action"] == "EVIDENCE" and event["event_id"] not in undone:
+                for key in event["observation_ids"]:
+                    with_evidence[key].setdefault("identity_evidence", []).extend(deepcopy(event["identity_evidence"]))
+        rows = {key: self.resolver.resolve(row) for key, row in with_evidence.items()}
+        for key, row in rows.items():
+            if row["identity_status"] == "CONFIRMED":
+                row["product_id"] = self._product("verified-amazon-child:" + row["confirmed_asin"])
+        for event in events:
+            action = event["action"]
+            if action in {"INGEST", "EVIDENCE", "undo"} or event["event_id"] in undone:
+                continue
+            selected = [rows[key] for key in event["observation_ids"]]
+            if action == "same":
+                prior_pids = {row["product_id"] for row in selected if row["product_id"]}
+                pid = min(prior_pids) if prior_pids else self._product("manual-anchor:" + min(event["observation_ids"]))
+                # Merge entire currently confirmed entities, not just the two
+                # chosen observation rows. Replaying without this event undoes it.
+                affected = [row for row in rows.values() if row in selected or row.get("product_id") in prior_pids]
+                for row in affected:
+                    row["original_identity_conflict_reason"] = row["identity_conflict_reason"]
+                    row.update(product_id=pid, identity_status="CONFIRMED", identity_conflict_reason=[], review_status="CONFIRMED_SAME")
+            elif action == "different":
+                for row in selected:
+                    row["original_identity_conflict_reason"] = row["identity_conflict_reason"]
+                    row.update(product_id=self._product("manual-separated:" + row["observation_id"]),
+                               identity_status="CONFIRMED", identity_conflict_reason=[], review_status="CONFIRMED_DIFFERENT")
+            elif action == "pending":
+                for row in selected:
+                    row.update(product_id=None, identity_status="UNCONFIRMED", review_status="PENDING")
+            elif action == "family":
+                family_id = "family_" + uuid.uuid5(_NAMESPACE, "|".join(sorted(event["observation_ids"]))).hex
+                for row in selected:
+                    row.update(variation_family_id=family_id, review_status="CONFIRMED_FAMILY")
+            for row in selected:
+                row.setdefault("review_events", []).append(event["event_id"])
+        return [rows[key] for key in sorted(rows)]
+
+    def _write_checkpoint(self, observations, events):
+        rows = self._materialize(observations, events)
+        atomic_json(self.checkpoint, sealed({"event_count": len(events),
+                    "head_sha256": events[-1]["event_sha256"] if events else None,
+                    "observation_count": len(rows), "mapping_sha256": digest(rows)}), backup=True)
+        return rows
+
+    def ingest(self, observations: list[dict] | dict) -> list[dict]:
+        observations = [observations] if isinstance(observations, dict) else list(observations)
+        with file_lock(self.directory / ".lock"):
+            known, events = self._load()
+            items = []
+            requested = []
+            for original in observations:
+                row = deepcopy(original)
+                key = row.get("observation_id")
+                if not key or not isinstance(key, str):
+                    raise ValueError("OBSERVATION_ID_REQUIRED")
+                timestamp(row.get("observed_at")) if row.get("observed_at") else None
+                requested.append(key)
+                path = self.directory / "observations" / (digest(key) + ".json")
+                immutable_json(path, row)
+                if key not in known:
+                    items.append({"observation_id": key, "sha256": digest(row)})
+                    known[key] = row
+            if items:
+                self._append(events, {"action": "INGEST", "observations": items})
+            mapped = {row["observation_id"]: row for row in self._write_checkpoint(known, events)}
+            return [mapped[key] for key in requested]
+
+    def materialize(self, observations: list[dict] | None = None) -> list[dict]:
+        with file_lock(self.directory / ".lock"):
+            known, events = self._load()
+            rows = self._write_checkpoint(known, events)
+            if observations is None:
+                return rows
+            ids = {row["observation_id"] for row in observations}
+            if ids - known.keys():
+                raise ValueError("OBSERVATION_NOT_INGESTED")
+            return [row for row in rows if row["observation_id"] in ids]
+
+    def resolve(self, observation: dict | str, *, evidence=None, actor="offline-evidence-verifier", event_id=None, reason=None) -> dict:
+        """Resolve hints, or durably attach a saved detail proof after capture.
+
+        Attaching evidence is a journal event, preserving immutable ranking
+        observation bytes. Invalid/conflicting proofs are retained and quarantined.
+        """
+        if isinstance(observation, dict) and evidence is None:
+            return self.resolver.resolve(observation)
+        key = observation if isinstance(observation, str) else observation["observation_id"]
+        with file_lock(self.directory / ".lock"):
+            observations, events = self._load()
+            if key not in observations:
+                raise ValueError("OBSERVATION_NOT_INGESTED")
+            if evidence is not None:
+                proofs = [evidence] if isinstance(evidence, dict) else list(evidence)
+                if not proofs or not actor or not str(actor).strip() or any(not isinstance(p, dict) for p in proofs):
+                    raise ValueError("IDENTITY_EVIDENCE_AND_ACTOR_REQUIRED")
+                payload = {"action": "EVIDENCE", "observation_ids": [key], "actor": actor,
+                           "identity_evidence": deepcopy(proofs)}
+                if reason is not None:
+                    payload["reason"] = reason
+                existing = next((e for e in events if event_id and e["event_id"] == event_id), None)
+                if existing:
+                    if any(existing.get(k) != v for k, v in payload.items()):
+                        raise ValueError("REVIEW_IDEMPOTENCY_CONFLICT")
+                else:
+                    if event_id:
+                        payload["event_id"] = event_id
+                    self._append(events, payload)
+            return next(row for row in self._write_checkpoint(observations, events) if row["observation_id"] == key)
+
+    def attach(self, observation_id: str, evidence: list[dict], *, actor: str, reason: str, event_id=None) -> dict:
+        """CLI-friendly post-capture proof attachment; undo accepts event_id."""
+        if not reason or not str(reason).strip() or not isinstance(evidence, list):
+            raise ValueError("ATTACH_REASON_AND_EVIDENCE_LIST_REQUIRED")
+        attachment_id = event_id or "proof_" + uuid.uuid4().hex
+        row = self.resolve(observation_id, evidence=evidence, actor=actor, reason=reason, event_id=attachment_id)
+        return {"event_id": attachment_id, "observation": row}
+
+    def review(self, action: str, observation_ids, *, actor: str, evidence, event_id=None) -> dict:
+        if action not in {"same", "different", "family", "pending"}:
+            raise ValueError("INVALID_IDENTITY_REVIEW_ACTION")
+        ids = sorted(set(observation_ids))
+        if not actor or not str(actor).strip() or not evidence or not ids:
+            raise ValueError("REVIEW_ACTOR_EVIDENCE_AND_OBSERVATIONS_REQUIRED")
+        if action in {"different", "family"} and len(ids) < 2:
+            raise ValueError("REVIEW_REQUIRES_TWO_OBSERVATIONS")
+        with file_lock(self.directory / ".lock"):
+            observations, events = self._load()
+            if set(ids) - observations.keys():
+                raise ValueError("OBSERVATION_NOT_INGESTED")
+            payload = {"action": action, "observation_ids": ids, "actor": actor, "evidence": deepcopy(evidence)}
+            if event_id:
+                existing = next((e for e in events if e["event_id"] == event_id), None)
+                if existing:
+                    if any(existing.get(k) != v for k, v in payload.items()):
+                        raise ValueError("REVIEW_IDEMPOTENCY_CONFLICT")
+                    return existing
+                payload["event_id"] = event_id
+            result = self._append(events, payload)
+            self._write_checkpoint(observations, events)
+            return result
+
+    def undo(self, event_id: str, *, actor: str, evidence) -> dict:
+        if not actor or not str(actor).strip() or not evidence:
+            raise ValueError("REVIEW_ACTOR_AND_EVIDENCE_REQUIRED")
+        with file_lock(self.directory / ".lock"):
+            observations, events = self._load()
+            target = next((e for e in events if e["event_id"] == event_id), None)
+            if not target or target["action"] in {"INGEST", "undo"}:
+                raise ValueError("REVIEW_EVENT_NOT_UNDOABLE")
+            existing = next((e for e in events if e["action"] == "undo" and e["target_event_id"] == event_id), None)
+            if existing:
+                return existing
+            result = self._append(events, {"action": "undo", "target_event_id": event_id, "actor": actor, "evidence": deepcopy(evidence)})
+            self._write_checkpoint(observations, events)
+            return result
+
+    def history(self) -> list[dict]:
+        with file_lock(self.directory / ".lock"):
+            return deepcopy(self._load()[1])
+
+    def summary(self) -> dict:
+        rows = self.materialize()
+        confirmed = [r for r in rows if r["identity_status"] == "CONFIRMED" and r["product_id"]]
+        candidates = {r.get("asin_from_raw_url") or r.get("asin_from_card") or r["observation_id"] for r in rows}
+        return {"schema_version": 1, "observations": len(rows), "unique_candidates": len(candidates),
+                "confirmed_observations": len(confirmed), "confirmed_unique_products": len({r["product_id"] for r in confirmed}),
+                "identity_conflicts": sum(r["identity_status"] == "CONFLICT" for r in rows),
+                "unconfirmed_observations": sum(r["product_id"] is None for r in rows),
+                "duplicate_confirmed_observations": len(confirmed) - len({r["product_id"] for r in confirmed})}
+
+    def import_legacy(self, records: list[dict], *, evidence_by_asin: dict | None = None) -> list[dict]:
+        observations = []
+        for record in records:
+            asin = _asin(record.get("asin") or record.get("ASIN"))
+            if not asin:
+                raise ValueError("LEGACY_ASIN_INVALID")
+            observations.append({"schema_version": 1, "observation_id": "legacy_" + digest(record),
+                "asin_observed": asin, "raw_product_url": record.get("product_url") or f"https://www.amazon.es/dp/{asin}",
+                "legacy_record": deepcopy(record), "origin": "HISTORICAL_REPLAY",
+                "legacy_identity_status": "HISTORICAL_UNCONFIRMED",
+                "identity_evidence": deepcopy((evidence_by_asin or {}).get(asin, []))})
+        return self.ingest(observations)
+
+    def legacy_mapping(self) -> dict:
+        """Only one-to-one confirmed ASIN/entity mappings may reach old caches."""
+        by_asin, by_product = {}, {}
+        for row in self.materialize():
+            asin = row.get("confirmed_asin")
+            if row["identity_status"] != "CONFIRMED" or not asin or not row["product_id"]:
+                continue
+            by_asin.setdefault(asin, set()).add(row["product_id"])
+            by_product.setdefault(row["product_id"], set()).add(asin)
+        return {asin: next(iter(pids)) for asin, pids in sorted(by_asin.items())
+                if len(pids) == 1 and len(by_product[next(iter(pids))]) == 1}
