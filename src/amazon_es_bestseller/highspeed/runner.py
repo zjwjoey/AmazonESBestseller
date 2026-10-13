@@ -14,6 +14,7 @@ from ..multisource.storage import file_lock, read_sealed, atomic_json, immutable
 from .authorization import authorize_request, validate_authorization
 from .budgets import aware_time, budget_reason, utc_text, validate_plan
 from .performance import RollingProgress
+from .links import NORMALIZER_VERSION
 from ..multisource.contracts import SOURCE_ROOTS, canonical_page_url
 
 def source_navigation_only(source, url, parsed):
@@ -130,9 +131,30 @@ class HighSpeedRunner:
                     last_request = max(filter(None, (last_request, aware_time(global_last))))
             reason = None
             rolling = RollingProgress(plan["target_unique_links"])
-            for event in bundle.get("events", []):
-                if event.get("kind") == "PROGRESS":
-                    rolling.record(event["elapsed_seconds"], event["unique_links"])
+            progress_history = [e for e in bundle.get("events", []) if e.get("kind") == "PROGRESS"]
+            comparable = [e for e in progress_history if e.get("normalizer_version") == NORMALIZER_VERSION]
+            current_elapsed = (aware_time(self.clock()) - aware_time(started)).total_seconds()
+            current_count = self.store.candidate_count(run_id)
+            rebase_reason = "NO_CURRENT_NORMALIZER_PROGRESS" if not comparable else None
+            if comparable:
+                try:
+                    for event in comparable:
+                        rolling.record(event["elapsed_seconds"], event["unique_links"])
+                    if rolling.samples[-1][0] > current_elapsed or rolling.samples[-1][1] > current_count:
+                        rebase_reason = "CURRENT_PROGRESS_NO_LONGER_COMPARABLE"
+                except ValueError:
+                    rebase_reason = "CURRENT_PROGRESS_NO_LONGER_COMPARABLE"
+            if rebase_reason:
+                # The run wall clock retains its original start. Only the rate
+                # baseline changes; historical counts and events remain intact.
+                rolling.samples.clear()
+                rolling.samples.append((current_elapsed, current_count))
+                if resume or progress_history:
+                    self.store.append_event(run_id, {"kind":"NORMALIZATION_PROGRESS_REBASE",
+                        "normalizer_version":NORMALIZER_VERSION, "reason":rebase_reason,
+                        "elapsed_seconds":current_elapsed, "unique_links":current_count,
+                        "preserved_history_count":len(progress_history),
+                        "previous_progress":progress_history[-1] if progress_history else None})
             for source in plan["sources"]:
                 for page_number, url in enumerate(source.get("page_urls", []), 1):
                     page_key = hashlib.sha256((source["source_id"] + "\0" + url).encode()).hexdigest()
@@ -250,7 +272,8 @@ class HighSpeedRunner:
                         committed.add(page_key)
                         elapsed = (aware_time(self.clock()) - aware_time(started)).total_seconds()
                         count = self.store.candidate_count(run_id)
-                        progress = {"kind": "PROGRESS", **rolling.record(elapsed, count)}
+                        progress = {"kind": "PROGRESS", "normalizer_version":NORMALIZER_VERSION,
+                            **rolling.record(elapsed, count)}
                         self.store.append_event(run_id, progress)
                         if self.progress:
                             self.progress(progress)

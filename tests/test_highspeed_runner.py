@@ -337,6 +337,41 @@ def test_finished_plan_is_not_a_quality_gate_pass(tmp_path):
     assert result["run"]["quality_gate_passed"] is False
     assert result["run"]["qa"]["unknown_pages"] == 1
 
+@pytest.mark.parametrize("history_version", [None, "link_url_v2.1", "current"])
+def test_resume_rebases_corrected_progress_without_erasing_legacy_history(tmp_path, history_version):
+    from amazon_es_bestseller.highspeed.links import NORMALIZER_VERSION, normalize_product_url
+    aliases=[normalize_product_url(url) for url in [
+        "https://www.amazon.es/dp/opaque-token/session-a",
+        "https://www.amazon.es/gp/product/opaque-token/session-b"]]
+    assert aliases[0]["normalized_product_url"] != aliases[1]["normalized_product_url"]
+    assert aliases[0]["possible_duplicate_key"] == aliases[1]["possible_duplicate_key"]
+    p=plan(tmp_path,"T1"); p["target_unique_links"]=5000
+    a=approval(p,tmp_path)
+    class CorrectedStore(Store):
+        def candidate_count(self,run_id): return 4351+len(self.observations)
+        def load_run(self,run_id): return {**super().load_run(run_id),"events":list(self.events)}
+    s=CorrectedStore(tmp_path/"store"); s.begin_run(p,started_at=(NOW-timedelta(hours=1)).isoformat())
+    old={"kind":"PROGRESS","elapsed_seconds":3500,"unique_links":5018}
+    if history_version is not None:
+        old["normalizer_version"]=NORMALIZER_VERSION if history_version == "current" else history_version
+    if history_version == "current": old["unique_links"]=4350
+    s.events.append(old.copy()); observed=[]
+    class Normal:
+        def fetch_page(self,url): return {"status_code":200,"url":url,"text":"<h1>Los más vendidos</h1>"}
+    result=make_runner(s,clock=lambda:NOW,parser=parser,gate_reader=lambda:{"state":"NORMAL"},
+        progress=observed.append).run(p,authorization=a,transport=Normal(),resume=True)
+    assert len(s.requests) == 1 and result["run"]["stop_reason"] != "Progress must be monotonic"
+    assert s.events[0] == old
+    assert observed[-1]["unique_links"] == 4352
+    assert observed[-1]["normalizer_version"] == NORMALIZER_VERSION
+    assert observed[-1]["elapsed_seconds"] == 3600
+    rebases=[e for e in s.events if e["kind"] == "NORMALIZATION_PROGRESS_REBASE"]
+    assert bool(rebases) == (history_version != "current")
+    if rebases:
+        assert rebases[0]["unique_links"] == 4351
+        assert observed[-1]["rolling_unique_per_hour"] == 0
+        assert observed[-1]["eta_remaining_seconds"] is None
+
 def test_normal_empty_root_continues_only_approved_leaf_preserving_failed_qa(tmp_path):
     root = "https://www.amazon.es/gp/bestsellers"
     p = plan(tmp_path, "T1"); p["sources"][0]["page_urls"] = [root, URL]
