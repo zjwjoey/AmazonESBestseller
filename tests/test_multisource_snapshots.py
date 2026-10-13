@@ -351,6 +351,32 @@ def test_live_daily_cap_amendment_preserves_original_spec_and_cumulative_budget(
         manager.run(expanded, [source], run_id="cap-change", origin="LIVE_CAPTURE", authorization=newer, transport=fake, resume=True)
 
 
+def test_failed_acp_transport_keeps_attempted_request_and_redacts_credentials(tmp_path, monkeypatch):
+    from test_multisource_sources import acp_page
+    manager, source, plan, _ = setup(tmp_path)
+    plan["live_enabled"] = True
+    auth = approval(source, plan)
+    auth["sources"][source["source_id"]]["allow_acp"] = True
+    monkeypatch.setattr("amazon_es_bestseller.multisource.snapshots.time.sleep", lambda _: None)
+    class Fake:
+        def fetch_page(self, url):
+            return TransportResponse(200, url, acp_page())
+        def prepare_ajax_descriptor(self, descriptor, *, referer):
+            return {**descriptor, "payload": '{"native":"attempt"}',
+                "headers": {"content-type": "application/json", "cookie": "secret"}}
+        def fetch_ajax(self, *args, **kwargs):
+            raise RuntimeError("Failed to fetch")
+    with pytest.raises(ValueError, match="ACCESS_STOP: NETWORK_ERROR"):
+        manager.run(plan, [source], run_id="failed-contract", origin="LIVE_CAPTURE", authorization=auth, transport=Fake())
+    receipt = next(read_sealed(p) for p in (manager._run_dir("failed-contract") / "requests").glob("*.json")
+        if read_sealed(p)["kind"] == "ACP")
+    request = receipt["transport_evidence"]["request"]
+    assert request["method"] == "POST"
+    assert request["payload"] == '{"native":"attempt"}'
+    assert request["headers"] == {"content-type": "application/json"}
+    assert receipt["transport_evidence"]["response"]["status_code"] is None
+
+
 def test_explicit_new_human_authorization_can_resume_restricted_page(tmp_path,monkeypatch):
     manager,source,plan,_=setup(tmp_path)
     plan["live_enabled"]=True

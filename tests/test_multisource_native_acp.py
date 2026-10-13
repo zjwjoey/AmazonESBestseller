@@ -29,11 +29,11 @@ class Route:
                 "x-amz-acp-params":"fixture-token", "cookie":"private", "user-agent":"private"})
         self.aborted = self.continued = False
     def abort(self): self.aborted = True
-    def continue_(self): self.continued = True
+    def continue_(self, *, headers=None): self.continued = True; self.transmitted_headers=headers
 
 class Page:
     url = PAGE
-    def __init__(self): self.callback=None; self.routes=[]; self.scrolls=0; self.inject=True; self.fail=False
+    def __init__(self): self.callback=None; self.routes=[]; self.scrolls=0; self.inject=True; self.fail=False; self.native_retry=False
     def route(self, pattern, callback): self.callback=callback
     def wait_for_timeout(self, value): assert value == 500
     def evaluate(self, code, data=None):
@@ -44,7 +44,10 @@ class Page:
             return
         # An unrelated native request may never consume the manual allowance.
         wrong=Route(body='wrong'); self.callback(wrong); self.routes.append(wrong)
-        exact=Route(data["url"], data["body"]); self.callback(exact); self.routes.append(exact)
+        if self.native_retry:
+            native=Route(data["url"],data["body"]); self.callback(native); self.routes.append(native)
+        exact=Route(data["url"], data["body"]); exact.request.headers.update(data["headers"])
+        self.callback(exact); self.routes.append(exact)
         if self.fail: raise RuntimeError("offline failure")
         return {"status":200,"url":data["url"],"text":"<div>Saved cards</div>"}
 
@@ -64,6 +67,47 @@ def test_native_capture_aborts_unmetered_request_and_uses_exact_body_without_coo
     assert p.routes[-2].aborted and p.routes[-1].continued
     after=Route(); p.callback(after); assert after.aborted
     assert t._manual_acp_allowance is None
+
+@pytest.mark.parametrize("kind", ["xhr", "fetch"])
+def test_identical_native_retry_cannot_steal_metered_fetch_allowance(kind):
+    t,p=transport(); p.native_retry=True
+    native_callback=p.callback
+    def with_retry_kind(route):
+        if not any("nonce" in key for key in route.request.headers):
+            route.request.resource_type=kind
+        native_callback(route)
+    p.callback=with_retry_kind
+    response=t.fetch_ajax(ENDPOINT,method="POST",payload="identical",headers={"content-type":"application/json"})
+    native,controlled=p.routes[-2:]
+    assert native.aborted and not native.continued
+    assert controlled.continued and not controlled.aborted
+    assert not any("nonce" in key for key in controlled.transmitted_headers)
+    assert not any("nonce" in key for key in response.request_headers)
+    assert t._native_acp_requests[-1]["resource_type"]==kind
+
+def test_nonce_is_one_shot_case_insensitive_and_removed_from_full_wire_headers():
+    t,p=transport()
+    t._manual_acp_allowance=(ENDPOINT,"POST","same","expected-local-nonce")
+    wrong=Route(body="same"); wrong.request.headers["X-Codex-Acp-Request-Nonce"]="wrong"
+    p.callback(wrong); assert wrong.aborted
+    exact=Route(body="same")
+    exact.request.headers["X-Codex-Acp-Request-Nonce"]="expected-local-nonce"
+    exact.request.all_headers=lambda:dict(exact.request.headers, cookie="actual-browser-cookie")
+    p.callback(exact)
+    assert exact.continued and exact.transmitted_headers["cookie"]=="actual-browser-cookie"
+    assert not any("nonce" in key.lower() for key in exact.transmitted_headers)
+    repeated=Route(body="same"); repeated.request.headers.update(exact.request.headers)
+    p.callback(repeated); assert repeated.aborted
+
+def test_internal_nonce_never_added_to_non_acp_ajax_request():
+    t,p=transport()
+    seen=[]
+    def local_evaluate(code,data):
+        seen.append(data)
+        return {"status":200,"url":data["url"],"text":"saved"}
+    p.evaluate=local_evaluate
+    t.fetch_ajax("https://www.amazon.es/example",headers={"X-Codex-Acp-Request-Nonce":"caller-value"})
+    assert not any("nonce" in key.lower() for key in seen[0]["headers"])
 
 
 def test_aborted_native_contract_is_saved_even_without_matching_endpoint():

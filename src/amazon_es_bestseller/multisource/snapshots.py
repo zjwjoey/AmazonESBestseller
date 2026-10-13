@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from ..access.detector import detect_access_status
-from ..transport.base import raw_response_evidence
+from ..transport.base import TransportResponse, raw_response_evidence
 from . import SCHEMA_VERSION
 from .authorization import validate_authorization, authorize_request
 from .budgets import BudgetLedger
@@ -184,7 +184,10 @@ class SnapshotManager:
         except Exception as exc:
             state = "NETWORK_ERROR"
             error = type(exc).__name__ + ": " + str(exc)
-            raw = {"request": {"url": url}, "response": {"status_code": None, "body": ""}}
+            attempted = descriptor or {}
+            raw = raw_response_evidence(TransportResponse(None, "", access_state=state,
+                request_method=attempted.get("method", "GET"), request_url=url,
+                request_headers=attempted.get("headers", {}), request_payload=attempted.get("payload")))
         envelope = {"request_id": request_id, "origin": "LIVE_CAPTURE", "source_id": source["source_id"],
             "page_url": url, "kind": kind, "observed_at": observed_at,
             "parent_page_url": (descriptor or {}).get("referer"),

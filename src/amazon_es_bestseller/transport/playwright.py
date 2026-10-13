@@ -7,10 +7,13 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 import hashlib
 import json
+from uuid import uuid4
 
 from ..access.detector import detect_access_status
 from .base import TransportResponse, locale_observation
 from .failures import classify_failure
+
+_CONTROLLED_ACP_NONCE_HEADER = "x-codex-acp-request-nonce"
 
 
 class PlaywrightTransport:
@@ -94,10 +97,17 @@ class PlaywrightTransport:
             return
         def capture(route):
             request = route.request
-            key = (request.url, request.method.upper(), request.post_data or "")
+            route_headers = {k.lower(): v for k, v in request.headers.items()}
+            key = (request.url, request.method.upper(), request.post_data or "",
+                route_headers.get(_CONTROLLED_ACP_NONCE_HEADER))
             if request.resource_type in {"xhr", "fetch"} and key == self._manual_acp_allowance:
                 self._manual_acp_allowance = None
-                route.continue_()
+                # This local marker distinguishes the metered fetch from an
+                # identical automatic retry. It must never reach Amazon.
+                all_headers = getattr(request, "all_headers", None)
+                wire_headers = all_headers() if callable(all_headers) else request.headers
+                route.continue_(headers={k: v for k, v in wire_headers.items()
+                    if k.lower() != _CONTROLLED_ACP_NONCE_HEADER})
                 return
             route.abort()
             if request.resource_type not in {"xhr", "fetch"} or len(self._native_acp_requests) >= 64:
@@ -108,6 +118,7 @@ class PlaywrightTransport:
             evidence = {"url": request.url,
                 "method": request.method.upper(), "payload": request.post_data or "",
                 "headers": headers, "parent_page_url": str(getattr(page, "url", "")),
+                "resource_type": request.resource_type,
                 "request_contract_source": "NATIVE_BROWSER_REQUEST_ABORTED"}
             self._native_acp_requests.append(evidence)
             if on_capture is not None:
@@ -180,7 +191,8 @@ class PlaywrightTransport:
         page = getattr(self.session, "page", None)
         if page is None:
             raise RuntimeError("Playwright AJAX requires an active page")
-        request_headers = dict(headers or {})
+        request_headers = {k: v for k, v in (headers or {}).items()
+            if k.lower() != _CONTROLLED_ACP_NONCE_HEADER}
         if referer:
             request_headers.setdefault("referer", referer)
         body = payload if isinstance(payload, str) else None
@@ -188,8 +200,12 @@ class PlaywrightTransport:
             import json
             body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             request_headers.setdefault("content-type", "application/json")
-        if self._acp_capture_installed:
-            self._manual_acp_allowance = (url, str(method or "GET").upper(), body or "")
+        browser_headers = dict(request_headers)
+        if self._acp_capture_installed and urlsplit(url).path.startswith("/acp/"):
+            nonce = uuid4().hex
+            # Keep the marker outside the actual request/evidence headers.
+            browser_headers[_CONTROLLED_ACP_NONCE_HEADER] = nonce
+            self._manual_acp_allowance = (url, str(method or "GET").upper(), body or "", nonce)
         try:
             result = page.evaluate(
             """
@@ -209,7 +225,7 @@ class PlaywrightTransport:
             }
             """,
             {"url": url, "method": str(method or "GET").upper(),
-             "headers": request_headers, "body": body},
+             "headers": browser_headers, "body": body},
             )
         finally:
             self._manual_acp_allowance = None
