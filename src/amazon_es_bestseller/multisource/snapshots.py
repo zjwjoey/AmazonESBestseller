@@ -240,7 +240,25 @@ class SnapshotManager:
             if (directory / "run_spec.json").exists():
                 existing = read_sealed(directory / "run_spec.json")
                 if existing != spec:
-                    raise ValueError("IMMUTABLE_RUN_SPEC_CONFLICT")
+                    old_plan, new_plan = dict(existing["plan"]), dict(spec["plan"])
+                    old_daily = old_plan.pop("max_requests_per_day", None)
+                    new_daily = new_plan.pop("max_requests_per_day", None)
+                    unchanged_scope = {k: v for k, v in existing.items() if k != "plan"} == {
+                        k: v for k, v in spec.items() if k != "plan"}
+                    if not (origin == "LIVE_CAPTURE" and resume and unchanged_scope
+                            and old_plan == new_plan and old_daily != new_daily):
+                        raise ValueError("IMMUTABLE_RUN_SPEC_CONFLICT")
+                    validate_authorization(plan, authorization, sources, self._gate())
+                    # Keep the original specification immutable. A newly
+                    # approved daily-cap change gets its own immutable audit.
+                    amendment = {"kind": "DAILY_REQUEST_CAP_AMENDMENT",
+                        "run_id": run_id, "original_spec_sha256": digest((directory / "run_spec.json").read_bytes()),
+                        "previous_daily_cap": old_daily, "approved_daily_cap": new_daily,
+                        "approval_id": authorization["approval_id"],
+                        "approved_by": authorization["approved_by"],
+                        "reviewed_at": authorization["reviewed_at"],
+                        "cumulative_request_cap": plan["max_requests"]}
+                    immutable_json(directory / "plan_amendments" / (digest(amendment) + ".json"), sealed(amendment))
             else:
                 immutable_json(directory / "run_spec.json", sealed(spec))
             checkpoint_manager = CheckpointManager(directory)
@@ -467,6 +485,9 @@ class SnapshotManager:
             "live_request_receipts": receipts if spec["origin"] == "LIVE_CAPTURE" else [],
             "counters": {"request_count": len(requests)},
             "budget": self.budget.counters(spec["origin"]), "created_from": "IMMUTABLE_PAGE_JOURNAL"}
+        manifest["execution_plan"] = spec["plan"]
+        manifest["plan_amendments"] = [{"path": str(path), "sha256": digest(path.read_bytes())}
+            for path in (self._run_dir(spec["run_id"]) / "plan_amendments").glob("*.json")]
         qa = audit_snapshot(manifest, pages, enriched)
         manifest["status"] = qa.get("status", "UNVERIFIED")
         immutable_bytes(directory / "observations.jsonl", b"".join(canonical_bytes(o)+b"\n" for o in observations))

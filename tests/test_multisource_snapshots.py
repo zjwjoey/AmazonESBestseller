@@ -317,6 +317,40 @@ def test_live_acp_response_recovery_reuses_saved_body_and_charges_only_two_reque
     assert bundle["quality"]["rates"]["evidence_traceability"] == 1
 
 
+def test_live_daily_cap_amendment_preserves_original_spec_and_cumulative_budget(tmp_path, monkeypatch):
+    manager, source, plan, _ = setup(tmp_path)
+    plan.update(live_enabled=True, max_requests=3, max_requests_per_day=1)
+    url2 = URL + "?pg=2"
+    auth = approval(source, plan)
+    auth["sources"][source["source_id"]]["page_urls"].append(url2)
+    monkeypatch.setattr("amazon_es_bestseller.multisource.snapshots.time.sleep", lambda _: None)
+    class Fake:
+        calls = 0
+        def fetch_page(self, url):
+            self.calls += 1
+            return TransportResponse(200, url, FIXTURE.read_text(encoding="utf-8"))
+    fake = Fake()
+    with pytest.raises(ValueError, match="REQUEST_BUDGET_EXHAUSTED"):
+        manager.run(plan, [source], run_id="cap-change", origin="LIVE_CAPTURE", authorization=auth, transport=fake)
+    spec_path = manager._run_dir("cap-change") / "run_spec.json"
+    original = spec_path.read_bytes()
+    amended = dict(plan, max_requests_per_day=3)
+    with pytest.raises(ValueError, match="UNREVIEWED_OR_INVALID_BUDGET"):
+        manager.run(amended, [source], run_id="cap-change", origin="LIVE_CAPTURE", authorization=auth, transport=fake, resume=True)
+    new = deepcopy(auth)
+    new.update(approval_id="explicit-user-cap-change", max_requests_per_day=3)
+    result = manager.run(amended, [source], run_id="cap-change", origin="LIVE_CAPTURE", authorization=new, transport=fake, resume=True)
+    assert spec_path.read_bytes() == original
+    assert fake.calls == 2
+    assert manager.budget.counters("LIVE_CAPTURE")["request_count"] == 2
+    assert result["manifest"]["execution_plan"]["max_requests_per_day"] == 3
+    assert len(result["manifest"]["plan_amendments"]) == 1
+    expanded = dict(amended, max_requests=4)
+    newer = dict(new, max_requests=4)
+    with pytest.raises(ValueError, match="IMMUTABLE_RUN_SPEC_CONFLICT"):
+        manager.run(expanded, [source], run_id="cap-change", origin="LIVE_CAPTURE", authorization=newer, transport=fake, resume=True)
+
+
 def test_explicit_new_human_authorization_can_resume_restricted_page(tmp_path,monkeypatch):
     manager,source,plan,_=setup(tmp_path)
     plan["live_enabled"]=True
