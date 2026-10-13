@@ -1,0 +1,31 @@
+{
+  "stage": "T2",
+  "run_id": "T2_PENDING_REVIEW",
+  "target_unique_links": 30000,
+  "max_duration_hours": 10,
+  "max_requests_per_run": 8000,
+  "max_requests_per_day": 8000,
+  "max_pages_per_run": 2000,
+  "max_raw_observations_per_run": 150000,
+  "history_observation_limit": 1000000,
+  "category_cooldown_seconds": 0,
+  "request_pacing_seconds": 3,
+  "parallelism": 1,
+  "approved": false,
+  "approval_id": null,
+  "approved_by": null,
+  "reviewed_at": null,
+  "expires_at": null,
+  "access_gate_state": "PENDING_HUMAN_REVIEW",
+  "sources": {},
+  "prerequisites": {},
+  "stop_conditions": [
+    "CHALLENGE",
+    "BLOCKED",
+    "RATE_LIMITED",
+    "UNKNOWN",
+    "NETWORK_ERROR"
+  ],
+  "store_root": null,
+  "shared_access_gate_path": "F:\\AmazonESBestseller\\runtime\\p0_live_20261013T054928Z\\store\\access_gate.json"
+}

@@ -1843,6 +1843,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(func=cmd_export)
     from .multisource.cli import register as register_multisource
     register_multisource(sub)
+    from .highspeed.cli import register as register_highspeed
+    register_highspeed(sub)
     return parser
 
 
