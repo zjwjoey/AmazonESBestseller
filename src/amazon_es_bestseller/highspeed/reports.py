@@ -92,6 +92,83 @@ def eligible_candidate_ids(candidates):
     return result
 
 
+def _continuation_metrics(metrics, run, observations, pages, requests, events, parent_started_at):
+    seeds = [e for e in events if (e.get("kind") or e.get("event_type")) == "HISTORICAL_CONTINUATION_SEED"]
+    if not seeds and not run.get("is_continuation"):
+        return metrics
+    result = dict(metrics)
+    seed = int(seeds[-1]["seed_unique_links"]) if seeds and seeds[-1].get("seed_unique_links") is not None else None
+    total = result["unique_link_candidates"]
+    added = max(total - seed, 0) if seed is not None else None
+    phase_start = run.get("task_started_at") or run.get("plan", {}).get("task_started_at") or result["started_at"]
+    start = datetime.fromisoformat(phase_start.replace("Z", "+00:00"))
+    sample_at = result.get("finished_at") or datetime.now(timezone.utc).isoformat()
+    end = datetime.fromisoformat(sample_at.replace("Z", "+00:00"))
+    wall = max((end - start).total_seconds(), 0)
+    fresh = [r for r in observations if r.get("origin") == "LIVE_CAPTURE" and not r.get("is_derivation")]
+    def within_phase(value):
+        try:
+            instant = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return instant.tzinfo is not None and start <= instant <= end
+        except (ValueError, TypeError):
+            return False
+    live_pages = [p for p in pages if p.get("origin") == "LIVE_CAPTURE" and not p.get("is_derivation")
+                  and p.get("raw_card_count", p.get("observation_count", 0)) > 0 and within_phase(p.get("observed_at"))]
+    live_requests = [r for r in requests if r.get("kind", r.get("request_kind")) in {"PAGE", "ACP"}
+                     and r.get("run_id", run["run_id"]) == run["run_id"]
+                     and r.get("origin", run.get("origin")) == "LIVE_CAPTURE" and not r.get("is_derivation")]
+    attributable = added is not None and added <= len(fresh) and fresh and live_requests
+    rate = added / wall if attributable and wall > 0 else None
+    remaining = max(result["target_unique_links"] - total, 0)
+    cumulative_wall = None
+    if parent_started_at:
+        try:
+            parent = datetime.fromisoformat(parent_started_at.replace("Z", "+00:00"))
+            if parent.tzinfo is not None and parent <= start:
+                cumulative_wall = (end - parent).total_seconds()
+        except (ValueError, TypeError):
+            pass
+    result.update(is_continuation=True, inherited_unique_links=seed, cumulative_unique_links=total,
+        phase_new_unique_links=added, started_at=phase_start, phase_started_at=phase_start,
+        phase_wall_seconds=wall, phase_sample_observed_at=sample_at,
+        parent_run_id=run.get("parent_run_id") or (seeds[-1].get("parent_run_id") if seeds else None),
+        parent_started_at=parent_started_at, cumulative_wall_seconds_including_idle_gap=cumulative_wall,
+        cumulative_timing_scope="PARENT_FIRST_START_THROUGH_SUCCESSOR_SAMPLE_INCLUDING_USER_IDLE_GAPS",
+        raw_observations_by_origin=dict(Counter(r.get("origin", "UNKNOWN") for r in observations)),
+        raw_observations_by_origin_and_derivation=[{"origin": origin, "is_derivation": derived, "raw_observations": count}
+            for (origin, derived), count in Counter((r.get("origin", "UNKNOWN"), bool(r.get("is_derivation"))) for r in observations).items()],
+        derived_raw_observations=sum(bool(r.get("is_derivation")) for r in observations),
+        phase_live_raw_observations=len(fresh),
+        phase_live_valid_link_observations=sum(bool(r.get("candidate_id")) for r in fresh),
+        fresh_live_product_pages=len(live_pages), request_count=len(live_requests),
+        acp_request_count=sum(r.get("kind", r.get("request_kind")) == "ACP" for r in live_requests),
+        fresh_live_request_count=len(live_requests), unique_per_hour=rate * 3600 if rate is not None else None,
+        unique_per_minute=rate * 60 if rate is not None else None,
+        eta_remaining_seconds=remaining / rate if rate and remaining else (0 if not remaining else None),
+        throughput_count_scope="SUCCESSOR_PHASE_NEW_UNIQUE_LINKS_EXCLUDING_HISTORICAL_SEED",
+        eta_is_estimate=True, include_report_export_in_task_wall=False)
+    if result.get("finished_at"):
+        result["total_wall_seconds"] = wall
+    result["phase_ten_hour_target_passed"] = bool(result.get("finished_at") and total >= result["target_unique_links"] and wall <= 36000)
+    result["ten_hour_target_passed"] = bool(result.get("finished_at") and total >= result["target_unique_links"]
+        and cumulative_wall is not None and cumulative_wall <= 36000)
+    sample = {"raw_observations": len(fresh), "unique_link_candidates": added if attributable else 0,
+              "product_pages": len(live_pages), "request_count": len(live_requests),
+              "total_wall_seconds": wall if attributable else None, "origin": "LIVE_CAPTURE",
+              "source_count": len({p["source_id"] for p in live_pages if p.get("source_id")}),
+              "verified_source_capacity": None}
+    model = estimate_capacity(sample, target=remaining)
+    model.update(is_continuation=True, sample_scope="FRESH_SUCCESSOR_LIVE_CAPTURE_ONLY",
+                 inherited_unique_links=seed, cumulative_unique_links=total, phase_new_unique_links=added,
+                 fresh_live_product_pages=len(live_pages), fresh_live_request_count=len(live_requests),
+                 remaining_cumulative_target=remaining)
+    if not live_requests:
+        model["estimated_total_seconds"] = None
+        model["ten_hour_throughput_projection"] = None
+    result["continuation_capacity_model"] = model
+    return result
+
+
 def export_rows_report(*, observations, candidates, output_root, run_metadata=None,
                   metrics=None, pages=(), sources=(), qa=None, pending_journals=(),
                   pending_observations=(), pending_issues=()):
@@ -158,12 +235,16 @@ def export_rows_report(*, observations, candidates, output_root, run_metadata=No
                    or c.get("url_identity_status") == "IDENTITY_CONFLICT" for c in candidates),
                "cross_list_reused_candidates": sum(len(r["source_types"]) > 1 for r in group_reuse),
                "cross_category_reused_candidates": sum(len(r["research_categories"]) > 1 for r in group_reuse)}
+    if (metrics or {}).get("is_continuation"):
+        summary.update({name: metrics[name] for name in ("inherited_unique_links", "cumulative_unique_links",
+            "phase_new_unique_links", "raw_observations_by_origin", "raw_observations_by_origin_and_derivation",
+            "derived_raw_observations", "phase_live_raw_observations")})
     complete_pages = sum(p.get("status") == "COMPLETE" or p.get("page_complete") is True for p in pages)
     summary["page_count"] = len(pages)
     summary["page_completeness_rate"] = complete_pages / len(pages) if pages else None
     summary["unknown_or_incomplete_pages"] = len(pages) - complete_pages
     _json(directory / "summary.json", summary)
-    _json(directory / "capacity_model.json", estimate_capacity({**(metrics or {}), "raw_observations": len(observations),
+    _json(directory / "capacity_model.json", (metrics or {}).get("continuation_capacity_model") or estimate_capacity({**(metrics or {}), "raw_observations": len(observations),
           "unique_link_candidates": len(eligible_ids), "product_pages": sum(p.get("observation_count", 0) > 0 for p in pages)}))
     evidence = [{"path": str(p), "sha256": hashlib.sha256(p.read_bytes()).hexdigest(), "bytes": p.stat().st_size}
                 for p in dict.fromkeys(Path(row["evidence_path"]) for row in [*observations, *pending_observations]
@@ -199,7 +280,7 @@ def export_rows_report(*, observations, candidates, output_root, run_metadata=No
     summary["performance"] = finalized_metrics
     _json(directory / "summary.json", summary)
     _json(directory / "performance.json", finalized_metrics)
-    _json(directory / "capacity_model.json", estimate_capacity({**finalized_metrics,
+    _json(directory / "capacity_model.json", finalized_metrics.get("continuation_capacity_model") or estimate_capacity({**finalized_metrics,
         "raw_observations": len(observations), "unique_link_candidates": len(eligible_ids),
         "product_pages": sum(p.get("raw_card_count", p.get("observation_count", 0)) > 0 for p in pages)}))
     (directory / "research_report.txt").write_text(
@@ -248,6 +329,17 @@ def export_report(store, run_id, output_root, source_registry=None, metrics=None
             target=run.get("target_unique_links", run.get("plan", {}).get("target_unique_links", 30000)))
     else:
         observations, candidates = list(store.iter_observations(run_id)), list(store.iter_candidates(run_id))
+    continuation_events = store.events(run_id)
+    parent_id = run.get("parent_run_id") or next((e.get("parent_run_id") for e in continuation_events
+        if (e.get("kind") or e.get("event_type")) == "HISTORICAL_CONTINUATION_SEED"), None)
+    parent_start = None
+    if parent_id and (run.get("is_continuation") or any((e.get("kind") or e.get("event_type")) == "HISTORICAL_CONTINUATION_SEED" for e in continuation_events)):
+        try:
+            parent_start = store.get_run(parent_id).get("started_at")
+        except (ValueError, KeyError):
+            pass
+    metrics = _continuation_metrics(metrics, run, observations, store.pages(run_id),
+        loaded.get("requests", []), continuation_events, parent_start)
     from ..multisource.storage import read_sealed
     pending = loaded.get("manifest", {}).get("pending_page_journals", [])
     pending_rows, pending_errors = [], []

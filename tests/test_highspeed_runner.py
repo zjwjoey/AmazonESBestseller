@@ -521,6 +521,47 @@ def test_prepare_contract_error_preserves_normal_base_cards_before_stop(tmp_path
     assert result["run"]["stop_reason"]=="ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED"
     assert any(e["kind"]=="ACP_PREPARE" and e["success"] is False for e in s.events)
 
+@pytest.mark.parametrize("failure,access,continues",[
+    ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","NORMAL",True),
+    ("ACP_NATIVE_BATCH_PROOF_INVALID","NORMAL",False),
+    ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","UNKNOWN",False)])
+def test_zero_card_native_unavailable_is_terminal_failed_only_with_normal_source_proof(tmp_path,failure,access,continues):
+    from amazon_es_bestseller.highspeed.adapters import parse_page
+    empty="https://www.amazon.es/gp/new-releases/boost"
+    body=(Path(__file__).parent/"fixtures/highspeed/continue30000_new_releases_boost_zero_cards.html").read_text(encoding="utf-8")
+    p=plan(tmp_path,"T1");p["sources"][0].update(source_type="NEW_RELEASES",actual_source_url=empty,page_urls=[empty])
+    p["sources"].append({"source_id":"next","source_type":"BEST_SELLERS","research_category":"home", "actual_source_url":URL,"page_urls":[URL]})
+    a=approval(p,tmp_path);a["sources"]["home"].update(source_type="NEW_RELEASES",page_urls=[empty],allow_native_acp=True)
+    a["sources"]["next"]={**a["sources"]["home"],"source_type":"BEST_SELLERS","page_urls":[URL]}
+    s=Store(tmp_path/"store");fetched=[];current=[NOW]
+    class Missing:
+        def fetch_page(self,url):
+            fetched.append(url)
+            return {"status_code":200,"url":url,"text":body if url==empty else "<h1>Los más vendidos</h1><div data-expected-count='1'><div class='ranking-card'><span class='zg-bdg-text'>#1</span><a href='/product/next'>Next</a></div></div>"}
+        def prepare_ajax_descriptor(self,descriptor,*,referer):raise ValueError(failure)
+    def actual(html,**kwargs):
+        parsed=parse_page(html,**kwargs)
+        if kwargs["page_url"]==empty:parsed["page"]["access_status"]=access
+        return parsed
+    runner=make_runner(s,clock=lambda:current[0],sleep=lambda seconds:current.__setitem__(0,current[0]+timedelta(seconds=seconds)),
+        parser=actual,gate_reader=lambda:{"state":"NORMAL"})
+    result=runner.run(p,authorization=a,transport=Missing())
+    if continues:
+        assert fetched==[empty,URL] and len(s.observations)==1
+        assert s.saved_pages[0]["status"]=="FAILED" and s.saved_pages[0]["actual_count"]==0
+        assert s.saved_pages[0]["terminal_for_snapshot"] is True
+        assert s.saved_pages[0]["completeness"]=="UNKNOWN" and not result["run"]["quality_gate_passed"]
+        # Reproduce the old checkpoint lacking a terminal decision. Resume must
+        # re-audit its saved normal HTML and miss reason without another PAGE.
+        s.saved_pages[0].update(status="PARTIAL",completeness="PARTIAL",terminal_for_snapshot=False)
+        runner.run(p,authorization=a,transport=Missing(),resume=True)
+        assert fetched==[empty,URL] and len(s.requests)==2
+        assert s.saved_pages[-1]["status"]=="FAILED" and s.saved_pages[-1]["terminal_for_snapshot"] is True
+        assert any(e.get("cached_failure_reaudited") for e in s.events)
+    else:
+        assert fetched==[empty] and result["run"]["stop_reason"]==failure
+        assert not s.saved_pages[0].get("terminal_for_snapshot")
+
 @pytest.mark.parametrize("failure,normal,continues", [
     ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",True,True),
     ("ACP_NATIVE_BATCH_PROOF_INVALID",True,False),

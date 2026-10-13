@@ -363,13 +363,14 @@ class RunStore:
         if indexed and indexed[0] == str(journal_path):
             return
         rows = value["observations"]
-        source_eligible = (page.get("access_status") == "NORMAL"
+        page_source_eligible = (page.get("access_status") == "NORMAL"
             and page.get("source_type_verified") is True and page.get("source_context_valid") is True)
         existing_count = self.db.execute("SELECT count(*) FROM observations WHERE run_id=?", (run_id,)).fetchone()[0]
         history_count = self.db.execute("SELECT count(*) FROM observations").fetchone()[0]
         with self._transaction():
             inserted = 0
             for slot, raw in enumerate(rows):
+                source_eligible = page_source_eligible and raw.get("source_evidence_eligible") is not False
                 oid = raw.get("observation_id") or "obs_" + uuid.uuid5(uuid.NAMESPACE_URL,
                     "|".join((run_id, str(page.get("source_id", "")), canonical_page_url(page.get("page_url", "")),
                         str(raw.get("slot_position", slot)), str(raw.get("rank_context", ""))))).hex

@@ -60,6 +60,16 @@ def continuation_unavailable(parsed, receipt, reason, gate):
         and page.get("source_type_verified") is True and page.get("source_context_valid") is True
         and parsed.get("observations") and page.get("actual_count", 0) > 0)
 
+def empty_continuation_unavailable(parsed, receipt, reason, gate):
+    """Zero capacity stays FAILED after a proven bounded native discovery miss."""
+    page=parsed["page"]
+    return bool(reason=="ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED"
+        and receipt.get("status_code")==200 and receipt.get("access_state")=="NORMAL"
+        and gate.get("state")=="NORMAL" and page.get("access_status")=="NORMAL"
+        and page.get("source_type_verified") is True and page.get("source_context_valid") is True
+        and not parsed.get("observations") and page.get("actual_count")==0
+        and page.get("raw_card_count")==0 and (parsed.get("acp_pending") or page.get("acp_pending")))
+
 class HighSpeedRunner:
     def __init__(self, store, *, clock=None, sleep=None, parser=None, gate_reader=None, progress=None, qa_auditor=None):
         self.store = store
@@ -115,15 +125,61 @@ class HighSpeedRunner:
                 started = utc_text(self.clock())
                 self.store.update_run(run_id, started_at=started)
             bundle = self.store.load_run(run_id)
+            seed_cache = {}
+            for page in bundle.get("pages", []):
+                if page.get("seed_provenance_path"):
+                    from .continuation import validate_seed_provenance
+                    seed = validate_seed_provenance(page,plan,store=self.store)
+                    seed["imported_page"] = page
+                    seed_cache[page["page_url"]] = seed
             committed = {p["page_key"] for p in bundle.get("pages", [])
                 if p.get("status") == "COMPLETE"
                 or (p.get("status") == "PARTIAL" and p.get("terminal_for_snapshot") is True)
                 or (p.get("status") == "FAILED" and p.get("source_navigation_only") is True
                     and source_navigation_only(p.get("source", {}), p.get("page_url", ""), {"page":p}))}
             cached = {}
+            for url,seed in seed_cache.items():
+                original = seed["latest_page"]
+                receipt = next(r for r in seed["receipts"] if r["kind"] == "PAGE"
+                    and r["html_path"] == original["evidence_path"] and r["observed_at"] == original["observed_at"])
+                cached[url] = receipt
             for receipt in bundle.get("responses", []):
                 if receipt.get("access_state") == "NORMAL" and receipt.get("kind", receipt.get("request_kind", "PAGE")) == "PAGE":
                     cached[receipt.get("request_url", receipt.get("url"))] = receipt
+            # Re-audit a previously recorded zero-card native miss offline. A
+            # cached failure must not repeatedly refresh the same source forever.
+            for page in bundle.get("pages", []):
+                if (page.get("seed_provenance_path") or page.get("status") not in {"FAILED","PARTIAL"}
+                        or "ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED" not in page.get("flags",[])
+                        or page.get("actual_count")!=0 or page.get("raw_card_count")!=0
+                        or page.get("access_status")!="NORMAL" or page.get("source_type_verified") is not True
+                        or page.get("source_context_valid") is not True):
+                    continue
+                source=next((s for s in plan["sources"] if s["source_id"]==page.get("source_id")),None)
+                receipt=cached.get(page.get("page_url"))
+                if not source or not receipt or receipt.get("html_path")!=page.get("evidence_path"):
+                    continue
+                try:
+                    from .adapters import parse_page
+                    html=Path(receipt["html_path"]).read_text(encoding="utf-8")
+                    hashed=hashlib.sha256(html.encode("utf-8")).hexdigest()
+                    if hashed!=page.get("evidence_sha256") or (receipt.get("sha256") and hashed!=receipt["sha256"]):
+                        continue
+                    checked=parse_page(html,source=source,run_id=run_id,snapshot_id=plan.get("snapshot_id",run_id),
+                        page_url=page["page_url"],page_number=page.get("page_number"),observed_at=page["observed_at"],
+                        evidence_path=page["evidence_path"],http_status=receipt.get("status_code"),origin=page["origin"])
+                except (OSError,ValueError,KeyError):
+                    continue
+                if empty_continuation_unavailable(checked,receipt,"ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",self._gate(plan)):
+                    if not (page.get("terminal_for_snapshot") is True and page.get("status")=="FAILED"):
+                        page={**page,"status":"FAILED","completeness":"UNKNOWN","page_complete":False,
+                            "continuation_unavailable":True,"terminal_for_snapshot":True}
+                        self.store.commit_page(run_id,page["page_key"],{k:v for k,v in page.items() if k!="journal_path"},[])
+                        self.store.append_event(run_id,{"kind":"SOURCE_CONTINUATION_UNAVAILABLE","stage":"source_incompleteness",
+                            "page_url":page["page_url"],"source_id":source["source_id"],"source_type":source["source_type"],
+                            "actual_cards":0,"reason":"ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","cached_failure_reaudited":True,
+                            "note":"Zero capacity retained FAILED; frozen approved queue continues without re-requesting this source."})
+                    committed.add(page["page_key"])
             last_request = max((aware_time(r["observed_at"]) for r in bundle.get("requests", []) if r.get("observed_at")), default=None)
             if hasattr(self.store, "latest_request_time"):
                 global_last = self.store.latest_request_time()
@@ -173,13 +229,19 @@ class HighSpeedRunner:
                         html = response.get("text", "")
                         acp = [{**item, "body": Path(item["html_path"]).read_text(encoding="utf-8"), "evidence_path": item["html_path"]}
                             for item in bundle.get("responses", []) if item.get("kind") == "ACP" and item.get("page_key") == page_key and item.get("access_state") == "NORMAL"]
-                        parsed = self._parse(plan, source, url, page_number, receipt, html, acp, origin)
+                        historical = url in seed_cache and receipt.get("run_id") == plan.get("parent_run_id")
+                        if historical:
+                            acp = [{**r,"body":Path(r["html_path"]).read_text(encoding="utf-8"),"evidence_path":r["html_path"]}
+                                for r in seed_cache[url]["receipts"] if r["kind"] == "ACP"]
+                        parsed = self._parse(plan, source, url, page_number, receipt, html, acp,
+                            "HISTORICAL_REPLAY" if historical else origin)
                         attempted = set()
                         pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
                         needs_context = getattr(transport, "requires_ajax_page_context", None)
-                        if pending and origin == "LIVE_CAPTURE" and url in cached and callable(needs_context) and needs_context(url):
+                        if pending and origin == "LIVE_CAPTURE" and url in cached and (historical or (callable(needs_context) and needs_context(url))):
                             response, receipt, last_request = self._request(plan, authorization, transport,
                                 source, url, "PAGE", started, last_request, page_key=page_key)
+                            historical = False
                             html = response.get("text", "")
                             parsed = self._parse(plan, source, url, page_number, receipt, html, [], origin)
                             pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
@@ -202,9 +264,10 @@ class HighSpeedRunner:
                                     # The initial normal page is real evidence even
                                     # when its lazy request contract is unavailable.
                                     prepare_error = str(exc) if isinstance(exc, ValueError) else "ACP_PREPARE_FAILED:"+type(exc).__name__
-                                    parsed["page"].update(status="PARTIAL", completeness="PARTIAL", page_complete=False)
+                                    empty_unavailable = empty_continuation_unavailable(parsed,receipt,prepare_error,self._gate(plan))
+                                    parsed["page"].update(status="FAILED" if empty_unavailable else "PARTIAL", completeness="PARTIAL", page_complete=False)
                                     parsed["page"].setdefault("flags", []).append(prepare_error)
-                                    unavailable = continuation_unavailable(parsed, receipt, prepare_error, self._gate(plan))
+                                    unavailable = empty_unavailable or continuation_unavailable(parsed, receipt, prepare_error, self._gate(plan))
                                     if unavailable:
                                         parsed["page"].update(completeness="UNKNOWN", continuation_unavailable=True,
                                             terminal_for_snapshot=True)
@@ -216,7 +279,7 @@ class HighSpeedRunner:
                                             "stage":"source_incompleteness", "source_id":source["source_id"],
                                             "source_type":source["source_type"], "page_url":url,
                                             "actual_cards":parsed["page"]["actual_count"], "reason":prepare_error,
-                                            "note":"Saved prefix retained PARTIAL; no endpoint/body invented. Continue the frozen approved queue."})
+                                            "note":"Source retained FAILED at zero capacity or PARTIAL with saved cards; no endpoint/body invented. Continue the frozen approved queue."})
                                         pending = None
                                         break
                                     raise ValueError(prepare_error) from exc
@@ -253,16 +316,22 @@ class HighSpeedRunner:
                                 break
                         persist_start = aware_time(self.clock())
                         navigation_only = source_navigation_only(source, url, parsed)
+                        if historical:
+                            imported = seed_cache[url]["imported_page"]
+                            parsed["page"] = {k:v for k,v in imported.items() if k != "journal_path"}
+                            parsed["observations"] = read_sealed(imported["journal_path"])["observations"]
                         if navigation_only:
                             parsed["page"]["source_navigation_only"] = True
                         self.store.commit_page(run_id, page_key,
                             {**parsed["page"], "page_key": page_key, "source": source,
-                             "evidence_path": receipt["html_path"], "origin": origin}, parsed["observations"])
+                             "evidence_path": receipt["html_path"], "origin": "HISTORICAL_REPLAY" if historical else origin}, parsed["observations"])
                         self.store.append_event(run_id, {"kind": "PERSIST", "stage": "persistence",
                             "duration_seconds": (aware_time(self.clock())-persist_start).total_seconds(),
                             "source_type": source["source_type"], "research_category": source.get("research_category")})
                         if parsed["page"].get("status") in {"FAILED", "BLOCKED"}:
-                            if navigation_only:
+                            if parsed["page"].get("status")=="FAILED" and parsed["page"].get("terminal_for_snapshot") is True and parsed["page"].get("continuation_unavailable") is True:
+                                pass
+                            elif navigation_only:
                                 self.store.append_event(run_id, {"kind": "SOURCE_NAVIGATION_ONLY", "stage": "source_navigation",
                                     "source_id": source["source_id"], "source_type": source["source_type"],
                                     "page_url": url, "evidence_path": receipt["html_path"],

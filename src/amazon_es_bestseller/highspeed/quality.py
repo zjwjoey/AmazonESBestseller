@@ -49,6 +49,29 @@ def audit_run(store, run_id):
         try:
             journal = read_sealed(page["journal_path"])
             raw = journal["observations"]
+            if page.get("seed_provenance_path"):
+                from .continuation import validate_seed_provenance
+                derived = validate_seed_provenance(page,run["plan"],store=store)
+                parent_rows = derived["parent_rows"]
+                if Counter(map(signature,raw)) != Counter(signature(r) for _,r in parent_rows):
+                    raise ValueError("CONTINUATION_IMPORTED_RAW_ROWS_CHANGED")
+                parents={b["parent_observation_id"]:r for b,r in parent_rows}
+                for row in raw:
+                    ids=row.get("parent_observation_ids",[])
+                    if (len(ids)!=1 or ids[0] not in parents or row.get("origin")!="HISTORICAL_REPLAY"
+                            or row.get("is_derivation") is not True or row.get("parent_run_id")!=run.get("parent_run_id")
+                            or row.get("observed_at")!=parents[ids[0]].get("observed_at")
+                            or row.get("evidence_path")!=parents[ids[0]].get("evidence_path")):
+                        raise ValueError("CONTINUATION_ROW_PROVENANCE_CHANGED")
+                if page.get("status")!="COMPLETE":
+                    fail("PAGE_COMPLETENESS_NOT_PROVEN",page_url=page["page_url"],status=page.get("status"))
+                if page.get("source_type_verified") and page.get("source_context_valid"):
+                    if any(normalize_product_url(r.get("raw_product_url"))["is_valid"] for r in raw):
+                        types.add(page["source_type"])
+                        if page.get("research_category") in RESEARCH_CATEGORIES: categories.add(page["research_category"])
+                else:
+                    fail("PAGE_SOURCE_OR_ACCESS_INVALID",page_url=page["page_url"])
+                continue
             html = body(page.get("evidence_path"), page.get("evidence_sha256"))
             source = sources.get(page["source_id"]) if live else page.get("source") or sources.get(page["source_id"])
             if not source and not live:

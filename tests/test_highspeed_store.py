@@ -43,6 +43,19 @@ def test_aliases_do_not_inflate_target_and_raw_cards_never_disappear(tmp_path):
     assert audit_run(store,"run")["gate_passed"]
 
 
+@pytest.mark.parametrize("page_eligible,raw_flag,expected",[(True,None,1),(True,False,0),(False,True,0)])
+def test_row_source_flag_can_only_reduce_page_eligibility(tmp_path,page_eligible,raw_flag,expected):
+    store,p,s=setup(tmp_path)
+    parsed=page(store,p,s,["/product/guarded"],key="original")
+    separate=new_plan("guarded",sources=[s]);store.begin_run(separate,started_at=TIME)
+    current={**parsed["page"],"source_type_verified":page_eligible}
+    raw=[dict(parsed["observations"][0])];raw[0]["observation_id"]="guarded_observation"
+    if raw_flag is not None:raw[0]["source_evidence_eligible"]=raw_flag
+    store.commit_page("guarded","guarded_page",current,raw)
+    assert store.candidate_count("guarded")==expected
+    assert next(store.iter_observations("guarded"))["source_evidence_eligible"] is bool(expected)
+
+
 def test_legacy_persisted_suffix_groups_project_read_only_and_resume_below_target(tmp_path):
     from amazon_es_bestseller.highspeed.links import NORMALIZER_VERSION
     samples = json.loads((Path(__file__).parent / "fixtures" / "highspeed" / "night5000_real_suffix_aliases.json").read_text(encoding="utf-8"))["samples"]
