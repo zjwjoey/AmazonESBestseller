@@ -572,13 +572,15 @@ def test_zero_card_native_unavailable_is_terminal_failed_only_with_normal_source
         assert not s.saved_pages[0].get("terminal_for_snapshot")
 
 @pytest.mark.parametrize("damage",[None,"message_removed","nonempty_recs","product_link","unknown_access"])
-@pytest.mark.parametrize("gifted",[False,True])
+@pytest.mark.parametrize("gifted",[False,True,"best"])
 def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_path,damage,gifted):
     from amazon_es_bestseller.highspeed.adapters import parse_page
     empty="https://www.amazon.es/gp/most-wished-for/dvd"
     kind="MOST_GIFTED" if gifted else "MOST_WISHED_FOR"
     if gifted:empty="https://www.amazon.es/gp/most-gifted/amazon-devices"
     name="continue30000_gifted_devices_empty.html" if gifted else "continue30000_wished_dvd_explicit_empty.html"
+    if gifted=="best":
+        kind="BEST_SELLERS";empty="https://www.amazon.es/gp/bestsellers/luggage";name="continue30000_best_luggage_empty.html"
     body=(Path(__file__).parent/"fixtures/highspeed"/name).read_text(encoding="utf-8")
     from bs4 import BeautifulSoup
     soup=BeautifulSoup(body,"lxml");grid=soup.select_one('.p13n-desktop-grid')
@@ -609,7 +611,7 @@ def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_
         assert s.saved_pages[0]['source_empty'] is True and s.saved_pages[0]['terminal_for_snapshot'] is True
         assert s.saved_pages[0]['completeness']=='UNKNOWN' and result['run']['quality_gate_passed'] is False
         s.saved_pages[0].update(source_empty=False,terminal_for_snapshot=False)
-        if gifted:s.saved_pages[0].update(source_type_verified=False,flags=['WRONG_PAGE_TYPE'])
+        if gifted is True:s.saved_pages[0].update(source_type_verified=False,flags=['WRONG_PAGE_TYPE'])
         runner.run(p,authorization=a,transport=Normal(),resume=True)
         assert fetched==[empty,URL] and len(s.requests)==2
         assert s.saved_pages[-1]['source_empty'] is True

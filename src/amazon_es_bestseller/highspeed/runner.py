@@ -71,9 +71,10 @@ def empty_continuation_unavailable(parsed, receipt, reason, gate):
         and page.get("raw_card_count")==0 and (parsed.get("acp_pending") or page.get("acp_pending")))
 
 def explicit_source_empty(parsed):
-    """Accept only the documented official wished-list empty component."""
+    """Accept only a documented official empty list component."""
     page=parsed["page"]
-    phrases={"MOST_WISHED_FOR":"más deseados","MOST_GIFTED":"más regalados"}
+    phrases={"MOST_WISHED_FOR":"de los más deseados","MOST_GIFTED":"de los más regalados",
+        "BEST_SELLERS":"más vendidos"}
     if (page.get("source_type") not in phrases or page.get("status")!="FAILED"
             or page.get("access_status")!="NORMAL" or page.get("source_type_verified") is not True
             or page.get("source_context_valid") is not True or parsed.get("observations")
@@ -91,8 +92,8 @@ def explicit_source_empty(parsed):
         if json.loads(grid.get("data-client-recs-list","null"))!=[]:return False
     except (OSError,UnicodeError,ValueError,KeyError):
         return False
-    message="Lo sentimos, no hay productos de los "+phrases[page["source_type"]]+" disponibles en esta categoría. Vuelve más tarde."
-    if (not any(h.get_text(" ",strip=True)==message for h in grid.find_all("h4",recursive=False))
+    message="Lo sentimos, no hay productos "+phrases[page["source_type"]]+" disponibles en esta categoría. Vuelve más tarde."
+    if (not any(" ".join(h.get_text(" ",strip=True).split())==message for h in grid.find_all("h4",recursive=False))
             or grid.select_one("#endOfList") is None
             or grid.select_one("[data-expected-count], [data-acp-path], .zg-bdg-text, [data-ranking-card], .ranking-card, #gridItemRoot")):
         return False
