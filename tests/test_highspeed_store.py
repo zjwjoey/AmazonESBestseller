@@ -132,6 +132,8 @@ def test_stable_candidate_identity_across_daily_runs(tmp_path):
 
 def test_plan_start_is_immutable_and_marker_protects_other_directories(tmp_path):
     store,p,s=setup(tmp_path)
+    assert store.db.execute("PRAGMA synchronous").fetchone()[0] == 2
+    assert store.db.execute("PRAGMA wal_autocheckpoint").fetchone()[0] == 8192
     assert store.begin_run(p,started_at="2026-10-14T00:00:00Z")["started_at"].startswith("2026-10-13")
     with pytest.raises(ValueError,match="PLAN_CONFLICT"): store.begin_run({**p,"max_requests_per_run":1})
     other=tmp_path/"production"; other.mkdir(); (other/"data.json").write_text("{}")

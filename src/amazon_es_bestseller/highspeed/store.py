@@ -31,7 +31,8 @@ def _json(value):
 
 class RunStore:
     def __init__(self, root):
-        self.root = Path(root).resolve()
+        from .path_checks import validate_store_root
+        self.root = validate_store_root(root)
         marker = self.root / ".highspeed_store.json"
         if self.root.exists() and not marker.exists() and any(self.root.iterdir()):
             raise ValueError("ISOLATED_EMPTY_HIGH_SPEED_STORE_REQUIRED")
@@ -43,6 +44,11 @@ class RunStore:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
+        # Keep FULL durability with an 8192-frame checkpoint threshold (~32 MiB
+        # for 4-KiB pages; one bounded transaction can exceed the threshold).
+        # The default 1000 frames repeatedly flushes
+        # the random URL/index pages during 500-card immutable transactions.
+        self.db.execute("PRAGMA wal_autocheckpoint=8192")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS runs(run_id TEXT PRIMARY KEY,plan_hash TEXT NOT NULL,
@@ -94,6 +100,8 @@ class RunStore:
 
     def begin_run(self, plan, *, started_at=None):
         run_id = _safe(plan["run_id"])
+        from .path_checks import validate_run_storage_root
+        validate_run_storage_root(self.root, run_id)
         original = self.db.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
         hashed = digest(plan)
         if original:
