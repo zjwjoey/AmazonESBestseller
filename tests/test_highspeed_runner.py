@@ -521,6 +521,15 @@ def test_prepare_contract_error_preserves_normal_base_cards_before_stop(tmp_path
     assert result["run"]["stop_reason"]=="ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED"
     assert any(e["kind"]=="ACP_PREPARE" and e["success"] is False for e in s.events)
 
+@pytest.mark.parametrize("main_heading",["Los más vendidos","Unknown list"])
+def test_gifted_wrong_main_heading_cannot_be_rescued_by_unrelated_footer(main_heading):
+    from amazon_es_bestseller.highspeed.adapters import parse_page
+    url="https://www.amazon.es/gp/most-gifted/amazon-devices"
+    html="<h1>Unknown banner</h1><div id='zg-right-col'><div class='_cDEzb_card-title_real'><h1>"+main_heading+"</h1></div><footer><h1>Los más regalados</h1></footer></div>"
+    parsed=parse_page(html,source={"source_id":"gifted","source_type":"MOST_GIFTED","actual_source_url":url},
+        run_id="test",page_url=url,page_number=1,evidence_path="offline-fixture",observed_at=NOW.isoformat())
+    assert parsed['page']['source_type_verified'] is False
+
 @pytest.mark.parametrize("failure,access,continues",[
     ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","NORMAL",True),
     ("ACP_NATIVE_BATCH_PROOF_INVALID","NORMAL",False),
@@ -563,10 +572,14 @@ def test_zero_card_native_unavailable_is_terminal_failed_only_with_normal_source
         assert not s.saved_pages[0].get("terminal_for_snapshot")
 
 @pytest.mark.parametrize("damage",[None,"message_removed","nonempty_recs","product_link","unknown_access"])
-def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_path,damage):
+@pytest.mark.parametrize("gifted",[False,True])
+def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_path,damage,gifted):
     from amazon_es_bestseller.highspeed.adapters import parse_page
     empty="https://www.amazon.es/gp/most-wished-for/dvd"
-    body=(Path(__file__).parent/"fixtures/highspeed/continue30000_wished_dvd_explicit_empty.html").read_text(encoding="utf-8")
+    kind="MOST_GIFTED" if gifted else "MOST_WISHED_FOR"
+    if gifted:empty="https://www.amazon.es/gp/most-gifted/amazon-devices"
+    name="continue30000_gifted_devices_empty.html" if gifted else "continue30000_wished_dvd_explicit_empty.html"
+    body=(Path(__file__).parent/"fixtures/highspeed"/name).read_text(encoding="utf-8")
     from bs4 import BeautifulSoup
     soup=BeautifulSoup(body,"lxml");grid=soup.select_one('.p13n-desktop-grid')
     if damage=="message_removed":grid.select_one('h4').decompose()
@@ -574,9 +587,9 @@ def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_
     if damage=="product_link":
         link=soup.new_tag('a',href='/product/unparsed-product');link.string='Product';grid.append(link)
     body=str(soup)
-    p=plan(tmp_path,"T1");p["sources"][0].update(source_type="MOST_WISHED_FOR",actual_source_url=empty,page_urls=[empty])
+    p=plan(tmp_path,"T1");p["sources"][0].update(source_type=kind,actual_source_url=empty,page_urls=[empty])
     p["sources"].append({"source_id":"next","source_type":"BEST_SELLERS","research_category":"home","actual_source_url":URL,"page_urls":[URL]})
-    a=approval(p,tmp_path);a["sources"]["home"].update(source_type="MOST_WISHED_FOR",page_urls=[empty])
+    a=approval(p,tmp_path);a["sources"]["home"].update(source_type=kind,page_urls=[empty])
     a["sources"]["next"]={**a["sources"]["home"],"source_type":"BEST_SELLERS","page_urls":[URL]}
     s=Store(tmp_path/"store");fetched=[];current=[NOW]
     class Normal:
@@ -596,6 +609,7 @@ def test_official_empty_wished_grid_continues_but_unproven_empty_grid_stops(tmp_
         assert s.saved_pages[0]['source_empty'] is True and s.saved_pages[0]['terminal_for_snapshot'] is True
         assert s.saved_pages[0]['completeness']=='UNKNOWN' and result['run']['quality_gate_passed'] is False
         s.saved_pages[0].update(source_empty=False,terminal_for_snapshot=False)
+        if gifted:s.saved_pages[0].update(source_type_verified=False,flags=['WRONG_PAGE_TYPE'])
         runner.run(p,authorization=a,transport=Normal(),resume=True)
         assert fetched==[empty,URL] and len(s.requests)==2
         assert s.saved_pages[-1]['source_empty'] is True

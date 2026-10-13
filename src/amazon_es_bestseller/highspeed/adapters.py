@@ -153,7 +153,7 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
     html = html or ""
     sha = digest(html.encode("utf-8"))
     soup = BeautifulSoup(html, "lxml")
-    headings = (soup.select("#zg h1[class*='style_zgH1Tag__']") or
+    headings = (soup.select("#zg-right-col [class*='card-title'] > h1") or soup.select("#zg h1[class*='style_zgH1Tag__']") or
         soup.select("#zg_banner_text, .zg-banner-text") or soup.select("h1") or soup.select("head > title"))
     heading = _text(headings[0]) if headings else None
     recognized = source_type_from_url(page_url) == kind and bool(heading and any(re.search(p, _fold(heading)) for p in _HEADINGS[kind]))

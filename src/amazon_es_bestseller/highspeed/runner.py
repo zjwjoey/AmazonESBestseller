@@ -73,7 +73,8 @@ def empty_continuation_unavailable(parsed, receipt, reason, gate):
 def explicit_source_empty(parsed):
     """Accept only the documented official wished-list empty component."""
     page=parsed["page"]
-    if (page.get("source_type")!="MOST_WISHED_FOR" or page.get("status")!="FAILED"
+    phrases={"MOST_WISHED_FOR":"más deseados","MOST_GIFTED":"más regalados"}
+    if (page.get("source_type") not in phrases or page.get("status")!="FAILED"
             or page.get("access_status")!="NORMAL" or page.get("source_type_verified") is not True
             or page.get("source_context_valid") is not True or parsed.get("observations")
             or page.get("actual_count")!=0 or page.get("raw_card_count")!=0
@@ -90,7 +91,7 @@ def explicit_source_empty(parsed):
         if json.loads(grid.get("data-client-recs-list","null"))!=[]:return False
     except (OSError,UnicodeError,ValueError,KeyError):
         return False
-    message="Lo sentimos, no hay productos de los más deseados disponibles en esta categoría. Vuelve más tarde."
+    message="Lo sentimos, no hay productos de los "+phrases[page["source_type"]]+" disponibles en esta categoría. Vuelve más tarde."
     if (not any(h.get_text(" ",strip=True)==message for h in grid.find_all("h4",recursive=False))
             or grid.select_one("#endOfList") is None
             or grid.select_one("[data-expected-count], [data-acp-path], .zg-bdg-text, [data-ranking-card], .ranking-card, #gridItemRoot")):
@@ -178,9 +179,11 @@ class HighSpeedRunner:
             for page in bundle.get("pages", []):
                 if (page.get("seed_provenance_path") or page.get("status") not in {"FAILED","PARTIAL"}
                         or not ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED" in page.get("flags",[])
-                            or set(page.get("flags",[]))=={"PAGE_CONTENT_MISSING"})
+                            or set(page.get("flags",[]))=={"PAGE_CONTENT_MISSING"}
+                            or (page.get("source_type")=="MOST_GIFTED" and set(page.get("flags",[]))=={"WRONG_PAGE_TYPE"}))
                         or page.get("actual_count")!=0 or page.get("raw_card_count")!=0
-                        or page.get("access_status")!="NORMAL" or page.get("source_type_verified") is not True
+                        or page.get("access_status")!="NORMAL" or (page.get("source_type_verified") is not True
+                            and not (page.get("source_type")=="MOST_GIFTED" and set(page.get("flags",[]))=={"WRONG_PAGE_TYPE"}))
                         or page.get("source_context_valid") is not True):
                     continue
                 source=next((s for s in plan["sources"] if s["source_id"]==page.get("source_id")),None)
@@ -204,7 +207,7 @@ class HighSpeedRunner:
                     and empty_continuation_unavailable(checked,receipt,"ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",self._gate(plan)))
                 if self._gate(plan).get("state")=="NORMAL" and (official_empty or native_empty):
                     if not (page.get("terminal_for_snapshot") is True and page.get("status")=="FAILED"):
-                        page={**page,"status":"FAILED","completeness":"UNKNOWN","page_complete":False,
+                        page={**page,**(checked["page"] if official_empty else {}),"status":"FAILED","completeness":"UNKNOWN","page_complete":False,
                             "continuation_unavailable":native_empty,"source_empty":official_empty,"terminal_for_snapshot":True}
                         self.store.commit_page(run_id,page["page_key"],{k:v for k,v in page.items() if k!="journal_path"},[])
                         self.store.append_event(run_id,{"kind":"SOURCE_EMPTY" if official_empty else "SOURCE_CONTINUATION_UNAVAILABLE","stage":"source_incompleteness",
