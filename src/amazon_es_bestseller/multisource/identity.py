@@ -46,6 +46,29 @@ def _asin(value) -> str | None:
     return normalize_asin(value) if is_valid_asin(value) else None
 
 
+def identity_fingerprint(observation: dict) -> str:
+    """Identity-bearing evidence fingerprint, independent of title and tracking.
+
+    A slot ID locates a raw observation; it cannot authorize carrying a reviewed
+    entity over to a parser result that extracts a different child or variant.
+    """
+    raw = observation.get("raw_product_url") or observation.get("product_url_raw")
+    fields = {
+        "product_url": normalize_product_url(raw),
+        "asin_from_raw_url": _asin(observation.get("asin_from_raw_url")) or asin_from_product_url(raw) or None,
+        "asin_from_card": _asin(observation.get("asin_from_card")),
+        "asin_observed": _asin(observation.get("asin_observed") or observation.get("observed_asin")),
+        "requested_product_url": normalize_product_url(observation.get("requested_product_url")),
+        "final_product_url": normalize_product_url(observation.get("final_product_url")),
+        "asin_from_final_url": _asin(observation.get("asin_from_final_url")) or asin_from_product_url(observation.get("final_product_url")) or None,
+        "canonical_asin_observed": _asin(observation.get("canonical_asin_observed")),
+        "parent_asin_observed": _asin(observation.get("parent_asin_observed")),
+    }
+    for key in ("selected_variant", "selected_variation", "selected_variant_asin", "variation_child_asin", "variation_family_asins"):
+        fields[key] = observation.get(key)
+    return digest(fields)
+
+
 class IdentityEvidenceResolver:
     """Require independent page evidence, rather than counting URL rewrites."""
 
@@ -265,7 +288,9 @@ class ProductIdentityRegistry:
         rows = self._materialize(observations, events)
         atomic_json(self.checkpoint, sealed({"event_count": len(events),
                     "head_sha256": events[-1]["event_sha256"] if events else None,
-                    "observation_count": len(rows), "mapping_sha256": digest(rows)}), backup=True)
+                    "observation_count": sum(not row.get("view_only") for row in rows),
+                    "identity_view_count": sum(bool(row.get("view_only")) for row in rows),
+                    "mapping_sha256": digest(rows)}), backup=True)
         return rows
 
     def ingest(self, observations: list[dict] | dict) -> list[dict]:
@@ -291,16 +316,71 @@ class ProductIdentityRegistry:
             mapped = {row["observation_id"]: row for row in self._write_checkpoint(known, events)}
             return [mapped[key] for key in requested]
 
-    def materialize(self, observations: list[dict] | None = None) -> list[dict]:
+    def materialize(self, observations: list[dict] | None = None, *, include_views=False) -> list[dict]:
         with file_lock(self.directory / ".lock"):
             known, events = self._load()
             rows = self._write_checkpoint(known, events)
             if observations is None:
-                return rows
+                return rows if include_views else [row for row in rows if not row.get("view_only")]
             ids = {row["observation_id"] for row in observations}
             if ids - known.keys():
                 raise ValueError("OBSERVATION_NOT_INGESTED")
             return [row for row in rows if row["observation_id"] in ids]
+
+    def materialize_views(self, observations: list[dict], parse_version: str) -> list[dict]:
+        """Project reviewed identity onto immutable parse-version observations.
+
+        Base observation IDs stay fixed. Changed identity-bearing evidence gets
+        a distinct internal identity_view_id and never inherits the old review.
+        Review/attach/undo accept that ID. Internal views are excluded from the
+        original observation counts and exposed separately in summary().
+        """
+        if not parse_version or not isinstance(parse_version, str):
+            raise ValueError("PARSE_VERSION_REQUIRED")
+        requested = list(observations)
+        with file_lock(self.directory / ".lock"):
+            known, events = self._load()
+            items = []
+            projections = []
+            for original in requested:
+                row = deepcopy(original)
+                base_id = row.get("base_observation_id") or row.get("observation_id")
+                if not base_id or not isinstance(base_id, str):
+                    raise ValueError("OBSERVATION_ID_REQUIRED")
+                fingerprint = identity_fingerprint(row)
+                base = known.get(base_id)
+                changed = bool(base and identity_fingerprint(base) != fingerprint)
+                view_id = "identity_view_" + digest([base_id, fingerprint]) if changed else base_id
+                if view_id not in known:
+                    stored = {**row, "observation_id": view_id}
+                    if changed:
+                        stored.update(base_observation_id=base_id, view_only=True,
+                                      identity_fingerprint=fingerprint, parse_version=parse_version)
+                    path = self.directory / "observations" / (digest(view_id) + ".json")
+                    immutable_json(path, stored)
+                    items.append({"observation_id": view_id, "sha256": digest(stored)})
+                    known[view_id] = stored
+                projections.append((row, base_id, view_id, fingerprint, changed))
+            if items:
+                self._append(events, {"action": "INGEST", "observations": items})
+            mapped = {row["observation_id"]: row for row in self._write_checkpoint(known, events)}
+            result = []
+            keys = ("product_id", "identity_status", "review_status", "identity_evidence",
+                    "identity_conflict_reason", "original_identity_conflict_reason", "confirmed_asin",
+                    "variation_family_id", "review_events")
+            for row, base_id, view_id, fingerprint, changed in projections:
+                identity = mapped[view_id]
+                for key in keys:
+                    if key in identity:
+                        row[key] = deepcopy(identity[key])
+                    else:
+                        row.pop(key, None)
+                row.update(observation_id=base_id, identity_view_id=view_id,
+                           identity_fingerprint=fingerprint, identity_view_changed=changed,
+                           identity_parse_version=parse_version)
+                row.pop("view_only", None)
+                result.append(row)
+            return result
 
     def resolve(self, observation: dict | str, *, evidence=None, actor="offline-evidence-verifier", event_id=None, reason=None) -> dict:
         """Resolve hints, or durably attach a saved detail proof after capture.
@@ -385,13 +465,18 @@ class ProductIdentityRegistry:
             return deepcopy(self._load()[1])
 
     def summary(self) -> dict:
-        rows = self.materialize()
+        all_rows = self.materialize(include_views=True)
+        rows = [row for row in all_rows if not row.get("view_only")]
+        views = [row for row in all_rows if row.get("view_only")]
         confirmed = [r for r in rows if r["identity_status"] == "CONFIRMED" and r["product_id"]]
         candidates = {r.get("asin_from_raw_url") or r.get("asin_from_card") or r["observation_id"] for r in rows}
         return {"schema_version": 1, "observations": len(rows), "unique_candidates": len(candidates),
                 "confirmed_observations": len(confirmed), "confirmed_unique_products": len({r["product_id"] for r in confirmed}),
                 "identity_conflicts": sum(r["identity_status"] == "CONFLICT" for r in rows),
                 "unconfirmed_observations": sum(r["product_id"] is None for r in rows),
+                "identity_view_count": len(views),
+                "confirmed_identity_views": sum(r["identity_status"] == "CONFIRMED" and bool(r["product_id"]) for r in views),
+                "identity_view_conflicts": sum(r["identity_status"] == "CONFLICT" for r in views),
                 "duplicate_confirmed_observations": len(confirmed) - len({r["product_id"] for r in confirmed})}
 
     def import_legacy(self, records: list[dict], *, evidence_by_asin: dict | None = None) -> list[dict]:
@@ -410,7 +495,7 @@ class ProductIdentityRegistry:
     def legacy_mapping(self) -> dict:
         """Only one-to-one confirmed ASIN/entity mappings may reach old caches."""
         by_asin, by_product = {}, {}
-        for row in self.materialize():
+        for row in self.materialize(include_views=True):
             asin = row.get("confirmed_asin")
             if row["identity_status"] != "CONFIRMED" or not asin or not row["product_id"]:
                 continue

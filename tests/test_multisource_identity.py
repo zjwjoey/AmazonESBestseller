@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from amazon_es_bestseller.multisource.identity import ProductIdentityRegistry, IdentityEvidenceResolver, normalize_product_url
+from amazon_es_bestseller.multisource.identity import ProductIdentityRegistry, IdentityEvidenceResolver, normalize_product_url, identity_fingerprint
 from amazon_es_bestseller.multisource.storage import digest
 
 A = "B08J7PQGD7"
@@ -267,3 +267,88 @@ def test_detail_parent_page_or_conflicting_selected_child_never_confirms(tmp_pat
     assert IdentityEvidenceResolver().resolve(row)["identity_status"] == "CONFLICT"
     row = observation(identity_evidence=[proof(tmp_path, selected_variant_asin=B)])
     assert "DETAIL_SELECTED_CHILD_PRIMARY_ASIN_CONFLICT" in IdentityEvidenceResolver().resolve(row)["identity_conflict_reason"]
+
+
+def test_reparse_identity_change_cannot_inherit_prior_reviewed_entity(tmp_path):
+    directory = tmp_path / "registry"
+    registry = ProductIdentityRegistry(directory)
+    original = observation()
+    registry.ingest(original)
+    registry.review("same", ["obs1"], actor="human", evidence="Review of original extraction")
+    old_pid = registry.resolve("obs1")["product_id"]
+    raw_path = directory / "observations" / (digest("obs1") + ".json")
+    raw_bytes = raw_path.read_bytes()
+    corrected = observation(asin=B)
+    row = registry.materialize_views([corrected], "v2")[0]
+    assert row["observation_id"] == "obs1"
+    assert row["identity_view_id"] != "obs1" and row["identity_view_changed"]
+    assert row["product_id"] is None and row["identity_status"] == "UNCONFIRMED"
+    event = registry.review("same", [row["identity_view_id"]], actor="human", evidence="Review corrected selected child")
+    reviewed = ProductIdentityRegistry(directory).materialize_views([corrected], "v2")[0]
+    assert reviewed["product_id"] and reviewed["product_id"] != old_pid
+    assert registry.summary()["observations"] == 1
+    assert registry.summary()["identity_view_count"] == 1
+    assert registry.summary()["confirmed_identity_views"] == 1
+    assert len(registry.materialize()) == 1
+    registry.undo(event["event_id"], actor="human", evidence="Incorrect new review")
+    assert registry.materialize_views([corrected], "v2")[0]["product_id"] is None
+    assert registry.summary()["confirmed_identity_views"] == 0
+    assert raw_path.read_bytes() == raw_bytes
+
+
+def test_identity_view_proof_attachment_and_restart_preserve_base_slot(tmp_path):
+    directory = tmp_path / "registry"
+    registry = ProductIdentityRegistry(directory)
+    registry.ingest(observation())
+    corrected = observation(asin=B)
+    view = registry.materialize_views([corrected], "v2")[0]
+    registry.attach(view["identity_view_id"], [proof(tmp_path, B)], actor="verifier", reason="Verify corrected child against actual saved page")
+    refreshed = ProductIdentityRegistry(directory).materialize_views([corrected], "v3")[0]
+    assert refreshed["observation_id"] == "obs1"
+    assert refreshed["identity_view_id"] == view["identity_view_id"]
+    assert refreshed["identity_status"] == "CONFIRMED"
+    assert registry.legacy_mapping() == {B: refreshed["product_id"]}
+    assert registry.summary()["observations"] == 1
+
+
+def test_titles_and_tracking_changes_do_not_create_identity_views(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    original = observation(title_raw="Cable")
+    registry.ingest(original)
+    registry.review("same", ["obs1"], actor="user", evidence="Reviewed cable")
+    changed = deepcopy(original)
+    changed.update(title_raw="Power cable revised title", raw_product_url=f"https://www.amazon.es/dp/{A}?tag=other&th=1&psc=1")
+    assert identity_fingerprint(original) == identity_fingerprint(changed)
+    row = registry.materialize_views([changed], "v2")[0]
+    assert row["product_id"] == registry.resolve("obs1")["product_id"]
+    assert not row["identity_view_changed"]
+    assert row["title_raw"] == "Power cable revised title"
+    assert registry.summary()["identity_view_count"] == 0
+
+
+@pytest.mark.parametrize("change", [
+    {"selected_variant": "Blue 2-pack"}, {"parent_asin_observed": PARENT},
+    {"requested_product_url": f"https://www.amazon.es/dp/{B}"},
+    {"final_product_url": f"https://www.amazon.es/dp/{B}"},
+    {"canonical_asin_observed": B},
+])
+def test_identity_bearing_variant_or_parent_evidence_changes_require_own_view(tmp_path, change):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    original = observation()
+    registry.ingest(original)
+    registry.review("same", ["obs1"], actor="human", evidence="Prior observation review")
+    changed = {**original, **change}
+    row = registry.materialize_views([changed], "v2")[0]
+    assert row["identity_view_changed"] and row["product_id"] is None
+
+
+def test_same_identity_view_across_parser_versions_keeps_immutable_first_view(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    registry.ingest(observation())
+    corrected = observation(asin=B, title_raw="First title")
+    first = registry.materialize_views([corrected], "v2")[0]
+    second = registry.materialize_views([{**corrected, "title_raw": "Further wording update"}], "v3")[0]
+    assert second["identity_view_id"] == first["identity_view_id"]
+    assert second["title_raw"] == "Further wording update"
+    assert registry.summary()["identity_view_count"] == 1
+    assert registry.summary()["observations"] == 1
