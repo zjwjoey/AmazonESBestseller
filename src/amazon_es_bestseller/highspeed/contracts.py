@@ -6,7 +6,7 @@ ORIGINS = ("OFFLINE_FIXTURE", "HISTORICAL_REPLAY", "LIVE_CAPTURE")
 DEDUP_STATUSES = ("EXACT_DUPLICATE", "NORMALIZED_DUPLICATE", "VERIFIED_SAME_DESTINATION",
     "UNIQUE_LINK_CANDIDATE", "POSSIBLE_DUPLICATE", "IDENTITY_UNCONFIRMED", "INVALID_PRODUCT_LINK")
 DEFAULT_CONFIG = {
-    "schema_version": 2, "target_unique_links": 30000, "max_duration_hours": 10,
+    "schema_version": 2, "mode": "HIGH_SPEED_V2", "target_unique_links": 30000, "max_duration_hours": 10,
     "category_cooldown_seconds": 0, "request_pacing_seconds": 3, "parallelism": 1,
     "max_requests_per_run": 8000, "max_pages_per_run": 2000,
     "max_requests_per_day": 8000, "max_raw_observations_per_run": 150000,
