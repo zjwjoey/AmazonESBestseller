@@ -87,8 +87,14 @@ def _exercise(pages, directory, run_id, *, origin_label, target):
         errors.append("MISSING_OBSERVATION_EVIDENCE")
     strong_audit = audit_run(reopened, run_id)
     errors.extend(f["code"] for f in strong_audit["findings"] if f["severity"] == "ERROR")
+    reopened.close()
     events.append({"stage": "restart_and_basic_qa", "duration_seconds": time.perf_counter() - before})
     store.update_run(run_id, started_at=started_at, ended_at=_now(), status="FINISHED", qa=strong_audit)
+    checkpoint_start = time.perf_counter()
+    checkpoint_result = list(store.db.execute("PRAGMA wal_checkpoint(FULL)").fetchone())
+    if checkpoint_result[0] or checkpoint_result[1] != checkpoint_result[2]:
+        raise ValueError("FINAL_FULL_CHECKPOINT_NOT_COMPLETE")
+    events.append({"stage": "sqlite_final_full_checkpoint", "duration_seconds": time.perf_counter() - checkpoint_start})
     finished_at = _now()
     metric = summarize_metrics(events, raw_count=len(observations),
         valid_link_count=sum(bool(r.get("candidate_id")) for r in observations),
@@ -96,15 +102,21 @@ def _exercise(pages, directory, run_id, *, origin_label, target):
     metric.update(measured_monotonic_seconds=time.perf_counter() - started_clock,
                   benchmark_origin=origin_label, live_requests=0, product_pages=product_page_count, page_count=page_count,
                   source_count=len(source_ids),
+                  final_full_checkpoint_result=checkpoint_result,
                   independent_sku_identity_verified=False, qa_errors=errors,
                   include_report_export_in_task_wall=True,
                   source_types_observed=sorted(source_types),
                   ten_hour_live_target_passed=False)
     metric["ten_hour_target_passed"] = metric["ten_hour_target_passed"] and strong_audit["gate_passed"]
     report = export_report(store, run_id, directory / "reports", metrics=metric)
+    close_started = time.perf_counter()
+    store.close()
+    close_duration = time.perf_counter() - close_started
     metric = json.loads(Path(report["report_directory"]).joinpath("performance.json").read_text(encoding="utf-8"))
+    metric["sqlite_final_close_seconds"] = close_duration
     metric["measured_monotonic_seconds"] = time.perf_counter() - started_clock
     metric["total_including_report_manifest_seconds"] = metric["measured_monotonic_seconds"]
+    metric["end_to_end_scope"] = "FIRST_CASE_START_THROUGH_EXPORT_MANIFEST_AND_BOTH_DATABASE_CONNECTIONS_CLOSED"
     metric["data_export_and_manifest_finished_at"] = _now()
     return {"run_id": run_id, "metrics": metric, "report": report, "restart_verified": not errors,
             "strong_audit": strong_audit,
@@ -115,6 +127,8 @@ def run_benchmark(pages, output_root, synthetic_unique=30000, synthetic_observat
     if synthetic_unique < 1 or synthetic_observations < synthetic_unique:
         raise ValueError("SYNTHETIC_COUNTS_INVALID")
     pages = list(pages)
+    source_hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                     for path in Path(__file__).parent.glob("*.py")}
     from ..multisource.storage import read_sealed
     provenance = []
     for spec in pages:
@@ -143,9 +157,15 @@ def run_benchmark(pages, output_root, synthetic_unique=30000, synthetic_observat
         directory / "synthetic", "t0_synthetic", origin_label="GENERATED_OFFLINE_FIXTURE", target=synthetic_unique)
     result = {"stage": "T0", "live_requests": 0, "saved_real": real, "synthetic": synthetic,
               "saved_input_provenance": provenance,
+              "working_tree_source_sha256_at_start": source_hashes,
               "live_t3_completed": False, "ten_hour_live_feasibility": "CANNOT_CONFIRM_WITHOUT_LIVE_CAPACITY_AND_TIMINGS",
               "synthetic_target_verified": synthetic["metrics"]["unique_link_candidates"] == synthetic_unique
                     and synthetic["metrics"]["raw_observations"] == synthetic_observations
                     and synthetic["restart_verified"], "output_directory": str(directory)}
+    final_hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in Path(__file__).parent.glob("*.py")}
+    result["working_tree_source_sha256_at_finish"] = final_hashes
+    result["source_files_changed_during_benchmark"] = sorted(name for name in set(source_hashes) | set(final_hashes)
+                                                            if source_hashes.get(name) != final_hashes.get(name))
     (directory / "benchmark.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result

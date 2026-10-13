@@ -20,6 +20,9 @@ def test_t0_persists_all_duplicate_evidence_and_restores_without_network(tmp_pat
     assert result["saved_real"]["metrics"]["unique_link_candidates"] == 1
     assert result["synthetic"]["restart_verified"]
     assert result["synthetic"]["strong_audit"]["gate_passed"]
+    checkpoint = result["synthetic"]["metrics"]["final_full_checkpoint_result"]
+    assert checkpoint[0] == 0 and checkpoint[1] == checkpoint[2]
+    assert result["synthetic"]["metrics"]["sqlite_final_close_seconds"] >= 0
     assert result["synthetic"]["metrics"]["stages"]["restart_and_basic_qa"]["total_seconds"] > 0
     assert not result["synthetic"]["metrics"]["ten_hour_live_target_passed"]
     directory = Path(result["output_directory"])
