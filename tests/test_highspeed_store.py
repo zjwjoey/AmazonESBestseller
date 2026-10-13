@@ -42,6 +42,32 @@ def test_aliases_do_not_inflate_target_and_raw_cards_never_disappear(tmp_path):
     assert all("asin" not in k.lower() for row in store.iter_candidates("run") for k in row)
     assert audit_run(store,"run")["gate_passed"]
 
+
+def test_legacy_persisted_suffix_groups_project_read_only_and_resume_below_target(tmp_path):
+    from amazon_es_bestseller.highspeed.links import NORMALIZER_VERSION
+    samples = json.loads((Path(__file__).parent / "fixtures" / "highspeed" / "night5000_real_suffix_aliases.json").read_text(encoding="utf-8"))["samples"]
+    store, plan, source = setup(tmp_path, target_unique_links=2)
+    page(store, plan, source, [s["raw_product_url"] for s in samples])
+    # Model old persisted indexes explicitly. Immutable journals retain their
+    # original identity/URL fields; current read projection must not rewrite SQL.
+    for sample in samples:
+        store.db.execute("UPDATE candidates SET possible_key=? WHERE candidate_id=?",
+            (sample["original_possible_duplicate_key"], sample["candidate_id"]))
+    before = list(map(tuple, store.db.execute("SELECT candidate_id,url,possible_key FROM candidates ORDER BY candidate_id")))
+    stored_obs = list(map(tuple, store.db.execute("SELECT observation_id,data_json FROM observations ORDER BY observation_id")))
+    assert store.normalized_candidate_count("run") == 2
+    assert store.candidate_count("run") == 1 < plan["target_unique_links"]
+    views = list(store.iter_candidates("run"))
+    observations = list(store.iter_observations("run"))
+    assert len({v["possible_duplicate_key"] for v in views}) == 1
+    assert all(v["current_normalizer_version"] == NORMALIZER_VERSION for v in views)
+    assert {v["original_possible_duplicate_key"] for v in views} == {s["original_possible_duplicate_key"] for s in samples}
+    assert len({v["target_group_key"] for v in observations}) == 1
+    assert sum(v["target_eligible"] for v in views) == 1
+    assert audit_run(store,"run")["gate_passed"]
+    assert list(map(tuple, store.db.execute("SELECT candidate_id,url,possible_key FROM candidates ORDER BY candidate_id"))) == before
+    assert list(map(tuple, store.db.execute("SELECT observation_id,data_json FROM observations ORDER BY observation_id"))) == stored_obs
+
 def test_request_limits_cannot_be_replaced_and_ambiguous_attempt_stays_charged(tmp_path):
     store,p,s = setup(tmp_path, max_requests_per_run=1)
     with pytest.raises(ValueError, match="BUDGET_CONFLICT"):

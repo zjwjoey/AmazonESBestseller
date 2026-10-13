@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import lru_cache
 import json
 from pathlib import Path
 import re
@@ -16,7 +17,13 @@ import uuid
 from ..multisource.contracts import timestamp, canonical_page_url
 from ..multisource.storage import (atomic_json, canonical_bytes, digest, file_lock,
     immutable_bytes, immutable_json, read_sealed, sealed)
-from .links import normalize_product_url, candidate_id
+from .links import normalize_product_url, candidate_id, NORMALIZER_VERSION
+
+
+@lru_cache(maxsize=100000)
+def _current_review_key(normalized_url, normalizer_version):
+    """Cache pure derived review keys, never identity/auth/raw modifications."""
+    return normalize_product_url(normalized_url).get("possible_duplicate_key") or normalized_url
 
 
 def _safe(value):
@@ -515,8 +522,11 @@ class RunStore:
                 value["source_evidence_eligible"]=(page.get("access_status") == "NORMAL" and
                     page.get("source_type_verified") is True and page.get("source_context_valid") is True)
             if view:
+                value.setdefault("original_possible_duplicate_key", value.get("possible_duplicate_key"))
+                value.setdefault("original_normalizer_version", value.get("normalizer_version"))
                 value.update({k:view[k] for k in ("possible_duplicate_key","target_group_key","target_eligible",
-                    "url_identity_status","final_product_url")})
+                    "url_identity_status","final_product_url", "current_normalizer_version",
+                    "possible_duplicate_key_version")})
                 if view["url_identity_status"] == "VERIFIED_SAME_DESTINATION":
                     value["original_dedup_status"]=value["dedup_status"]
                     value["dedup_status"]="VERIFIED_SAME_DESTINATION"
@@ -525,18 +535,25 @@ class RunStore:
             yield value
 
     def _base_candidates(self, run_id):
-        groups = {row["group_key"]: (row["representative"], row["members"])
-            for row in self.db.execute("SELECT coalesce(c.possible_key,c.url) AS group_key,min(c.candidate_id) AS representative,"
-                "count(*) AS members FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=? GROUP BY group_key", (run_id,))}
+        groups = {}
+        for row in self.db.execute("SELECT c.candidate_id,c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,)):
+            key = _current_review_key(row["url"], NORMALIZER_VERSION)
+            representative, members = groups.get(key, (row["candidate_id"], 0))
+            groups[key] = (min(representative, row["candidate_id"]), members + 1)
         for row in self.db.execute("SELECT c.*,r.*,o.data_json FROM candidates c JOIN run_candidates r USING(candidate_id) "
                 "JOIN observations o ON o.observation_id=r.first_observation_id WHERE r.run_id=? ORDER BY r.rowid", (run_id,)):
             first = json.loads(row["data_json"])
-            representative, members = groups[row["possible_key"] or row["url"]]
+            current_key = _current_review_key(row["url"], NORMALIZER_VERSION)
+            representative, members = groups[current_key]
             yield {**first, "candidate_id": row["candidate_id"], "normalized_product_url": row["url"],
                 "first_seen": row["first_seen"], "first_observed_at": row["first_seen"], "last_seen": row["last_seen"],
-                "observation_count": row["observation_count"], "possible_duplicate_key": row["possible_key"],
+                "observation_count": row["observation_count"], "possible_duplicate_key": current_key,
+                "original_possible_duplicate_key": row["possible_key"],
+                "original_normalizer_version": first.get("normalizer_version"),
+                "current_normalizer_version": NORMALIZER_VERSION,
+                "possible_duplicate_key_version": NORMALIZER_VERSION,
                 "dedup_status": "POSSIBLE_DUPLICATE" if members > 1 else "UNIQUE_LINK_CANDIDATE",
-                "target_group_key": row["possible_key"] or row["url"],
+                "target_group_key": current_key,
                 "target_eligible": row["candidate_id"] == representative,
                 "url_identity_status": "IDENTITY_UNCONFIRMED", "strict_buyable_confirmed": False,
                 "final_product_url": None}
@@ -592,8 +609,8 @@ class RunStore:
         # conservative lower bound, not an automatic product merge.
         if self.db.execute("SELECT 1 FROM destination_reviews WHERE run_id=? LIMIT 1",(run_id,)).fetchone():
             return sum(c["target_eligible"] for c in self.iter_candidates(run_id))
-        return self.db.execute("SELECT count(DISTINCT coalesce(c.possible_key,c.url)) FROM candidates c "
-            "JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,)).fetchone()[0]
+        return len({_current_review_key(row[0], NORMALIZER_VERSION)
+            for row in self.db.execute("SELECT c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,))})
 
     def normalized_candidate_count(self, run_id):
         return self.db.execute("SELECT count(*) FROM run_candidates WHERE run_id=?", (run_id,)).fetchone()[0]
@@ -606,8 +623,11 @@ class RunStore:
         counts = dict(self.db.execute("SELECT dedup_status,count(*) FROM observations WHERE run_id=? GROUP BY dedup_status", (run_id,)).fetchall())
         raw = sum(counts.values())
         unique = self.candidate_count(run_id)
-        possible = self.db.execute("SELECT coalesce(sum(members),0) FROM (SELECT count(*) AS members FROM candidates c "
-            "JOIN run_candidates r USING(candidate_id) WHERE r.run_id=? GROUP BY coalesce(c.possible_key,c.url) HAVING count(*)>1)", (run_id,)).fetchone()[0]
+        possible_groups = {}
+        for row in self.db.execute("SELECT c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,)):
+            key = _current_review_key(row[0], NORMALIZER_VERSION)
+            possible_groups[key] = possible_groups.get(key, 0) + 1
+        possible = sum(members for members in possible_groups.values() if members > 1)
         reviewed=list(self.iter_candidates(run_id)) if self.db.execute("SELECT 1 FROM destination_reviews WHERE run_id=? LIMIT 1",(run_id,)).fetchone() else []
         pending=[{"journal_path":r["journal_path"],"raw_observations":r["raw_count"]} for r in
             self.db.execute("SELECT * FROM pending_pages WHERE run_id=?",(run_id,))]

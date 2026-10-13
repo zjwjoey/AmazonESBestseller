@@ -5,11 +5,11 @@ import re
 import uuid
 from urllib.parse import unquote_plus, urljoin, urlsplit, urlunsplit
 
-NORMALIZER_VERSION = "link_url_v2.1"
+NORMALIZER_VERSION = "link_url_v2.2.review_suffix"
 _TRACKING = frozenset({"ref", "ref_", "tag", "linkCode", "camp", "creative", "ascsubtag"})
 _PRODUCT_PATH = re.compile(r"/(?:dp|gp/product|gp/aw/d|product)/[^/?#]+", re.I)
 _REDIRECT_PATH = re.compile(r"/(?:sspa/click|gp/slredirect|gp/redirect|gp/aw/redirect)(?:/|$)", re.I)
-_REVIEW_ROUTE = re.compile(r"/(?:dp|gp/product|gp/aw/d)/([^/?#]+)/?$", re.I)
+_REVIEW_ROUTE = re.compile(r"/(?:dp|gp/product|gp/aw/d)/([^/?#]+)(?:/|$)", re.I)
 
 
 def candidate_id(normalized_product_url: str) -> str:
@@ -58,6 +58,8 @@ def normalize_product_url(raw_url, base_url="https://www.amazon.es") -> dict:
         if route:
             # A literal opaque URL segment across known route aliases supplies
             # a conservative review group, not confirmed product identity.
+            # Arbitrary suffixes (including tracking/session paths) remain in
+            # normalized URLs and IDs but cannot inflate this weak review group.
             # No validation, decoding, casing or URL construction is performed.
             possible = "opaque_route_review_" + uuid.uuid5(uuid.NAMESPACE_URL,
                 "www.amazon.es|" + route.group(1)).hex

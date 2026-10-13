@@ -65,7 +65,21 @@ def test_unrecognized_suffixes_and_redirects_are_not_route_alias_groups():
     additional_path = normalize_product_url("/dp/token/unknown-action")
     generic = normalize_product_url("/product/token")
     redirect = normalize_product_url("/sspa/click?url=%2Fdp%2Ftoken")
-    assert len({r["possible_duplicate_key"] for r in [plain, additional_path, generic, redirect]}) == 4
+    assert plain["possible_duplicate_key"] == additional_path["possible_duplicate_key"]
+    assert len({r["possible_duplicate_key"] for r in [plain, additional_path, generic, redirect]}) == 3
+    assert plain["normalized_product_url"] != additional_path["normalized_product_url"]
+
+
+def test_real_tracking_and_session_suffixes_group_for_review_only():
+    fixture = Path(__file__).parent / "fixtures" / "highspeed" / "night5000_real_suffix_aliases.json"
+    samples = json.loads(fixture.read_text(encoding="utf-8"))["samples"]
+    rows = [normalize_product_url(s["raw_product_url"]) for s in samples]
+    assert len({r["possible_duplicate_key"] for r in rows}) == 1
+    assert len({candidate_id(r["normalized_product_url"]) for r in rows}) == 2
+    for sample, row in zip(samples, rows):
+        assert row["normalized_product_url"] == sample["normalized_product_url"]
+        assert candidate_id(row["normalized_product_url"]) == sample["candidate_id"]
+        assert row["url_identity_status"] == "IDENTITY_UNCONFIRMED"
 
 
 def test_all_cards_missing_link_and_identity_fields_preserved():
