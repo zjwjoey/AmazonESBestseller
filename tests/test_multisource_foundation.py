@@ -8,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from amazon_es_bestseller.multisource.contracts import (
-    SOURCE_BUDGETS, PRODUCTION_CATEGORY_QUOTAS, observation_id, timestamp)
+    SOURCE_BUDGETS, PRODUCTION_CATEGORY_QUOTAS, observation_id, timestamp,
+    canonical_page_url, make_observation)
 from amazon_es_bestseller.multisource.storage import (
     atomic_json, immutable_bytes, file_lock, sealed, read_sealed)
 
@@ -77,3 +78,33 @@ def test_unknown_schema_or_checksum_is_not_silently_accepted(tmp_path):
     atomic_json(path, value)
     with pytest.raises(ValueError):
         read_sealed(path)
+
+
+def test_known_tracking_aliases_are_the_same_observation_slot():
+    base = "https://www.amazon.es/gp/bestsellers/kitchen/12345?pg=1&node=12345&unknown=2"
+    alias = "https://www.amazon.es/gp/bestsellers/kitchen/12345/ref=zg_bs_nav?pg=1&tag=research&node=12345&unknown=2#top"
+    assert observation_id("snapshot", "source", base, 0) == observation_id("snapshot", "source", alias, 0)
+
+
+def test_canonical_observation_key_preserves_page_node_and_unknown_identity_scope():
+    base = "https://www.amazon.es/gp/bestsellers/kitchen?pg=1&node=12345&unknown=2"
+    key = observation_id("snapshot", "source", base, 0)
+    for other in (base.replace("pg=1", "pg=2"), base.replace("node=12345", "node=99999"),
+                  base.replace("unknown=2", "unknown=3")):
+        assert key != observation_id("snapshot", "source", other, 0)
+
+
+def test_observation_retains_raw_and_normalized_page_provenance():
+    raw = "https://www.amazon.es/gp/bestsellers/kitchen/12345/ref=zg_bs_nav?pg=1&tag=research#top"
+    row = make_observation(run_id="run", snapshot_id="snapshot", source={"source_id": "source",
+        "source_type": "BEST_SELLERS", "actual_source_url": "https://www.amazon.es/gp/bestsellers/kitchen/12345"},
+        page_url=raw, page_number=1, slot_position=0, observed_at="2026-10-13T10:00:00Z", evidence_path="fixture.html")
+    assert row["page_url"] == row["page_url_raw"] == raw
+    assert row["page_url_normalized"] == "https://www.amazon.es/gp/bestsellers/kitchen/12345?pg=1"
+
+
+def test_canonical_page_url_preserves_unknown_duplicate_blank_and_variant_parameters():
+    url = "https://www.amazon.es/dp/B000000001/ref=tracking?th=1&psc=1&node=123&pg=2&unknown=&unknown=3&tag=tracking#top"
+    expected = "https://www.amazon.es/dp/B000000001?th=1&psc=1&node=123&pg=2&unknown=&unknown=3"
+    assert canonical_page_url(url) == expected
+    assert canonical_page_url(expected) == expected

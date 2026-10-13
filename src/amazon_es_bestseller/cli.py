@@ -1841,6 +1841,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--profile", choices=("research", "business", "task"), default="research",
                    help="research=类目规划+双语三表；business=仅西语/中文两表；task=三表+采集任务元数据")
     x.set_defaults(func=cmd_export)
+    from .multisource.cli import register as register_multisource
+    register_multisource(sub)
     return parser
 
 

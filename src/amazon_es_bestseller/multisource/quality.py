@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import detect_access_status
 from . import SCHEMA_VERSION
-from .contracts import ORIGINS, RANK_SEMANTICS, RESEARCH_CATEGORIES, SOURCE_ROOTS, SOURCE_STATUSES, timestamp
+from .contracts import ORIGINS, RANK_SEMANTICS, RESEARCH_CATEGORIES, SOURCE_ROOTS, SOURCE_STATUSES, timestamp, canonical_page_url
 from .sources import _validate_live_receipt
 
 
@@ -47,7 +47,7 @@ def _evidence(path, checksum, root=None):
 
 
 def _page_key(page):
-    return (page.get("source_id"), page.get("page_url"))
+    return (page.get("source_id"), canonical_page_url(page.get("page_url") or ""))
 
 
 def _count_proof(page, data):

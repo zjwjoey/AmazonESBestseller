@@ -13,7 +13,7 @@ from ..transport.base import raw_response_evidence
 from . import SCHEMA_VERSION
 from .authorization import validate_authorization, authorize_request
 from .budgets import BudgetLedger
-from .contracts import ORIGINS, PHASE_TARGETS, timestamp
+from .contracts import ORIGINS, PHASE_TARGETS, timestamp, canonical_page_url
 from .storage import (atomic_json, canonical_bytes, digest, file_lock,
                       immutable_bytes, immutable_json, read_sealed, sealed)
 
@@ -212,6 +212,11 @@ class SnapshotManager:
             raise ValueError("INVALID_RUN_SCOPE")
         if not sources or len({s["source_id"] for s in sources}) != len(sources):
             raise ValueError("EMPTY_OR_DUPLICATE_SOURCE_PLAN")
+        if any(source.get("enabled") is False for source in sources):
+            raise ValueError("DISABLED_SOURCE_CANNOT_RUN")
+        source_urls = [canonical_page_url(source.get("actual_source_url") or source.get("root_url") or "") for source in sources]
+        if len(set(source_urls)) != len(source_urls):
+            raise ValueError("DUPLICATE_PHYSICAL_SOURCE_MAPPING")
         directory = self._run_dir(run_id)
         directory.mkdir(parents=True, exist_ok=True)
         snapshot_id = safe_id(snapshot_id or run_id)
@@ -251,12 +256,12 @@ class SnapshotManager:
             if frozen.exists():
                 self._ensure_phase_gate(frozen.parent)
                 return self.load(run_id)
-            completed = {p["page_key"] for p in committed}
+            completed = {digest([p["source"]["source_id"], canonical_page_url(p["page_url"])])[:32] for p in committed}
             source_index = {s["source_id"]: s for s in sources}
             for page_input in page_inputs:
                 source = source_index[page_input["source_id"]]
                 url = page_input["page_url"]
-                page_key = digest([source["source_id"], url])[:32]
+                page_key = digest([source["source_id"], canonical_page_url(url)])[:32]
                 if page_key in completed:
                     continue
                 if self._paused(directory):
@@ -420,7 +425,8 @@ class SnapshotManager:
             "snapshot_id": spec["snapshot_id"], "origin": spec["origin"], "phase": spec["plan"]["phase"], "stage": spec["plan"]["phase"],
             "version": version, "sources": spec["sources"], "local_dates": dates,
             "local_date": dates[0] if len(dates) == 1 else None, "timezone": "Europe/Madrid",
-            "planned_pages": [{"source_id": p["source_id"], "page_url": p["page_url"]} for p in spec["page_inputs"]],
+            "planned_pages": list({(p["source_id"], canonical_page_url(p["page_url"])):
+                {"source_id": p["source_id"], "page_url": canonical_page_url(p["page_url"])} for p in spec["page_inputs"]}.values()),
             "planned_page_urls": {s["source_id"]: [p["page_url"] for p in spec["page_inputs"] if p["source_id"] == s["source_id"]] for s in spec["sources"]},
             "source_ids": [s["source_id"] for s in spec["sources"]],
             "observation_count": len(observations), "page_count": len(pages),
@@ -553,6 +559,10 @@ class SnapshotManager:
                     page_url=record["page_url"], page_number=record["page_number"],
                     observed_at=record["observed_at"], evidence_path=record["evidence_files"][0]["path"],
                     origin=record["origin"], http_status=record.get("http_status", 200), acp_responses=acp)
+                previous_ids = {row["slot_position"]: row["observation_id"] for row in record["observations"]}
+                for row in parsed["observations"]:
+                    if row["slot_position"] in previous_ids:
+                        row["observation_id"] = previous_ids[row["slot_position"]]
                 reparsed.append({**record, "page": {**parsed["page"], "evidence_files": record["evidence_files"],
                     "request_paths": record["page"].get("request_paths", []),
                     "capture_receipt_path": record["page"].get("capture_receipt_path")}, "observations": parsed["observations"]})

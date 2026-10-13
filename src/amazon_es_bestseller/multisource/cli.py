@@ -45,6 +45,8 @@ def _execute(manager, args, spec=None):
     if args.phase:
         plan["phase"] = args.phase
     origin = spec["origin"] if spec else (args.origin or data.get("origin", "OFFLINE_FIXTURE"))
+    if args.operation == "replay" and origin == "LIVE_CAPTURE":
+        raise ValueError("REPLAY_CANNOT_CREATE_LIVE_CAPTURE")
     run_id = args.run_id or data.get("run_id")
     if not run_id:
         raise ValueError("RUN_ID_REQUIRED")

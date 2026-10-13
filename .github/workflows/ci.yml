@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   tests:
+    env:
+      RUN_LIVE: ""
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,7 +27,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
       - name: CLI help smoke
-        run: amazon-es --help
+        run: |
+          amazon-es --help
+          amazon-es multisource --help
       - name: Compile source
         run: python -m compileall src
       - name: Run offline tests

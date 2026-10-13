@@ -8,19 +8,18 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 import re
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlsplit
 import uuid
 
 from bs4 import BeautifulSoup
 
+from ..access.detector import detect_access_status
 from .contracts import (ORIGINS, RESEARCH_CATEGORIES, SOURCE_ROOTS,
-                        SOURCE_STATUSES, timestamp)
+                        SOURCE_STATUSES, canonical_page_url, timestamp)
 from .storage import atomic_json, digest, file_lock, read_sealed, sealed
 
 REGISTRY_VERSION = "source_registry_v1.1"
 _PATHS = {key: urlsplit(value).path for key, value in SOURCE_ROOTS.items()}
-_TRACKING_PARAMETERS = {"ref", "ref_", "tag", "linkCode", "camp", "creative",
-                        "creativeASIN", "ascsubtag"}
 
 
 def _classification_path(value: str) -> str:
@@ -38,18 +37,7 @@ def source_type_value(value) -> str:
 
 def normalize_source_url(value: str, *, base_url: str = "https://www.amazon.es") -> str:
     """Remove known tracking only; preserve node, page and unknown parameters."""
-    try:
-        parts = urlsplit(urljoin(base_url, str(value or "").strip()))
-        if parts.scheme != "https" or parts.hostname not in {"amazon.es", "www.amazon.es"}:
-            return ""
-        if parts.username or parts.password or parts.port not in {None, 443}:
-            return ""
-    except ValueError:
-        return ""
-    path = re.sub(r"/ref=[^/]*$", "", parts.path).rstrip("/") or "/"
-    query = [(key, val) for key, val in parse_qsl(parts.query, keep_blank_values=True)
-             if key not in _TRACKING_PARAMETERS]
-    return urlunsplit(("https", "www.amazon.es", path, urlencode(query), ""))
+    return canonical_page_url(value, base_url=base_url)
 
 
 def source_type_from_url(value: str) -> str | None:
@@ -107,13 +95,39 @@ def _validate_live_receipt(proof: dict, *, row_id: str, source_url: str) -> None
     if not receipt_path.is_file():
         raise ValueError("LIVE_SOURCE_CAPTURE_RECEIPT_REQUIRED")
     receipt = read_sealed(receipt_path)
-    body = receipt.get("transport_evidence", {}).get("response", {}).get("body")
+    transport = receipt.get("transport_evidence")
+    if not isinstance(transport, dict) or not isinstance(transport.get("request"), dict) or not isinstance(transport.get("response"), dict):
+        raise ValueError("LIVE_SOURCE_CAPTURE_RECEIPT_INVALID")
+    request, response = transport["request"], transport["response"]
+    body = response.get("body")
+    request_url = normalize_source_url(request.get("url") or "")
+    receipt_url = normalize_source_url(receipt.get("page_url") or "")
+    proof_url = normalize_source_url(proof.get("page_url") or "")
+    response_url = normalize_source_url(response.get("url") or "")
+    def page_number(url):
+        values = [value for key, value in parse_qsl(urlsplit(url).query, keep_blank_values=True) if key == "pg"]
+        if not values:
+            return 1
+        if len(values) != 1 or not values[0].isdigit() or int(values[0]) < 1:
+            return None
+        return int(values[0])
+    try:
+        captured = timestamp(receipt.get("observed_at"))["observed_at"]
+    except (TypeError, ValueError):
+        raise ValueError("LIVE_SOURCE_CAPTURE_RECEIPT_INVALID") from None
+    status_code = response.get("status_code")
+    if (not isinstance(body, str) or (status_code is not None and type(status_code) is not int)
+            or detect_access_status(status_code, body).value != receipt.get("access_status")):
+        raise ValueError("LIVE_SOURCE_CAPTURE_RECEIPT_INVALID")
     if (receipt.get("origin") != "LIVE_CAPTURE" or receipt.get("kind") != "PAGE"
             or receipt.get("source_id") != row_id or receipt.get("access_status") != proof.get("access_status")
             or not receipt.get("approval_id") or not isinstance(body, str)
             or digest(body.encode("utf-8")) != proof.get("evidence_sha256")
-            or receipt.get("observed_at") != proof.get("observed_at")
-            or not same_source_category(receipt.get("page_url") or "", source_url)
+            or captured != proof.get("observed_at") or not receipt.get("observed_at")
+            or not request_url or request_url != receipt_url or request_url != proof_url
+            or not same_source_category(request_url, source_url)
+            or not same_source_category(response_url, source_url)
+            or page_number(request_url) is None or page_number(response_url) != page_number(request_url)
             or (proof.get("capture_receipt_sha256") and
                 digest(receipt_path.read_bytes()) != proof["capture_receipt_sha256"])):
         raise ValueError("LIVE_SOURCE_CAPTURE_RECEIPT_INVALID")
@@ -256,10 +270,20 @@ class SourceRegistry:
                 raise ValueError("LIVE_SOURCE_VERIFICATION_EVIDENCE_INVALID")
             _validate_live_receipt(proof, row_id=row_id, source_url=url)
         if status == "UNSUPPORTED":
-            proof = row.get("status_evidence") or {}
+            proof = deepcopy(row.get("status_evidence") or row.get("unsupported_evidence") or {})
             if not (proof.get("reviewed_by") and proof.get("reason") and proof.get("evidence_path")
                     and proof.get("conclusion") == "UNSUPPORTED"):
                 raise ValueError("REVIEWED_UNSUPPORTED_EVIDENCE_REQUIRED")
+            proof_path = Path(proof["evidence_path"])
+            if (not proof_path.is_file() or not proof_path.stat().st_size
+                    or (proof.get("evidence_sha256") and
+                        digest(proof_path.read_bytes()) != proof["evidence_sha256"])):
+                raise ValueError("UNSUPPORTED_EVIDENCE_INVALID")
+            proof["evidence_sha256"] = digest(proof_path.read_bytes())
+            # Keep the original public status field and the QA/report field in
+            # sync; downstream consumers must not lose the reviewed evidence.
+            row["status_evidence"] = proof
+            row["unsupported_evidence"] = deepcopy(proof)
         defaults = {"source_id": row_id, "source_type": kind, "root_url": SOURCE_ROOTS[kind],
             "actual_source_url": url, "research_category": research,
             "amazon_category": None, "browse_node_id": browse_node_id(url),
@@ -313,6 +337,8 @@ class SourceRegistry:
             proof["capture_receipt_path"] = capture_receipt_path
             _validate_live_receipt(proof, row_id=source_id, source_url=row["actual_source_url"])
             proof["capture_receipt_sha256"] = digest(Path(capture_receipt_path).read_bytes())
+        if proof in row.get("verification_history", []):
+            return row
         row.setdefault("verification_history", []).append(proof)
         row["tested_page_count"] += 1
         row["tested_record_count"] += page.get("actual_count", 0)
@@ -357,10 +383,25 @@ class SourceRegistry:
                     status = "TEMPORARILY_UNAVAILABLE"
                 else:
                     status = "UNVERIFIED"
+                proofs = {"discovery_evidence": [], "verification_evidence": [],
+                          "unsupported_evidence": []}
+                for registered in matched:
+                    for field in proofs:
+                        value = registered.get(field)
+                        if field == "unsupported_evidence" and not value:
+                            value = registered.get("status_evidence")
+                        values = value if isinstance(value, list) else [value] if value else []
+                        for proof in values:
+                            # Context belongs to each contributing source, not
+                            # merely to an aggregate combination's status label.
+                            proofs[field].append({**deepcopy(proof),
+                                "source_id": registered["source_id"],
+                                "actual_source_url": registered["actual_source_url"]})
                 matrix.append({"source_type": kind, "research_category": category,
                     "source_status": status, "status": status,
                     "source_ids": [row["source_id"] for row in matched],
                     "actual_urls": [row["actual_source_url"] for row in matched],
+                    **proofs,
                     "logical_combination": True})
         return {"schema_version": 1, "total": len(matrix), "combinations": matrix,
                 "counts": {status: sum(row["status"] == status for row in matrix)

@@ -323,6 +323,30 @@ def test_filtered_comparison_keeps_missing_planned_source_page(tmp_path):
     assert SnapshotComparator().compare(left, right, source_type="BEST_SELLERS")["status"] == "NOT_COMPARABLE"
 
 
+def test_tracking_aliases_match_one_captured_and_planned_page(tmp_path):
+    value = bundle(tmp_path)
+    base = value["pages"][0]["page_url"]
+    value["pages"][0]["page_url"] = base + "?ref=first"
+    for row in value["observations"]:
+        row["page_url"] = base + "?ref=second"
+    value["manifest"]["planned_pages"] = [
+        {"source_id": "src_BEST_SELLERS", "page_url": base + "?ref=first"},
+        {"source_id": "src_BEST_SELLERS", "page_url": base + "?ref=second"}]
+    result = qa(value)
+    assert result["gate_passed"] and result["counts"]["observations"] == 2
+    value["manifest"]["planned_pages"].append({"source_id": "src_BEST_SELLERS", "page_url": base + "?pg=2&ref=third"})
+    assert not qa(value)["gate_passed"] and "PLANNED_PAGE_MISSING" in codes(qa(value))
+
+
+def test_tracking_aliases_have_same_comparison_coverage(tmp_path):
+    first, second = bundle(tmp_path), bundle(tmp_path, day="2026-10-02")
+    for value, tracking in ((first, "first"), (second, "second")):
+        value["pages"][0]["page_url"] += "?ref=" + tracking
+        for row in value["observations"]:
+            row["page_url"] = value["pages"][0]["page_url"]
+    assert SnapshotComparator().compare(first, second)["status"] == "COMPARABLE"
+
+
 def test_category_binding_and_unplanned_page_cannot_silently_pass(tmp_path):
     value = bundle(tmp_path)
     value["observations"][0]["research_category"] = "玩具"

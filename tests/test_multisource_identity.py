@@ -352,3 +352,86 @@ def test_same_identity_view_across_parser_versions_keeps_immutable_first_view(tm
     assert second["title_raw"] == "Further wording update"
     assert registry.summary()["identity_view_count"] == 1
     assert registry.summary()["observations"] == 1
+
+
+def test_manual_anchor_stays_stable_after_matching_proof_and_future_verified_alias(tmp_path):
+    directory = tmp_path / "registry"
+    registry = ProductIdentityRegistry(directory)
+    original = observation()
+    registry.ingest(original)
+    event = registry.review("same", ["obs1"], actor="human", evidence="Confirmed this selected child")
+    pid = registry.resolve("obs1")["product_id"]
+    attached = registry.attach("obs1", [proof(tmp_path)], actor="human", reason="Add corroborating archived detail")
+    assert attached["observation"]["product_id"] == pid
+    future = confirmed(tmp_path, "tomorrow", observed_at="2026-10-13T08:00:00Z")
+    assert registry.ingest(future)[0]["product_id"] == pid
+    assert ProductIdentityRegistry(directory).summary()["confirmed_unique_products"] == 1
+    assert registry.history()[1]["product_id"] == pid
+
+
+def test_new_conflicting_attachment_after_old_review_requires_fresh_review(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    registry.ingest(observation())
+    old_review = registry.review("same", ["obs1"], actor="human", evidence="Old card review")
+    wrong = registry.attach("obs1", [proof(tmp_path, B)], actor="human", reason="Later actual detail contradicts the card")
+    assert wrong["observation"]["identity_status"] == "CONFLICT"
+    assert wrong["observation"]["product_id"] is None
+    assert wrong["observation"]["identity_conflict_reason"]
+    assert registry.summary()["confirmed_unique_products"] == 0
+    fresh = registry.review("same", ["obs1"], actor="human", evidence="Explicitly resolve the newly attached contradiction")
+    assert registry.resolve("obs1")["identity_status"] == "CONFIRMED"
+    registry.undo(fresh["event_id"], actor="human", evidence="Resolution requires further checking")
+    assert registry.resolve("obs1")["identity_status"] == "CONFLICT"
+    registry.undo(wrong["event_id"], actor="human", evidence="This attachment belonged to another child")
+    assert registry.resolve("obs1")["identity_status"] == "CONFIRMED"
+
+
+def test_manual_different_is_not_undone_by_matching_detail_or_new_same_asin(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    registry.ingest([observation("a"), observation("b")])
+    registry.review("different", ["a", "b"], actor="human", evidence="Actual packages differ despite unreliable shared ASIN hints")
+    initial = {row["observation_id"]: row["product_id"] for row in registry.materialize()}
+    registry.attach("a", [proof(tmp_path)], actor="verifier", reason="Additional page evidence for first package")
+    registry.attach("b", [proof(tmp_path)], actor="verifier", reason="Additional page evidence for second package")
+    assert {row["observation_id"]: row["product_id"] for row in registry.materialize()} == initial
+    future = registry.ingest(confirmed(tmp_path, "third"))[0]
+    assert future["product_id"] is None and future["identity_status"] == "CONFLICT"
+
+
+def test_later_proof_does_not_change_manual_merge_entity_or_other_date_mappings(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    registry.ingest([observation("day1", A), observation("day2", B)])
+    event = registry.review("same", ["day1", "day2"], actor="human", evidence="Reviewed a legitimate cross-ASIN alias relationship")
+    pid = registry.resolve("day1")["product_id"]
+    registry.attach("day1", [proof(tmp_path, A)], actor="human", reason="Corroborate first archived date")
+    registry.attach("day2", [proof(tmp_path, B)], actor="human", reason="Corroborate second archived date")
+    assert {row["product_id"] for row in registry.materialize()} == {pid}
+    assert registry.ingest(confirmed(tmp_path, "day3", A))[0]["product_id"] == pid
+    assert registry.summary()["confirmed_unique_products"] == 1
+
+
+def test_corrupted_old_detail_invalidates_bound_review_and_restoration_keeps_pid(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    original = confirmed(tmp_path)
+    registry.ingest(original)
+    registry.review("same", ["obs1"], actor="human", evidence="Review of the verified archived detail")
+    pid = registry.resolve("obs1")["product_id"]
+    path = tmp_path / f"detail_{A}.html"
+    raw = path.read_bytes()
+    path.write_bytes(raw.replace(A.encode(), B.encode()))
+    damaged = registry.resolve("obs1")
+    assert damaged["product_id"] is None and damaged["identity_status"] == "CONFLICT"
+    assert "REVIEW_EVIDENCE_CHANGED" in damaged["identity_conflict_reason"]
+    path.write_bytes(raw)
+    assert registry.resolve("obs1")["product_id"] == pid
+
+
+def test_duplicate_handled_conflicting_proof_does_not_invalidate_fresh_review(tmp_path):
+    registry = ProductIdentityRegistry(tmp_path / "registry")
+    registry.ingest(observation())
+    item = proof(tmp_path, B)
+    registry.attach("obs1", [item], actor="human", reason="Actual new conflict")
+    registry.review("same", ["obs1"], actor="human", evidence="Explicitly reviewed this exact contradictory proof")
+    pid = registry.resolve("obs1")["product_id"]
+    row = registry.attach("obs1", [item], actor="human", reason="Repeat the already handled identical proof")["observation"]
+    assert row["identity_status"] == "CONFIRMED" and row["product_id"] == pid

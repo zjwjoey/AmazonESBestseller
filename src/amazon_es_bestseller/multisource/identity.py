@@ -243,36 +243,112 @@ class ProductIdentityRegistry:
     def _product(key):
         return "prod_" + uuid.uuid5(_NAMESPACE, key).hex
 
+    @staticmethod
+    def _candidate_asin(row):
+        values = {_asin(row.get(key)) for key in ("asin_from_raw_url", "asin_from_card", "asin_observed",
+                  "asin_from_final_url", "canonical_asin_observed")}
+        values.update(_asin(proof.get("asin")) for proof in row.get("identity_evidence", [])
+                      if isinstance(proof, dict) and proof.get("kind") == "DETAIL_PAGE" and proof.get("verified"))
+        values.discard(None)
+        return next(iter(values)) if len(values) == 1 else None
+
+    @staticmethod
+    def _review_revision(row):
+        return digest({"evidence": row.get("identity_evidence", []),
+                       "conflicts": row.get("identity_conflict_reason", [])})
+
     def _materialize(self, observations, events):
+        """Replay decisions in journal order; later evidence cannot reuse review.
+
+        Entity allocation is persisted in new review events. Older journals use
+        the same allocation at their historical event position, before later
+        proof attachments, instead of reallocating from today's evidence.
+        """
         undone = {e["target_event_id"] for e in events if e["action"] == "undo"}
-        with_evidence = deepcopy(observations)
-        for event in events:
-            if event["action"] == "EVIDENCE" and event["event_id"] not in undone:
-                for key in event["observation_ids"]:
-                    with_evidence[key].setdefault("identity_evidence", []).extend(deepcopy(event["identity_evidence"]))
-        rows = {key: self.resolver.resolve(row) for key, row in with_evidence.items()}
-        for key, row in rows.items():
-            if row["identity_status"] == "CONFIRMED":
-                row["product_id"] = self._product("verified-amazon-child:" + row["confirmed_asin"])
+        with_evidence, rows = {}, {}
+
+        def assign_verified(row, preferred=None):
+            if row["identity_status"] != "CONFIRMED":
+                return
+            asin = row["confirmed_asin"]
+            anchors = {existing["product_id"] for key, existing in rows.items()
+                       if key != row["observation_id"] and existing.get("product_id")
+                       and existing["identity_status"] == "CONFIRMED" and self._candidate_asin(existing) == asin}
+            if preferred and row.get("identity_separation_event"):
+                row["product_id"] = preferred
+            elif len(anchors) > 1:
+                row.update(product_id=None, identity_status="CONFLICT",
+                           identity_conflict_reason=["ASIN_MATCHES_DIFFERENT_CONFIRMED_ENTITIES"])
+            else:
+                row["product_id"] = preferred or next(iter(anchors), None) or self._product("verified-amazon-child:" + asin)
+
         for event in events:
             action = event["action"]
-            if action in {"INGEST", "EVIDENCE", "undo"} or event["event_id"] in undone:
+            if action == "undo" or event["event_id"] in undone:
+                continue
+            if action == "INGEST":
+                for item in event["observations"]:
+                    key = item["observation_id"]
+                    with_evidence[key] = deepcopy(observations[key])
+                    row = self.resolver.resolve(with_evidence[key])
+                    assign_verified(row)
+                    rows[key] = row
+                continue
+            if action == "EVIDENCE":
+                for key in event["observation_ids"]:
+                    previous = rows[key]
+                    proofs = with_evidence[key].setdefault("identity_evidence", [])
+                    # Reattaching the identical proof adds no contradictory fact.
+                    known_proofs = {digest(proof) for proof in proofs}
+                    additions = [deepcopy(proof) for proof in event["identity_evidence"] if digest(proof) not in known_proofs]
+                    proofs.extend(additions)
+                    row = self.resolver.resolve(with_evidence[key])
+                    for field in ("review_events", "original_identity_conflict_reason", "variation_family_id", "identity_separation_event"):
+                        if field in previous:
+                            row[field] = deepcopy(previous[field])
+                    if previous.get("product_id") and previous["identity_status"] == "CONFIRMED":
+                        if row["identity_status"] == "CONFLICT" and additions:
+                            row.update(identity_previous_product_id=previous["product_id"], review_status="STALE_REVIEW")
+                        elif row["identity_status"] != "CONFLICT":
+                            row["review_status"] = previous["review_status"]
+                            assign_verified(row, preferred=previous["product_id"])
+                        else:
+                            row.update(product_id=previous["product_id"], identity_status="CONFIRMED",
+                                       identity_conflict_reason=[], review_status=previous["review_status"])
+                    else:
+                        if previous.get("identity_previous_product_id"):
+                            row["identity_previous_product_id"] = previous["identity_previous_product_id"]
+                        assign_verified(row)
+                    rows[key] = row
                 continue
             selected = [rows[key] for key in event["observation_ids"]]
+            revisions = event.get("identity_revisions", {})
+            stale = [row for row in selected if row["observation_id"] in revisions and
+                     revisions[row["observation_id"]] != self._review_revision(row)]
+            if stale:
+                for row in stale:
+                    previous_pid = row.get("product_id")
+                    row.update(product_id=None, identity_status="CONFLICT", review_status="STALE_REVIEW",
+                               identity_conflict_reason=sorted(set(row["identity_conflict_reason"] + ["REVIEW_EVIDENCE_CHANGED"])))
+                    if previous_pid:
+                        row["identity_previous_product_id"] = previous_pid
+                continue
             if action == "same":
                 prior_pids = {row["product_id"] for row in selected if row["product_id"]}
-                pid = min(prior_pids) if prior_pids else self._product("manual-anchor:" + min(event["observation_ids"]))
+                pid = event.get("product_id") or (min(prior_pids) if prior_pids else self._product("manual-anchor:" + min(event["observation_ids"])))
                 # Merge entire currently confirmed entities, not just the two
                 # chosen observation rows. Replaying without this event undoes it.
                 affected = [row for row in rows.values() if row in selected or row.get("product_id") in prior_pids]
                 for row in affected:
                     row["original_identity_conflict_reason"] = row["identity_conflict_reason"]
                     row.update(product_id=pid, identity_status="CONFIRMED", identity_conflict_reason=[], review_status="CONFIRMED_SAME")
+                    row.pop("identity_separation_event", None)
             elif action == "different":
                 for row in selected:
                     row["original_identity_conflict_reason"] = row["identity_conflict_reason"]
-                    row.update(product_id=self._product("manual-separated:" + row["observation_id"]),
-                               identity_status="CONFIRMED", identity_conflict_reason=[], review_status="CONFIRMED_DIFFERENT")
+                    pid = event.get("product_ids", {}).get(row["observation_id"]) or self._product("manual-separated:" + row["observation_id"])
+                    row.update(product_id=pid, identity_status="CONFIRMED", identity_conflict_reason=[],
+                               review_status="CONFIRMED_DIFFERENT", identity_separation_event=event["event_id"])
             elif action == "pending":
                 for row in selected:
                     row.update(product_id=None, identity_status="UNCONFIRMED", review_status="PENDING")
@@ -441,6 +517,21 @@ class ProductIdentityRegistry:
                         raise ValueError("REVIEW_IDEMPOTENCY_CONFLICT")
                     return existing
                 payload["event_id"] = event_id
+            current = {row["observation_id"]: row for row in self._materialize(observations, events)}
+            payload["identity_revisions"] = {key: self._review_revision(current[key]) for key in ids}
+            if action == "same":
+                prior = {current[key].get("product_id") or current[key].get("identity_previous_product_id") for key in ids}
+                prior.discard(None)
+                if not prior:
+                    candidates = {self._candidate_asin(current[key]) for key in ids}
+                    candidates.discard(None)
+                    aliases = {row["product_id"] for row in current.values() if row.get("product_id")
+                               and row["identity_status"] == "CONFIRMED" and self._candidate_asin(row) in candidates}
+                    if len(aliases) == 1:
+                        prior = aliases
+                payload["product_id"] = min(prior) if prior else self._product("manual-anchor:" + min(ids))
+            elif action == "different":
+                payload["product_ids"] = {key: self._product("manual-separated:" + key) for key in ids}
             result = self._append(events, payload)
             self._write_checkpoint(observations, events)
             return result

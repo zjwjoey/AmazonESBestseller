@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+import re
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -44,6 +46,29 @@ PRODUCTION_CATEGORY_QUOTAS = dict(zip(RESEARCH_CATEGORIES,
 ORIGINS = {"LIVE_CAPTURE", "HISTORICAL_REPLAY", "OFFLINE_FIXTURE"}
 SOURCE_STATUSES = {"AVAILABLE", "UNVERIFIED", "UNSUPPORTED", "TEMPORARILY_UNAVAILABLE", "BLOCKED"}
 PAGE_STATUSES = {"COMPLETE", "PARTIAL", "UNVERIFIED", "BLOCKED", "FAILED"}
+_TRACKING_PARAMETERS = frozenset({"ref", "ref_", "tag", "linkCode", "camp", "creative",
+                                  "creativeASIN", "ascsubtag"})
+
+
+def canonical_page_url(value: str, *, base_url: str = "https://www.amazon.es") -> str:
+    """Stable Amazon.es page key while preserving explicit identity scope.
+
+    Only known tracking fields, a trailing /ref= marker, and the fragment are
+    discarded. Page/node/variant parameters and unknown query fields retain
+    their values and order. Locale paths stay explicit, as do all raw URLs.
+    """
+    try:
+        parts = urlsplit(urljoin(base_url, str(value or "").strip()))
+        if parts.scheme != "https" or parts.hostname not in {"amazon.es", "www.amazon.es"}:
+            return ""
+        if parts.username or parts.password or parts.port not in {None, 443}:
+            return ""
+    except ValueError:
+        return ""
+    path = re.sub(r"/ref=[^/]*$", "", parts.path).rstrip("/") or "/"
+    query = [(key, val) for key, val in parse_qsl(parts.query, keep_blank_values=True)
+             if key not in _TRACKING_PARAMETERS]
+    return urlunsplit(("https", "www.amazon.es", path, urlencode(query), ""))
 
 
 def timestamp(value: str | datetime | None = None) -> dict:
@@ -63,10 +88,11 @@ def timestamp(value: str | datetime | None = None) -> dict:
 
 
 def observation_id(snapshot_id: str, source_id: str, page_url: str, slot_position: int) -> str:
-    if not snapshot_id or not source_id or not page_url or int(slot_position) < 0:
+    canonical_url = canonical_page_url(page_url)
+    if not snapshot_id or not source_id or not canonical_url or int(slot_position) < 0:
         raise ValueError("Snapshot, source, page and nonnegative slot are required")
     # Identity uncertainty cannot alter a raw observation's identity.
-    key = "|".join((snapshot_id, source_id, page_url, str(slot_position)))
+    key = "|".join((snapshot_id, source_id, canonical_url, str(slot_position)))
     return "obs_" + uuid.uuid5(uuid.NAMESPACE_URL, key).hex
 
 
@@ -82,7 +108,8 @@ def make_observation(*, run_id: str, snapshot_id: str, source: dict,
         "observation_id": observation_id(snapshot_id, source["source_id"], page_url, slot_position),
         "source_id": source["source_id"], "source_type": source_type,
         "source_url": source.get("actual_source_url") or source.get("root_url"),
-        "page_url": page_url, "page_number": page_number,
+        "page_url": page_url, "page_url_raw": page_url,
+        "page_url_normalized": canonical_page_url(page_url), "page_number": page_number,
         "source_category": source.get("amazon_category"),
         "research_category": source.get("research_category"),
         "browse_node_id": source.get("browse_node_id"),
@@ -100,7 +127,7 @@ def make_observation(*, run_id: str, snapshot_id: str, source: dict,
         "identity_evidence": [], "identity_conflict_reason": [], "review_status": "PENDING"}
     result.update(timestamp(observed_at))
     protected = {"observation_id", "schema_version", "run_id", "snapshot_id", "source_id",
-                 "source_type", "page_url", "slot_position", "observed_at", "local_date", "timezone"}
+                 "source_type", "page_url", "page_url_raw", "page_url_normalized", "slot_position", "observed_at", "local_date", "timezone"}
     if protected.intersection(values):
         raise ValueError("Observation provenance cannot be overridden")
     result.update(values)

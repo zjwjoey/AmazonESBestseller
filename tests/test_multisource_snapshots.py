@@ -207,12 +207,15 @@ def test_budget_adjustment_preserves_audit_and_cannot_raise_global_cap(tmp_path)
 def test_copy_on_upgrade_and_exact_rollback(tmp_path):
     path = tmp_path / "old.json"
     initial = {"schema_version":0,"payload":{"counters":{"observations":12}}}
-    atomic_json(path, initial)
+    original_bytes=(json.dumps(initial,indent=2)+"\n").encode("utf-8")
+    path.write_bytes(original_bytes)
     upgraded = upgrade_state(path)
     assert read_sealed(path) == initial["payload"]
     assert upgrade_state(path)["changed"] is False
     assert rollback_state(upgraded["journal"])["rolled_back"]
     assert json.loads(path.read_bytes()) == initial
+    assert path.read_bytes()==original_bytes
+    assert upgrade_state(path)["journal"]==upgraded["journal"]
 
 
 def test_daily_schedule_has_fourteen_slots_and_cannot_redate_history(tmp_path):
@@ -460,3 +463,67 @@ def test_zero_category_cooldown_requires_specific_approval(tmp_path):
         validate_authorization(plan,auth,[source],{"state":"NORMAL"})
     auth["cooldown_after_category_seconds"]=0
     assert validate_authorization(plan,auth,[source],{"state":"NORMAL"})==auth
+
+
+def test_interrupted_schema_upgrade_keeps_rollback_journal_and_resumes(tmp_path,monkeypatch):
+    import amazon_es_bestseller.multisource.migrations as module
+    path=tmp_path/"state.json"
+    atomic_json(path,{"schema_version":0,"payload":{"records":[1,2]}})
+    original=path.read_bytes(); publish=module.atomic_json; failed=[False]
+    def fail_once(destination,value,**kwargs):
+        if Path(destination)==path and not failed[0]:
+            failed[0]=True
+            raise OSError("interrupted state publication")
+        return publish(destination,value,**kwargs)
+    monkeypatch.setattr(module,"atomic_json",fail_once)
+    with pytest.raises(OSError): upgrade_state(path)
+    assert path.read_bytes()==original
+    assert len(list((tmp_path/"schema_history").glob("*.migration.json")))==1
+    result=upgrade_state(path)
+    assert read_sealed(path)=={"records":[1,2]}
+    rollback_state(result["journal"])
+    assert path.read_bytes()==original
+
+
+def test_replay_cannot_inherit_live_mode_from_plan(tmp_path,capsys):
+    _,source,plan,_=setup(tmp_path); plan["live_enabled"]=True
+    planfile=tmp_path/"live_plan.json"; authfile=tmp_path/"approved.json"
+    atomic_json(planfile,{"schema_version":1,"run_id":"forbidden-replay","origin":"LIVE_CAPTURE","plan":plan,"sources":[source]})
+    atomic_json(authfile,approval(source,plan))
+    with pytest.raises(SystemExit) as error:
+        main(["multisource","replay","--root",str(tmp_path/"denied"),"--plan",str(planfile),"--authorization",str(authfile),"--live"])
+    assert error.value.code==2 and "REPLAY_CANNOT_CREATE_LIVE_CAPTURE" in capsys.readouterr().err
+
+
+def test_known_tracking_aliases_reuse_page_slots_and_observation_budget(tmp_path):
+    manager,source,plan,pages=setup(tmp_path)
+    pages[0]["page_url"]=URL+"?ref=one"
+    pages.append({**pages[0],"page_url":URL+"?ref=two"})
+    bundle=manager.run(plan,[source],run_id="tracking-alias",pages=pages)
+    assert len(bundle["observations"])==2 and len(bundle["pages"])==1
+    assert manager.budget.counters("OFFLINE_FIXTURE")["observation_count"]==2
+    assert bundle["quality"]["status"]=="COMPLETE"
+    assert "ref=one" in bundle["observations"][0]["page_url_raw"]
+
+
+def test_duplicate_physical_source_cannot_be_counted_under_two_research_mappings(tmp_path):
+    manager,source,plan,pages=setup(tmp_path)
+    duplicate={**source,"source_id":source_id("BEST_SELLERS",URL,"居家生活"),"research_category":"居家生活"}
+    with pytest.raises(ValueError,match="DUPLICATE_PHYSICAL_SOURCE_MAPPING"):
+        manager.run(plan,[source,duplicate],run_id="duplicate-source",pages=pages)
+    assert manager.budget.counters("OFFLINE_FIXTURE")["observation_count"]==0
+
+
+def test_reparse_preserves_original_slot_ids_when_key_algorithm_is_upgraded(tmp_path,monkeypatch):
+    import amazon_es_bestseller.multisource.contracts as contracts
+    import uuid
+    current=contracts.observation_id
+    monkeypatch.setattr(contracts,"observation_id",lambda snapshot,source,page,slot:
+        "obs_"+uuid.uuid5(uuid.NAMESPACE_URL,"|".join((snapshot,source,page,str(slot)))).hex)
+    manager,source,plan,pages=setup(tmp_path); pages[0]["page_url"]=URL+"?ref=old-key"
+    original=manager.run(plan,[source],run_id="old-slot-key",pages=pages)
+    ids=[row["observation_id"] for row in original["observations"]]
+    monkeypatch.setattr(contracts,"observation_id",current)
+    updated=manager.reparse("old-slot-key",version="v2")
+    assert [row["observation_id"] for row in updated["observations"]]==ids
+    assert manager.budget.counters("OFFLINE_FIXTURE")["observation_count"]==2

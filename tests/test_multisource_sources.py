@@ -7,7 +7,7 @@ import json
 import pytest
 
 from amazon_es_bestseller.multisource.adapters import get_adapter
-from amazon_es_bestseller.multisource.contracts import RANK_SEMANTICS, SOURCE_ROOTS
+from amazon_es_bestseller.multisource.contracts import RANK_SEMANTICS, SOURCE_ROOTS, canonical_page_url
 from amazon_es_bestseller.multisource.sources import (SourceRegistry, browse_node_id,
     discover_sources, normalize_source_url, source_id, source_type_from_url)
 from amazon_es_bestseller.multisource.storage import atomic_json, sealed
@@ -375,8 +375,10 @@ def simulated_capture_receipt(directory, result):
     atomic_json(path, sealed({"origin": "LIVE_CAPTURE", "kind": "PAGE",
         "source_id": page["source_id"], "access_status": page["access_status"],
         "approval_id": "unit-test-mock-only", "page_url": page["page_url"],
-        "observed_at": page["observed_at"], "transport_evidence": {"response": {
-            "status_code": 200, "body": Path(page["evidence_path"]).read_bytes().decode("utf-8")}}}))
+        "observed_at": page["observed_at"], "transport_evidence": {
+            "request": {"method": "GET", "url": page["page_url"]}, "response": {
+            "status_code": 200, "url": page["page_url"],
+            "body": Path(page["evidence_path"]).read_bytes().decode("utf-8")}}}))
     return path
 
 
@@ -423,3 +425,115 @@ def test_simulated_receipt_verification_is_bound_to_body_timestamp_and_source(tm
     atomic_json(receipt, sealed(payload))
     with pytest.raises(ValueError, match="CAPTURE_RECEIPT_INVALID"):
         registry.upsert(verified)
+
+
+def test_coverage_roundtrip_retains_verified_availability_and_source_bound_proof(tmp_path):
+    from amazon_es_bestseller.multisource.quality import coverage_matrix
+    registry = SourceRegistry(tmp_path / "registry.json")
+    registered = registry.upsert(source())
+    result = parse(origin="LIVE_CAPTURE")
+    receipt = simulated_capture_receipt(tmp_path, result)
+    verified = registry.verify(registered["source_id"], result, origin="LIVE_CAPTURE", observed_at=INSTANT,
+        evidence_path=str(FIXTURES / "best_sellers.html"), capture_receipt_path=str(receipt))
+    matrix = coverage_matrix(registry.coverage())
+    row = next(item for item in matrix if item["source_type"] == "BEST_SELLERS" and item["research_category"] == "厨房用品")
+    assert row["source_status"] == "AVAILABLE"
+    assert row["source_ids"] == [registered["source_id"]]
+    assert row["verification_evidence"][0]["capture_receipt_sha256"] == verified["verification_evidence"]["capture_receipt_sha256"]
+    assert row["verification_evidence"][0]["source_id"] == registered["source_id"]
+
+
+def test_coverage_roundtrip_retains_reviewed_unsupported_and_discovery_provenance(tmp_path):
+    from amazon_es_bestseller.multisource.quality import coverage_matrix
+    registry = SourceRegistry(tmp_path / "registry.json")
+    proof_path = tmp_path / "synthetic-reviewed-status.txt"
+    proof_path.write_text("Synthetic manual review evidence used only in this unit test", encoding="utf-8")
+    discovery_proof = {"kind": "TASK_CANDIDATE_LINK", "origin": "OFFLINE_FIXTURE", "raw_href": source("MOST_GIFTED")["actual_source_url"]}
+    registered = registry.upsert({**source("MOST_GIFTED"), "source_status": "UNSUPPORTED",
+        "discovery_evidence": [discovery_proof], "status_evidence": {"reviewed_by": "unit-test-only",
+            "reason": "Synthetic reviewed unsupported conclusion", "evidence_path": str(proof_path), "conclusion": "UNSUPPORTED"}})
+    matrix = coverage_matrix(registry.coverage())
+    row = next(item for item in matrix if item["source_type"] == "MOST_GIFTED" and item["research_category"] == "厨房用品")
+    assert row["source_status"] == "UNSUPPORTED"
+    assert row["source_ids"] == [registered["source_id"]]
+    assert row["unsupported_evidence"][0]["reviewed_by"] == "unit-test-only"
+    assert row["unsupported_evidence"][0]["source_id"] == registered["source_id"]
+    assert row["discovery_evidence"][0]["raw_href"] == discovery_proof["raw_href"]
+
+
+def test_unsupported_requires_real_review_evidence_not_only_a_path_label(tmp_path):
+    registry = SourceRegistry(tmp_path / "registry.json")
+    with pytest.raises(ValueError, match="UNSUPPORTED_EVIDENCE_INVALID"):
+        registry.upsert({**source(), "source_status": "UNSUPPORTED", "status_evidence": {
+            "reviewed_by": "unit-test", "reason": "Path text alone is not evidence", "conclusion": "UNSUPPORTED",
+            "evidence_path": str(tmp_path / "missing-evidence.txt")}})
+
+
+@pytest.mark.parametrize("mutation", ["request_foreign", "request_category", "request_pg", "response_foreign",
+    "response_category", "response_pg", "response_duplicate_pg", "http403_normal", "http_status_text", "naive_timestamp"])
+def test_live_receipt_rejects_actual_transport_context_or_access_corruption(tmp_path, mutation):
+    registry = SourceRegistry(tmp_path / "registry.json")
+    registered = registry.upsert(source())
+    result = parse(origin="LIVE_CAPTURE")
+    path = simulated_capture_receipt(tmp_path, result)
+    value = json.loads(path.read_text(encoding="utf-8"))["payload"]
+    transport = value["transport_evidence"]
+    url = result["page"]["page_url"]
+    if mutation == "request_foreign":
+        transport["request"]["url"] = "https://evil.example/gp/bestsellers/kitchen/12345"
+    elif mutation == "request_category":
+        transport["request"]["url"] = url.replace("12345", "99999")
+    elif mutation == "request_pg":
+        transport["request"]["url"] = url + "?pg=2"
+    elif mutation == "response_foreign":
+        transport["response"]["url"] = "https://evil.example/gp/bestsellers/kitchen/12345"
+    elif mutation == "response_category":
+        transport["response"]["url"] = url.replace("12345", "99999")
+    elif mutation == "response_pg":
+        transport["response"]["url"] = url + "?pg=2"
+    elif mutation == "response_duplicate_pg":
+        transport["response"]["url"] = url + "?pg=1&pg=2"
+    elif mutation == "http403_normal":
+        transport["response"]["status_code"] = 403
+    elif mutation == "http_status_text":
+        transport["response"]["status_code"] = "200"
+    else:
+        value["observed_at"] = INSTANT.rstrip("Z")
+    atomic_json(path, sealed(value))
+    with pytest.raises(ValueError, match="CAPTURE_RECEIPT_INVALID"):
+        registry.verify(registered["source_id"], result, origin="LIVE_CAPTURE", observed_at=INSTANT,
+            evidence_path=str(FIXTURES / "best_sellers.html"), capture_receipt_path=str(path))
+
+
+def test_live_receipt_allows_real_display_locale_redirect_with_same_category_page(tmp_path):
+    registry = SourceRegistry(tmp_path / "registry.json")
+    registered = registry.upsert(source())
+    result = parse(origin="LIVE_CAPTURE")
+    path = simulated_capture_receipt(tmp_path, result)
+    value = json.loads(path.read_text(encoding="utf-8"))["payload"]
+    value["transport_evidence"]["response"]["url"] = result["page"]["page_url"].replace("/gp/", "/-/en/gp/") + "?pg=1"
+    atomic_json(path, sealed(value))
+    verified = registry.verify(registered["source_id"], result, origin="LIVE_CAPTURE", observed_at=INSTANT,
+        evidence_path=str(FIXTURES / "best_sellers.html"), capture_receipt_path=str(path))
+    assert verified["source_status"] == "AVAILABLE"
+
+
+def test_source_verification_is_idempotent_for_same_capture_proof(tmp_path):
+    registry = SourceRegistry(tmp_path / "registry.json")
+    registered = registry.upsert(source())
+    result = parse(origin="LIVE_CAPTURE")
+    path = simulated_capture_receipt(tmp_path, result)
+    arguments = dict(origin="LIVE_CAPTURE", observed_at=INSTANT, evidence_path=str(FIXTURES / "best_sellers.html"), capture_receipt_path=str(path))
+    first = registry.verify(registered["source_id"], result, **arguments)
+    second = registry.verify(registered["source_id"], result, **arguments)
+    assert first == second
+    assert second["tested_page_count"] == 1 and second["tested_record_count"] == 2
+    assert len(second["verification_history"]) == 1
+
+
+def test_source_normalization_and_ids_share_canonical_tracking_alias_policy():
+    base = "https://www.amazon.es/gp/bestsellers/kitchen/12345?pg=1&unknown=2"
+    alias = "https://www.amazon.es/gp/bestsellers/kitchen/12345/ref=zg_bs_nav?tag=tracking&pg=1&unknown=2#top"
+    assert normalize_source_url(alias) == canonical_page_url(alias) == base
+    assert source_id("BEST_SELLERS", alias, "厨房用品") == source_id("BEST_SELLERS", base, "厨房用品")
+    assert source_id("BEST_SELLERS", base, "厨房用品") != source_id("BEST_SELLERS", base.replace("unknown=2", "unknown=3"), "厨房用品")
