@@ -1,0 +1,32 @@
+Multi-Source Snapshot Test V1.1 — repository audit (2026-10-13)
+
+Verified baseline: origin/main 9d669b3c7a01ccd0090acbc320d19b471a0b02a1.
+Remote Offline CI: success, https://github.com/zjwjoey/AmazonESBestseller/actions/runs/37213587892.
+Production checkout main 2f6292e is 38 commits behind origin/main and has 22 modified tracked files plus many historical untracked artifacts. It is not reset, cleaned or modified by this development.
+Isolated worktree: C:/Users/Administrator/.codex/worktrees/multisource-snapshot-v1-1/AmazonESBestseller.
+Branch: codex/multisource-snapshot-test-v1-1. No corresponding existing development branch was found.
+
+Actual capabilities and reuse:
+- collection/ranking.py and ranking_v2.py implement Best Sellers cards, ACP metadata and expected-count completeness. discovery.py discovers Best Sellers navigation only.
+- monitoring/ranking_identity extracts literal card identities and supplemental server/client/ACP evidence; resolver, URL ASIN validation and archive evidence are reusable. Its canonical URL fallback is derived from an ASIN and must not count as independent proof in the new entity registry.
+- monitoring/snapshot supplies immutable snapshot patterns and per-page audits; detail_planner is ASIN-oriented and remains untouched. The new observations must not inherit its single-list ranking semantics or migrate its production keys.
+- access/detector.py, BrowserSession, transport/base.py and PlaywrightTransport supply conservative access and redacted request/response envelopes. Live tests retain explicit authorization and serial pacing.
+- Existing normalization, translation caches, frozen 3-sheet/26-column exports and historical data remain outside the new module.
+- New Releases, Movers & Shakers, Most Wished For and Most Gifted have no independently verified adapters in this baseline. Real availability across 75 combinations remains UNVERIFIED until evidence is supplied; a synthetic fixture is not live validation.
+
+Documents checked: AGENTS.md, README.md, ARCHITECTURE.md, CURRENT_STATE.md, DATA_MODEL.md, QA_RULES.md, RANKING_IDENTITY_SNAPSHOT_V1.md and RANKING_SNAPSHOT_DETAIL_INCREMENTAL_V1.md. CURRENT_STATE's 193–200 sample description is historical and does not establish present module capability.
+
+Risks:
+- ASIN reconstructed URLs and original URLs are the same evidence family.
+- Same parent family must not merge distinct purchasable variations.
+- Server/ACP representations may repeat slots; product deduplication cannot substitute for page completeness.
+- Unknown expected page counts must remain UNVERIFIED, not COMPLETE.
+- Historical replay dates cannot be assigned the new replay date.
+- Worktree/interpreter resolution must be explicit; do not globally replace the user's editable Python installation.
+
+Architecture and expected modifications:
+Add isolated multisource contracts/storage, registry/discovery/adapters, persistent product identity registry, snapshot engine and budget controller, quality/comparison/report modules, CLI registration, fixtures/tests, one 14-day example config and PowerShell helpers. Extend only the existing CLI registration and documentation; do not change legacy schemas or identity keys.
+
+Acceptance:
+Verified unmodified baseline: 859 passed, 6 skipped, 0 failed (865 collected, 89.6 seconds). Two skips require live authorization; four require generated 4,500-SKU artifacts. Foundation storage/DST/slot/lock tests: 6 passed.
+Run the unmodified baseline offline suite; adapter, identity, recovery, budget and comparison fixtures; real saved Best Sellers replay; CLI commands; a fixture-only scale budget stress test; production regressions; compile/CI-equivalent checks. Every artifact identifies LIVE_CAPTURE, HISTORICAL_REPLAY or OFFLINE_FIXTURE. Live P0 and a real 14-day observation series remain unexecuted pending phase authorization, not substituted by simulated success.
