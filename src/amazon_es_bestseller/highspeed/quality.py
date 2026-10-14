@@ -202,6 +202,7 @@ def _audit_run_v3(store, run_id, run):
     from collections import OrderedDict
     replay_receipt_cache=OrderedDict()
     live=run.get('origin')=='LIVE_CAPTURE'
+    fixture_execution=run.get('stage')=='T0' and run.get('origin')=='OFFLINE_FIXTURE'
     body_hashes={}
     def verify_body(path,sha):
         key=(path,sha)
@@ -213,12 +214,14 @@ def _audit_run_v3(store, run_id, run):
     for indexed in store.iter_responses(run_id):
         try:
             proof=read_sealed(indexed['evidence_path'])
-            for field in ('request_id','run_id','source_id','source_type','html_path','sha256','observed_at','kind','page_key'):
+            for field in ('request_id','run_id','source_id','source_type','html_path','sha256','observed_at','kind','page_key','origin'):
                 if proof.get(field)!=indexed.get(field):raise ValueError('SEALED_INDEX_RECEIPT_CONFLICT:'+field)
             if proof.get('run_id')!=run_id:raise ValueError('RECEIPT_RUN_CONFLICT')
             if not proof.get('observed_at'):raise ValueError('RECEIPT_CAPTURE_TIME_MISSING')
             from .budgets import aware_time
             aware_time(proof['observed_at'])
+            proof['_audited_receipt_reference']={'path':str(Path(indexed['evidence_path']).resolve()),
+                'sha256':digest(Path(indexed['evidence_path']).read_bytes())}
             receipts.setdefault(proof['html_path'],[]).append(proof)
         except (OSError,ValueError,KeyError,TypeError) as exc:fail('V3_RECEIPT_INVALID',reason=str(exc))
     def receipt_for(row,source):
@@ -228,16 +231,27 @@ def _audit_run_v3(store, run_id, run):
         if row.get('origin')=='HISTORICAL_REPLAY':
             from .v3_workflows import validate_replay_receipt
             return validate_replay_receipt(row,source,cache=replay_receipt_cache)
-        if not live or row.get('origin') not in {None,'LIVE_CAPTURE'} or row.get('is_derivation') is True:return False
+        if fixture_execution:
+            # A T0 receipt proves only a same-run local fixture execution. It
+            # cannot establish Amazon HTTP success or satisfy any LIVE stage.
+            if (row.get('origin')!='OFFLINE_FIXTURE' or row.get('run_id')!=run_id
+                    or row.get('is_derivation') is True or row.get('parent_run_id')
+                    or row.get('historical_page_journal_reference')):return False
+            expected_origin='OFFLINE_FIXTURE'
+        else:
+            if not live or row.get('origin') not in {None,'LIVE_CAPTURE'} or row.get('is_derivation') is True:return False
+            expected_origin='LIVE_CAPTURE'
         binding=row_pages.get(row.get('observation_id'))
         if not binding or identity(row) not in reparsed.get(binding['page_key'],set()):return False
         kind='PAGE' if row.get('representation')=='SERVER' else 'ACP'
         for proof in receipts.get(row.get('evidence_path'),[]):
-            if (proof.get('origin')=='LIVE_CAPTURE' and proof.get('run_id')==run_id
+            if (proof.get('origin')==expected_origin and proof.get('run_id')==run_id
                     and proof.get('source_id')==source['source_id'] and proof.get('source_type')==source['source_type']
                     and proof.get('kind')==kind and proof.get('status_code')==200 and proof.get('access_state')=='NORMAL'
                     and proof.get('sha256')==row.get('evidence_sha256') and proof.get('observed_at')==row.get('observed_at')
                     and proof.get('page_key')==binding['page_key']
+                    and (not fixture_execution or proof.get('final_url')==proof.get('request_url'))
+                    and (not fixture_execution or row.get('capture_receipt_reference')==proof['_audited_receipt_reference'])
                     and (kind!='PAGE' or proof.get('request_url')==row.get('page_url') in source.get('page_urls',[]))):
                 return verify_body(proof['html_path'],proof['sha256'])
         return False
@@ -309,6 +323,11 @@ def _audit_run_v3(store, run_id, run):
                 if page.get('research_category') in RESEARCH_CATEGORIES:categories.add(page['research_category'])
         except (OSError,ValueError,KeyError,TypeError) as exc:fail('V3_PAGE_EVIDENCE_AUDIT_FAILED',page_url=page.get('page_url'),reason=str(exc))
     domain=audit_observations(rows,sources,receipt_validator=receipt_for,context_validator=context_for)
+    if fixture_execution:
+        domain['receipt_verification_scope']='SAME_RUN_OFFLINE_FIXTURE_EXECUTION'
+        domain['counts']['offline_fixture_execution_receipts_verified']=domain['counts'].get('capture_receipts_verified',0)
+        domain['counts']['actual_live_capture_receipts_verified']=0
+        domain['receipt_semantics']='Local saved-file execution; status_code=200 is simulated and no new Amazon HTTP request occurred. Original historical capture provenance stays separately in the source plan.'
     missing_by_state=Counter()
     for row in rows:
         state=source_states.get(row_pages.get(row.get('observation_id'),{}).get('page_key'),'UNVERIFIED')
