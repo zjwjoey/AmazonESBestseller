@@ -46,6 +46,14 @@ def test_v3_audit_run_fake_capture_time_cannot_match_receipt(tmp_path):
     qa=audit_run(store,'r');store.close()
     assert any(f['code']=='CAPTURE_RECEIPT_UNVERIFIED' for f in qa['findings'])
 
+def test_historical_derivation_cannot_earn_live_stage_quality(tmp_path):
+    store=captured(tmp_path,lambda r:r.update(is_derivation=True,parent_run_id='old'))
+    qa=audit_run(store,'r');store.close()
+    assert not qa['quality_gate_passed']
+    assert any(f['code']=='V3_LIVE_RUN_CONTAINS_HISTORICAL_DERIVATION' for f in qa['findings'])
+    assert any(f['code']=='CAPTURE_RECEIPT_UNVERIFIED' for f in qa['findings'])
+
+
 def captured_acp(tmp_path):
     store=RunStore(tmp_path/'store');url='https://www.amazon.es/gp/bestsellers/home'
     source={'source_id':'s','source_type':'BEST_SELLERS','actual_source_url':url,'page_urls':[url],'parser_profile':'V3'}
@@ -73,6 +81,7 @@ def test_v3_acp_actual_capture_time_and_complete_combined_parse(tmp_path):
     qa=audit_run(store,'r');store.close()
     assert qa['card_field_quality']['ok']
     assert qa['card_field_quality']['counts']['capture_receipts_verified']==2
+    assert sum(x['observations'] for x in qa['card_field_quality']['field_status_by_reverified_page_state'] if x['field']=='rating' and x['page_state']=='COMPLETE')==2
     assert not any(f['code']=='V3_RAW_ROWS_NOT_BOUND_TO_FULL_REPARSE' for f in qa['findings'])
 
 

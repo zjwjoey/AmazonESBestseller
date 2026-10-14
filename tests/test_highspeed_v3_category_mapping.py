@@ -196,3 +196,36 @@ def test_tampered_exact_node_navigation_text_rejected():
     rule=next(rule for rule in _rules() if rule['scope']=='EXACT_NODE')
     rule['evidence']['navigation_text_raw']='Invented node ancestry'
     with pytest.raises(ValueError,match='NODE_NAVIGATION_CONTEXT_MISMATCH'):validate_mapping_rules([rule])
+
+
+
+def test_mapping_twice_cannot_wash_out_original_human_conflict():
+    from amazon_es_bestseller.highspeed.category_mapping import load_mapping_rules
+    fixture=json.loads(Path('tests/fixtures/highspeed/v3_812_source_baseline.json').read_text(encoding='utf8'))
+    source=next(row['source'] for row in fixture['sources'] if row['source']['actual_source_url'].endswith('/1641736031'))
+    rules=load_mapping_rules('configs/highspeed/v3/category_mapping.reviewed.json')
+    first=map_category(source,rules)
+    assert first['category_mapping_status']=='SOURCE_CONFLICT'
+    second=map_category({**source,**first},rules)
+    assert second==first
+
+
+
+def test_unproved_original_prior_cannot_create_conflict_after_projection():
+    source={'actual_source_url':'https://www.amazon.es/gp/bestsellers/toys/unknown','research_category':None,'original_research_category':'旅行','mapping_evidence':[{'reviewed':True}]}
+    from amazon_es_bestseller.highspeed.category_mapping import load_mapping_rules
+    result=map_category(source,load_mapping_rules('configs/highspeed/v3/category_mapping.reviewed.json'))
+    assert result['research_category']=='玩具' and not result['source_conflict']
+
+
+
+def test_real_saved_wish_department_discovers_deep_literal_nodes_without_live_claim():
+    from amazon_es_bestseller.highspeed.sources import discover_sources
+    fixture=Path('tests/fixtures/highspeed/v3_real_wish_department_navigation.html')
+    proof=json.loads(fixture.with_suffix('.provenance.json').read_text(encoding='utf8'))
+    sources=discover_sources(fixture.read_text(encoding='utf8'),'MOST_WISHED_FOR',proof['source_url'],evidence_path=str(fixture),origin='HISTORICAL_REPLAY')
+    assert len(sources)==proof['literal_source_count']==62
+    assert set(proof['actual_deep_nav_sample_urls'])<={s['actual_source_url'] for s in sources}
+    assert any(s['browse_node_id'] for s in sources)
+    assert all(s['source_status']=='UNVERIFIED' and s['enabled'] is False for s in sources)
+    assert discover_sources(fixture.read_text(encoding='utf8'),'MOST_GIFTED',proof['source_url'])==[]

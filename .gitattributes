@@ -5,4 +5,5 @@
 # conversion to these newly introduced evidence files.
 /tests/fixtures/highspeed/real_v3_*.html -text
 /tests/fixtures/highspeed/v3_real_department_navigation.html -text
+/tests/fixtures/highspeed/v3_real_wish_department_navigation.html -text
 /tests/fixtures/highspeed/v3_category_node_evidence/*.html -text

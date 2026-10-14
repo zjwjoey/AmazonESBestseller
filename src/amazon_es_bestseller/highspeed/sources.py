@@ -82,12 +82,40 @@ def detailed_coverage_matrix(sources, pages=(), observations=()):
     """
     sources=list(sources); pages=list(pages); observations=list(observations)
     matrix=[]
+    from .category_mapping import validate_mapping_rules, map_observation_category
+    context_cache={}; policy_cache={};verified_owner_rows={};owner_errors={}
+    source_map={s['source_id']:s for s in sources}
+    for row in observations:
+        source=source_map.get(row.get('source_id'));proof=row.get('category_mapping_context_evidence') or {}
+        if (not source or row.get('category_mapping_status')!='VERIFIED'
+                or proof.get('verification_status')!='VERIFIED_CARD_OWNER_CONTEXT'
+                or not proof.get('raw_context_href') or not row.get('category_mapping_evidence')):
+            continue
+        if normalize_source_url(proof.get('ranking_context_url'))==normalize_source_url(row.get('page_url')):
+            continue
+        try:
+            matching=[r for r in row['category_mapping_evidence'] if r.get('scope')]
+            key=__import__('json').dumps(matching,sort_keys=True,ensure_ascii=False)
+            if key not in policy_cache:policy_cache[key]=validate_mapping_rules(matching)
+            rebuilt=map_observation_category(row,source,policy_cache[key],parent_html_path=proof['parent_html_path'],
+                parent_html_sha256=proof['parent_html_sha256'],cache=context_cache)
+            if rebuilt['research_category']!=row.get('research_category') or rebuilt['category_mapping_status']!='VERIFIED':
+                raise ValueError('CATEGORY_MATRIX_POLICY_CONTEXT_MISMATCH')
+            verified_owner_rows[id(row)]=proof
+        except (ValueError,OSError,KeyError,TypeError) as exc:
+            owner_errors[id(row)]=str(exc)
     for kind in SOURCE_ROOTS:
         for category in RESEARCH_CATEGORIES:
             scoped=[s for s in sources if s.get('source_type')==kind and s.get('research_category')==category]
-            ids={s['source_id'] for s in scoped}
+            explicit_ids={s['source_id'] for s in scoped}
+            os=[o for o in observations if o.get('source_type',source_map.get(o.get('source_id'),{}).get('source_type'))==kind
+                and ((o.get('source_id') in explicit_ids and o.get('research_category') in {None,category})
+                     or id(o) in verified_owner_rows and o.get('research_category')==category)]
+            context_rows=[o for o in os if id(o) in verified_owner_rows]
+            context_ids={o['source_id'] for o in context_rows}
+            ids=explicit_ids|context_ids
+            contributing=[s for s in sources if s['source_id'] in ids]
             ps=[p for p in pages if p.get('source_id') in ids]
-            os=[o for o in observations if o.get('source_id') in ids]
             verified=[p for p in ps if p.get('access_status')=='NORMAL'
                       and p.get('source_type_verified') is True and p.get('source_context_valid') is True
                       and p.get('evidence_path') and p.get('evidence_sha256')]
@@ -106,14 +134,20 @@ def detailed_coverage_matrix(sources, pages=(), observations=()):
                 status='UNVERIFIED'
                 reason='NO_DISCOVERED_MAPPED_SOURCE' if not scoped else 'NOT_ATTEMPTED' if not ps else 'NO_VERIFIED_PRODUCT_CARDS'
             matrix.append({'source_type':kind,'research_category':category,
-                'discovered_source_count':len(scoped),'verified_source_count':len({p['source_id'] for p in verified}),
+                'discovered_source_count':len(contributing),'verified_source_count':len({p['source_id'] for p in verified}),
                 'completed_page_count':len(completed),'extracted_observation_count':len(os),
                 'unique_link_candidate_count':len({o['target_group_id'] for o in os if o.get('target_group_id')
                     and o.get('link_valid') is True}),
                 'source_status':status,'current_availability_verified':False,
-                'source_evidence':[{'source_id':s['source_id'],'discovery_evidence':s.get('discovery_evidence',[])} for s in scoped]
+                'source_count_basis':'REGISTERED_PARENT_SOURCES_WITH_EXPLICIT_MAPPING_OR_REVALIDATED_CARD_OWNER_CONTEXT',
+                'source_and_page_counts_across_categories_non_additive':True,
+                'discovered_card_owner_context_count':len({(o['source_id'],o['rank_context']) for o in context_rows}),
+                'verified_card_owner_context_count':len({(o['source_id'],o['rank_context']) for o in context_rows if any(p.get('source_id')==o['source_id'] and p.get('evidence_sha256')==verified_owner_rows[id(o)].get('parent_html_sha256') for p in verified)}),
+                'source_evidence':[{'source_id':s['source_id'],'discovery_evidence':s.get('discovery_evidence',[])} for s in contributing]
+                    +[{'kind':'REVALIDATED_CARD_OWNER_CONTEXT_NOT_A_VISITED_CHILD_PAGE','source_id':o['source_id'],
+                       'ranking_context_url':o['rank_context'],'context_evidence':verified_owner_rows[id(o)]} for o in context_rows]
                     +[{'page_url':p.get('page_url'),'evidence_path':p.get('evidence_path'),
                        'evidence_sha256':p.get('evidence_sha256'),'observed_at':p.get('observed_at'),
                        'origin':p.get('origin'),'status':p.get('status')} for p in ps],
-                'missing_reason':reason,'identity_count_missing':sum(1 for o in os if o.get('link_valid') is True and not o.get('target_group_id'))})
+                'missing_reason':reason,'unverified_owner_context_observation_count':sum(1 for o in observations if o.get('source_type')==kind and o.get('research_category')==category and id(o) in owner_errors),'identity_count_missing':sum(1 for o in os if o.get('link_valid') is True and not o.get('target_group_id'))})
     return matrix

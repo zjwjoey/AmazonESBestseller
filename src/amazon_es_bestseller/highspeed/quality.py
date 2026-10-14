@@ -198,7 +198,7 @@ def _audit_run_v3(store, run_id, run):
     sources={s['source_id']:s for s in run.get('sources',run.get('plan',{}).get('sources',[]))}
     sources={k:{**v,'parser_profile':'V3'} for k,v in sources.items()}
     pages=store.pages(run_id);rows=list(store.iter_observations(run_id))
-    findings=[];receipts={};row_pages={};reparsed={};types=set();categories=set()
+    findings=[];receipts={};row_pages={};reparsed={};types=set();categories=set();source_states={}
     from collections import OrderedDict
     replay_receipt_cache=OrderedDict()
     live=run.get('origin')=='LIVE_CAPTURE'
@@ -222,6 +222,9 @@ def _audit_run_v3(store, run_id, run):
             receipts.setdefault(proof['html_path'],[]).append(proof)
         except (OSError,ValueError,KeyError,TypeError) as exc:fail('V3_RECEIPT_INVALID',reason=str(exc))
     def receipt_for(row,source):
+        if live and (row.get('origin') != 'LIVE_CAPTURE' or row.get('is_derivation') is True
+                or row.get('parent_run_id') or row.get('historical_page_journal_reference')):
+            return False
         if row.get('origin')=='HISTORICAL_REPLAY':
             from .v3_workflows import validate_replay_receipt
             return validate_replay_receipt(row,source,cache=replay_receipt_cache)
@@ -246,6 +249,10 @@ def _audit_run_v3(store, run_id, run):
             journal=read_sealed(page['journal_path'])
             if journal.get('run_id')!=run_id or journal.get('page_key')!=page['page_key']:raise ValueError('JOURNAL_RUN_OR_PAGE_CONFLICT')
             raw=journal['observations'];source=sources[page['source_id']]
+            if live and (page.get('origin')!='LIVE_CAPTURE' or page.get('is_derivation') is True
+                    or any(r.get('origin')!='LIVE_CAPTURE' or r.get('is_derivation') is True
+                        or r.get('parent_run_id') or r.get('historical_page_journal_reference') for r in raw)):
+                fail('V3_LIVE_RUN_CONTAINS_HISTORICAL_DERIVATION',page_url=page['page_url'])
             for row in raw:row_pages[row['observation_id']]=page
             html=Path(page['evidence_path']).read_text(encoding='utf8')
             if digest(html.encode('utf8'))!=page['evidence_sha256']:raise ValueError('SERVER_HTML_SHA_CONFLICT')
@@ -284,6 +291,7 @@ def _audit_run_v3(store, run_id, run):
                 page_url=page['page_url'],page_number=page.get('page_number'),observed_at=page['observed_at'],
                 evidence_path=page['evidence_path'],http_status=page.get('http_status',200),origin=run.get('origin','OFFLINE_FIXTURE'),acp_responses=fragments)
             actual=parsed['page'];reparsed[page['page_key']]=set(map(identity,parsed['observations']))
+            source_states[page['page_key']]=actual.get('status','UNVERIFIED')
             if Counter(map(identity,raw))!=Counter(map(identity,parsed['observations'])):fail('V3_RAW_ROWS_NOT_BOUND_TO_FULL_REPARSE',page_url=page['page_url'])
             expected_rows={identity(r):r for r in parsed['observations']}
             field_keys=('product_title_raw','product_title_status','product_title_evidence','rating_raw','rating_value','rating_status','rating_source','rating_evidence','review_count_raw','review_count','review_count_status','review_count_evidence','rating_observed_at','rating_binding_evidence','rating_parser_version')
@@ -301,6 +309,14 @@ def _audit_run_v3(store, run_id, run):
                 if page.get('research_category') in RESEARCH_CATEGORIES:categories.add(page['research_category'])
         except (OSError,ValueError,KeyError,TypeError) as exc:fail('V3_PAGE_EVIDENCE_AUDIT_FAILED',page_url=page.get('page_url'),reason=str(exc))
     domain=audit_observations(rows,sources,receipt_validator=receipt_for,context_validator=context_for)
+    missing_by_state=Counter()
+    for row in rows:
+        state=source_states.get(row_pages.get(row.get('observation_id'),{}).get('page_key'),'UNVERIFIED')
+        for field in ('rating','review_count'):
+            missing_by_state[(field,row.get(field+'_status','UNVERIFIED'),state)]+=1
+    domain['field_status_by_reverified_page_state']=[{'field':field,'field_status':status,
+        'page_state':state,'observations':count} for (field,status,state),count in sorted(missing_by_state.items())]
+    domain['page_state_metric_denominator']='all supplied observations; full SERVER plus actual ACP page reparse, not single-fragment completeness'
     findings.extend(domain['findings'])
     normalized=set()
     for row in rows:
