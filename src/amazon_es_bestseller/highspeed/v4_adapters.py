@@ -16,7 +16,8 @@ from .v3_links import normalize_product_url_v3
 from .v4_sources import RANKED, amazon_url, node_id
 
 LEGACY_VERSION = 'multisource_v4.1.card_bound'
-VERSION = 'multisource_v4.2.capture_bound'
+CAPTURE_VERSION = 'multisource_v4.2.capture_bound'
+VERSION = 'multisource_v4.3.loading_context'
 SELECTORS = {
     'DEALS_ZONE': '[data-testid="product-card"][data-asin][data-deal-id]',
     'LIGHTNING_DEAL_FILTER': '[data-testid="product-card"][data-asin][data-deal-id]',
@@ -181,7 +182,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                   http_status=None, origin='OFFLINE_FIXTURE', snapshot_id=None, page_number=1,
                   acp_responses=None, parser_profile_version=None):
     version = parser_profile_version or VERSION
-    if version not in {VERSION, LEGACY_VERSION}:
+    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION}:
         raise ValueError('V4_UNKNOWN_PARSER_VERSION')
     if origin not in {'OFFLINE_FIXTURE', 'LIVE_CAPTURE', 'HISTORICAL_REPLAY'}:
         raise ValueError('UNKNOWN_ORIGIN')
@@ -262,7 +263,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                    observed_at=row.get('observed_at', observed_at), origin=origin, evidence_path=row.get('evidence_path', evidence_path),
                    evidence_sha256=row.get('evidence_sha256', sha), parser_version=version,
                    observation_id='v4obs_' + _sha(f'{run_id}|{sha}|{index}|{page_url}' +
-                       ('|' + row.get('observed_at', observed_at) if version == VERSION else ''))[:32],
+                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION} else ''))[:32],
                    source_node_id=node_id(page_url), amazon_category_path=[],
                    amazon_category_l1=None, amazon_category_l2=None, amazon_category_l3=None, amazon_category_leaf=None,
                    research_category=None, category_mapping_status='UNKNOWN', source_completeness_status='UNKNOWN',
@@ -289,5 +290,14 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
     nav = _navigation(soup, source, page_url, sha)
     page['status'] = 'VERIFIED_WITH_PRODUCTS' if any(r.get('is_valid') for r in rows) else 'NAVIGATION_ONLY' if nav else 'UNVERIFIED'
     page['actual_card_count'] = len(rows)
+    if version==VERSION and kind=='DEALS' and access=='NORMAL' and http_status==200 and not rows:
+        grids=soup.select('[data-testid="discount-asin-grid"]')
+        title=_text(soup.title) or ''
+        exact='No se ha encontrado ninguna coincidencia.'
+        if (len(grids)==1 and 'Las ofertas' in title and not grids[0].select('a[href*="/dp/"], [data-testid="product-card"]')
+                and any(_text(p)==exact for p in grids[0].select('p'))):
+            page.update(status='EXPLICIT_EMPTY',source_empty_evidence={'selector':'[data-testid="discount-asin-grid"] p',
+                'statement_raw':exact,'evidence_path':evidence_path,'evidence_sha256':sha},
+                completeness_status='UNKNOWN',source_context_verified=True)
     return {'page': page, 'observations': rows, 'pagination': [n for n in nav if n['kind'] == 'PAGINATION_LINK'],
             'discovered_sources': nav, 'acp_pending': legacy['acp_pending'] if kind in RANKED else []}

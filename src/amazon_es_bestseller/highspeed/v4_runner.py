@@ -143,6 +143,7 @@ class V4T1Runner:
                                               'ACP', started, last, descriptor=descriptor, page_key=key)
                             acp.append(self._acp(saved)); parsed = parse(); commit()
                     if (not cached and source['source_type'] in {'DEALS','AMAZON_HAUL'}
+                            and parsed['page']['status']!='EXPLICIT_EMPTY'
                             and authorization['sources'][sid].get('allow_native_dynamic')):
                         for _ in range(plan.get('max_dynamic_requests_per_source',2)):
                             remaining_pages=sum(u not in committed and u!=url for s,u in work)
@@ -181,6 +182,7 @@ class V4T1Runner:
                                 'rendered_frames':list(rendered_frames),
                                 'rendered_observed_at':frame_time,'new_PAGE_request':False}
                             previous_count=len(parsed['observations'])
+                            previous_links={r['normalized_product_url'] for r in parsed['observations'] if r.get('is_valid')}
                             receipt={**root_receipt,'html_path':str(path),'sha256':sha,
                                 'observed_at':derivation['rendered_observed_at'],
                                 'source_representation':'RENDERED_DOM_DERIVATION',
@@ -191,13 +193,13 @@ class V4T1Runner:
                             self.store.append_event(run_id,{'kind':'V4_RENDERED_LOADING_FRAME','source_id':sid,
                                 'previous_cards':previous_count,'actual_cards':len(parsed['observations']),
                                 'rendered_derivation':derivation,'completeness_status':'UNKNOWN'})
-                            if len(parsed['observations'])<=previous_count:break
+                            if not {r['normalized_product_url'] for r in parsed['observations'] if r.get('is_valid')}-previous_links:break
                         transport.cancel_dynamic()
                     self.store.append_event(run_id, {'kind': 'V4_DISCOVERED_NAVIGATION', 'source_id': key,
                         'links': parsed['discovered_sources'], 'note': 'Discovery only, not visited or approved.'})
                     committed.add(url)
                     # A failed/unknown frame stops. It never becomes source-empty.
-                    if not parsed['observations']:
+                    if not parsed['observations'] and parsed['page']['status']!='EXPLICIT_EMPTY':
                         raise ValueError('V4_SOURCE_FRAME_UNVERIFIED_SAVED_FOR_OFFLINE_DIAGNOSIS')
                 except (ValueError, OSError) as exc:
                     stop = str(exc)

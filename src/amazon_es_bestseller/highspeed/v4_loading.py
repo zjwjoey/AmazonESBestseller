@@ -113,8 +113,12 @@ class V4LoadingTransport(PlaywrightTransport):
                 return {**d,'referer':source['actual_source_url']}
             # Actual visible UI only; no application factories or invented API.
             if source['source_type']=='DEALS':
-                page.evaluate("""() => { const b=document.querySelector('button[class*="SeeMoreButton"]');
-                    if(b && !b.disabled){b.scrollIntoView();b.click();}else window.scrollTo(0,document.body.scrollHeight); }""")
+                # SeeMoreButton in the actual saved page expands departments
+                # or brands. Product continuation is a grid scroll sentinel.
+                page.evaluate("""() => { const g=document.querySelector('[data-testid="discount-asin-grid"]');
+                    const c=g && g.querySelectorAll('[data-testid="product-card"]');
+                    if(c && c.length)c[c.length-1].scrollIntoView({block:'end',behavior:'instant'});
+                    window.scrollBy(0,Math.max(160,window.innerHeight)); }""")
             else:
                 page.evaluate('() => window.scrollTo(0,document.body.scrollHeight)')
             page.wait_for_timeout(500)

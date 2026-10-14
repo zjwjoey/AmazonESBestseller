@@ -19,6 +19,27 @@ ROOT=Path(__file__).parent/'fixtures/highspeed_v4/loading'
 PROOFS=json.loads((ROOT/'provenance.json').read_text(encoding='utf8'))
 
 
+@pytest.mark.parametrize('variant',['actual','legacy','restricted','footer','wrong_title'])
+def test_actual_lightning_empty_statement_only_in_owned_normal_grid(variant):
+    source=next(p['source'] for p in PROOFS if p['source']['source_subtype']=='LIGHTNING_DEAL_FILTER')
+    path=ROOT/'lightning_explicit_empty.html';body=path.read_text(encoding='utf8')
+    if variant in {'footer','wrong_title'}:
+        from bs4 import BeautifulSoup
+        soup=BeautifulSoup(body,'lxml')
+        if variant=='footer':
+            grid=soup.select_one('[data-testid="discount-asin-grid"]');grid.decompose()
+            soup.body.append(BeautifulSoup('<p>No se ha encontrado ninguna coincidencia.</p>','lxml').p)
+        else:soup.title.string='An unrelated page'
+        body=str(soup)
+    r=parse_v4_page(body,source=source,page_url=source['actual_source_url'],run_id='offline-empty',
+        observed_at='2026-10-14T23:50:00Z',evidence_path=str(path),http_status=403 if variant=='restricted' else 200,
+        parser_profile_version='multisource_v4.2.capture_bound' if variant=='legacy' else None)
+    assert r['page']['completeness_status']=='UNKNOWN'
+    assert not r['observations']
+    assert (r['page']['status']=='EXPLICIT_EMPTY')==(variant=='actual')
+    if variant=='restricted':assert r['page']['status']=='ACCESS_RESTRICTED'
+
+
 def pagination():
     p=deepcopy(PROOFS[0]);ref=p['pagination'];ref['evidence_path']=str((ROOT/p['file']).resolve())
     return p['source'],ref
