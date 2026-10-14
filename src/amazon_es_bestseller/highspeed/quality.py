@@ -199,6 +199,8 @@ def _audit_run_v3(store, run_id, run):
     sources={k:{**v,'parser_profile':'V3'} for k,v in sources.items()}
     pages=store.pages(run_id);rows=list(store.iter_observations(run_id))
     findings=[];receipts={};row_pages={};reparsed={};types=set();categories=set()
+    from collections import OrderedDict
+    replay_receipt_cache=OrderedDict()
     live=run.get('origin')=='LIVE_CAPTURE'
     body_hashes={}
     def verify_body(path,sha):
@@ -222,7 +224,7 @@ def _audit_run_v3(store, run_id, run):
     def receipt_for(row,source):
         if row.get('origin')=='HISTORICAL_REPLAY':
             from .v3_workflows import validate_replay_receipt
-            return validate_replay_receipt(row,source)
+            return validate_replay_receipt(row,source,cache=replay_receipt_cache)
         if not live or row.get('origin') not in {None,'LIVE_CAPTURE'} or row.get('is_derivation') is True:return False
         binding=row_pages.get(row.get('observation_id'))
         if not binding or identity(row) not in reparsed.get(binding['page_key'],set()):return False

@@ -1,6 +1,6 @@
 # V3 candidate snapshot contract
 
-Contract: `candidate_snapshot_v3.2`. Parser: `link_first_adapters_v3.card_bound`.
+Contract: `candidate_snapshot_v3.3`. Parser: `link_first_adapters_v3.card_bound`.
 URL resolver: `link_url_v3.1.lexical_tracking`. Category rules:
 `reviewed_category_mapping_v3.2`. The production Excel contract is unchanged.
 
@@ -13,6 +13,9 @@ Variant parameters, unknown query bytes, opaque product routes and unreviewed
 path suffixes remain distinct. Coarse route groups describe possible duplicates;
 they never collapse V3 target candidates. Title similarity and Parent ASIN are
 not grouping rules. URL equality does not prove an independent purchasable SKU.
+Different canonical URLs sharing a coarse route key remain separate candidates
+with `POSSIBLE_DUPLICATE` / `PENDING_IDENTITY_REVIEW`; unknown parameters,
+fragments and unreviewed path suffixes likewise retain that review state.
 
 ## Record fields
 

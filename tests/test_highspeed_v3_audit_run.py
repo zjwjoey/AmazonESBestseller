@@ -5,12 +5,13 @@ from amazon_es_bestseller.highspeed.store import RunStore
 from amazon_es_bestseller.highspeed.contracts import DEFAULT_CONFIG
 from amazon_es_bestseller.highspeed.adapters import parse_page
 from amazon_es_bestseller.highspeed.quality import audit_run
+from amazon_es_bestseller.highspeed.v3_links import NORMALIZER_VERSION
 
 
 def captured(tmp_path,change=None):
     store=RunStore(tmp_path/'store');url='https://www.amazon.es/gp/bestsellers/home'
     source={'source_id':'s','source_type':'BEST_SELLERS','actual_source_url':url,'page_urls':[url],'parser_profile':'V3'}
-    plan={**DEFAULT_CONFIG,'run_id':'r','snapshot_id':'r','stage':'T1','origin':'LIVE_CAPTURE','sources':[source],'snapshot_contract_version':3}
+    plan={**DEFAULT_CONFIG,'run_id':'r','snapshot_id':'r','stage':'T1','origin':'LIVE_CAPTURE','sources':[source],'snapshot_contract_version':3,'normalizer_version':NORMALIZER_VERSION}
     store.begin_run(plan)
     card=(Path(__file__).parent/'fixtures/highspeed/real_v3_rating_best_sellers.html').read_text(encoding='utf8')
     html='<h1>Los más vendidos</h1><div id="zg" data-expected-count="1">'+card+'</div>'
@@ -48,7 +49,7 @@ def test_v3_audit_run_fake_capture_time_cannot_match_receipt(tmp_path):
 def captured_acp(tmp_path):
     store=RunStore(tmp_path/'store');url='https://www.amazon.es/gp/bestsellers/home'
     source={'source_id':'s','source_type':'BEST_SELLERS','actual_source_url':url,'page_urls':[url],'parser_profile':'V3'}
-    plan={**DEFAULT_CONFIG,'run_id':'r','snapshot_id':'r','stage':'T1','origin':'LIVE_CAPTURE','sources':[source],'snapshot_contract_version':3}
+    plan={**DEFAULT_CONFIG,'run_id':'r','snapshot_id':'r','stage':'T1','origin':'LIVE_CAPTURE','sources':[source],'snapshot_contract_version':3,'normalizer_version':NORMALIZER_VERSION}
     store.begin_run(plan)
     card=(Path(__file__).parent/'fixtures/highspeed/real_v3_rating_best_sellers.html').read_text(encoding='utf8')
     html='<h1>Los más vendidos</h1><div id="zg" data-expected-count="2">'+card+'</div>'

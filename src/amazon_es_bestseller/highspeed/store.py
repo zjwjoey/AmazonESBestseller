@@ -581,7 +581,8 @@ class RunStore:
             representative, members = groups[current_key]
             yield {**first, "candidate_id": row["candidate_id"], "normalized_product_url": row["url"],
                 "first_seen": row["first_seen"], "first_observed_at": row["first_seen"], "last_seen": row["last_seen"],
-                "observation_count": row["observation_count"], "possible_duplicate_key": current_key,
+                "observation_count": row["observation_count"],
+                "possible_duplicate_key": row["possible_key"] if version == V3_NORMALIZER_VERSION else current_key,
                 "original_possible_duplicate_key": row["possible_key"],
                 "original_normalizer_version": first.get("normalizer_version"),
                 "current_normalizer_version": version,

@@ -9,7 +9,8 @@ def test_replayed_target_and_partial_qa_never_prove_fresh_t3_speed():
     assert result['inherited_unique_links']==1
     assert not result['ten_hour_target_passed']
     assert result['timing_breakdown']['browser_wait_seconds'] is None
-    assert result['timing_breakdown']['actual_network_seconds']==2
+    assert result['timing_breakdown']['actual_network_seconds'] is None
+    assert result['timing_breakdown']['fetch_transaction_seconds']==2
     result=summarize_v3_metrics([],observations=[fresh],origin='HISTORICAL_REPLAY',
         started_at='2026-10-14T00:00:00Z',finished_at='2026-10-14T00:00:01Z',target=1,qa_passed=True)
     assert result['unique_per_hour'] is None and not result['ten_hour_target_passed']

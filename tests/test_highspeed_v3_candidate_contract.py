@@ -101,3 +101,35 @@ def test_review_only_tie_conflict_not_selected():
     c=build([a,b])[0]
     assert c['review_count_status']=='SOURCE_CONFLICT' and c['review_count'] is None
     assert c['rating_value'] is None and len(c['review_count_conflicts'])==2
+
+def test_shared_coarse_variant_group_flags_review_without_merging():
+    a=observation(url='https://www.amazon.es/dp/B077T9VSNZ?variant=red')
+    b=observation('b',url='https://www.amazon.es/dp/B077T9VSNZ?variant=blue')
+    for r in (a,b):r['possible_duplicate_key']='coarse'
+    cs=build([a,b])
+    assert len(cs)==2
+    assert all(c['dedup_status']=='POSSIBLE_DUPLICATE' and c['dedup_review_status']=='PENDING_IDENTITY_REVIEW' and not c['strict_buyable_confirmed'] for c in cs)
+
+
+def test_unknown_identity_parameter_stays_distinct_and_pending():
+    a=observation(url='https://www.amazon.es/dp/B077T9VSNZ?unknown=a');a['unknown_query_parameters']=['unknown']
+    b=observation('b',url='https://www.amazon.es/dp/B077T9VSNZ?unknown=b');b['unknown_query_parameters']=['unknown']
+    cs=build([a,b])
+    assert len(cs)==2 and all(c['dedup_status']=='POSSIBLE_DUPLICATE' for c in cs)
+
+
+def test_canonical_alias_without_unreviewed_evidence_stays_exact():
+    c=build([observation(),observation('b')])[0]
+    assert c['dedup_status']=='EXACT_NORMALIZED_URL_GROUP' and c['dedup_review_status']=='EXACT_URL_ONLY'
+
+
+def test_original_coarse_group_evidence_is_not_lost():
+    a=observation();b=observation('b',url='https://www.amazon.es/dp/B077T9VSNZ?variant=b')
+    for row in (a,b):row['original_possible_duplicate_key']='old-review-group'
+    assert all(c['dedup_status']=='POSSIBLE_DUPLICATE' for c in build([a,b]))
+
+
+def test_fragment_and_unknown_path_keep_review_status():
+    a=observation(url='https://www.amazon.es/dp/B077T9VSNZ#unknown')
+    b=observation('b',url='https://www.amazon.es/dp/B077T9VSNZ/opaque');b['unreviewed_path_suffix']='/opaque'
+    assert all(c['dedup_status']=='POSSIBLE_DUPLICATE' for c in build([a,b]))

@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from .links import candidate_id
 
-CONTRACT_VERSION = 'candidate_snapshot_v3.2'
+CONTRACT_VERSION = 'candidate_snapshot_v3.3'
 RATING_SELECTION_RULE = 'LATEST_VALID_OBSERVATION_WITH_PAIRED_REVIEW_FALLBACK_v2'
 
 def _time(row):
@@ -27,6 +28,11 @@ def build_candidate_records(observations, *, batch_id, snapshot_id):
         row=deepcopy(original)
         url=row.get('normalized_product_url')
         if url:groups[url].append(row)
+    review_groups=defaultdict(set)
+    for url,group_rows in groups.items():
+        for row in group_rows:
+            coarse=row.get('possible_duplicate_key') or row.get('original_possible_duplicate_key')
+            if coarse:review_groups[coarse].add(url)
     results=[]
     for url,rows in sorted(groups.items()):
         ordered=sorted(rows,key=lambda r:(_time(r) or datetime.min.replace(tzinfo=timezone.utc),r.get('observation_id','')))
@@ -57,13 +63,20 @@ def build_candidate_records(observations, *, batch_id, snapshot_id):
         titles=[r for r in ordered if r.get('product_title_raw') and r.get('product_title_status') in {'SOURCE_VISIBLE','IMAGE_ALT','TRUNCATED'} and r.get('product_title_evidence',{}).get('raw_product_url')==r.get('raw_product_url')]
         title=titles[-1] if titles else None
         memberships=[{k:deepcopy(r.get(k)) for k in ('observation_id','run_id','snapshot_id','raw_product_url','normalized_product_url','product_title_raw','product_title_evidence','product_title_status','parser_version','source_type','source_id','source_url','page_url','rank_raw','ranking_position','rank_semantics','rank_context','category_path','amazon_category','browse_node_id','research_category','category_mapping_status','observed_at','representation','representation_slot','evidence_path','evidence_sha256')} for r in ordered]
+        possible_duplicate=bool(urlsplit(url).fragment) or any(
+            r.get('unknown_query_parameters') or r.get('unreviewed_path_suffix')
+            or r.get('dedup_status')=='POSSIBLE_DUPLICATE'
+            or any(len(review_groups.get(key,set()))>1 for key in (r.get('possible_duplicate_key'),r.get('original_possible_duplicate_key')) if key)
+            for r in ordered)
         record={'contract_version':CONTRACT_VERSION,'candidate_id':candidate_id(url),
             'product_title_es':title['product_title_raw'] if title else None,
             'product_title_status':title['product_title_status'] if title else 'UNVERIFIED',
             'product_title_chosen_observation_id':title.get('observation_id') if title else None,
             'raw_product_url':representative.get('raw_product_url'),'normalized_product_url':url,
             'url_identity_status':representative.get('url_identity_status','IDENTITY_UNCONFIRMED'),
-            'dedup_status':'EXACT_NORMALIZED_URL_GROUP','source_memberships':memberships,
+            'dedup_status':'POSSIBLE_DUPLICATE' if possible_duplicate else 'EXACT_NORMALIZED_URL_GROUP',
+            'dedup_review_status':'PENDING_IDENTITY_REVIEW' if possible_duplicate else 'EXACT_URL_ONLY',
+            'strict_buyable_confirmed':False,'source_memberships':memberships,
             'rating_history':history,'rating_selection_rule':RATING_SELECTION_RULE,
             'rating_chosen_observation_id':chosen.get('observation_id') if chosen else None,
             'rating_selection_decision':selection_decision,

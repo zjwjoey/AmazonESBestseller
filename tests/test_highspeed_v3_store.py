@@ -23,6 +23,8 @@ def test_v3_store_exact_identity_queries_and_tracking_resume(tmp_path, monkeypat
     assert store.normalized_candidate_count('v3') == 4
     assert {r['raw_product_url'] for r in store.iter_observations('v3')} == set(urls)
     assert all(r['current_normalizer_version']==NORMALIZER_VERSION for r in store.iter_candidates('v3'))
+    assert len({r['possible_duplicate_key'] for r in store.iter_candidates('v3')}) == 1
+    assert len({r['target_group_key'] for r in store.iter_candidates('v3')}) == 4
     store.recover('v3')
     assert store.summary('v3')['raw_count']==5
     assert store.candidate_count('v3')==4

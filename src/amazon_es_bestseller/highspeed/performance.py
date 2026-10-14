@@ -121,7 +121,8 @@ def summarize_v3_metrics(events, *, observations, started_at, finished_at=None,
     result = summarize_metrics(events, raw_count=len(rows), valid_link_count=len(valid),
         unique_count=len(urls(valid)), started_at=started_at, finished_at=finished_at, target=target)
     wall = result["total_wall_seconds"]
-    timing_names = {"actual_network_seconds":("navigation","acp"),
+    timing_names = {"actual_network_seconds":("network_only",),
+        "fetch_transaction_seconds":("navigation","acp"),
         "browser_wait_seconds":("browser_wait",), "acp_continuation_seconds":("acp","acp_prepare"),
         "parse_seconds":("parse",), "dedup_seconds":("dedup",),
         "html_and_data_write_seconds":("html_save","persistence"), "qa_seconds":("qa",),
