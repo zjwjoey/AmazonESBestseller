@@ -10,7 +10,7 @@ from contextlib import nullcontext, ExitStack
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from ..access.detector import detect_access_status
-from ..multisource.storage import file_lock, read_sealed, atomic_json, immutable_json, sealed
+from ..multisource.storage import file_lock, read_sealed, atomic_json, immutable_json, sealed, digest
 from .authorization import authorize_request, validate_authorization
 from .budgets import aware_time, budget_reason, utc_text, validate_plan
 from .performance import RollingProgress
@@ -121,6 +121,132 @@ def _probe_scope_summary(plan, bundle, committed, reason):
         'complete':attempted == expected and processed == expected and reason == 'SOURCE_PLAN_EXHAUSTED',
         'missing_page_scopes':[{'source_id':sid,'page_url':url} for sid,url in sorted(expected-processed)],
         'scope_note':'Probe completion is separate from COMPLETE page status and stage QA; restrictions and unknown/parser failures still stop.'}
+
+
+def reviewed_t1_reverification(store, plan, authorization, gate, *, now=None):
+    """Read-only validation of one explicit same-run fresh PAGE review."""
+    reference=(authorization or {}).get('t1_reverification_review')
+    if not reference:return None
+    if (plan.get('snapshot_contract_version')!=3 or plan.get('stage')!='T1'
+            or plan.get('origin')!='LIVE_CAPTURE' or plan.get('probe_all_reviewed_page_urls') is not True
+            or gate.get('state')!='NORMAL'):
+        raise ValueError('T1_REVERIFICATION_SCOPE_OR_GATE_INVALID')
+    def exact(reference):
+        if not isinstance(reference,dict) or not reference.get('path') or not reference.get('sha256'):
+            raise ValueError('T1_REVERIFICATION_REFERENCE_REQUIRED')
+        path=Path(reference['path']).resolve()
+        if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['sha256']:
+            raise ValueError('T1_REVERIFICATION_REFERENCE_HASH_MISMATCH')
+        return path
+    review=read_sealed(exact(reference));current=aware_time(now)
+    run=store.get_run(plan['run_id'])
+    flags=('preserve_evidence','preserve_cumulative_budget','fresh_PAGE_once_per_source',
+        'no_source_expansion','reserve_PAGE_budget_for_all_reviewed_scopes')
+    if (review.get('kind')!='T1_FRESH_REVERIFICATION_APPROVAL' or review.get('approved') is not True
+            or review.get('approved_by')!='user_in_current_conversation' or not review.get('approval_id')
+            or review.get('run_id')!=plan['run_id'] or review.get('store_root')!=str(store.root.resolve())
+            or any(review.get(k) is not True for k in flags)
+            or not aware_time(review['reviewed_at'])<=current<aware_time(review['expires_at'])<=aware_time(authorization['expires_at'])
+            or review.get('original_started_at')!=run.get('started_at')
+            or aware_time(review['reviewed_at'])<aware_time(run['started_at'])
+            or run.get('plan')!=plan or review.get('plan_sha256')!=digest(plan)):
+        raise ValueError('T1_REVERIFICATION_USER_OR_IMMUTABLE_RUN_BINDING_INVALID')
+    plan_path=exact(review.get('plan_reference'))
+    raw=json.loads(plan_path.read_text(encoding='utf-8-sig'))
+    if ('payload' in raw and read_sealed(plan_path)!=plan) or ('payload' not in raw and raw!=plan):
+        raise ValueError('T1_REVERIFICATION_PLAN_REFERENCE_MISMATCH')
+    for field in ('max_requests_per_run','max_pages_per_run'):
+        if type(review.get(field)) is not int or review[field]!=plan[field] or authorization.get(field)!=plan[field]:
+            raise ValueError('T1_REVERIFICATION_CUMULATIVE_CAP_MISMATCH')
+    expected={(s['source_id'],s['source_type'],tuple(s['page_urls'])) for s in plan['sources']}
+    scopes=review.get('source_scopes',[])
+    reviewed={(s.get('source_id'),s.get('source_type'),tuple(s.get('page_urls',[]))) for s in scopes}
+    pairs={(sid,url) for sid,kind,urls in expected for url in urls}
+    if reviewed!=expected or len(scopes)!=len(expected) or len(pairs)!=9:
+        raise ValueError('T1_REVERIFICATION_EXACT_NINE_SOURCE_SCOPES_REQUIRED')
+    prior_refs=review.get('prior_page_journal_references',[]);prior={}
+    for item in prior_refs:
+        journal=read_sealed(exact(item));page=journal.get('page',{})
+        pair=(page.get('source_id'),page.get('page_url'))
+        source=next((s for s in plan['sources'] if s['source_id']==pair[0]),None)
+        if (pair not in pairs or pair in prior or not source or journal.get('run_id')!=plan['run_id']
+                or page.get('source_type')!=source['source_type']
+                or journal.get('page_key')!=hashlib.sha256((pair[0]+'\0'+pair[1]).encode()).hexdigest()
+                or aware_time(page['observed_at'])>=aware_time(review['reviewed_at'])):
+            raise ValueError('T1_REVERIFICATION_PRIOR_JOURNAL_SCOPE_INVALID')
+        prior[pair]=(journal,item)
+    if set(prior)!=pairs:raise ValueError('T1_REVERIFICATION_PRIOR_NINE_JOURNALS_REQUIRED')
+    sources={s['source_id']:s for s in plan['sources']};rules={}
+    for rule in review.get('retained_failed_source_rules',[]):
+        pair=(rule.get('source_id'),rule.get('page_url'));source=sources.get(pair[0])
+        if (pair in rules or pair not in prior or not source or source['source_type']!='MOVERS_SHAKERS'
+                or rule.get('source_type')!='MOVERS_SHAKERS' or pair[1]!=SOURCE_ROOTS['MOVERS_SHAKERS']
+                or rule.get('retained_state')!='PARSER_EMPTY_UNVERIFIED'
+                or rule.get('prior_failure_journal_reference')!=prior[pair][1]):
+            raise ValueError('T1_REVERIFICATION_RETAINED_FAILURE_SCOPE_INVALID')
+        old=prior[pair][0]['page'];body_path=exact(rule.get('prior_html_reference'))
+        if (Path(old.get('evidence_path','')).resolve()!=body_path or old.get('evidence_sha256')!=rule['prior_html_reference']['sha256']
+                or old.get('status')!='FAILED' or old.get('page_content_state')!='PARSER_EMPTY_UNVERIFIED'
+                or old.get('actual_count')!=0 or old.get('page_complete') is not False):
+            raise ValueError('T1_REVERIFICATION_OLD_FAILURE_EVIDENCE_INVALID')
+        from .adapters import parse_page
+        parsed=parse_page(body_path.read_text(encoding='utf-8'),source=source,run_id=plan['run_id'],
+            page_url=pair[1],page_number=1,observed_at=old['observed_at'],evidence_path=str(body_path),
+            origin='LIVE_CAPTURE',http_status=200)
+        if not _same_reviewed_move_failure(parsed) or not _same_move_empty_dom(body_path.read_text(encoding='utf-8')):
+            raise ValueError('T1_REVERIFICATION_OLD_FAILURE_REPARSE_INVALID')
+        prior_receipts=store.load_run(plan['run_id']).get('responses',[])
+        if not any(r.get('kind')=='PAGE' and r.get('origin')=='LIVE_CAPTURE'
+                and r.get('source_id')==pair[0] and r.get('request_url')==pair[1] and r.get('final_url')==pair[1]
+                and r.get('status_code')==200 and r.get('access_state')=='NORMAL'
+                and r.get('observed_at')==old['observed_at']
+                and (r.get('sha256') or r.get('html_sha256'))==rule['prior_html_reference']['sha256'] for r in prior_receipts):
+            raise ValueError('T1_REVERIFICATION_OLD_FAILURE_NORMAL_CAPTURE_REQUIRED')
+        rules[pair]={**rule,'reviewed_shell_text':_move_shell_text(body_path.read_text(encoding='utf-8'))}
+    bundle=store.load_run(plan['run_id']);attempted=set();fresh_receipts={}
+    for request in bundle.get('requests',[]):
+        if request.get('kind')=='PAGE' and aware_time(request['observed_at'])>=aware_time(review['reviewed_at']):
+            pair=(request.get('source_id'),request.get('url'))
+            if pair in pairs:attempted.add(pair)
+    for receipt in bundle.get('responses',[]):
+        if receipt.get('kind')=='PAGE' and aware_time(receipt['observed_at'])>=aware_time(review['reviewed_at']):
+            pair=(receipt.get('source_id'),receipt.get('request_url'))
+            if pair in pairs:
+                attempted.add(pair)
+                if receipt.get('status_code')==200 and receipt.get('access_state')=='NORMAL':fresh_receipts[pair]=receipt
+    return {'review':review,'reference':reference,'pairs':pairs,'attempted':attempted,
+        'fresh_receipts':fresh_receipts,'retained_rules':rules}
+
+
+def _move_shell_text(html):
+    root=BeautifulSoup(html,'lxml').select_one('#zg')
+    return ' '.join(root.get_text(' ',strip=True).split()) if root is not None else None
+
+
+def _same_move_empty_dom(html):
+    """The reviewed real MOVE empty shell, not a generic parser miss."""
+    soup=BeautifulSoup(html,'lxml')
+    roots=soup.select('#zg');right=soup.select('#zg-right-col');left=soup.select('#zg-left-col')
+    if len(roots)!=1 or len(right)!=1 or len(left)!=1:return False
+    if right[0].find(recursive=False) is not None or right[0].get_text(' ',strip=True):return False
+    if ' '.join(left[0].get_text(' ',strip=True).split())!='Cualquier departamento (Current)' or left[0].select('a[href]'):return False
+    for node in [roots[0],*roots[0].find_all(True)]:
+        if any(k.startswith(('data-acp','data-a-carousel','data-client-recs','data-ranking','data-expected-count','data-asin')) for k in node.attrs):return False
+    if roots[0].select('.zg-bdg-text,#gridItemRoot,.ranking-card,.rank-card'):return False
+    known_shell_metrics={'p13n-zg-nav-tab-all_zeitgeist-lists_0',
+        'p13n-zg-banner-landing-page-header_zeitgeist-lists_3',
+        'p13n-zg-nav-tree-all_zeitgeist-lists_1','p13n-zg-banner-landing-page-footer_zeitgeist-lists_4'}
+    if any(n.get('data-card-metrics-id') not in known_shell_metrics for n in roots[0].select('[data-card-metrics-id]')):return False
+    return not any(normalize_product_url(a['href'],base_url=SOURCE_ROOTS['MOVERS_SHAKERS'])['is_valid'] for a in roots[0].select('a[href]'))
+
+
+def _same_reviewed_move_failure(parsed):
+    p=parsed['page']
+    return (p.get('access_status')=='NORMAL' and p.get('source_type_verified') is True
+        and p.get('source_context_valid') is True and p.get('status')=='FAILED'
+        and p.get('page_content_state')=='PARSER_EMPTY_UNVERIFIED' and p.get('actual_count')==0
+        and p.get('raw_card_count')==0 and p.get('page_complete') is False
+        and set(p.get('flags',[]))=={'PAGE_CONTENT_MISSING'} and not parsed.get('observations') and not parsed.get('acp_pending'))
 
 
 def reviewed_t1_diagnostic_failures(store, plan, authorization, gate, *, now=None):
@@ -256,12 +382,16 @@ class HighSpeedRunner:
             if origin == "LIVE_CAPTURE" and not preheld_lock and plan.get("shared_access_gate_path"):
                 locks.enter_context(file_lock(Path(plan["shared_access_gate_path"]).parent / "highspeed_live.lock"))
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
+            if (authorization or {}).get('t1_reverification_review') and not resume:
+                raise ValueError('T1_REVERIFICATION_REQUIRES_SAME_RUN_RESUME')
             run = self.store.get_run(run_id) if resume else self.store.begin_run(plan, started_at=entry_time)
             if not run:
                 raise ValueError("RUN_NOT_FOUND")
             # Resume must use precisely the frozen plan, never larger limits.
             if run.get("plan") and run["plan"] != plan:
                 raise ValueError("IMMUTABLE_RUN_PLAN_MISMATCH")
+            reverification=reviewed_t1_reverification(self.store,plan,authorization,self._gate(plan),now=self.clock())
+            self._t1_reverification_context=reverification
             previous_run_status = run.get("status")
             self.store.update_run(run_id, origin=origin, status="RUNNING")
             started = run.get("started_at") or run.get("created_at")
@@ -297,7 +427,7 @@ class HighSpeedRunner:
                     cached[receipt.get("request_url", receipt.get("url"))] = receipt
             # Re-audit a previously recorded zero-card native miss offline. A
             # cached failure must not repeatedly refresh the same source forever.
-            for page in bundle.get("pages", []):
+            for page in ([] if reverification else bundle.get("pages", [])):
                 if (page.get("seed_provenance_path") or page.get("status") not in {"FAILED","PARTIAL"}
                         or not ("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED" in page.get("flags",[])
                             or set(page.get("flags",[]))=={"PAGE_CONTENT_MISSING"}
@@ -336,6 +466,36 @@ class HighSpeedRunner:
                             "actual_cards":0,"reason":"OFFICIAL_EMPTY_STATE" if official_empty else "ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED","cached_failure_reaudited":True,
                             "note":"Zero capacity retained FAILED; frozen approved queue continues without re-requesting this source."})
                     committed.add(page["page_key"])
+            if reverification:
+                for sid,url in reverification['pairs']:
+                    key=hashlib.sha256((sid+'\0'+url).encode()).hexdigest()
+                    fresh=reverification['fresh_receipts'].get((sid,url))
+                    fresh_page=next((p for p in bundle.get('pages',[]) if p.get('page_key')==key
+                        and fresh and p.get('observed_at')==fresh.get('observed_at')
+                        and p.get('evidence_path')==fresh.get('html_path')),None)
+                    if fresh_page is None:
+                        committed.discard(key)
+                    if (sid,url) not in reverification['attempted']:
+                        cached.pop(url,None)
+                    elif fresh:
+                        cached[url]=fresh
+                    else:
+                        cached.pop(url,None)
+                    if fresh_page and (sid,url) in reverification['retained_rules']:
+                        source=next(s for s in plan['sources'] if s['source_id']==sid)
+                        from .adapters import parse_page
+                        check=parse_page(Path(fresh['html_path']).read_text(encoding='utf-8'),source=source,
+                            run_id=run_id,page_url=url,page_number=1,observed_at=fresh['observed_at'],
+                            evidence_path=fresh['html_path'],origin=origin,http_status=fresh['status_code'])
+                        fresh_text=Path(fresh['html_path']).read_text(encoding='utf-8')
+                        if (_same_reviewed_move_failure(check) and _same_move_empty_dom(fresh_text)
+                                and _move_shell_text(fresh_text)==reverification['retained_rules'][(sid,url)]['reviewed_shell_text']):committed.add(key)
+                self.store.append_event(run_id,{'kind':'T1_FRESH_REVERIFICATION_SCOPE',
+                    'approval_reference':reverification['reference'],'reviewed_at':reverification['review']['reviewed_at'],
+                    'expected_PAGE_scopes':len(reverification['pairs']),
+                    'already_attempted_PAGE_scopes':len(reverification['attempted']),
+                    'remaining_fresh_PAGE_scopes':len(reverification['pairs']-reverification['attempted']),
+                    'original_started_at_preserved':started,'cumulative_budget_preserved':True})
             last_request = max((aware_time(r["observed_at"]) for r in bundle.get("requests", []) if r.get("observed_at")), default=None)
             if hasattr(self.store, "latest_request_time"):
                 global_last = self.store.latest_request_time()
@@ -391,6 +551,9 @@ class HighSpeedRunner:
                         reason = "TARGET_UNIQUE_LINKS_REACHED"
                         break
                     try:
+                        if (reverification and (source['source_id'],url) in reverification['attempted']
+                                and (source['source_id'],url) not in reverification['fresh_receipts']):
+                            raise ValueError('AMBIGUOUS_T1_REVERIFICATION_PAGE_ATTEMPT_NO_REPEAT')
                         if url in cached:
                             receipt = cached[url]
                             response = {**receipt, "text": Path(receipt["html_path"]).read_text(encoding="utf-8")}
@@ -400,7 +563,8 @@ class HighSpeedRunner:
                         html = response.get("text", "")
                         acp = [{**item, "body": Path(item["html_path"]).read_text(encoding="utf-8"), "evidence_path": item["html_path"],
                                 "capture_receipt_reference":self._receipt_ref(item)}
-                            for item in bundle.get("responses", []) if item.get("kind") == "ACP" and item.get("page_key") == page_key and item.get("access_state") == "NORMAL"]
+                            for item in bundle.get("responses", []) if item.get("kind") == "ACP" and item.get("page_key") == page_key and item.get("access_state") == "NORMAL"
+                            and (not reverification or aware_time(item['observed_at'])>=aware_time(reverification['review']['reviewed_at']))]
                         historical = url in seed_cache and receipt.get("run_id") == plan.get("parent_run_id")
                         if historical:
                             acp = [{**r,"body":Path(r["html_path"]).read_text(encoding="utf-8"),"evidence_path":r["html_path"]}
@@ -413,14 +577,38 @@ class HighSpeedRunner:
                         v3 = plan.get("snapshot_contract_version") == 3
                         pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
                         needs_context = getattr(transport, "requires_ajax_page_context", None)
-                        if pending and origin == "LIVE_CAPTURE" and url in cached and (historical or (callable(needs_context) and needs_context(url))):
+                        native_context_unrestored=bool(reverification and pending and url in cached
+                            and callable(needs_context) and needs_context(url))
+                        if native_context_unrestored:
+                            parsed['page'].update(status='PARTIAL',completeness='UNKNOWN',page_complete=False)
+                            parsed['page'].setdefault('flags',[]).append('T1_REVERIFICATION_NATIVE_CONTEXT_NOT_RELOADED')
+                            self.store.append_event(run_id,{'kind':'T1_REVERIFICATION_NATIVE_CONTEXT_NOT_RELOADED',
+                                'source_id':source['source_id'],'page_url':url,
+                                'note':'Fresh PAGE already attempted; no duplicate navigation to restore ACP context.'})
+                        if (not native_context_unrestored and pending and origin == "LIVE_CAPTURE" and url in cached
+                                and (historical or (callable(needs_context) and needs_context(url)))):
                             response, receipt, last_request = self._request(plan, authorization, transport,
                                 source, url, "PAGE", started, last_request, page_key=page_key)
                             historical = False
                             html = response.get("text", "")
                             parsed = self._parse(plan, source, url, page_number, receipt, html, [], origin)
                             pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
-                        while pending and origin == "LIVE_CAPTURE":
+                        while pending and origin == "LIVE_CAPTURE" and not native_context_unrestored:
+                            if reverification:
+                                if not aware_time(reverification['review']['reviewed_at'])<=aware_time(self.clock())<aware_time(reverification['review']['expires_at']):
+                                    raise ValueError('T1_REVERIFICATION_REVIEW_EXPIRED')
+                                counters=self.store.summary(run_id)
+                                from .budgets import madrid_day
+                                remaining=min(plan['max_requests_per_run']-counters.get('requests',0),
+                                    plan['max_requests_per_day']-counters.get('requests_by_day',{}).get(madrid_day(self.clock()),0))
+                                pending_pages=len(reverification['pairs']-reverification['attempted'])
+                                if remaining<=pending_pages:
+                                    parsed['page'].update(status='PARTIAL',completeness='UNKNOWN',page_complete=False)
+                                    parsed['page'].setdefault('flags',[]).append('T1_ACP_BUDGET_RESERVED_FOR_PAGE_PROBES')
+                                    self.store.append_event(run_id,{'kind':'T1_ACP_BUDGET_RESERVED_FOR_PAGE_PROBES',
+                                        'source_id':source['source_id'],'page_url':url,'remaining_requests':remaining,
+                                        'remaining_fresh_PAGE_scopes':pending_pages,'approval_reference':reverification['reference']})
+                                    break
                             descriptor = _next_acp_pending(pending, excluded_carousels, v3=v3)
                             if descriptor is None:
                                 break
@@ -547,7 +735,19 @@ class HighSpeedRunner:
                             "duration_seconds": (aware_time(self.clock())-persist_start).total_seconds(),
                             "source_type": source["source_type"], "research_category": source.get("research_category")})
                         if parsed["page"].get("status") in {"FAILED", "BLOCKED"}:
-                            if parsed["page"].get("status")=="FAILED" and parsed["page"].get("terminal_for_snapshot") is True and (parsed["page"].get("continuation_unavailable") is True or official_empty):
+                            retained_move=bool(reverification and (source['source_id'],url) in reverification['retained_rules']
+                                and receipt.get('status_code')==200 and receipt.get('access_state')=='NORMAL'
+                                and self._gate(plan).get('state')=='NORMAL' and _same_reviewed_move_failure(parsed)
+                                and hashlib.sha256(Path(receipt['html_path']).read_bytes()).hexdigest()==receipt.get('sha256')
+                                and _same_move_empty_dom(Path(receipt['html_path']).read_text(encoding='utf-8'))
+                                and _move_shell_text(Path(receipt['html_path']).read_text(encoding='utf-8'))==reverification['retained_rules'][(source['source_id'],url)]['reviewed_shell_text'])
+                            if retained_move:
+                                self.store.append_event(run_id,{'kind':'T1_DIAGNOSTIC_FAILED_PAGE_RETAINED',
+                                    'source_id':source['source_id'],'page_url':url,'page_key':page_key,
+                                    'approval_reference':reverification['reference'],'capture_receipt_reference':self._receipt_ref(receipt),
+                                    'fresh_html_reference':{'path':receipt['html_path'],'sha256':receipt.get('sha256')},
+                                    'note':'This fresh exact MOVE failure is explicitly reviewed; FAILED/UNKNOWN/0 cards and QA unchanged.'})
+                            elif parsed["page"].get("status")=="FAILED" and parsed["page"].get("terminal_for_snapshot") is True and (parsed["page"].get("continuation_unavailable") is True or official_empty):
                                 pass
                             elif navigation_only:
                                 self.store.append_event(run_id, {"kind": "SOURCE_NAVIGATION_ONLY", "stage": "source_navigation",
@@ -665,6 +865,9 @@ class HighSpeedRunner:
             # Approval, gate and elapsed budget may change while pacing.
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
         counters = self.store.summary(plan["run_id"])
+        reverification=getattr(self,'_t1_reverification_context',None)
+        if reverification and not aware_time(reverification['review']['reviewed_at'])<=aware_time(self.clock())<aware_time(reverification['review']['expires_at']):
+            raise ValueError('T1_REVERIFICATION_REVIEW_EXPIRED')
         reason = budget_reason(plan, counters, now=self.clock(), started_at=started, kind=kind)
         if reason:
             raise ValueError(reason)
@@ -673,7 +876,13 @@ class HighSpeedRunner:
         request = {"kind": kind, "url": url, "source_id": source["source_id"], "source_type": source["source_type"],
             "observed_at": utc_text(observed), "limits": plan, "page_key": page_key,
             "origin": origin}
+        if reverification and kind=='PAGE':
+            pair=(source['source_id'],url)
+            if pair in reverification['attempted']:
+                raise ValueError('T1_REVERIFICATION_FRESH_PAGE_ALREADY_ATTEMPTED')
         reservation = self.store.reserve_request(plan["run_id"], request)
+        if reverification and kind=='PAGE':
+            reverification['attempted'].add(pair)
         before = aware_time(self.clock())
         transaction_started=time.perf_counter()
         try:
