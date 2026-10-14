@@ -18,6 +18,8 @@ from .v4_workflows import replay_v4, prepare_v4, export_v4
 def run_live_v4(args):
     from .store import RunStore
     plan = load_json(args.plan); approval = load_json(args.authorization)
+    if Path(args.root).resolve().parent.name != plan['run_id']:
+        raise ValueError('V4_FRESH_RUN_DIRECTORY_REQUIRED')
     store = RunStore(args.root)
     try:
         runner = V4T1Runner(store)

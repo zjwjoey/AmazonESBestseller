@@ -137,3 +137,19 @@ def test_v4_plan_cannot_enter_legacy_unbounded_workflow(tmp_path):
             run_live(None, store, plan, a, entry_time=NOW.isoformat())
     finally:
         store.close()
+
+
+def test_v4_cannot_adopt_a_historical_store(tmp_path):
+    from amazon_es_bestseller.highspeed.contracts import new_plan
+    plan, a = setup_scope(tmp_path)
+    store = RunStore(a['store_root'])
+    try:
+        store.begin_run(new_plan('historical'))
+        before = list(store.db.execute('SELECT run_id,plan_hash FROM runs'))
+        t = FakeTransport(plan, a)
+        with pytest.raises(ValueError, match='NO_HISTORICAL_RUNS'):
+            V4T1Runner(store, clock=lambda: NOW).run(plan, authorization=a, transport=t)
+        assert list(store.db.execute('SELECT run_id,plan_hash FROM runs')) == before
+        assert not t.calls
+    finally:
+        store.close()

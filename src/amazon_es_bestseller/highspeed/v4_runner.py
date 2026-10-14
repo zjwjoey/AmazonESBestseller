@@ -28,6 +28,8 @@ class V4T1Runner:
         if plan.get('stage') != 'T1':
             raise ValueError('V4_T2_T3_REQUIRE_VERIFIED_DYNAMIC_PROTOCOLS')
         e = self.engine; run_id = plan['run_id']; entry = utc_text(e.clock())
+        if self.store.db.execute('SELECT 1 FROM runs WHERE run_id<>? LIMIT 1', (run_id,)).fetchone():
+            raise ValueError('V4_FRESH_STORE_NO_HISTORICAL_RUNS_REQUIRED')
         validate_v4_authorization(plan, authorization, e._gate(plan), now=e.clock(), store_root=self.store.root)
         with ExitStack() as locks:
             locks.enter_context(nullcontext() if preheld_lock else self.store.run_lock(run_id))

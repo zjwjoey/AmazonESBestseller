@@ -75,6 +75,8 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
         raise ValueError('AUTHORIZATION_EXPIRED_OR_NOT_YET_VALID')
     if store_root is None or a.get('store_root') != str(Path(store_root).resolve()):
         raise ValueError('EXACT_AUTHORIZED_STORE_ROOT_REQUIRED')
+    if Path(store_root).resolve().parent.name != plan['run_id']:
+        raise ValueError('V4_FRESH_RUN_DIRECTORY_REQUIRED')
     shared = plan.get('shared_access_gate_path')
     if not shared or a.get('shared_access_gate_path') != str(Path(shared).resolve()):
         raise ValueError('V4_SHARED_GATE_REQUIRED')
