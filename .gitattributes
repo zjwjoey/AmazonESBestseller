@@ -11,3 +11,4 @@
 # CRLF bytes must survive Linux checkout so conflicts stay verifiable.
 /tests/fixtures/highspeed/v3_prior_category_plan.json -text
 /tests/fixtures/highspeed/real_v3_t1_best_native_carousel_contract.json -text
+/tests/fixtures/highspeed_v4/*.html -text whitespace=-trailing-space
