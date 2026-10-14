@@ -6,6 +6,7 @@ from amazon_es_bestseller.highspeed.contracts import DEFAULT_CONFIG
 from amazon_es_bestseller.highspeed.adapters import parse_page
 from amazon_es_bestseller.highspeed.quality import audit_run
 from amazon_es_bestseller.highspeed.v3_links import NORMALIZER_VERSION
+from amazon_es_bestseller.multisource.storage import digest
 
 
 def captured(tmp_path,change=None):
@@ -20,6 +21,9 @@ def captured(tmp_path,change=None):
     receipt=store.save_response('r',reserved,{'text':html,'status_code':200,'access_state':'NORMAL','origin':'LIVE_CAPTURE','url':url,'source_id':'s','source_type':'BEST_SELLERS','observed_at':time,'page_key':'page'})
     parsed=parse_page(html,source=source,run_id='r',page_url=url,page_number=1,observed_at=time,evidence_path=receipt['html_path'],origin='LIVE_CAPTURE')
     rows=parsed['observations']
+    for row in rows:
+        row.update(origin='LIVE_CAPTURE',capture_run_id='r',capture_receipt_reference={'path':receipt['evidence_path'],
+            'sha256':digest(Path(receipt['evidence_path']).read_bytes())})
     if change:change(rows[0])
     store.commit_page('r','page',{**parsed['page'],'source':source},rows)
     return store
@@ -69,6 +73,10 @@ def captured_acp(tmp_path):
         proof=store.save_response('r',reserved,{'text':body,'status_code':200,'access_state':'NORMAL','origin':'LIVE_CAPTURE','url':request_url,'source_id':'s','source_type':'BEST_SELLERS','observed_at':time,'page_key':'page'})
         captures.append(proof)
     parsed=parse_page(html,source=source,run_id='r',page_url=url,page_number=1,observed_at=captures[0]['observed_at'],evidence_path=captures[0]['html_path'],origin='LIVE_CAPTURE',acp_responses=[{**captures[1],'body':acp,'evidence_path':captures[1]['html_path']}])
+    for row in parsed['observations']:
+        receipt=captures[0] if row['representation']=='SERVER' else captures[1]
+        row.update(origin='LIVE_CAPTURE',capture_run_id='r',capture_receipt_reference={'path':receipt['evidence_path'],
+            'sha256':digest(Path(receipt['evidence_path']).read_bytes())})
     store.commit_page('r','page',{**parsed['page'],'source':source},parsed['observations'])
     return store,parsed
 
