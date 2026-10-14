@@ -70,7 +70,14 @@ def captured_acp(tmp_path):
     for kind,time,body in [('PAGE','2026-10-14T00:00:00Z',html),('ACP','2026-10-14T00:01:00Z',acp)]:
         request_url=url if kind=='PAGE' else 'https://www.amazon.es/acp/test/nextPage'
         reserved=store.reserve_request('r',{'kind':kind,'url':request_url,'source_id':'s','source_type':'BEST_SELLERS','observed_at':time,'page_key':'page'})
-        proof=store.save_response('r',reserved,{'text':body,'status_code':200,'access_state':'NORMAL','origin':'LIVE_CAPTURE','url':request_url,'source_id':'s','source_type':'BEST_SELLERS','observed_at':time,'page_key':'page'})
+        response={'text':body,'status_code':200,'access_state':'NORMAL','origin':'LIVE_CAPTURE','url':request_url,'source_id':'s','source_type':'BEST_SELLERS','observed_at':time,'page_key':'page'}
+        if kind=='ACP':
+            parent=captures[0]
+            binding={'source_id':'s','ranking_context_url':url,'page_evidence_sha256':parent['sha256']}
+            response.update(ranking_context_binding=binding,native_acp_descriptor={
+                'request_contract_parent_page_url':url,'parent_page_url':url,
+                'evidence_path':parent['html_path'],'ranking_context_binding':binding})
+        proof=store.save_response('r',reserved,response)
         captures.append(proof)
     parsed=parse_page(html,source=source,run_id='r',page_url=url,page_number=1,observed_at=captures[0]['observed_at'],evidence_path=captures[0]['html_path'],origin='LIVE_CAPTURE',acp_responses=[{**captures[1],'body':acp,'evidence_path':captures[1]['html_path']}])
     for row in parsed['observations']:
