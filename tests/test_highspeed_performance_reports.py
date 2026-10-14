@@ -14,6 +14,24 @@ def test_eta_uses_unique_yield_and_zero_is_unknown():
         progress.record(170, 101)
 
 
+def test_sampling_epoch_keeps_task_elapsed_but_excludes_existing_pool_and_pause():
+    progress = RollingProgress(target=30000)
+    progress.record(8580, 22369)
+    progress.start_epoch(10800, 22369)
+    baseline = progress.record(10800, 22369)
+    assert baseline["rolling_unique_per_hour"] == 0
+    assert baseline["eta_remaining_seconds"] is None
+    result = progress.record(10910, 22549)
+    assert result["elapsed_seconds"] == 10910
+    assert result["window_observed_seconds"] == 110
+    assert result["rolling_unique_per_hour"] == pytest.approx(180 * 3600 / 110)
+    assert result["sampling_epoch_started_elapsed_seconds"] == 10800
+    assert result["sampling_epoch_initial_unique_links"] == 22369
+    no_yield = progress.record(11210, 22549)
+    assert no_yield["rolling_unique_per_hour"] == 0
+    assert no_yield["eta_remaining_seconds"] is None
+
+
 def test_wall_includes_waits_and_qa_not_sum_of_http():
     result = summarize_metrics([{"stage": "navigation", "duration_seconds": 1}], raw_count=100,
         valid_link_count=90, unique_count=50, started_at="2026-10-13T00:00:00Z",

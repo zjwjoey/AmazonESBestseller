@@ -23,6 +23,18 @@ class RollingProgress:
         self.target = target
         self.window_seconds = window_seconds
         self.samples = deque([(0.0, 0)])
+        self.epoch_started_elapsed_seconds = 0.0
+        self.epoch_initial_unique_links = 0
+
+    def start_epoch(self, elapsed_seconds, unique_count):
+        """Start a rate sample after resume; retain the caller's original task clock."""
+        elapsed_seconds = float(elapsed_seconds)
+        if not math.isfinite(elapsed_seconds) or elapsed_seconds < 0 or type(unique_count) is not int or unique_count < 0:
+            raise ValueError("Invalid sampling epoch baseline")
+        self.samples.clear()
+        self.samples.append((elapsed_seconds, unique_count))
+        self.epoch_started_elapsed_seconds = elapsed_seconds
+        self.epoch_initial_unique_links = unique_count
 
     def record(self, elapsed_seconds, unique_count):
         elapsed_seconds = float(elapsed_seconds)
@@ -37,7 +49,9 @@ class RollingProgress:
         return {"elapsed_seconds": elapsed_seconds, "unique_links": unique_count,
                 "rolling_unique_per_hour": rate * 3600,
                 "eta_remaining_seconds": remaining / rate if rate else (0 if not remaining else None),
-                "eta_is_estimate": True, "window_observed_seconds": duration}
+                "eta_is_estimate": True, "window_observed_seconds": duration,
+                "sampling_epoch_started_elapsed_seconds": self.epoch_started_elapsed_seconds,
+                "sampling_epoch_initial_unique_links": self.epoch_initial_unique_links}
 
 
 def summarize_metrics(events, *, raw_count, valid_link_count, unique_count,

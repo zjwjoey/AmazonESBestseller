@@ -148,6 +148,7 @@ class HighSpeedRunner:
             # Resume must use precisely the frozen plan, never larger limits.
             if run.get("plan") and run["plan"] != plan:
                 raise ValueError("IMMUTABLE_RUN_PLAN_MISMATCH")
+            previous_run_status = run.get("status")
             self.store.update_run(run_id, origin=origin, status="RUNNING")
             started = run.get("started_at") or run.get("created_at")
             if not started:
@@ -239,14 +240,25 @@ class HighSpeedRunner:
             if rebase_reason:
                 # The run wall clock retains its original start. Only the rate
                 # baseline changes; historical counts and events remain intact.
-                rolling.samples.clear()
-                rolling.samples.append((current_elapsed, current_count))
+                rolling.start_epoch(current_elapsed, current_count)
                 if resume or progress_history:
                     self.store.append_event(run_id, {"kind":"NORMALIZATION_PROGRESS_REBASE",
                         "normalizer_version":NORMALIZER_VERSION, "reason":rebase_reason,
                         "elapsed_seconds":current_elapsed, "unique_links":current_count,
                         "preserved_history_count":len(progress_history),
                         "previous_progress":progress_history[-1] if progress_history else None})
+            if resume:
+                # Offline checkpoint verification above is startup work. A new
+                # recent-rate sample must not span a prior stop or user pause.
+                # The run clock, cumulative pool and original events are intact.
+                rolling.start_epoch(current_elapsed, current_count)
+                self.store.append_event(run_id, {"kind": "PROGRESS_SAMPLING_EPOCH",
+                    "reason": "RESUME_AFTER_CHECKPOINT_VALIDATION",
+                    "normalizer_version": NORMALIZER_VERSION,
+                    "elapsed_seconds": current_elapsed, "unique_links": current_count,
+                    "preserved_history_count": len(progress_history),
+                    "previous_run_status": previous_run_status,
+                    "sampling_scope": "NEW_YIELD_AFTER_RESUME_EXCLUDING_PRIOR_PAUSE_AND_STARTUP_VALIDATION"})
             for source in plan["sources"]:
                 for page_number, url in enumerate(source.get("page_urls", []), 1):
                     page_key = hashlib.sha256((source["source_id"] + "\0" + url).encode()).hexdigest()

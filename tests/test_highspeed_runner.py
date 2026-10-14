@@ -372,6 +372,48 @@ def test_resume_rebases_corrected_progress_without_erasing_legacy_history(tmp_pa
         assert observed[-1]["rolling_unique_per_hour"] == 0
         assert observed[-1]["eta_remaining_seconds"] is None
 
+def test_resume_recent_speed_excludes_user_pause_and_retains_original_task_history(tmp_path):
+    from amazon_es_bestseller.highspeed.links import NORMALIZER_VERSION
+    p = plan(tmp_path, "T1")
+    a = approval(p, tmp_path)
+    current = [NOW]
+    class PausedStore(Store):
+        def candidate_count(self, run_id): return 22369 + len(self.observations)
+        def load_run(self, run_id): return {**super().load_run(run_id), "events": list(self.events)}
+    s = PausedStore(tmp_path / "store")
+    start = (NOW - timedelta(hours=3)).isoformat()
+    s.begin_run(p, started_at=start)
+    s.run.update(status="USER_PAUSED", user_paused_at=(NOW-timedelta(minutes=37)).isoformat())
+    history = [{"kind": "PROGRESS", "normalizer_version": NORMALIZER_VERSION,
+        "elapsed_seconds": 8500, "unique_links": 22240},
+        {"kind": "PROGRESS", "normalizer_version": NORMALIZER_VERSION,
+        "elapsed_seconds": 8580, "unique_links": 22369}]
+    s.events.extend(dict(row) for row in history)
+    class SavedResponse:
+        def fetch_page(self, url):
+            current[0] += timedelta(seconds=110)
+            return {"status_code": 200, "url": url, "text": "<h1>Los más vendidos</h1>"}
+    def fresh_parser(html, **kwargs):
+        return {"page": {"actual_count": 180, "completeness": "UNVERIFIED"},
+            "observations": [{"raw_product_url": f"https://www.amazon.es/product/fixture-{i}"} for i in range(180)]}
+    observed = []
+    make_runner(s, clock=lambda: current[0], parser=fresh_parser,
+        gate_reader=lambda: {"state": "NORMAL"}, progress=observed.append).run(
+            p, authorization=a, transport=SavedResponse(), resume=True)
+    progress = observed[-1]
+    assert progress["elapsed_seconds"] == 10910
+    assert progress["unique_links"] == 22549
+    assert progress["window_observed_seconds"] == 110
+    assert progress["rolling_unique_per_hour"] == pytest.approx(180 * 3600 / 110)
+    assert progress["eta_remaining_seconds"] == pytest.approx((30000-22549) * 110 / 180)
+    assert s.run["started_at"] == start
+    assert s.events[:2] == history
+    epochs = [e for e in s.events if e["kind"] == "PROGRESS_SAMPLING_EPOCH"]
+    assert epochs[0]["unique_links"] == 22369
+    assert epochs[0]["elapsed_seconds"] == 10800
+    assert epochs[0]["previous_run_status"] == "USER_PAUSED"
+
+
 def test_normal_empty_root_continues_only_approved_leaf_preserving_failed_qa(tmp_path):
     root = "https://www.amazon.es/gp/bestsellers"
     p = plan(tmp_path, "T1"); p["sources"][0]["page_urls"] = [root, URL]
