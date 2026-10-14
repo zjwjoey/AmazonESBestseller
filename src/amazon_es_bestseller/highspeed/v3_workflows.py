@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict, OrderedDict
 from contextlib import contextmanager
 import csv
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -247,6 +248,98 @@ def bounded_csv_fields():
     try:yield
     finally:csv.field_size_limit(previous)
 
+def combined_field_qa(central,supplement):
+    """Aggregate fields without changing central full-page completeness proofs."""
+    result=deepcopy(central)
+    for key,value in supplement['counts'].items():
+        if isinstance(value,int):result['counts'][key]=result['counts'].get(key,0)+value
+    scoped={}
+    for item in result['source_scope']+supplement['source_scope']:
+        key=(item['source_type'],item['source_id']);values=scoped.setdefault(key,{'source_type':key[0],'source_id':key[1]})
+        for field,count in item.items():
+            if isinstance(count,int):values[field]=values.get(field,0)+count
+    result['source_scope']=list(scoped.values())
+    for field in ('rating','review_count'):
+        for status in ('VALID','NOT_DISPLAYED','PARSE_FAILED','SOURCE_CONFLICT','UNVERIFIED'):
+            count=supplement['counts'].get(field+'_'+status,0)
+            if count:result.setdefault('field_status_by_reverified_page_state',[]).append({'field':field,'field_status':status,
+                'page_state':'HISTORICAL_SUPPLEMENT_COMPLETENESS_UNVERIFIED','observations':count})
+    result['page_state_metric_denominator']='All latest full-page reverified observations plus independently bound historical supplement cards; supplement page completeness unverified'
+    result['metric_scope']={'central_full_page_observations':central['counts']['observations'],
+        'historical_supplement_observations':supplement['counts']['observations'],'combined_observations':result['counts']['observations']}
+    result['ok']=central['ok'] and supplement['ok'];result['findings'].extend(supplement['findings'])
+    return result
+
+
+def reconcile_report_scope(report_manifest,out):
+    """New metadata projection over independently rechecked sealed exports."""
+    from itertools import zip_longest
+    from .budgets import utc_text,aware_time
+    started=time.perf_counter();previous_reference=_ref(report_manifest);manifest=_read_ref(previous_reference)
+    artifacts=deepcopy(manifest['artifacts'])
+    def load(name):
+        reference=artifacts[name]
+        if _ref(reference['path'])!=reference:raise ValueError('SCOPE_RECONCILIATION_ARTIFACT_HASH_CONFLICT:'+name)
+        return json.loads(Path(reference['path']).read_text(encoding='utf-8'))
+    for name,reference in artifacts.items():
+        if 'rows' not in reference:
+            if _ref(reference['path'])!=reference:raise ValueError('SCOPE_RECONCILIATION_ARTIFACT_HASH_CONFLICT:'+name)
+            continue
+        for kind in ('csv','jsonl'):
+            if _ref(reference[kind]['path'])!=reference[kind]:raise ValueError('SCOPE_RECONCILIATION_EXPORT_HASH_CONFLICT')
+        count=0
+        with bounded_csv_fields(),Path(reference['jsonl']['path']).open(encoding='utf-8') as jh,Path(reference['csv']['path']).open(encoding='utf-8-sig',newline='') as ch:
+            for line,record in zip_longest(jh,csv.DictReader(ch)):
+                if line is None or record is None:raise ValueError('SCOPE_RECONCILIATION_EXPORT_COUNT_CONFLICT')
+                value=json.loads(line);count+=1
+                for key,item in value.items():
+                    actual=record.get(key)
+                    if isinstance(item,(dict,list)):
+                        if json.loads(actual)!=item:raise ValueError('SCOPE_RECONCILIATION_EXPORT_FIELD_CONFLICT:'+key)
+                    elif actual!=('' if item is None else str(item)):raise ValueError('SCOPE_RECONCILIATION_EXPORT_FIELD_CONFLICT:'+key)
+                if any(item!='' for key,item in record.items() if key not in value):raise ValueError('SCOPE_RECONCILIATION_EXTRA_CSV_FIELD')
+        if count!=reference['rows']:raise ValueError('SCOPE_RECONCILIATION_EXPORT_COUNT_CONFLICT')
+    source_quality=load('source_quality');history=load('history_coverage_qa');supplement=history['supplement_field_qa']
+    latest=manifest['latest_replay_observations'];central=deepcopy(source_quality['card_field_quality'])
+    if supplement['counts']['observations']>0 and central['counts']['observations']==latest+supplement['counts']['observations']:
+        for key,value in supplement['counts'].items():
+            if isinstance(value,int):central['counts'][key]-=value
+        size=len(supplement['source_scope'])
+        if central['source_scope'][-size:]!=supplement['source_scope']:raise ValueError('SCOPE_RECONCILIATION_CENTRAL_SCOPE_SUFFIX_CONFLICT')
+        central['source_scope']=central['source_scope'][:-size]
+    if central['counts']['observations']!=latest:raise ValueError('SCOPE_RECONCILIATION_CENTRAL_DENOMINATOR_CONFLICT')
+    source_quality['card_field_quality']=central
+    qa=combined_field_qa(central,supplement)
+    if qa['counts']['observations']!=manifest['observations']:raise ValueError('SCOPE_RECONCILIATION_COMBINED_DENOMINATOR_CONFLICT')
+    for domain,total in ((central,latest),(qa,manifest['observations'])):
+        if sum(r['observations'] for r in domain['source_scope'])!=total:raise ValueError('SCOPE_RECONCILIATION_SOURCE_DENOMINATOR_CONFLICT')
+        for field in ('rating','review_count'):
+            if sum(r['observations'] for r in domain['field_status_by_reverified_page_state'] if r['field']==field)!=total:
+                raise ValueError('SCOPE_RECONCILIATION_FIELD_STATE_DENOMINATOR_CONFLICT')
+    directory=Path(out)/('final_v3_scope_'+uuid.uuid4().hex);directory.mkdir(parents=True,exist_ok=False)
+    for name,value in (('qa',qa),('source_quality',source_quality)):
+        path=directory/(name+'.json');immutable_json(path,value);artifacts[name]=_ref(path)
+    timing=load('performance');verified_at=utc_text();elapsed=time.perf_counter()-started
+    timing['original_report_verified_at']=timing.get('final_report_verified_at');timing['final_delivery_verified_at']=verified_at
+    timing['scope_reconciliation_seconds']=elapsed
+    if timing.get('finished_at'):
+        timing.update(finished_at=verified_at,final_report_verified_at=verified_at,
+            total_wall_seconds=(aware_time(verified_at)-aware_time(timing['started_at'])).total_seconds())
+        if timing.get('fresh_unique_per_hour') is not None:
+            rate=timing['fresh_new_unique_links']*3600/timing['total_wall_seconds']
+            timing.update(fresh_unique_per_hour=rate,unique_per_hour=rate,unique_per_minute=rate/60)
+        timing['ten_hour_target_passed']=timing['ten_hour_target_passed'] and timing['total_wall_seconds']<=36000
+    timing['stages']['scope_reconciliation']={'count':1,'total_seconds':elapsed,'mean_seconds':elapsed,'p50_seconds':elapsed,'p95_seconds':elapsed}
+    if timing.get('timing_breakdown',{}).get('qa_seconds') is not None:timing['timing_breakdown']['qa_seconds']+=elapsed
+    performance_path=directory/'performance.json';immutable_json(performance_path,timing);artifacts['performance']=_ref(performance_path)
+    manifest.update(artifacts=artifacts,scope_projection_version='separate_central_and_combined_denominators_v3.1',
+        original_report_manifest_reference=previous_reference,scope_reconciliation_verified_at=verified_at,
+        independent_all_export_fields_reverified=True,central_source_page_observations=latest,
+        combined_field_observations=qa['counts']['observations'],original_DOM_audits_reused_with_verified_artifact_SHA=True)
+    immutable_json(directory/'manifest.json',sealed(manifest))
+    return {'directory':str(directory),'manifest':manifest}
+
+
 def report_replay_v3(root,run_id,out,*,mapping_config=None,history_manifest=None):
     from .candidate_contract import build_candidate_records
     from .quality import audit_run
@@ -259,14 +352,12 @@ def report_replay_v3(root,run_id,out,*,mapping_config=None,history_manifest=None
             raise ValueError('V3_SNAPSHOT_RUN_REQUIRED')
         historical=origin=='HISTORICAL_REPLAY'
         source_quality=audit_run(store,run_id)
-        qa=source_quality['card_field_quality']
+        qa=deepcopy(source_quality['card_field_quality'])
         latest_row_count=len(rows);history_qa=None;supplement_pages={}
         if history_manifest:
             added,history_qa,supplement_pages=recover_history_supplement(history_manifest,run)
             rows.extend(added)
-            for key,value in history_qa['supplement_field_qa']['counts'].items():
-                if isinstance(value,int):qa['counts'][key]=qa['counts'].get(key,0)+value
-            qa['source_scope'].extend(history_qa['supplement_field_qa']['source_scope'])
+            qa=combined_field_qa(qa,history_qa['supplement_field_qa'])
             if not history_qa['ok']:
                 qa['ok']=False;qa['findings'].extend(history_qa['findings'])
         replay_manifest=read_sealed(Path(root).parent/'replay_manifest.json') if historical else {}
@@ -419,6 +510,24 @@ def verified_pending_navigation(pack_path):
     return result,reference
 
 
+def pending_source_order_v3(sources,new_sources):
+    """Probe literal new deep navigation before exhausted department scopes.
+
+    Preserve every exact source and five-type round robin. Within the two
+    historically cardless navigation types, the global root remains first,
+    then newly evidenced deep links. This is ordering, not source validation.
+    """
+    from urllib.parse import urlsplit
+    from .schedule import source_order
+    newly_discovered={source['source_id'] for source in new_sources}
+    def priority(source):
+        if source['source_type'] not in {'MOST_WISHED_FOR','MOST_GIFTED'}:return 0
+        parts=[part for part in urlsplit(source['actual_source_url']).path.split('/') if part]
+        if len(parts)==2:return 0
+        return 1 if source['source_id'] in newly_discovered else 2
+    return source_order(sorted(sources,key=priority),policy='FIVE_TYPE_ROUND_ROBIN_V3')
+
+
 def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_source_pack=None,runtime_root=None):
     """Literal prior navigation plan only; new LIVE batches remain unapproved."""
     from .contracts import DEFAULT_CONFIG
@@ -442,7 +551,7 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
             key=(source['source_type'],source['actual_source_url'])
             if key not in existing:
                 sources.append({**source,**map_category(source,rules)});existing.add(key)
-        sources=source_order(sources,policy='FIVE_TYPE_ROUND_ROBIN_V3')
+        sources=pending_source_order_v3(sources,new_sources)
     directory=Path(out)/('pending_v3_'+uuid.uuid4().hex);directory.mkdir(parents=True,exist_ok=False)
     outputs={}
     for stage,count,requests,pages in [('T1',5,50,20),('T2',len(sources),500,150),('T3',len(sources),8000,2000)]:
@@ -462,6 +571,7 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
         plan={**DEFAULT_CONFIG,'mode':'HIGH_SPEED_V2','snapshot_contract_version':3,'normalizer_version':NORMALIZER_VERSION,
             'run_id':run_id,'snapshot_id':run_id,'stage':stage,'origin':'LIVE_CAPTURE','live_enabled':False,'approved':False,
             'sources_reviewed':False,'sources':selected,'source_order_policy':'FIVE_TYPE_ROUND_ROBIN_V3',
+            'source_scope_priority_policy':'ROOT_THEN_NEW_LITERAL_DEEP_BEFORE_HISTORICAL_DEPARTMENT_NAV_v3.1',
             'max_duration_hours':10,'request_pacing_seconds':3,'parallelism':1,'category_cooldown_seconds':0,
             'max_requests_per_run':requests,'max_requests_per_day':requests,'max_pages_per_run':pages,
             'max_raw_observations_per_run':150000,'history_observation_limit':1000000,
@@ -483,13 +593,20 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
                 'navigation_evidence':s.get('discovery_evidence',[])} for s in selected}}
         plan_path=directory/(stage+'.plan.pending.json');auth_path=directory/(stage+'.authorization.pending.json')
         immutable_json(plan_path,plan);immutable_json(auth_path,authorization)
-        outputs[stage]={'plan':_ref(plan_path),'authorization':_ref(auth_path),'run_id':run_id,'store_root':str(runtime)}
+        outputs[stage]={'plan':_ref(plan_path),'authorization':_ref(auth_path),'run_id':run_id,'store_root':str(runtime),'browser_profile':str(runtime.parent/'browser_profile')}
     script=directory/'Start-Reviewed-V3.ps1'
-    script.write_text("param([Parameter(Mandatory=$true)][string]$PlanPath,[Parameter(Mandatory=$true)][string]$AuthorizationPath,[Parameter(Mandatory=$true)][string]$StoreRoot,[Parameter(Mandatory=$true)][string]$PythonPath,[Parameter(Mandatory=$true)][string]$WorktreePath)\n$ErrorActionPreference='Stop'\n$plan=Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json\n$auth=Get-Content -LiteralPath $AuthorizationPath -Raw | ConvertFrom-Json\nif ($plan.live_enabled -ne $true -or $auth.approved -ne $true) { throw 'Pending templates require explicit source/budget/stage approval before activation.' }\n$env:PYTHONPATH=Join-Path $WorktreePath 'src'\n$env:PYTHONDONTWRITEBYTECODE='1'\n$env:PYTHONIOENCODING='utf-8'\nRemove-Item Env:RUN_LIVE -ErrorAction SilentlyContinue\n& $PythonPath -m amazon_es_bestseller.cli highspeed run --root $StoreRoot --plan $PlanPath --authorization $AuthorizationPath --run-id $plan.run_id --headful --live\nif ($LASTEXITCODE -ne 0) { throw 'Reviewed V3 run failed; retain logs and evidence.' }\n",encoding='utf-8-sig')
+    script.write_text("param([Parameter(Mandatory=$true)][string]$PlanPath,[Parameter(Mandatory=$true)][string]$AuthorizationPath,[Parameter(Mandatory=$true)][string]$StoreRoot,[Parameter(Mandatory=$true)][string]$PythonPath,[Parameter(Mandatory=$true)][string]$WorktreePath)\n$ErrorActionPreference='Stop'\n$plan=Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json\n$auth=Get-Content -LiteralPath $AuthorizationPath -Raw | ConvertFrom-Json\nif ($plan.live_enabled -ne $true -or $auth.approved -ne $true) { throw 'Pending templates require explicit source/budget/stage approval before activation.' }\n$env:PYTHONPATH=Join-Path $WorktreePath 'src'\n$env:PYTHONDONTWRITEBYTECODE='1'\n$env:PYTHONIOENCODING='utf-8'\nRemove-Item Env:RUN_LIVE -ErrorAction SilentlyContinue\n$ProfilePath=Join-Path (Split-Path -Parent $StoreRoot) 'browser_profile'\n& $PythonPath -m amazon_es_bestseller.cli highspeed run --root $StoreRoot --plan $PlanPath --authorization $AuthorizationPath --run-id $plan.run_id --profile-dir $ProfilePath --headful --live\nif ($LASTEXITCODE -ne 0) { throw 'Reviewed V3 run failed; retain logs and evidence.' }\n",encoding='utf-8-sig')
+    capacity_reference=None
+    if pending_source_pack:
+        from .v3_capacity import export_capacity
+        capacity_path=directory/'source_capacity_estimate.json'
+        export_capacity(historical_root,historical_run_id,outputs['T2']['plan']['path'],pending_source_pack,capacity_path)
+        capacity_reference=_ref(capacity_path)
     manifest={'origin':'OFFLINE_PREPARATION','live_requests':0,'approved':False,'generated_at':utc_text(),
         'source_navigation_plan_reference':prior_ref,'mapping_config_reference':mapping_reference,'stages':outputs,'launcher':_ref(script),
         'pending_navigation_pack_reference':pending_reference,'new_literal_navigation_sources':len(new_sources),
         'fresh_batch_runtime_root':str(batch_runtime),'runtime_directories_created':False,
+        'source_capacity_estimate_reference':capacity_reference,
         'T1_T2_T3_passed':False,'stage_gate_prerequisites_required':True}
     immutable_json(directory/'manifest.json',sealed(manifest));return {'directory':str(directory),'manifest':manifest}
 

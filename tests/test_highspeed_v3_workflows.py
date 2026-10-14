@@ -82,6 +82,33 @@ def test_all_history_keeps_older_actual_capture_membership_and_rating_tuple(tmp_
     assert report['manifest']['supplemental_historical_capture_observations']==1
     candidate=json.loads(Path(report['manifest']['artifacts']['candidates']['jsonl']['path']).read_text(encoding='utf-8').splitlines()[0])
     assert len(candidate['source_memberships'])==2 and len(candidate['rating_history'])==2
+    artifacts=report['manifest']['artifacts']
+    combined=json.loads(Path(artifacts['qa']['path']).read_text(encoding='utf-8'))
+    central=json.loads(Path(artifacts['source_quality']['path']).read_text(encoding='utf-8'))['card_field_quality']
+    assert central['counts']['observations']==1 and combined['counts']['observations']==2
+    assert sum(r['observations'] for r in combined['source_scope'])==2
+    for field in ('rating','review_count'):
+        assert sum(r['observations'] for r in combined['field_status_by_reverified_page_state'] if r['field']==field)==2
+        assert any(r['page_state']=='HISTORICAL_SUPPLEMENT_COMPLETENESS_UNVERIFIED' for r in combined['field_status_by_reverified_page_state'] if r['field']==field)
+    # Reproduce the earlier metadata alias defect without changing source files.
+    from copy import deepcopy
+    from amazon_es_bestseller.multisource.storage import immutable_json,sealed
+    from amazon_es_bestseller.highspeed.v3_workflows import reconcile_report_scope
+    source_quality=json.loads(Path(artifacts['source_quality']['path']).read_text(encoding='utf-8'))
+    supplement=report['manifest']['all_history_coverage_qa']['supplement_field_qa']
+    for key,value in supplement['counts'].items():
+        if isinstance(value,int):source_quality['card_field_quality']['counts'][key]+=value
+    source_quality['card_field_quality']['source_scope'].extend(supplement['source_scope'])
+    bad_scope=tmp_path/'bad_scope.json';immutable_json(bad_scope,source_quality)
+    original_projection=deepcopy(report['manifest']);original_projection['artifacts']['source_quality']={'path':str(bad_scope),'sha256':digest(bad_scope.read_bytes())}
+    old_manifest=tmp_path/'old_manifest.json';immutable_json(old_manifest,sealed(original_projection))
+    reconciled=reconcile_report_scope(old_manifest,tmp_path/'reconciled')
+    fixed_source=json.loads(Path(reconciled['manifest']['artifacts']['source_quality']['path']).read_text(encoding='utf-8'))
+    fixed_qa=json.loads(Path(reconciled['manifest']['artifacts']['qa']['path']).read_text(encoding='utf-8'))
+    assert fixed_source['card_field_quality']['counts']['observations']==1
+    assert fixed_qa['counts']['observations']==2
+    assert reconciled['manifest']['artifacts']['candidates']==artifacts['candidates']
+    assert reconciled['manifest']['independent_all_export_fields_reverified']
 
 
 def test_pending_navigation_pack_rebuilds_exact_literal_dom_and_rejects_forgery(tmp_path):
@@ -92,6 +119,14 @@ def test_pending_navigation_pack_rebuilds_exact_literal_dom_and_rejects_forgery(
     pack=tmp_path/'pack.json';pack.write_text(json.dumps({'approved':False,'live_enabled':False,'sources':sources}),encoding='utf-8')
     rows,reference=verified_pending_navigation(pack)
     assert rows[0]['page_urls']==[sources[0]['actual_source_url']] and rows[0]['current_availability_verified'] is False
+    root,mapping=old_capture(tmp_path/'original')
+    pending=prepare_v3(root,'old',tmp_path/'prepared',mapping_config=mapping,pending_source_pack=pack)
+    capacity=pending['manifest']['source_capacity_estimate_reference']
+    from amazon_es_bestseller.multisource.storage import read_sealed
+    capacity_data=read_sealed(Path(capacity['path']))
+    assert capacity['sha256']==digest(Path(capacity['path']).read_bytes())
+    assert capacity_data['live_requests']==0 and capacity_data['target_supply_sufficiency']=='UNVERIFIED'
+    assert capacity_data['current_capacity_upper_bound'] is None
     sources[0]['discovery_evidence'][0]['raw_href']='/gp/most-wished-for/home/FAKE'
     pack.write_text(json.dumps({'approved':False,'live_enabled':False,'sources':sources}),encoding='utf-8')
     with pytest.raises(ValueError,match='LITERAL_DOM'):verified_pending_navigation(pack)
@@ -103,17 +138,44 @@ def test_replay_never_overwrites_existing_or_historical_directory(tmp_path):
 
 def test_pending_templates_are_new_unapproved_live_disabled_and_literal_sources(tmp_path):
     root,mapping=old_capture(tmp_path);result=prepare_v3(root,'old',tmp_path/'plans',mapping_config=mapping,runtime_root=tmp_path/'machine_runtime')
+    launcher=Path(result['manifest']['launcher']['path']).read_text(encoding='utf-8-sig')
+    assert '--profile-dir $ProfilePath' in launcher
     for stage,item in result['manifest']['stages'].items():
         plan=json.loads(Path(item['plan']['path']).read_text(encoding='utf-8'))
         auth=json.loads(Path(item['authorization']['path']).read_text(encoding='utf-8'))
         assert not plan['live_enabled'] and not auth['approved']
         assert Path(auth['store_root']).parents[1]==tmp_path/'machine_runtime'
         assert not Path(auth['store_root']).exists()
+        assert item['browser_profile']==str(Path(auth['store_root']).parent/'browser_profile')
         assert plan['run_id']!='old' and plan['origin']=='LIVE_CAPTURE'
         assert plan['sources'][0]['page_urls']==['https://www.amazon.es/gp/bestsellers/home']
         assert plan['request_pacing_seconds']==3 and plan['parallelism']==1
         assert plan['sources'][0]['parser_profile']=='V3'
         assert not plan['sources_reviewed']
+
+
+def test_pending_missing_types_probe_new_deep_sources_before_page_budget_exhaustion():
+    from amazon_es_bestseller.highspeed.v3_workflows import pending_source_order_v3
+    sources=[];new=[]
+    for kind,path in [('BEST_SELLERS','bestsellers'),('NEW_RELEASES','new-releases'),
+                      ('MOST_WISHED_FOR','most-wished-for'),('MOST_GIFTED','most-gifted')]:
+        for slot in range(40):
+            url='https://www.amazon.es/gp/'+path+('' if slot==0 else '/department'+str(slot))
+            sources.append({'source_id':kind+str(slot),'source_type':kind,'actual_source_url':url,'page_urls':[url]})
+        if kind in {'MOST_WISHED_FOR','MOST_GIFTED'}:
+            for slot in range(2):
+                url='https://www.amazon.es/gp/'+path+'/real-node/'+str(slot)
+                row={'source_id':kind+'deep'+str(slot),'source_type':kind,'actual_source_url':url,'page_urls':[url],'enabled':False}
+                sources.append(row);new.append(row)
+    ordered=pending_source_order_v3(sources,new)
+    assert {s['source_id'] for s in ordered}=={s['source_id'] for s in sources}
+    assert len(ordered)==len(sources)
+    for kind in ('MOST_WISHED_FOR','MOST_GIFTED'):
+        queue=[s for s in ordered if s['source_type']==kind]
+        assert queue[0]['source_id']==kind+'0'
+        assert [s['source_id'] for s in queue[1:3]]==[kind+'deep0',kind+'deep1']
+        assert all(not s['enabled'] for s in queue[1:3])
+    assert {s['source_id'] for s in new}<={s['source_id'] for s in ordered[:150]}
 
 def test_live_v3_standard_report_exports_full_contract_from_sealed_same_run_receipt(tmp_path):
     from amazon_es_bestseller.highspeed.reports import export_report
