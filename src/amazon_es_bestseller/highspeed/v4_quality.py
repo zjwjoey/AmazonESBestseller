@@ -100,6 +100,24 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                 cp = Path(ref['evidence_path']); cb = cp.read_bytes()
                 if hashlib.sha256(cb).hexdigest() != ref['evidence_sha256']:
                     raise ValueError('ACP_DOM_SHA_MISMATCH')
+                if require_live:
+                    # Early journals retained request_id but used evidence_path
+                    # for HTML. Resolve its original sealed receipt in this same
+                    # run's immutable response directory, never a newer capture.
+                    receipt_path = Path(page['capture_receipt_reference']['path']).parent / (ref['request_id'] + '.json')
+                    actual = read_sealed(receipt_path)
+                    reserved = read_sealed(receipt_path.parent.parent / 'requests' / (ref['request_id'] + '.reserved.json'))
+                    binding = actual.get('ranking_context_binding') or {}
+                    if (actual.get('run_id') != page['run_id'] or actual.get('origin') != 'LIVE_CAPTURE'
+                            or actual.get('kind') != 'ACP' or actual.get('status_code') != 200
+                            or actual.get('access_state') != 'NORMAL' or actual.get('sha256') != ref['evidence_sha256']
+                            or actual.get('observed_at') != ref['observed_at']
+                            or actual.get('request_url') != ref.get('request_url')
+                            or actual.get('source_id') != page['source_id']
+                            or binding.get('page_evidence_sha256') != page['evidence_sha256']
+                            or reserved.get('run_id') != page['run_id'] or reserved.get('kind') != 'ACP'
+                            or reserved.get('url') != actual.get('request_url')):
+                        raise ValueError('ACP_ORIGINAL_LIVE_RECEIPT_BINDING_REQUIRED')
                 acp.append({**ref, 'body': cb.decode('utf8')})
             parsed = parse_v4_page(body.decode('utf8'), source=source, page_url=page['page_url'],
                                    run_id=page['run_id'], snapshot_id=page.get('snapshot_id'),
@@ -123,6 +141,10 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                         or reservation.get('url') != page['page_url']
                         or reservation.get('kind') != 'PAGE' or reservation.get('origin') != 'LIVE_CAPTURE'):
                     raise ValueError('CURRENT_RUN_LIVE_RECEIPT_REQUIRED')
+                for name in ('document_html_reference', 'rendered_html_reference'):
+                    reference = page.get(name) or {}
+                    if reference.get('path') and hashlib.sha256(Path(reference['path']).read_bytes()).hexdigest() != reference.get('sha256'):
+                        raise ValueError('PAIRED_CAPTURE_REPRESENTATION_SHA_MISMATCH')
             if parsed['page']['status'] != page['status']:
                 raise ValueError('PAGE_STATUS_DOM_MISMATCH')
         except (OSError, KeyError, ValueError, TypeError) as exc:

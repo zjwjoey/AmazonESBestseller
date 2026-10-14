@@ -106,7 +106,8 @@ def main(argv=None):
         try:
             run = store.get_run(args.run_id)
             result = export_v4(store.pages(args.run_id), list(store.iter_observations(args.run_id)),
-                                run['plan']['sources'], args.out, run_id=args.run_id, stage=run['stage'])
+                                run['plan']['sources'], args.out, run_id=args.run_id, stage=run['stage'],
+                                request_receipts=list(store.iter_responses(args.run_id)))
         finally:
             store.close()
     else:

@@ -31,7 +31,7 @@ def csv_bytes(records):
     return stream.getvalue().encode('utf-8-sig')
 
 
-def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timings=None):
+def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timings=None, request_receipts=None):
     directory = Path(output) / ('report_v4_' + uuid.uuid4().hex)
     directory.mkdir(parents=True, exist_ok=False)
     qa_started = time.perf_counter()
@@ -51,6 +51,26 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
                    'live_candidates_per_hour': None, 'live_request_success_rate': None,
                    'ten_hour_collection_goal_demonstrated': False,
                    'capacity_verified': False}
+    if request_receipts is not None:
+        from ..multisource.storage import read_sealed
+        verified = []
+        for supplied in request_receipts:
+            actual = read_sealed(supplied['evidence_path'])
+            if actual['request_id'] != supplied['request_id'] or actual['run_id'] != run_id or actual.get('origin') != 'LIVE_CAPTURE':
+                raise ValueError('V4_PERFORMANCE_ACTUAL_RUN_RECEIPTS_REQUIRED')
+            if hashlib.sha256(Path(actual['html_path']).read_bytes()).hexdigest() != actual['sha256']:
+                raise ValueError('V4_PERFORMANCE_RECEIPT_BODY_SHA_MISMATCH')
+            verified.append(actual)
+        if len({r['request_id'] for r in verified}) != len(verified):
+            raise ValueError('V4_PERFORMANCE_DUPLICATE_RECEIPT')
+        successes = sum(r.get('status_code') == 200 and r.get('access_state') == 'NORMAL' for r in verified)
+        kinds = sorted({r['source_type'] for r in verified})
+        performance.update(actual_request_receipt_count=len(verified), successful_HTTP_200_NORMAL=successes,
+            live_request_success_rate=successes / len(verified) if verified else None,
+            collection_request_operation_seconds=sum(r.get('duration_seconds', 0) for r in verified),
+            mean_request_seconds_by_source={k: sum(r.get('duration_seconds', 0) for r in verified if r['source_type'] == k)
+                / sum(r['source_type'] == k for r in verified) for k in kinds},
+            measurement_scope='Charged PAGE/ACP operations including browser wait; static assets not counted. Capacity and active candidate rate unverified.')
     artifacts = {
         'candidate_snapshot_v4.csv': csv_bytes(candidates),
         'observations_v4.jsonl': b''.join(canonical_bytes(r) + b'\n' for r in observations),
