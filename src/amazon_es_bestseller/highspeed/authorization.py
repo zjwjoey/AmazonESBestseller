@@ -413,6 +413,9 @@ def verified_stage_artifact(reference, expected_stage):
     return record
 
 def validate_authorization(plan, authorization, gate, *, now=None, store_root=None):
+    if plan.get('snapshot_contract_version') == 4:
+        from .v4_authorization import validate_v4_authorization
+        return validate_v4_authorization(plan, authorization, gate, now=now, store_root=store_root)
     validate_plan(plan)
     if plan.get('snapshot_contract_version') == 3 and plan.get('stage') != 'T0':
         approved_probe = authorization.get('probe_all_reviewed_page_urls', False) if authorization else False
@@ -488,6 +491,9 @@ def validate_authorization(plan, authorization, gate, *, now=None, store_root=No
     return authorization
 
 def authorize_request(url, source, authorization, *, kind="PAGE", descriptor=None):
+    if authorization.get('snapshot_contract_version') == 4:
+        from .v4_authorization import authorize_v4_request
+        return authorize_v4_request(url, source, authorization, kind=kind, descriptor=descriptor)
     if not amazon_url(url):
         raise ValueError("INVALID_AMAZON_REQUEST_URL")
     scope = authorization["sources"][source["source_id"]]

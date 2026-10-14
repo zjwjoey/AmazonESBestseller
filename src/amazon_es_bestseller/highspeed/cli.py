@@ -82,6 +82,8 @@ def export_gate(store, run_id, output, *, authorization_path=None):
         "directory": str(directory), "gate_validation_error": record.get("gate_validation_error")}
 
 def run_live(args, store, plan, approval, *, entry_time):
+    if plan.get('snapshot_contract_version') == 4:
+        raise ValueError('V4_REQUIRES_EXPLICIT_V4_CLI_AND_BOUNDED_PROTOCOL_DIAGNOSTICS')
     # No browser is even constructed while another run owns this store.
     with ExitStack() as locks:
         locks.enter_context(store.run_lock(plan["run_id"]))

@@ -22,6 +22,9 @@ def madrid_day(value=None):
     return aware_time(value).astimezone(ZoneInfo("Europe/Madrid")).date().isoformat()
 
 def validate_plan(plan):
+    if plan.get('snapshot_contract_version') == 4:
+        from .v4_authorization import validate_plan_v4
+        return validate_plan_v4(plan)
     if plan.get("mode") != "HIGH_SPEED_V2" or plan.get("stage") not in {"T0", "T1", "T2", "T3"}:
         raise ValueError("HIGH_SPEED_STAGE_REQUIRED")
     contract_version = plan.get("snapshot_contract_version", 2)

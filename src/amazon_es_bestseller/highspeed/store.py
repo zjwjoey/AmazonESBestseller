@@ -41,9 +41,14 @@ def _json(value):
 
 def _plan_normalizer_version(plan):
     version = plan.get("snapshot_contract_version", 2)
-    if type(version) is not int or version not in {2, 3}:
+    if type(version) is not int or version not in {2, 3, 4}:
         raise ValueError("UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION")
-    if version == 3:
+    if version == 4:
+        if plan.get('mode') != 'HIGH_SPEED_V4':
+            raise ValueError('UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION')
+        from .v4_authorization import validate_plan_v4
+        validate_plan_v4(plan)
+    if version in {3, 4}:
         if plan.get("normalizer_version") != V3_NORMALIZER_VERSION:
             raise ValueError("V3_REVIEWED_NORMALIZER_REQUIRED")
         return V3_NORMALIZER_VERSION
@@ -418,7 +423,7 @@ class RunStore:
                 if plan.get("history_observation_limit") is not None and history_count + inserted > plan["history_observation_limit"]:
                     raise ValueError("HISTORY_OBSERVATION_STORAGE_BUDGET_EXHAUSTED")
                 url = raw.get("raw_product_url", raw.get("product_url_raw"))
-                resolver = normalize_product_url_v3 if plan.get("snapshot_contract_version") == 3 else normalize_product_url
+                resolver = normalize_product_url_v3 if plan.get("snapshot_contract_version") in {3, 4} else normalize_product_url
                 normalized = resolver(url, base_url=page.get("page_url") or "https://www.amazon.es")
                 valid = normalized.get("is_valid", bool(normalized.get("normalized_product_url")))
                 cid, status = None, "INVALID_PRODUCT_LINK"
@@ -456,7 +461,7 @@ class RunStore:
                     "evidence_path": raw.get("evidence_path", page.get("evidence_path")),
                     "raw_sha256": raw_hash, "parent_observation_id": parent_oid}
                 row_data["source_evidence_eligible"] = source_eligible
-                if plan.get("snapshot_contract_version") == 3:
+                if plan.get("snapshot_contract_version") in {3, 4}:
                     for field in ("normalizer_version", "normalization_version", "normalization_evidence",
                                   "unknown_query_parameters", "preserved_identity_parameters", "unreviewed_path_suffix"):
                         row_data[field] = normalized.get(field)

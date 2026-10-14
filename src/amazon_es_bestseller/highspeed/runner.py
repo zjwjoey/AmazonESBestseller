@@ -361,6 +361,8 @@ class HighSpeedRunner:
         return local if local.get("state", "NORMAL") != "NORMAL" else shared
 
     def run(self, plan, *, authorization=None, transport=None, resume=False, preheld_lock=False):
+        if plan.get('snapshot_contract_version') == 4:
+            raise ValueError('V4_REQUIRES_EXPLICIT_V4_T1_RUNNER')
         entry_time = utc_text(self.clock())
         validate_plan(plan)
         if plan.get("snapshot_contract_version") == 3 and self.parser is None:
@@ -924,7 +926,7 @@ class HighSpeedRunner:
         save_start = aware_time(self.clock())
         receipt = self.store.save_response(plan["run_id"], reservation, response)
         acknowledge=getattr(transport,'acknowledge_native_response',None)
-        if live and plan.get('snapshot_contract_version')==3 and kind=='ACP' and callable(acknowledge):
+        if live and plan.get('snapshot_contract_version') in {3,4} and kind=='ACP' and callable(acknowledge):
             acknowledge(receipt)
         self.store.append_event(plan["run_id"], {"kind": "HTMLSAVE", "stage": "html_save",
             "duration_seconds": (aware_time(self.clock())-save_start).total_seconds(),

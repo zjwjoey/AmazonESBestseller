@@ -105,9 +105,11 @@ def _fields(card):
         if m:
             v = float(m.group(1).replace(',', '.')) * 1000 if m.group(2) else int(re.sub(r'[. ]', '', m.group(1)))
             monthly.append((raw, int(v), _proof(n, 'span')))
+        elif 'comprados el mes pasado' in raw.casefold() or 'comprado el mes pasado' in raw.casefold():
+            monthly.append((raw, None, _proof(n, 'span')))
     choose('rating', ratings, any(v is None for _, v, _ in ratings))
     choose('rating_count', counts, any(v is None for _, v, _ in counts))
-    choose('monthly_bought', monthly)
+    choose('monthly_bought', monthly, any(v is None for _, v, _ in monthly))
 
     prices, references = [], []
     for n in card.select('.a-price'):
@@ -124,6 +126,7 @@ def _fields(card):
     choose('price', prices, any(v is None for _, v, _ in prices))
     result['current_price_raw'] = result.pop('price_raw')
     result['reference_price_raw'] = references[0][0] if references else None
+    evidence['reference_price'] = [v[2] for v in references]
     result['reference_price_semantics'] = 'DISPLAYED_REFERENCE_NOT_CONFIRMED_PREVIOUS_PRICE' if references else None
     raw_text = _text(card) or ''
     discount = re.search(r'-\s*\d{1,2}\s*%', raw_text)
@@ -242,6 +245,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                     fields[field + '_status'] = 'UNVERIFIED'
                     fields[value_key] = None
                 fields['binding_doubts'] = ['MULTIPLE_FOREIGN_PRODUCT_TARGETS_IN_CARD']
+                fields['discount_rate'] = None
             rows.append({**link, **fields, 'product_title_es': title, 'product_title_raw': title,
                          'product_title_status': status, 'product_title_evidence': {**(title_proof or {}), 'raw_product_url': raw},
                          'ranking_position': None, 'ranking_semantics': subtype,
@@ -263,6 +267,19 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                                          'raw_product_url': row['raw_product_url'], 'title': row.get('product_title_evidence')})
         row.setdefault('rating_count_semantics', 'EVALUATION_COUNT_NOT_WRITTEN_REVIEWS')
         row.setdefault('written_review_count', None)
+        row.setdefault('rating_count_raw', row.get('review_count_raw'))
+        row.setdefault('rating_count', row.get('review_count'))
+        row.setdefault('rating_count_status', row.get('review_count_status', 'UNVERIFIED'))
+        for name, value_key in [('monthly_bought', 'monthly_bought_min'), ('price', 'current_price')]:
+            row.setdefault(name + '_status', 'UNVERIFIED')
+            row.setdefault(value_key, None)
+        for key in ('monthly_bought_raw', 'current_price_raw', 'reference_price_raw', 'discount_raw',
+                    'discount_rate', 'cart_interest_raw'):
+            row.setdefault(key, None)
+        row.setdefault('promotion_badge_raw', [])
+        row.setdefault('binding_doubts', [])
+        row.setdefault('preserved_variant_parameters', row.get('preserved_identity_parameters', []))
+        row.setdefault('title_components_raw', [])
         row['source_memberships'] = [{'source_id': source['source_id'], 'source_type': kind, 'source_subtype': source['source_subtype']}]
     nav = _navigation(soup, source, page_url, sha)
     page['status'] = 'VERIFIED_WITH_PRODUCTS' if any(r.get('is_valid') for r in rows) else 'NAVIGATION_ONLY' if nav else 'UNVERIFIED'
