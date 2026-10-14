@@ -16,9 +16,15 @@ def renormalize_run(store, run_id, output_root):
     explicit, while candidate fields belong to the new normalization version.
     """
     original = store.get_run(run_id)
+    v3 = original.get("snapshot_contract_version") == 3
+    if v3:
+        from .v3_links import normalize_product_url_v3, NORMALIZER_VERSION as version
+        resolver = normalize_product_url_v3
+    else:
+        resolver, version = normalize_product_url, NORMALIZER_VERSION
     rows, candidates, counts, raw_seen = [], {}, Counter(), set()
     for captured in store.iter_observations(run_id):
-        value = normalize_product_url(captured.get("raw_product_url"),
+        value = resolver(captured.get("raw_product_url"),
             base_url=captured.get("source_url") or "https://www.amazon.es")
         cid = candidate_id(value["normalized_product_url"]) if value["is_valid"] else None
         pair = (cid, captured.get("raw_product_url"))
@@ -41,14 +47,14 @@ def renormalize_run(store, run_id, output_root):
             status="IDENTITY_UNCONFIRMED"
         row = {**captured, **value, "candidate_id": cid, "dedup_status": status,
             "parent_run_id": run_id, "parent_observation_id": captured["observation_id"],
-            "normalizer_version": NORMALIZER_VERSION, "is_derivation": True}
+            "normalizer_version": version, "is_derivation": True}
         if captured.get("source_evidence_eligible") is False:
             row["target_eligible"]=False
         rows.append(row)
         counts[status] += 1
     groups = {}
     for cid, candidate in candidates.items():
-        key = candidate["possible_duplicate_key"] or candidate["normalized_product_url"]
+        key = candidate["normalized_product_url"] if v3 else candidate["possible_duplicate_key"] or candidate["normalized_product_url"]
         groups.setdefault(key, []).append(cid)
     for key, members in groups.items():
         representative = min(members)
@@ -64,9 +70,9 @@ def renormalize_run(store, run_id, output_root):
             for row in values:
                 handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
         files[name] = {"path": str(path.resolve()), "sha256": digest(path.read_bytes())}
-    manifest = {"schema_version": 2, "is_derivation": True, "origin": "OFFLINE_RENORMALIZATION",
+    manifest = {"schema_version": 3 if v3 else 2, "is_derivation": True, "origin": "OFFLINE_RENORMALIZATION",
         "parent_run_id": run_id, "parent_started_at": original["started_at"],
-        "parent_plan_sha256": digest(original["plan"]), "normalizer_version": NORMALIZER_VERSION,
+        "parent_plan_sha256": digest(original["plan"]), "normalizer_version": version,
         "raw_observations": len(rows), "normalized_unique_urls": len(candidates),
         "unique_valid_links": len(groups), "strict_independent_buyable_products": 0,
         "dedup_counts": dict(counts), "artifacts": files,

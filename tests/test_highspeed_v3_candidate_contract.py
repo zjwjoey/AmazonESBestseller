@@ -16,7 +16,7 @@ def test_latest_rating_and_reviews_come_from_same_observation():
     assert c['rating_value']==4.8 and c['review_count']==5
     assert c['rating_status']=='SOURCE_CONFLICT' and c['rating_chosen_observation_id']=='b'
     assert len(c['rating_history'])==len(c['source_memberships'])==2
-    assert c['rating_selection_rule']=='LATEST_VALID_OBSERVATION_v1'
+    assert c['rating_selection_rule']=='LATEST_VALID_OBSERVATION_WITH_PAIRED_REVIEW_FALLBACK_v2'
 
 def test_same_time_conflicts_not_arbitrarily_selected():
     c=build([observation(),observation('b',rating=4.8,count=100)])[0]
@@ -84,3 +84,20 @@ def test_memberships_and_rating_history_retain_exact_card_binding():
     for key in ('raw_product_url','normalized_product_url','representation','representation_slot','rank_raw','rank_context','run_id','snapshot_id','parser_version'):
         assert c['source_memberships'][0][key]==r[key]
         assert c['rating_history'][0][key]==r[key]
+
+def test_valid_review_without_rating_kept_as_same_observation_pair():
+    r=observation();r.update(rating_status='NOT_DISPLAYED',rating_value=None,rating_raw=None,review_count=123,review_count_raw='123',review_count_evidence=[{'original':'proof'}])
+    c=build([r])[0]
+    assert c['rating_status']=='NOT_DISPLAYED' and c['rating_value'] is None
+    assert c['review_count']==123 and c['review_count_raw']=='123'
+    assert c['review_count_evidence']==r['review_count_evidence']
+    assert c['rating_chosen_observation_id']=='a'
+    assert c['rating_selection_decision']=='LATEST_VALID_REVIEW_WITHOUT_VALID_RATING_PAIRED_FALLBACK_v1'
+
+
+def test_review_only_tie_conflict_not_selected():
+    a=observation();b=observation('b',count=20)
+    for r in (a,b):r.update(rating_status='NOT_DISPLAYED',rating_value=None,rating_raw=None)
+    c=build([a,b])[0]
+    assert c['review_count_status']=='SOURCE_CONFLICT' and c['review_count'] is None
+    assert c['rating_value'] is None and len(c['review_count_conflicts'])==2

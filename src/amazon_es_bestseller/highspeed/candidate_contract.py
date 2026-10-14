@@ -5,8 +5,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from .links import candidate_id
 
-CONTRACT_VERSION = 'candidate_snapshot_v3.1'
-RATING_SELECTION_RULE = 'LATEST_VALID_OBSERVATION_v1'
+CONTRACT_VERSION = 'candidate_snapshot_v3.2'
+RATING_SELECTION_RULE = 'LATEST_VALID_OBSERVATION_WITH_PAIRED_REVIEW_FALLBACK_v2'
 
 def _time(row):
     try:
@@ -40,6 +40,17 @@ def build_candidate_records(observations, *, batch_id, snapshot_id):
             ties=[r for r in valid if _time(r)==latest]
             if len({(r['rating_value'],r.get('review_count'),r.get('review_count_status')) for r in ties})==1:
                 chosen=sorted(ties,key=lambda r:r.get('observation_id',''))[0]
+        selection_decision='LATEST_VALID_RATING' if chosen else 'NO_VALID_RATING'
+        review_tie_conflict=False
+        if not valid:
+            reviews=[r for r in dated if r.get('rating_status')!='VALID' and r.get('review_count_status')=='VALID' and type(r.get('review_count')) is int and r['review_count']>=0]
+            if reviews:
+                latest=max(_time(r) for r in reviews)
+                review_ties=[r for r in reviews if _time(r)==latest]
+                review_tie_conflict=len({r['review_count'] for r in review_ties})>1
+                if not review_tie_conflict:
+                    chosen=sorted(review_ties,key=lambda r:r.get('observation_id',''))[0]
+                    selection_decision='LATEST_VALID_REVIEW_WITHOUT_VALID_RATING_PAIRED_FALLBACK_v1'
         values={r['rating_value'] for r in valid}
         conflict=len(values)>1 or (valid and chosen is None)
         history=[{k:deepcopy(r.get(k)) for k in ('observation_id','run_id','snapshot_id','raw_product_url','normalized_product_url','representation','representation_slot','ranking_position','rank_raw','rank_context','parser_version','source_type','source_id','source_url','observed_at','rating_binding_evidence','rating_raw','rating_value','rating_status','rating_source','rating_evidence','review_count_raw','review_count','review_count_status','review_count_evidence','rating_observed_at','evidence_path','evidence_sha256')} for r in ordered]
@@ -55,17 +66,19 @@ def build_candidate_records(observations, *, batch_id, snapshot_id):
             'dedup_status':'EXACT_NORMALIZED_URL_GROUP','source_memberships':memberships,
             'rating_history':history,'rating_selection_rule':RATING_SELECTION_RULE,
             'rating_chosen_observation_id':chosen.get('observation_id') if chosen else None,
+            'rating_selection_decision':selection_decision,
             'rating_conflicts':history if conflict else [],
             'rating_raw':chosen.get('rating_raw') if chosen else None,
-            'rating_value':chosen.get('rating_value') if chosen else None,
-            'rating_status':'SOURCE_CONFLICT' if conflict else 'VALID' if chosen else (representative.get('rating_status','UNVERIFIED') if representative.get('rating_status')!='VALID' else 'UNVERIFIED'),
+            'rating_value':chosen.get('rating_value') if chosen and chosen.get('rating_status')=='VALID' else None,
+            'rating_status':'SOURCE_CONFLICT' if conflict else chosen.get('rating_status','UNVERIFIED') if chosen else (representative.get('rating_status','UNVERIFIED') if representative.get('rating_status')!='VALID' else 'UNVERIFIED'),
             'rating_source':chosen.get('rating_source') if chosen else None,
             'rating_observed_at':chosen.get('rating_observed_at') if chosen else None,
             'rating_evidence':deepcopy(chosen.get('rating_evidence')) if chosen else [],
             'review_count_raw':chosen.get('review_count_raw') if chosen else None,
             'review_count':chosen.get('review_count') if chosen and chosen.get('review_count_status')=='VALID' else None,
-            'review_count_status':chosen.get('review_count_status','UNVERIFIED') if chosen else 'SOURCE_CONFLICT' if conflict else representative.get('review_count_status','UNVERIFIED'),
+            'review_count_status':chosen.get('review_count_status','UNVERIFIED') if chosen else 'SOURCE_CONFLICT' if conflict or review_tie_conflict else representative.get('review_count_status','UNVERIFIED'),
             'review_count_evidence':deepcopy(chosen.get('review_count_evidence')) if chosen else [],
+            'review_count_conflicts':history if review_tie_conflict else [],
             'first_observed_at':dated[0].get('observed_at') if dated else None,
             'latest_observed_at':dated[-1].get('observed_at') if dated else None,
             'observation_count':len(rows),'snapshot_id':snapshot_id,'batch_id':batch_id,

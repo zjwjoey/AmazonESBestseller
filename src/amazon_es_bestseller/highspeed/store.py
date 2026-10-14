@@ -39,6 +39,17 @@ def _json(value):
     return canonical_bytes(value).decode("utf-8")
 
 
+def _plan_normalizer_version(plan):
+    version = plan.get("snapshot_contract_version", 2)
+    if type(version) is not int or version not in {2, 3}:
+        raise ValueError("UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION")
+    if version == 3:
+        if plan.get("normalizer_version") != V3_NORMALIZER_VERSION:
+            raise ValueError("V3_REVIEWED_NORMALIZER_REQUIRED")
+        return V3_NORMALIZER_VERSION
+    return NORMALIZER_VERSION
+
+
 class RunStore:
     def normalizer_version(self, run_id):
         # Plans are immutable. Cache only their resolver selection, avoiding a
@@ -49,7 +60,7 @@ class RunStore:
             if row is None:
                 raise ValueError("HIGH_SPEED_RUN_NOT_FOUND")
             plan = json.loads(row[0])
-            cache[run_id] = V3_NORMALIZER_VERSION if plan.get("snapshot_contract_version") == 3 else NORMALIZER_VERSION
+            cache[run_id] = _plan_normalizer_version(plan)
         return cache[run_id]
 
     def __init__(self, root):
@@ -121,6 +132,7 @@ class RunStore:
         return self.root / "runs" / _safe(run_id)
 
     def begin_run(self, plan, *, started_at=None):
+        _plan_normalizer_version(plan)
         run_id = _safe(plan["run_id"])
         from .path_checks import validate_run_storage_root
         validate_run_storage_root(self.root, run_id)
@@ -632,6 +644,11 @@ class RunStore:
         if self.db.execute("SELECT 1 FROM destination_reviews WHERE run_id=? LIMIT 1",(run_id,)).fetchone():
             return sum(c["target_eligible"] for c in self.iter_candidates(run_id))
         version = self.normalizer_version(run_id)
+        if version == V3_NORMALIZER_VERSION:
+            # Every indexed V3 candidate is already an exact canonical URL.
+            # SQL uniqueness provides the same pool without reparsing all
+            # previous URLs on every page. Unknown/variant bytes stay distinct.
+            return self.normalized_candidate_count(run_id)
         return len({_current_review_key(row[0], version)
             for row in self.db.execute("SELECT c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,))})
 

@@ -1,9 +1,10 @@
 from amazon_es_bestseller.highspeed.store import RunStore
 from amazon_es_bestseller.highspeed.contracts import new_plan
 from amazon_es_bestseller.highspeed.v3_links import NORMALIZER_VERSION
+import pytest
 
 
-def test_v3_store_exact_identity_queries_and_tracking_resume(tmp_path):
+def test_v3_store_exact_identity_queries_and_tracking_resume(tmp_path, monkeypatch):
     store = RunStore(tmp_path / 'store')
     plan = new_plan('v3', sources=[{'source_id':'source','source_type':'BEST_SELLERS',
         'page_urls':['https://www.amazon.es/gp/bestsellers/kitchen/1']}])
@@ -26,4 +27,21 @@ def test_v3_store_exact_identity_queries_and_tracking_resume(tmp_path):
     assert store.summary('v3')['raw_count']==5
     assert store.candidate_count('v3')==4
     assert store.summary('v3')['possible_duplicates']==4
+    from amazon_es_bestseller.highspeed.reprocess import renormalize_run
+    result = renormalize_run(store,'v3',tmp_path/'reports')
+    assert result['unique_valid_links'] == result['normalized_unique_urls'] == 4
+    assert result['normalizer_version'] == NORMALIZER_VERSION
+    import amazon_es_bestseller.highspeed.store as module
+    monkeypatch.setattr(module, '_current_review_key', lambda *args: (_ for _ in ()).throw(AssertionError('full URL rescan')))
+    assert store.candidate_count('v3') == 4
+    store.close()
+
+
+def test_store_rejects_unsupported_policy_before_publishing_plan(tmp_path):
+    store = RunStore(tmp_path / 'store')
+    plan = new_plan('unsupported', snapshot_contract_version=4)
+    with pytest.raises(ValueError,match='UNSUPPORTED_SNAPSHOT'):
+        store.begin_run(plan)
+    assert store.db.execute('SELECT count(*) FROM runs').fetchone()[0] == 0
+    assert not (store.root/'runs'/'unsupported').exists()
     store.close()
