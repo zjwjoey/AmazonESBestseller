@@ -30,6 +30,7 @@ jobs:
         run: |
           amazon-es --help
           amazon-es multisource --help
+          python -m amazon_es_bestseller.highspeed.v4_cli --help
       - name: Compile source
         run: python -m compileall src
       - name: Run offline tests
