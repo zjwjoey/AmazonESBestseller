@@ -32,7 +32,7 @@ New navigation entries remain individually `enabled=false` and every authorizati
 
 ## Actual Windows paths for this offline delivery
 
-The final pending directory is `F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_v3_a554d66487e24fe980bb5b02d8a914a0`. Earlier pending directories are retained intermediate preparations; use this directory's sealed manifest. Fresh machine stores are declared under `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches`, outside delivery. Preparation does not create those stores or open a browser.
+The final pending directory is `F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_v3_78aa638e540244358d465991cdf3127f`. Earlier pending directories are retained intermediate preparations; use this directory's sealed manifest. Fresh machine stores are declared under `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches`, outside delivery. Preparation does not create those stores or open a browser.
 
 The following command independently creates another unapproved preparation in a new GUID directory; it sends zero requests:
 
@@ -44,9 +44,11 @@ Remove-Item Env:RUN_LIVE -ErrorAction SilentlyContinue
 & 'C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe' -m amazon_es_bestseller.cli highspeed prepare-v3 --historical-root 'F:\AmazonESBestseller\runtime\night5000_20261013T155222Z\store' --historical-run-id 'continue30000_20261013T204238Z' --mapping-config 'C:\Users\Administrator\.codex\worktrees\highspeed-snapshot-v3\AmazonESBestseller\configs\highspeed\v3\category_mapping.reviewed.json' --pending-source-pack 'F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_new_navigation_evidence\new_sources.pending_review.json' --runtime-root 'F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches' --out 'F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221'
 ```
 
-For reviewed activation, the delivered launcher takes the exact plan/auth and runtime paths from the sealed stage manifest. Current T1 store is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t1_2a0f2908aef9\store`, T2 is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t2_ae061b1dc2e0\store`, and T3 is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t3_76fc1e13b045\store`. These are pending references, not running batches. Preserve the pending originals; activate separately reviewed copies only after exact stage approval.
+For reviewed activation, the delivered launcher takes the exact plan/auth and runtime paths from the sealed stage manifest. Current T1 store is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t1_9ade8e5793a8\store`, T2 is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t2_1761e0e3e6f5\store`, and T3 is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t3_67c6a09b5a2b\store`. These are pending references, not running batches. Preserve the pending originals; activate separately reviewed copies only after exact stage approval.
 
 T1 tests five real entries and current score bindings; it is needed even when three historical list roots yielded no cards. T2 measures real source supply/coverage/throughput. T3 starts a genuinely new capture batch only after explicit approval and strict preceding stage gates. Neither synthetic tests nor historical replay establish current supply or ten-hour feasibility. Access restrictions stop new requests; there is no CAPTCHA, proxy, cookie, account or IP bypass.
+
+T1 sets `probe_all_reviewed_page_urls=true` in both its pending plan and pending authorization; the reviewed values must match. For this V3 T1 mode, reaching 500 links does not stop the frozen nine-source probe queue. Healthy execution continues through all exact reviewed PAGE URLs within the unchanged budgets. T2/T3 and V2 retain their normal target threshold. A budget, parser/access failure, UNKNOWN or restriction still stops immediately; nothing is skipped to force coverage. The run records attempted probes, successfully processed probes, actual COMPLETE pages and missing scopes separately. Probe-scope completion is not page completeness or five-list acceptance. The strict stage artifact also independently checks all exact approved PAGE receipts before the existing completeness/card/field gates. Any new probe scope still requires its own explicit review.
 
 ## Copyable reviewed activation, inspection and same-run recovery
 
@@ -55,7 +57,7 @@ These commands are preparation instructions, not permission to start LIVE. The p
 ```powershell
 $v3Python='C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe'
 $v3Worktree='C:\Users\Administrator\.codex\worktrees\highspeed-snapshot-v3\AmazonESBestseller'
-$v3Pending='F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_v3_a554d66487e24fe980bb5b02d8a914a0'
+$v3Pending='F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_v3_78aa638e540244358d465991cdf3127f'
 $v3Stage='T1'
 $v3ManifestEnvelope=Get-Content -LiteralPath (Join-Path $v3Pending 'manifest.json') -Raw | ConvertFrom-Json
 $v3Manifest=$v3ManifestEnvelope.payload
@@ -87,6 +89,51 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select-Object Proces
 $v3ReportOut=Join-Path ('F:\AmazonESBestseller\交付文件\'+(Get-Date -Format 'yyyyMMdd')+'\HighSpeedSnapshotV3_dd3c9221') ('fresh_stage_QA_'+[guid]::NewGuid().ToString('N'))
 & $v3Python -m amazon_es_bestseller.cli highspeed report-v3 --root $v3Store --run-id $v3Selected.run_id --mapping-config (Join-Path $v3Worktree 'configs\highspeed\v3\category_mapping.reviewed.json') --out $v3ReportOut
 ```
+
+For a completed fresh stage, export the actual strict prerequisite artifact separately. `qa` and `report-v3` are diagnostic outputs, not a substitute for `stage_gate.json`. This command independently rechecks the exported observations, exact card fields, receipt bodies, authorization and URL pool before allowing `passed=true`:
+
+```powershell
+$v3GateOut=Join-Path ('F:\AmazonESBestseller\交付文件\'+(Get-Date -Format 'yyyyMMdd')+'\HighSpeedSnapshotV3_dd3c9221') ('fresh_stage_gate_'+[guid]::NewGuid().ToString('N'))
+& $v3Python -m amazon_es_bestseller.cli highspeed gate-export --root $v3Store --run-id $v3Selected.run_id --authorization $v3Authorization --out $v3GateOut
+```
+
+Only when its returned `passed` is true may the returned `gate.path` and `gate.sha256` be bound into the next stage's separately reviewed `authorization.prerequisites`. The next stage independently verifies that exact artifact again. Keep failed gate reports, `gate_validation_error`, partial pages and source gaps; do not edit booleans or reseal a failure as a pass. An approved T1 authorization is not T2 authorization, and neither authorizes T3.
+
+## Separately reviewed real-fixture T0 prerequisite
+
+The full historical 30,026-candidate report preserves failed/partial/unknown sources. Its successful field checks therefore do not make it a passing T0 stage gate. A T0 prerequisite comes from a separately bounded offline run with an actual reviewed plan, real saved pages, and independently verified fields/provenance under the offline T0 policy. No passing prerequisite is created merely by running these commands or by a green unit-test suite.
+
+A concrete bounded T0 artifact is now supplied: run `v3_t0_109403e7d85a`, origin `OFFLINE_FIXTURE`, 36 genuine saved NEW_RELEASES root-card links; 34 valid rating/review pairs and two NOT_DISPLAYED. Its strict stage gate passed independent verification. The root remains PARTIAL, and missing-four-list warnings remain visible. This is a bounded field/parser prerequisite, not complete five-list supply, acceptance of the full historical batch, a current LIVE capture, or proof of the ten-hour target. The delivered gate references immutable runtime evidence; preserve those files.
+
+```powershell
+$v3T0Reference=@{
+    path='F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\T0真实保存页验收_0e66d52fbcce\stage_gate_artifacts\stage_gate.json'
+    sha256='55d09cd5065f7d024c1de293762c9acc4ca1079bf65b07a86da603c5ed3e8fbe'
+}
+$v3T0ActualHash=(Get-FileHash -LiteralPath $v3T0Reference.path -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($v3T0ActualHash -ne $v3T0Reference.sha256) { throw 'Delivered T0 artifact hash changed.' }
+$v3T0Gate=Get-Content -LiteralPath $v3T0Reference.path -Raw | ConvertFrom-Json
+if ($v3T0Gate.stage -ne 'T0' -or $v3T0Gate.passed -ne $true) { throw 'Expected the independently verified bounded T0 gate.' }
+```
+
+This object can be bound as `authorization.prerequisites.T0` in a separately reviewed T2/T3 authorization. It does not enable the pending plans, satisfy T1/T2 prerequisites, alter access-gate state or grant any LIVE permission. The engine re-verifies all referenced evidence rather than relying only on this local hash/boolean check.
+
+The reviewed T0 plan must explicitly use `stage=T0`, `origin=OFFLINE_FIXTURE` (or verified `HISTORICAL_REPLAY` with original capture provenance), `snapshot_contract_version=3`, `normalizer_version=link_url_v3.1.lexical_tracking`, V3 source parser profiles and finite budgets. Each exact source page URL maps to its real saved HTML through `source.offline_pages`; retain its original aware timestamp/page URL/body SHA in `offline_metadata` when known. Preserve mapping-config/source references. Do not truncate a partial root into a supposedly complete fixture, invent capture times, or remove a failed page from a run to change its result. Review a new, explicitly bounded fixture scope instead, and keep the full-history gaps visible.
+
+After that local plan has been prepared and reviewed at the exact path below, these commands execute only offline and export its actual gate. The path is an example for a separately prepared plan, not a claim that it already exists or passed:
+
+```powershell
+$v3T0Plan='F:\AmazonESBestseller\runtime\highspeed_v3_t0_reviewed\plan.offline.reviewed.json'
+$v3T0PlanObject=Get-Content -LiteralPath $v3T0Plan -Raw | ConvertFrom-Json
+if ($v3T0PlanObject.stage -ne 'T0' -or $v3T0PlanObject.live_enabled -eq $true) { throw 'Expected separately reviewed offline T0 plan.' }
+$v3T0Store=Join-Path 'F:\AmazonESBestseller\runtime\highspeed_v3_t0_reviewed' $v3T0PlanObject.run_id
+& $v3Python -m amazon_es_bestseller.cli highspeed run --root $v3T0Store --run-id $v3T0PlanObject.run_id --plan $v3T0Plan
+& $v3Python -m amazon_es_bestseller.cli highspeed qa --root $v3T0Store --run-id $v3T0PlanObject.run_id
+$v3T0GateOut=Join-Path ('F:\AmazonESBestseller\交付文件\'+(Get-Date -Format 'yyyyMMdd')+'\HighSpeedSnapshotV3_dd3c9221') ('T0_stage_gate_'+[guid]::NewGuid().ToString('N'))
+& $v3Python -m amazon_es_bestseller.cli highspeed gate-export --root $v3T0Store --run-id $v3T0PlanObject.run_id --out $v3T0GateOut
+```
+
+Do not supply its reference if `passed=false` or evidence validation fails. This T0 process does not open Amazon, alter the shared access gate or count historical pages as fresh T1/T2/T3 captures.
 
 Resume only after no collector exists, the same run's checkpoint is verified, both local and shared gates are NORMAL, and the exact approved authorization/budgets are still valid. This reuses captured evidence and preserves original start time and cumulative limits. An expired authorization or exhausted budget requires a newly explicit review; do not reset epochs or raise limits automatically.
 

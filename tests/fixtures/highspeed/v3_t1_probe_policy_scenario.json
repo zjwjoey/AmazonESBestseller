@@ -1,0 +1,16 @@
+{
+  "origin": "SYNTHETIC_SCHEDULER_SCENARIO_NOT_AMAZON_CAPTURE",
+  "target_unique_links": 500,
+  "first_page_observations": 501,
+  "pages": [
+    ["BEST_SELLERS", "https://www.amazon.es/gp/bestsellers"],
+    ["MOVERS_SHAKERS", "https://www.amazon.es/gp/movers-and-shakers"],
+    ["NEW_RELEASES", "https://www.amazon.es/gp/new-releases"],
+    ["MOST_WISHED_FOR", "https://www.amazon.es/gp/most-wished-for"],
+    ["MOST_GIFTED", "https://www.amazon.es/gp/most-gifted"],
+    ["MOST_WISHED_FOR", "https://www.amazon.es/gp/most-wished-for/kitchen/2165211031"],
+    ["MOST_GIFTED", "https://www.amazon.es/gp/most-gifted/grocery/6347360031"],
+    ["MOST_WISHED_FOR", "https://www.amazon.es/gp/most-wished-for/kitchen/3359926031"],
+    ["MOST_GIFTED", "https://www.amazon.es/gp/most-gifted/grocery/6347831031"]
+  ]
+}

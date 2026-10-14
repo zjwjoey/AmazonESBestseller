@@ -27,6 +27,11 @@ def validate_plan(plan):
     contract_version = plan.get("snapshot_contract_version", 2)
     if type(contract_version) is not int or contract_version not in {2, 3}:
         raise ValueError("UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION")
+    probe_all = plan.get('probe_all_reviewed_page_urls', False)
+    if type(probe_all) is not bool:
+        raise ValueError('PROBE_SCOPE_BOOLEAN_REQUIRED')
+    if probe_all and (contract_version != 3 or plan.get('stage') != 'T1'):
+        raise ValueError('PROBE_ALL_SCOPE_ONLY_V3_T1')
     if contract_version == 3:
         from .v3_links import NORMALIZER_VERSION
         if plan.get("normalizer_version") != NORMALIZER_VERSION:

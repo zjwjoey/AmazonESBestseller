@@ -279,6 +279,16 @@ def _verify_v3_stage_fields(manifest, observations, candidates, *, parsed_rows=N
     return quality
 
 
+def _verify_t1_probe_scope_receipts(plan, receipts):
+    """Additional exact PAGE coverage guard, after receipt integrity validation."""
+    if not plan.get('probe_all_reviewed_page_urls', False):
+        return
+    expected = {(s['source_id'],url) for s in plan['sources'] for url in s['page_urls']}
+    actual = {(r.get('source_id'),r.get('request_url')) for r in receipts if r.get('kind') == 'PAGE'}
+    if not expected.issubset(actual):
+        raise ValueError('V3_T1_APPROVED_PAGE_PROBE_SCOPE_INCOMPLETE')
+
+
 def verified_stage_artifact(reference, expected_stage):
     path = Path(reference["path"])
     raw = path.read_bytes()
@@ -316,6 +326,9 @@ def verified_stage_artifact(reference, expected_stage):
             raise ValueError("PRIOR_STAGE_APPROVAL_STORE_CONTEXT_INVALID")
         if v3 and stage_approval.get("snapshot_contract_version") != 3:
             raise ValueError("V3_PRIOR_STAGE_APPROVAL_PROFILE_REQUIRED")
+        if v3 and (type(stage_approval.get('probe_all_reviewed_page_urls',False)) is not bool
+                or stage_approval.get('probe_all_reviewed_page_urls',False) != manifest['plan'].get('probe_all_reviewed_page_urls',False)):
+            raise ValueError('V3_PRIOR_STAGE_PROBE_SCOPE_APPROVAL_MISMATCH')
         received, parsed_urls, parsed_slots, parsed_bindings = [], set(), set(), set()
         for item in receipts:
             raw_receipt = Path(item["path"]).read_bytes()
@@ -356,6 +369,7 @@ def verified_stage_artifact(reference, expected_stage):
             authorize_request(receipt["final_url"], source, stage_approval, kind=receipt.get("kind", "PAGE"),
                 descriptor=receipt.get("native_acp_descriptor") or {"method": receipt.get("request_method"), "payload": receipt.get("request_payload")})
             received.append((receipt, body.decode("utf-8", errors="replace"), source))
+        _verify_t1_probe_scope_receipts(manifest['plan'],[r for r,body,source in received])
         from .adapters import parse_page
         for receipt, body, source in received:
             if receipt.get("kind", "PAGE") != "PAGE":
@@ -400,6 +414,10 @@ def verified_stage_artifact(reference, expected_stage):
 
 def validate_authorization(plan, authorization, gate, *, now=None, store_root=None):
     validate_plan(plan)
+    if plan.get('snapshot_contract_version') == 3 and plan.get('stage') != 'T0':
+        approved_probe = authorization.get('probe_all_reviewed_page_urls', False) if authorization else False
+        if type(approved_probe) is not bool or approved_probe != plan.get('probe_all_reviewed_page_urls', False):
+            raise ValueError('EXACT_PROBE_SCOPE_AUTHORIZATION_REQUIRED')
     if plan.get('snapshot_contract_version')==3 and plan.get('live_enabled'):
         from .v3_links import NORMALIZER_VERSION
         if (not authorization or authorization.get('snapshot_contract_version')!=3

@@ -576,6 +576,7 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
             'max_requests_per_run':requests,'max_requests_per_day':requests,'max_pages_per_run':pages,
             'max_raw_observations_per_run':150000,'history_observation_limit':1000000,
             'target_unique_links':30000 if stage=='T3' else 500 if stage=='T1' else 5000,
+            'probe_all_reviewed_page_urls':stage=='T1',
             'source_navigation_plan_reference':prior_ref,'source_pack_sha256':digest(selected),
             'pending_navigation_pack_reference':pending_reference,'pending_navigation_availability_verified':False,
             'category_mapping_config_reference':mapping_reference,

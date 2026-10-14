@@ -108,6 +108,21 @@ def explicit_source_empty(parsed):
         return False
     return not any(normalize_product_url(a["href"],base_url=page["page_url"])["is_valid"] for a in grid.select("a[href]"))
 
+def _probe_scope_summary(plan, bundle, committed, reason):
+    expected = {(s['source_id'],url) for s in plan['sources'] for url in s['page_urls']}
+    expected_keys = {hashlib.sha256((sid+'\0'+url).encode()).hexdigest() for sid,url in expected}
+    attempted = {(r.get('source_id'),r.get('request_url')) for r in bundle.get('responses', [])
+        if r.get('kind') == 'PAGE' and (r.get('source_id'),r.get('request_url')) in expected}
+    processed = {pair for pair in expected if hashlib.sha256((pair[0]+'\0'+pair[1]).encode()).hexdigest() in committed}
+    complete_pages = {p['page_key'] for p in bundle.get('pages', [])
+        if p.get('status') == 'COMPLETE' and p.get('page_key') in expected_keys}
+    return {'expected_page_count':len(expected),'attempted_page_count':len(attempted),
+        'processed_page_count':len(processed),'complete_page_count':len(complete_pages),
+        'complete':attempted == expected and processed == expected and reason == 'SOURCE_PLAN_EXHAUSTED',
+        'missing_page_scopes':[{'source_id':sid,'page_url':url} for sid,url in sorted(expected-processed)],
+        'scope_note':'Probe completion is separate from COMPLETE page status and stage QA; restrictions and unknown/parser failures still stop.'}
+
+
 class HighSpeedRunner:
     def __init__(self, store, *, clock=None, sleep=None, parser=None, gate_reader=None, progress=None, qa_auditor=None):
         self.store = store
@@ -280,7 +295,8 @@ class HighSpeedRunner:
                     page_key = hashlib.sha256((source["source_id"] + "\0" + url).encode()).hexdigest()
                     if page_key in committed:
                         continue
-                    if self.store.candidate_count(run_id) >= plan["target_unique_links"]:
+                    if (not plan.get('probe_all_reviewed_page_urls', False)
+                            and self.store.candidate_count(run_id) >= plan["target_unique_links"]):
                         reason = "TARGET_UNIQUE_LINKS_REACHED"
                         break
                     try:
@@ -479,7 +495,12 @@ class HighSpeedRunner:
             quality = auditor(self.store, run_id)
             errors = quality.get("errors", [finding for finding in quality.get("findings", []) if finding.get("severity") == "ERROR"])
             elapsed = (aware_time(self.clock()) - aware_time(started)).total_seconds()
-            reason = reason or ("TARGET_UNIQUE_LINKS_REACHED" if self.store.candidate_count(run_id) >= plan["target_unique_links"] else "SOURCE_PLAN_EXHAUSTED")
+            reason = reason or ("TARGET_UNIQUE_LINKS_REACHED" if not plan.get('probe_all_reviewed_page_urls', False)
+                and self.store.candidate_count(run_id) >= plan["target_unique_links"] else "SOURCE_PLAN_EXHAUSTED")
+            if plan.get('probe_all_reviewed_page_urls', False):
+                probe_scope = _probe_scope_summary(plan,bundle,committed,reason)
+                self.store.append_event(run_id, {'kind':'T1_PROBE_SCOPE', **probe_scope})
+                self.store.update_run(run_id, probe_scope=probe_scope)
             self.store.append_event(run_id, {"kind": "QA", "stage": "qa", "duration_seconds": (aware_time(self.clock())-qa_start).total_seconds(), "errors": errors})
             self.store.update_run(run_id, status="STOPPED" if errors or reason not in {"TARGET_UNIQUE_LINKS_REACHED", "SOURCE_PLAN_EXHAUSTED"} else "FINISHED",
                 stop_reason=reason, elapsed_seconds=elapsed, within_duration_target=elapsed <= plan["max_duration_hours"]*3600,
