@@ -136,3 +136,92 @@ def test_v3_fresh_t3_approval_rejects_history_import_aliases(tmp_path,field,valu
     p[field]=value;a=approval(p,tmp_path);a['sources']['home']['parser_profile']='V3'
     with pytest.raises(ValueError,match='FRESH_BATCH_REQUIRED'):
         validate_authorization(p,a,{'state':'NORMAL'},now=NOW)
+
+
+
+def actual_card_stage(tmp_path, mutation=None):
+    """Real saved Amazon card bytes wrapped as OFFLINE T0 protocol evidence."""
+    from test_highspeed_runner import plan
+    from amazon_es_bestseller.highspeed.v3_links import NORMALIZER_VERSION
+    from amazon_es_bestseller.highspeed.adapters import parse_page
+    p=plan(tmp_path,'T0');p.update(snapshot_contract_version=3,normalizer_version=NORMALIZER_VERSION,origin='OFFLINE_FIXTURE',snapshot_id='test')
+    source=p['sources'][0];source.update(parser_profile='V3',actual_source_url=source['page_urls'][0],research_category=None)
+    card=Path('tests/fixtures/highspeed/real_v3_rating_best_sellers.html').read_text(encoding='utf8')
+    body='<h1>Los más vendidos</h1><div id="zg" data-expected-count="1">'+card+'</div>'
+    saved=tmp_path/'actual_card_page.html';saved.write_text(body,encoding='utf8')
+    parsed=parse_page(body,source=source,run_id=p['run_id'],snapshot_id=p['snapshot_id'],page_url=source['actual_source_url'],page_number=1,observed_at='2026-10-14T00:00:00Z',evidence_path=str(saved),origin='OFFLINE_FIXTURE')
+    observations=parsed['observations'];assert observations[0]['rating_status']=='VALID'
+    for row in observations:row['origin']='OFFLINE_FIXTURE'
+    if mutation:mutation(observations[0])
+    candidate=dict(observations[0])
+    def save(name,value,lines=False):
+        path=tmp_path/(name+('.jsonl' if lines else '.json'))
+        path.write_text('\n'.join(json.dumps(r) for r in value) if lines else json.dumps(value),encoding='utf8')
+        return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    refs={'manifest':save('manifest_real',{'run_id':p['run_id'],'stage':'T0','origin':'OFFLINE_FIXTURE','plan':p,'pages':[parsed['page']]}),
+          'quality_report':save('quality_real',{'run_id':p['run_id'],'gate_passed':True,'unique_valid_links':1}),
+          'observations':save('obs_real',observations,True),'candidates':save('cand_real',[candidate],True)}
+    record={'run_id':p['run_id'],'stage':'T0','origin':'OFFLINE_FIXTURE','passed':True,'quality_gate_passed':True,'unique_valid_links':1,**refs,'artifacts':list(refs.values())}
+    return save('gate_real',record),record,save
+
+
+def test_actual_v3_card_stage_reparses_fields_not_quality_boolean(tmp_path):
+    from amazon_es_bestseller.highspeed.authorization import verified_stage_artifact
+    reference,_,_=actual_card_stage(tmp_path)
+    assert verified_stage_artifact(reference,'T0')['passed']
+
+
+@pytest.mark.parametrize('field,value',[
+ ('rating_value',1.0),('review_count',1),('rating_raw','1,0 de 5 estrellas'),
+ ('rating_status','NOT_DISPLAYED'),('rating_source','invented'),('rating_observed_at','2026-10-14T01:00:00Z'),
+ ('review_count_raw','1'),('review_count_status','NOT_DISPLAYED'),
+ ('product_title_raw','Forged correct-hash title'),('product_title_status','MISSING'),
+ ('product_title_evidence',{'kind':'invented-proof'}),('rating_evidence',[]),
+ ('rating_binding_evidence',{'raw_product_url':'neighbor'}),('review_count_evidence',[])])
+def test_correct_hash_resealed_v3_field_forgery_never_proves_stage(tmp_path,field,value):
+    from amazon_es_bestseller.highspeed.authorization import verified_stage_artifact
+    reference,_,_=actual_card_stage(tmp_path,lambda row:row.update({field:value}))
+    with pytest.raises(ValueError,match='V3_PRIOR_STAGE'):
+        verified_stage_artifact(reference,'T0')
+
+
+def test_v2_codec_cannot_pretend_v3_prior_stage(tmp_path):
+    from amazon_es_bestseller.highspeed.authorization import verified_stage_artifact
+    reference,_,_=actual_card_stage(tmp_path,lambda row:row.update(parser_version='link_first_adapters_v2.2.title_priority'))
+    with pytest.raises(ValueError,match='DECLARED_PARSER_MISMATCH'):verified_stage_artifact(reference,'T0')
+
+
+def test_verified_observation_does_not_legitimize_forged_candidate_rating(tmp_path):
+    from amazon_es_bestseller.highspeed.authorization import verified_stage_artifact
+    reference,record,save=actual_card_stage(tmp_path)
+    candidates=[json.loads(l) for l in Path(record['candidates']['path']).read_text(encoding='utf8').splitlines()]
+    candidates[0]['rating_value']=1.0;record['candidates']=save('cand_changed',candidates,True)
+    record['artifacts']=[record[k] for k in ('manifest','quality_report','observations','candidates')]
+    reference=save('gate_changed',record)
+    with pytest.raises(ValueError,match='CANDIDATE_CARD_FIELDS_MISMATCH'):verified_stage_artifact(reference,'T0')
+
+
+
+def test_live_full_fields_gate_uses_actual_reparsed_card_not_boolean(tmp_path):
+    from amazon_es_bestseller.highspeed.authorization import _verify_v3_stage_fields
+    _,record,_=actual_card_stage(tmp_path)
+    manifest=json.loads(Path(record['manifest']['path']).read_text(encoding='utf8'))
+    actual=[json.loads(l) for l in Path(record['observations']['path']).read_text(encoding='utf8').splitlines()]
+    manifest['stage']='T1';manifest['plan']['stage']='T1'
+    observed=json.loads(json.dumps(actual))
+    assert _verify_v3_stage_fields(manifest,observed,[dict(observed[0])],parsed_rows=actual)['ok']
+    observed[0]['review_count']=1
+    with pytest.raises(ValueError,match='PARSED_CARD_FIELDS_MISMATCH'):
+        _verify_v3_stage_fields(manifest,observed,[dict(observed[0])],parsed_rows=actual)
+
+
+def test_live_full_fields_gate_rejects_rebound_capture_time(tmp_path):
+    from amazon_es_bestseller.highspeed.authorization import _verify_v3_stage_fields
+    _,record,_=actual_card_stage(tmp_path)
+    manifest=json.loads(Path(record['manifest']['path']).read_text(encoding='utf8'))
+    actual=[json.loads(l) for l in Path(record['observations']['path']).read_text(encoding='utf8').splitlines()]
+    manifest['stage']='T1';manifest['plan']['stage']='T1'
+    observed=json.loads(json.dumps(actual));observed[0]['observed_at']='2026-10-14T01:00:00Z'
+    observed[0]['rating_observed_at']=observed[0]['observed_at']
+    with pytest.raises(ValueError,match='CAPTURE_EVIDENCE_OR_TIME_MISMATCH'):
+        _verify_v3_stage_fields(manifest,observed,[dict(observed[0])],parsed_rows=actual)

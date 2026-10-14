@@ -25,6 +25,7 @@ class TransportResponse:
     request_url: str | None = None
     request_headers: Mapping[str, str] = field(default_factory=dict)
     request_payload: object = None
+    timings: Mapping[str, object] = field(default_factory=dict)
 
 
 _SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization", "set-cookie"}

@@ -174,6 +174,111 @@ def _artifact_link_pool(record, expected_stage):
         raise ValueError("PRIOR_STAGE_FIVE_LIST_VALID_CARD_BREADTH_REQUIRED")
     return manifest, observations, actual_urls
 
+_V3_CARD_FIELDS=('product_title_raw','product_title_status','product_title_evidence','parser_version',
+    'rating_raw','rating_value','rating_status','rating_source','rating_evidence','rating_binding_evidence',
+    'rating_observed_at','review_count_raw','review_count','review_count_status','review_count_evidence')
+
+
+def _v3_binding_key(row):
+    return (row.get('source_id'),row.get('raw_product_url'),row.get('normalized_product_url'),
+        row.get('representation'),row.get('representation_slot'),row.get('ranking_position'),row.get('rank_raw'),
+        row.get('rank_context'),row.get('observed_at'),str(Path(row.get('evidence_path') or '').resolve()),row.get('evidence_sha256'))
+
+
+def _verify_v3_stage_fields(manifest, observations, candidates, *, parsed_rows=None):
+    """Reparse actual cards instead of trusting resealed quality-result labels."""
+    from .v3_quality import audit_observations
+    from .adapters import parser_version
+    sources={s['source_id']:s for s in manifest['plan']['sources']}
+    expected={_v3_binding_key(row):row for row in parsed_rows or []}
+    live=manifest.get('stage',manifest['plan'].get('stage'))!='T0'
+    offline_cards={}
+    for row in observations:
+        if row.get('parser_version')!=parser_version(sources[row['source_id']]):
+            raise ValueError('V3_PRIOR_STAGE_DECLARED_PARSER_MISMATCH')
+        if any(field not in row for field in _V3_CARD_FIELDS):
+            raise ValueError('V3_PRIOR_STAGE_CARD_FIELDS_REQUIRED')
+        if not live:
+            # T0 is offline only, but every published field still has to be
+            # reconstructed from the exact saved card, not a QA boolean.
+            from bs4 import BeautifulSoup
+            from .adapters import _parse_cards
+            key=(row.get('evidence_path'),row.get('evidence_sha256'),row['source_id'],
+                row.get('representation'),row.get('page_url'),row.get('observed_at'),row.get('snapshot_id'))
+            if key not in offline_cards:
+                body=Path(row['evidence_path']).read_bytes()
+                if hashlib.sha256(body).hexdigest()!=row.get('evidence_sha256'):
+                    raise ValueError('V3_PRIOR_STAGE_CARD_BODY_HASH_MISMATCH')
+                offline_cards[key]=_parse_cards(BeautifulSoup(body.decode('utf8'),'lxml'),
+                    source=sources[row['source_id']],run_id=row['run_id'],snapshot_id=row.get('snapshot_id'),
+                    page_url=row['page_url'],page_number=row.get('page_number',1),observed_at=row['observed_at'],
+                    evidence_path=row['evidence_path'],sha=row['evidence_sha256'],
+                    representation=row['representation'],fragment=row['representation']!='SERVER')
+            slot=row.get('representation_slot')
+            actual=next((r for r in offline_cards[key] if r['representation_slot']==slot),None)
+            if actual is None or any(row.get(f)!=actual.get(f) for f in _V3_CARD_FIELDS):
+                raise ValueError('V3_PRIOR_STAGE_PARSED_CARD_FIELDS_MISMATCH')
+        if live:
+            actual=expected.get(_v3_binding_key(row))
+            if actual is None:
+                raise ValueError('V3_PRIOR_STAGE_CAPTURE_EVIDENCE_OR_TIME_MISMATCH')
+            if any(row.get(field)!=actual.get(field) for field in _V3_CARD_FIELDS):
+                raise ValueError('V3_PRIOR_STAGE_PARSED_CARD_FIELDS_MISMATCH')
+    def receipt(row,source):
+        return _v3_binding_key(row) in expected if live else True
+    def context(row,card,source):
+        # LIVE expected rows were rebuilt from fully approved, byte-bound
+        # PAGE+ACP captures, including the actual native owner context.
+        return live and _v3_binding_key(row) in expected
+    quality=audit_observations(observations,sources,receipt_validator=receipt,
+        require_receipts=live,context_validator=context)
+    if not quality['ok']:
+        raise ValueError('V3_PRIOR_STAGE_DOM_CARD_FIELDS_NOT_VERIFIED:'+','.join(sorted({f['code'] for f in quality['findings']})))
+    # The default stage exporter uses first-observation representatives. Any
+    # published candidate card fields must point to a verified observation.
+    byid={r.get('observation_id'):r for r in observations}
+    for candidate in candidates:
+        if str(candidate.get('contract_version','')).startswith('candidate_snapshot_v3.'):
+            from .candidate_contract import build_candidate_records,CONTRACT_VERSION
+            if candidate['contract_version']!=CONTRACT_VERSION:
+                raise ValueError('V3_PRIOR_STAGE_CANDIDATE_CONTRACT_VERSION_MISMATCH')
+            group=[r for r in observations if r.get('normalized_product_url')==candidate.get('normalized_product_url')]
+            recomputed=build_candidate_records(group,batch_id=manifest['run_id'],snapshot_id=manifest['plan'].get('snapshot_id') or manifest['run_id'])
+            if len(recomputed)!=1 or any(candidate.get(k)!=v for k,v in recomputed[0].items()):
+                raise ValueError('V3_PRIOR_STAGE_CANDIDATE_CARD_FIELDS_MISMATCH')
+            continue
+        published=[f for f in _V3_CARD_FIELDS if f in candidate]
+        if published:
+            row=byid.get(candidate.get('observation_id'))
+            if row is None or any(candidate.get(f)!=row.get(f) for f in published):
+                raise ValueError('V3_PRIOR_STAGE_CANDIDATE_CARD_FIELDS_MISMATCH')
+    # Source/category projections are independently rebuilt when present. A
+    # matched subset of reviewed policies is sufficient and cannot invent a
+    # category for an unknown sibling; prior-human proof is separately checked.
+    from .category_mapping import validate_mapping_rules,load_mapping_rules,map_observation_category
+    global_rules=None;reference=manifest['plan'].get('category_mapping_config_reference')
+    if reference:
+        _verified_reference(reference,'V3_PRIOR_STAGE_CATEGORY_RULES')
+        global_rules=load_mapping_rules(reference['path'])
+    parents={(p.get('source_id'),p.get('page_url')):p for p in manifest.get('pages',[])}
+    cache={}
+    for row in observations:
+        if 'category_mapping_status' not in row and not row.get('research_category'):
+            continue
+        parent=parents.get((row.get('source_id'),row.get('page_url')))
+        if parent is None and row.get('representation')=='SERVER':
+            parent={'evidence_path':row.get('evidence_path'),'evidence_sha256':row.get('evidence_sha256')}
+        if parent is None:
+            raise ValueError('V3_PRIOR_STAGE_CATEGORY_PARENT_EVIDENCE_REQUIRED')
+        rules=global_rules if global_rules is not None else validate_mapping_rules([r for r in row.get('category_mapping_evidence',[]) if r.get('scope')])
+        projection=map_observation_category(row,sources[row['source_id']],rules,
+            parent_html_path=parent['evidence_path'],parent_html_sha256=parent['evidence_sha256'],cache=cache)
+        if (projection.get('research_category')!=row.get('research_category')
+                or projection.get('category_mapping_status')!=row.get('category_mapping_status')):
+            raise ValueError('V3_PRIOR_STAGE_CATEGORY_POLICY_OR_CONTEXT_MISMATCH')
+    return quality
+
+
 def verified_stage_artifact(reference, expected_stage):
     path = Path(reference["path"])
     raw = path.read_bytes()
@@ -198,6 +303,7 @@ def verified_stage_artifact(reference, expected_stage):
     manifest, observations, actual_urls = _artifact_link_pool(record, expected_stage)
     normalizer = _normalizer_for_plan(manifest["plan"])
     v3 = manifest["plan"].get("snapshot_contract_version") == 3
+    parsed_v3_rows=[]
     if expected_stage != "T0":
         receipts = record.get("request_receipts", [])
         if not receipts:
@@ -262,6 +368,7 @@ def verified_stage_artifact(reference, expected_stage):
                 origin="LIVE_CAPTURE", http_status=receipt["status_code"], acp_responses=acp)
             if result["page"].get("status") != "COMPLETE":
                 raise ValueError("PRIOR_STAGE_LIVE_PAGE_QA_NOT_COMPLETE")
+            if v3:parsed_v3_rows.extend(result['observations'])
             for observation in result["observations"]:
                 link = normalizer(observation.get("raw_product_url"), base_url=receipt["request_url"])
                 if link["is_valid"]:
@@ -286,6 +393,9 @@ def verified_stage_artifact(reference, expected_stage):
                     observation.get('raw_product_url'),observation.get('observed_at'),
                     str(Path(observation.get('evidence_path') or '').resolve()),observation.get('evidence_sha256')) not in parsed_bindings:
                 raise ValueError('V3_PRIOR_STAGE_CAPTURE_EVIDENCE_OR_TIME_MISMATCH')
+    if v3:
+        _verify_v3_stage_fields(manifest,observations,_verified_rows(record.get('candidates'),'PRIOR_STAGE_CANDIDATES'),
+            parsed_rows=parsed_v3_rows)
     return record
 
 def validate_authorization(plan, authorization, gate, *, now=None, store_root=None):

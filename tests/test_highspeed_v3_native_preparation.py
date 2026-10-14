@@ -123,3 +123,56 @@ def test_actual_v3_movers_empty_unverified_root_is_not_navigation_shortcut():
     p=parse_page(path.read_text(encoding="utf-8"),source=source,run_id="r",page_url=url,page_number=1,observed_at="2026-10-14T00:00:00Z",evidence_path=str(path))
     assert p["page"]["page_content_state"]=="PARSER_EMPTY_UNVERIFIED"
     assert not source_navigation_only(source,url,p)
+
+def test_v3_request_pacing_and_failure_measurement_keep_unknown_pure_network(tmp_path):
+    from test_highspeed_runner import plan,approval,Store,NOW,URL,make_runner
+    from amazon_es_bestseller.highspeed.v3_links import NORMALIZER_VERSION
+    p=plan(tmp_path,"T1");p.update(snapshot_contract_version=3,normalizer_version=NORMALIZER_VERSION)
+    p["sources"][0]["parser_profile"]="V3"
+    auth=approval(p,tmp_path);auth["sources"]["home"]["parser_profile"]="V3"
+    store=Store(tmp_path/"store");store.begin_run(p)
+    sleeps=[]
+    runner=make_runner(store,clock=lambda:NOW,sleep=sleeps.append,gate_reader=lambda:{"state":"NORMAL"})
+    class Transport:
+        def __init__(self):self.calls=0
+        def fetch_page(self,url):
+            self.calls+=1
+            return {"status_code":200,"url":url,"text":"normal" if self.calls==1 else "Robot Check"}
+    transport=Transport()
+    _,_,last=runner._request(p,auth,transport,p["sources"][0],URL,"PAGE",NOW,None)
+    with pytest.raises(ValueError,match="CHALLENGE"):
+        runner._request(p,auth,transport,p["sources"][0],URL,"PAGE",NOW,last)
+    assert sleeps==[3]
+    assert any(e["stage"]=="pacing" and e["requested_sleep_seconds"]==3 for e in store.events)
+    assert any(e["stage"]=="request_failure" and e["duration_seconds"]>=0 for e in store.events)
+    assert all(e["pure_network_seconds"] is None for e in store.events if e["stage"]=="network_with_browser_wait")
+    assert store.gate["state"]=="CHALLENGE"
+
+def test_opt_in_transport_timings_are_full_operations_not_pure_network():
+    page=SimpleNamespace(url="https://www.amazon.es/gp/bestsellers",content=lambda:'<html lang="es-es">normal</html>')
+    session=SimpleNamespace(page=page,goto=lambda url:200)
+    response=PlaywrightTransport(session,measure_timings=True).fetch_page(page.url)
+    assert response.timings["goto_network_and_browser_seconds"]>=0
+    assert response.timings["content_serialization_seconds"]>=0
+    assert response.timings["pure_network_seconds"] is None
+    assert PlaywrightTransport(session).fetch_page(page.url).timings=={}
+
+def test_readonly_resource_timing_measures_only_unique_current_noncache_actual_url():
+    url="https://www.amazon.es/acp/mock/nextPage"
+    entry={"name":url,"startTime":100,"requestStart":120,"responseEnd":620,"transferSize":4096}
+    measure=PlaywrightTransport._resource_network_seconds
+    assert measure([entry],url,minimum_start=90)==0.5
+    assert measure([entry,entry],url,minimum_start=90) is None
+    assert measure([dict(entry,transferSize=0)],url,minimum_start=90) is None
+    assert measure([dict(entry,startTime=80)],url,minimum_start=90) is None
+    assert measure([dict(entry,responseEnd=float("nan"))],url,minimum_start=90) is None
+    assert measure([dict(entry,requestStart=True)],url,minimum_start=90) is None
+    assert measure([entry],url+"/other",minimum_start=90) is None
+
+def test_restricted_page_never_performs_extra_timing_dom_evaluation():
+    def no_evaluate(*args):raise AssertionError("restriction must not cause timing interaction")
+    page=SimpleNamespace(url="https://www.amazon.es/gp/bestsellers",content=lambda:"Robot Check",evaluate=no_evaluate)
+    session=SimpleNamespace(page=page,goto=lambda url:200)
+    response=PlaywrightTransport(session,measure_timings=True).fetch_page(page.url)
+    assert response.access_state=="CHALLENGE"
+    assert response.timings["network_request_response_seconds"] is None

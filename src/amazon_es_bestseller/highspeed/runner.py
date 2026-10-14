@@ -17,9 +17,18 @@ from .performance import RollingProgress
 from .links import NORMALIZER_VERSION, normalize_product_url
 from ..multisource.contracts import SOURCE_ROOTS, canonical_page_url
 
+
+def _next_acp_pending(pending, excluded, *, v3=False):
+    rows = pending if isinstance(pending, list) else [pending] if pending else []
+    return next((row for row in rows if not (v3 and (row.get("metadata") or {}).get("carousel")
+        and (row.get("metadata") or {}).get("ranking_context_url") in excluded)), None)
+
 def source_navigation_only(source, url, parsed):
     """A verified empty root may expose navigation, never valid product output."""
     page = parsed["page"]
+    if (page.get("parser_version", "").startswith("link_first_adapters_v3.")
+            and page.get("page_content_state") != "NAVIGATION_ONLY"):
+        return False
     actual = canonical_page_url(url).rstrip("/")
     root = SOURCE_ROOTS.get(source.get("source_type"), "").rstrip("/")
     eligible = bool(page.get("status") == "FAILED"
@@ -127,6 +136,10 @@ class HighSpeedRunner:
     def run(self, plan, *, authorization=None, transport=None, resume=False, preheld_lock=False):
         entry_time = utc_text(self.clock())
         validate_plan(plan)
+        if plan.get("snapshot_contract_version") == 3 and self.parser is None:
+            reference=plan.get("category_mapping_config_reference")
+            if not reference or hashlib.sha256(Path(reference["path"]).read_bytes()).hexdigest()!=reference.get("sha256"):
+                raise ValueError("V3_MAPPING_CONFIG_REFERENCE_REQUIRED")
         origin = plan.get("origin", "OFFLINE_FIXTURE" if plan["stage"] == "T0" else "LIVE_CAPTURE")
         if (plan["stage"] == "T0" and origin not in {"OFFLINE_FIXTURE", "HISTORICAL_REPLAY"}) or (plan["stage"] != "T0" and origin != "LIVE_CAPTURE"):
             raise ValueError("STAGE_ORIGIN_MISMATCH")
@@ -225,7 +238,8 @@ class HighSpeedRunner:
             reason = None
             rolling = RollingProgress(plan["target_unique_links"])
             progress_history = [e for e in bundle.get("events", []) if e.get("kind") == "PROGRESS"]
-            comparable = [e for e in progress_history if e.get("normalizer_version") == NORMALIZER_VERSION]
+            normalizer_version = self.store.normalizer_version(run_id) if hasattr(self.store,"normalizer_version") else plan.get("normalizer_version",NORMALIZER_VERSION)
+            comparable = [e for e in progress_history if e.get("normalizer_version") == normalizer_version]
             current_elapsed = (aware_time(self.clock()) - aware_time(started)).total_seconds()
             current_count = self.store.candidate_count(run_id)
             rebase_reason = "NO_CURRENT_NORMALIZER_PROGRESS" if not comparable else None
@@ -243,7 +257,7 @@ class HighSpeedRunner:
                 rolling.start_epoch(current_elapsed, current_count)
                 if resume or progress_history:
                     self.store.append_event(run_id, {"kind":"NORMALIZATION_PROGRESS_REBASE",
-                        "normalizer_version":NORMALIZER_VERSION, "reason":rebase_reason,
+                        "normalizer_version":normalizer_version, "reason":rebase_reason,
                         "elapsed_seconds":current_elapsed, "unique_links":current_count,
                         "preserved_history_count":len(progress_history),
                         "previous_progress":progress_history[-1] if progress_history else None})
@@ -254,12 +268,14 @@ class HighSpeedRunner:
                 rolling.start_epoch(current_elapsed, current_count)
                 self.store.append_event(run_id, {"kind": "PROGRESS_SAMPLING_EPOCH",
                     "reason": "RESUME_AFTER_CHECKPOINT_VALIDATION",
-                    "normalizer_version": NORMALIZER_VERSION,
+                    "normalizer_version": normalizer_version,
                     "elapsed_seconds": current_elapsed, "unique_links": current_count,
                     "preserved_history_count": len(progress_history),
                     "previous_run_status": previous_run_status,
                     "sampling_scope": "NEW_YIELD_AFTER_RESUME_EXCLUDING_PRIOR_PAUSE_AND_STARTUP_VALIDATION"})
-            for source in plan["sources"]:
+            from .schedule import source_order
+            ordered_sources = source_order(plan["sources"], policy=plan.get("source_order_policy", "PLAN_ORDER"))
+            for source in ordered_sources:
                 for page_number, url in enumerate(source.get("page_urls", []), 1):
                     page_key = hashlib.sha256((source["source_id"] + "\0" + url).encode()).hexdigest()
                     if page_key in committed:
@@ -275,7 +291,8 @@ class HighSpeedRunner:
                             response, receipt, last_request = self._request(plan, authorization, transport,
                                 source, url, "PAGE", started, last_request, page_key=page_key)
                         html = response.get("text", "")
-                        acp = [{**item, "body": Path(item["html_path"]).read_text(encoding="utf-8"), "evidence_path": item["html_path"]}
+                        acp = [{**item, "body": Path(item["html_path"]).read_text(encoding="utf-8"), "evidence_path": item["html_path"],
+                                "capture_receipt_reference":self._receipt_ref(item)}
                             for item in bundle.get("responses", []) if item.get("kind") == "ACP" and item.get("page_key") == page_key and item.get("access_state") == "NORMAL"]
                         historical = url in seed_cache and receipt.get("run_id") == plan.get("parent_run_id")
                         if historical:
@@ -284,6 +301,9 @@ class HighSpeedRunner:
                         parsed = self._parse(plan, source, url, page_number, receipt, html, acp,
                             "HISTORICAL_REPLAY" if historical else origin)
                         attempted = set()
+                        excluded_carousels = set()
+                        carousel_failures = {}
+                        v3 = plan.get("snapshot_contract_version") == 3
                         pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
                         needs_context = getattr(transport, "requires_ajax_page_context", None)
                         if pending and origin == "LIVE_CAPTURE" and url in cached and (historical or (callable(needs_context) and needs_context(url))):
@@ -294,7 +314,12 @@ class HighSpeedRunner:
                             parsed = self._parse(plan, source, url, page_number, receipt, html, [], origin)
                             pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
                         while pending and origin == "LIVE_CAPTURE":
-                            descriptor = pending[0] if isinstance(pending, list) else pending
+                            descriptor = _next_acp_pending(pending, excluded_carousels, v3=v3)
+                            if descriptor is None:
+                                break
+                            descriptor = dict(descriptor)
+                            if v3:
+                                descriptor["source_id"] = source["source_id"]
                             scope = authorization["sources"][source["source_id"]]
                             if not (scope.get("allow_acp") or scope.get("allow_native_acp")):
                                 break
@@ -316,6 +341,13 @@ class HighSpeedRunner:
                                     parsed["page"].update(status="FAILED" if empty_unavailable else "PARTIAL", completeness="PARTIAL", page_complete=False)
                                     parsed["page"].setdefault("flags", []).append(prepare_error)
                                     unavailable = empty_unavailable or continuation_unavailable(parsed, receipt, prepare_error, self._gate(plan))
+                                    if (v3 and descriptor.get("metadata", {}).get("carousel")
+                                            and prepare_error in {"ACP_CAROUSEL_OWNER_EVIDENCE_UNVERIFIED", "ACP_CAROUSEL_NATIVE_CONTRACT_AMBIGUOUS"}
+                                            and receipt.get("status_code") == 200 and receipt.get("access_state") == "NORMAL"
+                                            and self._gate(plan).get("state") == "NORMAL"
+                                            and parsed["page"].get("source_type_verified") is True
+                                            and parsed["page"].get("source_context_valid") is True and parsed.get("observations")):
+                                        unavailable = True
                                     if unavailable:
                                         parsed["page"].update(completeness="UNKNOWN", continuation_unavailable=True,
                                             terminal_for_snapshot=True)
@@ -328,6 +360,10 @@ class HighSpeedRunner:
                                             "source_type":source["source_type"], "page_url":url,
                                             "actual_cards":parsed["page"]["actual_count"], "reason":prepare_error,
                                             "note":"Source retained FAILED at zero capacity or PARTIAL with saved cards; no endpoint/body invented. Continue the frozen approved queue."})
+                                        if v3 and descriptor.get("metadata", {}).get("carousel"):
+                                            excluded_carousels.add(descriptor["metadata"]["ranking_context_url"])
+                                            carousel_failures[descriptor["metadata"]["ranking_context_url"]] = prepare_error
+                                            continue
                                         pending = None
                                         break
                                     raise ValueError(prepare_error) from exc
@@ -335,9 +371,17 @@ class HighSpeedRunner:
                                     self.store.append_event(run_id, {"kind": "ACP_PREPARE", "stage": "acp_prepare",
                                         "duration_seconds": time.perf_counter()-prepare_start, "success": prepare_success,
                                         "source_type": source["source_type"], "research_category": source.get("research_category")})
+                                    if v3 and hasattr(transport,"last_prepare_browser_wait_seconds"):
+                                        self.store.append_event(run_id,{"kind":"BROWSER_WAIT","stage":"browser_wait",
+                                            "duration_seconds":transport.last_prepare_browser_wait_seconds,
+                                            "measurement_scope":"Explicit native contract wait; subset of ACP_PREPARE, not additive total."})
                             key = json.dumps(descriptor, sort_keys=True, default=str)
                             if key in attempted:
                                 parsed["page"].setdefault("flags", []).append("ACP_NO_PROGRESS")
+                                if v3 and descriptor.get("metadata", {}).get("carousel"):
+                                    excluded_carousels.add(descriptor["metadata"]["ranking_context_url"])
+                                    carousel_failures[descriptor["metadata"]["ranking_context_url"]] = "ACP_NO_PROGRESS"
+                                    continue
                                 break
                             attempted.add(key)
                             try:
@@ -356,12 +400,24 @@ class HighSpeedRunner:
                                      "evidence_path": receipt["html_path"], "origin": origin}, parsed["observations"])
                                 raise
                             acp.append({**item, "body": item.get("text", ""), "evidence_path": saved["html_path"]})
+                            if v3:
+                                acp[-1]["capture_receipt_reference"] = self._receipt_ref(saved)
                             previous = parsed["page"].get("actual_count", len(parsed["observations"]))
                             parsed = self._parse(plan, source, url, page_number, receipt, html, acp, origin)
+                            if carousel_failures:
+                                parsed["page"].setdefault("flags", []).extend(carousel_failures.values())
                             pending = parsed.get("acp_pending") or parsed["page"].get("acp_pending")
                             if parsed["page"].get("actual_count", len(parsed["observations"])) <= previous and pending:
                                 parsed["page"].setdefault("flags", []).append("ACP_NO_PROGRESS")
+                                if v3 and descriptor.get("metadata", {}).get("carousel"):
+                                    excluded_carousels.add(descriptor["metadata"]["ranking_context_url"])
+                                    carousel_failures[descriptor["metadata"]["ranking_context_url"]] = "ACP_NO_PROGRESS"
+                                    continue
                                 break
+                        if carousel_failures:
+                            parsed["page"].update(carousel_contract_failures=carousel_failures,
+                                page_complete=False, completeness="UNKNOWN",
+                                terminal_for_snapshot=_next_acp_pending(pending, excluded_carousels, v3=True) is None)
                         persist_start = aware_time(self.clock())
                         navigation_only = source_navigation_only(source, url, parsed)
                         official_empty = (receipt.get("status_code")==200 and receipt.get("access_state")=="NORMAL"
@@ -395,8 +451,12 @@ class HighSpeedRunner:
                                 raise ValueError("PAGE_PARSE_OR_ACCESS_FAILED")
                         committed.add(page_key)
                         elapsed = (aware_time(self.clock()) - aware_time(started)).total_seconds()
+                        dedup_start = time.perf_counter()
                         count = self.store.candidate_count(run_id)
-                        progress = {"kind": "PROGRESS", "normalizer_version":NORMALIZER_VERSION,
+                        self.store.append_event(run_id, {"kind":"DEDUP", "stage":"dedup",
+                            "duration_seconds":time.perf_counter()-dedup_start,
+                            "source_type":source["source_type"], "research_category":source.get("research_category")})
+                        progress = {"kind": "PROGRESS", "normalizer_version":normalizer_version,
                             **rolling.record(elapsed, count)}
                         self.store.append_event(run_id, progress)
                         if self.progress:
@@ -434,6 +494,19 @@ class HighSpeedRunner:
         else:
             parser = self.parser
         before = aware_time(self.clock())
+        parent_source=source
+        category_mapping = None
+        if plan.get("snapshot_contract_version") == 3 and self.parser is None:
+            from .category_mapping import load_mapping_rules, map_category, map_observation_category
+            reference = plan.get("category_mapping_config_reference")
+            if not reference or hashlib.sha256(Path(reference["path"]).read_bytes()).hexdigest() != reference.get("sha256"):
+                raise ValueError("V3_MAPPING_CONFIG_REFERENCE_REQUIRED")
+            key = (reference["path"],reference["sha256"])
+            cache = self.__dict__.setdefault("_v3_mapping_rules", {})
+            if key not in cache:
+                cache[key] = load_mapping_rules(reference["path"])
+            category_mapping = map_category(source,cache[key])
+            source = {**source,**category_mapping}
         parsed = parser(html, source=source, run_id=plan["run_id"], snapshot_id=plan["run_id"],
             page_url=url, page_number=number, observed_at=receipt.get("observed_at") or utc_text(before),
             evidence_path=receipt["html_path"], http_status=receipt.get("status_code"), origin=origin, acp_responses=acp)
@@ -441,10 +514,28 @@ class HighSpeedRunner:
             if observation.get("origin", origin) != origin:
                 raise ValueError("OBSERVATION_ORIGIN_MISMATCH")
             observation.setdefault("origin", origin)
+            if category_mapping is not None:
+                representation=observation.get("representation", "SERVER")
+                captured=receipt if representation=="SERVER" else acp[int(representation.split("_")[1])]
+                observation.update(capture_receipt_reference=captured.get("capture_receipt_reference") or self._receipt_ref(captured),
+                    capture_run_id=captured.get("run_id",plan["run_id"]),source_completeness_status="UNKNOWN")
+                mapping_cache=self.__dict__.setdefault("_v3_card_category_cache",{})
+                try:
+                    observation.update(map_observation_category(observation,parent_source,cache[key],
+                        parent_html_path=receipt["html_path"],parent_html_sha256=receipt.get("sha256") or hashlib.sha256(html.encode()).hexdigest(),
+                        cache=mapping_cache))
+                except (ValueError,OSError,KeyError,TypeError) as exc:
+                    observation.update(research_category=None,category_mapping_status="UNKNOWN",
+                        category_mapping_reason=str(exc),category_mapping_evidence=[],category_mapping_candidates=[])
         self.store.append_event(plan["run_id"], {"kind": "PARSE", "stage": "parse", "duration_seconds": (aware_time(self.clock())-before).total_seconds(),
             "raw_card_count": len(parsed["observations"]), "page_url": url,
             "source_type": source["source_type"], "research_category": source.get("research_category")})
         return parsed
+
+    @staticmethod
+    def _receipt_ref(receipt):
+        path=Path(receipt["evidence_path"])
+        return {"path":str(path.resolve()),"sha256":hashlib.sha256(path.read_bytes()).hexdigest()}
 
     def _request(self, plan, authorization, transport, source, url, kind, started, last_request, *, descriptor=None, page_key=None):
         live = plan["stage"] != "T0"
@@ -453,8 +544,12 @@ class HighSpeedRunner:
             authorize_request(url, source, authorization, kind=kind, descriptor=descriptor)
             if last_request is not None:
                 delay = plan["request_pacing_seconds"] - (aware_time(self.clock())-last_request).total_seconds()
+                pacing_started=time.perf_counter()
                 if delay > 0:
                     self.sleep(delay)
+                if plan.get("snapshot_contract_version") == 3:
+                    self.store.append_event(plan["run_id"],{"kind":"PACING","stage":"pacing",
+                        "duration_seconds":time.perf_counter()-pacing_started,"requested_sleep_seconds":max(0,delay)})
             # Approval, gate and elapsed budget may change while pacing.
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
         counters = self.store.summary(plan["run_id"])
@@ -468,6 +563,7 @@ class HighSpeedRunner:
             "origin": origin}
         reservation = self.store.reserve_request(plan["run_id"], request)
         before = aware_time(self.clock())
+        transaction_started=time.perf_counter()
         try:
             if not live:
                 entries = source.get("offline_pages", {})
@@ -490,13 +586,15 @@ class HighSpeedRunner:
             response = {"status_code": None, "url": None, "text": "", "error": type(exc).__name__ + ": " + str(exc)}
             state = "NETWORK_ERROR"
         response.update(access_state=state, observed_at=utc_text(observed), request_url=url,
-            duration_seconds=(aware_time(self.clock())-before).total_seconds(), origin=request["origin"],
+            duration_seconds=time.perf_counter()-transaction_started if plan.get("snapshot_contract_version") == 3 else (aware_time(self.clock())-before).total_seconds(), origin=request["origin"],
             kind=kind, page_key=page_key, source_id=source["source_id"], source_type=source["source_type"],
             research_category=source.get("research_category"), final_url=response.get("url"),
             request_method="GET" if kind == "PAGE" else descriptor["method"],
             request_payload=None if descriptor is None else descriptor.get("payload"))
         if descriptor is not None:
             response["native_acp_descriptor"] = dict(descriptor)
+            if descriptor.get("ranking_context_binding"):
+                response["ranking_context_binding"] = dict(descriptor["ranking_context_binding"])
         sensitive = {"authorization", "cookie", "proxy-authorization", "set-cookie"}
         for field in ("headers", "request_headers"):
             response[field] = {str(k): str(v) for k,v in (response.get(field) or {}).items() if str(k).casefold() not in sensitive}
@@ -510,6 +608,19 @@ class HighSpeedRunner:
         self.store.append_event(plan["run_id"], {"kind": "REQUEST", "stage": "navigation" if kind == "PAGE" else "acp", "request_kind": kind,
             "duration_seconds": response["duration_seconds"], "access_state": state, "url": url,
             "source_type": source["source_type"], "research_category": source.get("research_category")})
+        if plan.get("snapshot_contract_version") == 3:
+            self.store.append_event(plan["run_id"],{"kind":"NETWORK_WITH_BROWSER_WAIT","stage":"network_with_browser_wait",
+                "duration_seconds":response["duration_seconds"],"transport_timings":response.get("timings",{}),
+                "pure_network_seconds":None,"measurement_scope":"Full fetch operation; browser/network/body wait overlap is not decomposed."})
+            measured=(response.get("timings") or {}).get("network_request_response_seconds")
+            if isinstance(measured,(int,float)) and not isinstance(measured,bool) and 0<=measured<=response["duration_seconds"]:
+                self.store.append_event(plan["run_id"],{"kind":"NETWORK_REQUEST_RESPONSE_PHASE","stage":"network_only",
+                    "duration_seconds":measured,"measurement_source":response["timings"].get("network_measurement_source"),
+                    "measurement_scope":"Browser requestStart→responseEnd including server wait; subset of fetch, not physical wire-only time."})
+            if state != "NORMAL":
+                self.store.append_event(plan["run_id"],{"kind":"REQUEST_FAILURE","stage":"request_failure",
+                    "duration_seconds":response["duration_seconds"],"access_state":state,
+                    "measurement_scope":"Failed fetch transaction; subset of request time, not additive total."})
         if state != "NORMAL":
             if hasattr(self.store, "set_gate"):
                 self.store.set_gate(state, evidence_path=receipt["evidence_path"], run_id=plan["run_id"])

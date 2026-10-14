@@ -7,6 +7,8 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 import hashlib
 import json
+import time
+import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,6 +22,25 @@ _CONTROLLED_ACP_NONCE_HEADER = "x-codex-acp-request-nonce"
 class PlaywrightTransport:
     name = "PLAYWRIGHT"
     primary = True
+
+    @staticmethod
+    def _resource_network_seconds(entries, actual_url, *, minimum_start=None):
+        """Browser requestStart→responseEnd phase, including server wait.
+
+        Missing/ambiguous/cache entries remain unknown. This is not wire-only
+        transfer time or a new request, and never reconstructs unseen timings.
+        """
+        if not isinstance(entries,list):return None
+        matches=[e for e in entries if isinstance(e,dict) and e.get("name")==actual_url]
+        if len(matches)!=1:return None
+        item=matches[0]
+        values=[item.get(k) for k in ("startTime","requestStart","responseEnd","transferSize")]
+        if not all(isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) for v in values):return None
+        start,request,end,transfer=values
+        if start<0 or request<=0 or end<=request or request<start or transfer<=0:return None
+        if minimum_start is not None and (not isinstance(minimum_start,(int,float)) or isinstance(minimum_start,bool)
+                or not math.isfinite(minimum_start) or start<minimum_start):return None
+        return (end-request)/1000
 
     @staticmethod
     def _native_batch_descriptor(descriptor: dict, captured: dict) -> dict:
@@ -74,13 +95,15 @@ class PlaywrightTransport:
 
     def __init__(self, session, *, marketplace: str = "ES",
                  requested_locale: str = "es_ES", currency: str = "EUR",
-                 postal_code: str | None = None, marketplace_id: str | None = None):
+                 postal_code: str | None = None, marketplace_id: str | None = None,
+                 measure_timings: bool = False):
         self.session = session
         self.marketplace = marketplace
         self.requested_locale = requested_locale
         self.currency = currency
         self.postal_code = postal_code
         self.marketplace_id = marketplace_id
+        self.measure_timings = measure_timings
         self._native_acp_requests = []
         self._manual_acp_allowance = None
         self._acp_capture_installed = False
@@ -143,6 +166,7 @@ class PlaywrightTransport:
 
     def prepare_ajax_descriptor(self, descriptor: dict, *, referer: str) -> dict:
         """Use a captured native request, never a guessed request-body contract."""
+        self.last_prepare_browser_wait_seconds = 0.0
         if not self._acp_capture_installed:
             raise ValueError("ACP_NATIVE_CAPTURE_NOT_INSTALLED")
         page = getattr(self.session, "page", None)
@@ -204,7 +228,9 @@ class PlaywrightTransport:
                     window.scrollBy(0, Math.max(80, Math.floor(window.innerHeight * 0.8)));
                 }
             })()""")
+            wait_started=time.perf_counter()
             page.wait_for_timeout(500)
+            self.last_prepare_browser_wait_seconds+=time.perf_counter()-wait_started
         raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
 
     @staticmethod
@@ -285,15 +311,22 @@ class PlaywrightTransport:
                 })""", owner)
                 if result is not True:
                     raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
+                wait_started=time.perf_counter()
                 page.wait_for_timeout(500)
+                self.last_prepare_browser_wait_seconds+=time.perf_counter()-wait_started
             raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
         finally:
             self._active_carousel_owner = None
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
+        navigation_started=time.perf_counter()
         status = self.session.goto(url)
+        navigation_seconds=time.perf_counter()-navigation_started
         page = getattr(self.session, "page", None)
+        content_started=time.perf_counter()
         text = page.content() if page is not None else ""
+        content_seconds=time.perf_counter()-content_started
+        lazy_seconds=None
         # Access Gate must see the initial response before any scroll/lazy
         # loading is attempted.  A challenge/403/429 page must stop promptly;
         # it is never treated as a normal page that may be interacted with.
@@ -301,13 +334,28 @@ class PlaywrightTransport:
         if initial_state.value == "NORMAL":
             load_lazy = getattr(self.session, "load_lazy_ranking_content", None)
             if callable(load_lazy):
+                lazy_started=time.perf_counter()
                 load_lazy()
+                lazy_seconds=time.perf_counter()-lazy_started
+                content_started=time.perf_counter()
                 text = page.content() if page is not None else text
+                content_seconds+=time.perf_counter()-content_started
         final_url = str(getattr(page, "url", "") or url)
         state = detect_access_status(status, text).value
         failure = classify_failure(status_code=status, body=text, url=final_url)
         locale = locale_observation(text, requested_locale=self.requested_locale)
-        return TransportResponse(status, final_url, text, access_state=state,
+        network_seconds=None
+        if self.measure_timings and state=="NORMAL" and callable(getattr(page,"evaluate",None)):
+            try:
+                entries=page.evaluate("() => performance.getEntriesByType('navigation').map(e => ({name:e.name,startTime:e.startTime,requestStart:e.requestStart,responseEnd:e.responseEnd,transferSize:e.transferSize}))")
+                network_seconds=self._resource_network_seconds(entries,final_url)
+            except Exception:
+                network_seconds=None
+        timings={'goto_network_and_browser_seconds':navigation_seconds,'content_serialization_seconds':content_seconds,
+            'lazy_browser_operation_seconds':lazy_seconds,'pure_network_seconds':None,
+            'network_request_response_seconds':network_seconds,'network_measurement_source':'Browser PerformanceNavigationTiming requestStart→responseEnd; includes server wait, cache/ambiguous unknown',
+            'measurement_scope':'Client operation wall; navigation includes browser/DOM/network and cannot be decomposed.'} if self.measure_timings else {}
+        return TransportResponse(status, final_url, text, access_state=state, timings=timings,
                                  failure=failure.to_dict() if failure else None,
                                  marketplace=self.marketplace,
                                  currency=self.currency, postal_code=self.postal_code,
@@ -335,34 +383,47 @@ class PlaywrightTransport:
             browser_headers[_CONTROLLED_ACP_NONCE_HEADER] = nonce
             self._manual_acp_allowance = (url, str(method or "GET").upper(), body or "", nonce)
         try:
+            fetch_started=time.perf_counter()
             result = page.evaluate(
             """
-            async ({url, method, headers, body}) => {
+            async ({url, method, headers, body, measureTimings=false}) => {
+              const fetchStarted = measureTimings ? performance.now() : null;
               const response = await fetch(url, {
                 method,
                 headers,
                 body: method === "GET" || method === "HEAD" ? undefined : body,
                 credentials: "include"
               });
+              const text = await response.text();
+              const networkEntries = measureTimings ? performance.getEntriesByName(response.url)
+                .filter(e => e.startTime >= fetchStarted)
+                .map(e => ({name:e.name,startTime:e.startTime,requestStart:e.requestStart,responseEnd:e.responseEnd,transferSize:e.transferSize})) : [];
               return {
                 status: response.status,
                 url: response.url,
-                text: await response.text(),
+                text,
+                fetchStarted,
+                networkEntries,
                 headers: Object.fromEntries(response.headers.entries())
               };
             }
             """,
             {"url": url, "method": str(method or "GET").upper(),
-             "headers": browser_headers, "body": body},
+             "headers": browser_headers, "body": body, **({"measureTimings":True} if self.measure_timings else {})},
             )
         finally:
             self._manual_acp_allowance = None
+        fetch_seconds=time.perf_counter()-fetch_started
         status = result.get("status")
         text = result.get("text") or ""
         final_url = str(result.get("url") or url)
         state = detect_access_status(status, text).value
         failure = classify_failure(status_code=status, body=text, url=final_url)
         locale = locale_observation(text, requested_locale=self.requested_locale)
+        fetch_start=result.get("fetchStarted")
+        network_seconds=self._resource_network_seconds(result.get("networkEntries"),final_url,
+            minimum_start=fetch_start) if (self.measure_timings and isinstance(fetch_start,(int,float))
+                and not isinstance(fetch_start,bool) and math.isfinite(fetch_start)) else None
         return TransportResponse(
             status, final_url, text, headers=result.get("headers") or {},
             access_state=state,
@@ -371,6 +432,9 @@ class PlaywrightTransport:
             postal_code=self.postal_code, marketplace_id=self.marketplace_id,
             request_method=str(method or "GET").upper(), request_url=url,
             request_headers=request_headers, request_payload=payload,
+            timings={'js_fetch_and_response_body_seconds':fetch_seconds,'pure_network_seconds':None,
+                'network_request_response_seconds':network_seconds,'network_measurement_source':'Browser ResourceTiming requestStart→responseEnd from this fetch; includes server wait, cache/ambiguous unknown',
+                'measurement_scope':'Browser JS fetch through complete body serialization; not pure network.'} if self.measure_timings else {},
             **locale)
 
     def requires_ajax_page_context(self, page_url: str) -> bool:

@@ -96,6 +96,10 @@ def _run_live_locked(args, store, plan, approval, *, entry_time):
     validate_authorization(plan, approval, runner._gate(plan), store_root=store.root)
     if getattr(args, "offline", False) or not args.live or plan["stage"] == "T0":
         raise ValueError("EXPLICIT_LIVE_SWITCH_REQUIRED")
+    if plan.get("snapshot_contract_version") == 3:
+        reference=plan.get("category_mapping_config_reference")
+        if not reference or hashlib.sha256(Path(reference["path"]).read_bytes()).hexdigest()!=reference.get("sha256"):
+            raise ValueError("V3_MAPPING_CONFIG_REFERENCE_REQUIRED")
     # Freeze task start before browser setup; resume never resets its clock.
     if args.operation == "run":
         store.begin_run(plan, started_at=entry_time)
@@ -121,7 +125,7 @@ def _run_live_locked(args, store, plan, approval, *, entry_time):
             else:
                 route.continue_()
         session.page.route("**/*", bounded_document)
-        transport = PlaywrightTransport(session)
+        transport = PlaywrightTransport(session, measure_timings=plan.get("snapshot_contract_version") == 3)
         (store.root / "native_acp_contracts").mkdir(parents=True, exist_ok=True)
         def save_contract(value):
             save_native_contract(store, plan, value)
@@ -131,6 +135,20 @@ def _run_live_locked(args, store, plan, approval, *, entry_time):
 def dispatch(args):
     entry_time = utc_text()
     operation = args.operation
+    if operation == "baseline-v3":
+        from .v3_baseline import export_baseline
+        return export_baseline(args.csv, args.out, candidate_jsonl=args.candidate_jsonl)
+    if operation in {"replay-v3", "report-v3", "prepare-v3", "history-v3"}:
+        from .v3_workflows import replay_v3, report_replay_v3, prepare_v3, archive_history_v3
+        if operation == "history-v3":
+            return archive_history_v3(args.historical_root,args.historical_run_id,args.root,args.run_id,args.out)
+        if operation == "replay-v3":
+            return replay_v3(args.historical_root, args.historical_run_id, args.out,
+                mapping_config=args.mapping_config,
+                progress=lambda value: print(json.dumps({"kind":"V3_OFFLINE_REPLAY_PROGRESS", **value})))
+        if operation == "report-v3":
+            return report_replay_v3(args.root, args.run_id, args.out,mapping_config=args.mapping_config,history_manifest=args.history_manifest)
+        return prepare_v3(args.historical_root, args.historical_run_id, args.out, mapping_config=args.mapping_config,pending_source_pack=args.pending_source_pack)
     if operation == "plan":
         pending = {**DEFAULT_CONFIG, "mode": "HIGH_SPEED_V2", "run_id": args.run_id,
             "snapshot_id": args.run_id, "stage": args.stage, "origin": "OFFLINE_FIXTURE" if args.stage == "T0" else "LIVE_CAPTURE",
@@ -208,6 +226,23 @@ def command(args):
 def register(subparsers):
     parser = subparsers.add_parser("highspeed", help="V2 link-first isolated snapshot tests")
     operations = parser.add_subparsers(dest="operation", required=True)
+    op = operations.add_parser("baseline-v3", help="Historical CSV baseline; no browser")
+    op.add_argument("--csv", required=True); op.add_argument("--candidate-jsonl"); op.add_argument("--out", required=True)
+    op.set_defaults(func=command)
+    for name in ("replay-v3", "prepare-v3"):
+        op = operations.add_parser(name, help="Read-only old evidence; no LIVE requests")
+        op.add_argument("--historical-root", required=True); op.add_argument("--historical-run-id", required=True)
+        op.add_argument("--mapping-config", required=True); op.add_argument("--out", required=True)
+        if name == "prepare-v3":op.add_argument("--pending-source-pack")
+        op.set_defaults(func=command)
+    op = operations.add_parser("report-v3", help="Full historical V3 DOM/receipt QA and contract export")
+    op.add_argument("--root", required=True); op.add_argument("--run-id", required=True); op.add_argument("--out", required=True)
+    op.add_argument("--mapping-config"); op.add_argument("--history-manifest")
+    op.set_defaults(func=command)
+    op = operations.add_parser("history-v3", help="Read-only all historical index and actual capture binding audit")
+    op.add_argument("--historical-root",required=True);op.add_argument("--historical-run-id",required=True)
+    op.add_argument("--root",required=True);op.add_argument("--run-id",required=True);op.add_argument("--out",required=True)
+    op.set_defaults(func=command)
     for name in ("run", "resume", "status", "qa", "report", "gate-export", "renormalize", "review-identity", "gate-recover"):
         op = operations.add_parser(name)
         op.add_argument("--root", required=True)

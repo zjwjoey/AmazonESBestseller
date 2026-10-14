@@ -331,6 +331,9 @@ def _user_pause_sample(run):
 def export_report(store, run_id, output_root, source_registry=None, metrics=None, *, title_review_manifest=None):
     loaded = store.load_run(run_id)
     run = loaded.get("run", {})
+    if run.get("plan", {}).get("snapshot_contract_version") == 3:
+        from .v3_workflows import report_replay_v3
+        return report_replay_v3(store.root, run_id, output_root)
     sources = source_registry or run.get("sources", [])
     if isinstance(sources, dict):
         sources = sources.get("sources", [])
