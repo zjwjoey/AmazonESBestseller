@@ -169,9 +169,27 @@ def _continuation_metrics(metrics, run, observations, pages, requests, events, p
     return result
 
 
+def _reviewed_title_rows(rows, projection, manifest_path):
+    """Render centrally validated title evidence without replacing captured fields."""
+    result = []
+    for row in rows:
+        review = projection.get(row.get("observation_id"))
+        status = review["review_status"] if review else "PENDING_REVIEW"
+        result.append({**row,
+            "original_product_title_raw": row.get("product_title_raw"),
+            "product_title_for_research": review.get("corrected_source_title")
+                if review and status in {"CORRECTED", "UNCHANGED"} else None,
+            "title_review_status": status,
+            "title_review_reason": review.get("reason") if review else "OBSERVATION_NOT_IN_REVIEW_SNAPSHOT",
+            "title_review_manifest": str(manifest_path),
+            "title_review_evidence": review,
+        })
+    return result
+
+
 def export_rows_report(*, observations, candidates, output_root, run_metadata=None,
                   metrics=None, pages=(), sources=(), qa=None, pending_journals=(),
-                  pending_observations=(), pending_issues=()):
+                  pending_observations=(), pending_issues=(), title_review_metadata=None):
     """Create a new directory every time; never rewrite snapshots or formal Excel."""
     export_started = time.perf_counter()
     observations, candidates, pages, sources = map(list, (observations, candidates, pages, sources))
@@ -235,6 +253,8 @@ def export_rows_report(*, observations, candidates, output_root, run_metadata=No
                    or c.get("url_identity_status") == "IDENTITY_CONFLICT" for c in candidates),
                "cross_list_reused_candidates": sum(len(r["source_types"]) > 1 for r in group_reuse),
                "cross_category_reused_candidates": sum(len(r["research_categories"]) > 1 for r in group_reuse)}
+    if title_review_metadata is not None:
+        summary["title_review"] = title_review_metadata
     if (metrics or {}).get("is_continuation"):
         summary.update({name: metrics[name] for name in ("inherited_unique_links", "cumulative_unique_links",
             "phase_new_unique_links", "raw_observations_by_origin", "raw_observations_by_origin_and_derivation",
@@ -253,6 +273,7 @@ def export_rows_report(*, observations, candidates, output_root, run_metadata=No
           "pending_unindexed_page_journals": list(pending_journals),
           "unindexed_raw_card_count": pending_count,
           "pending_journal_errors": list(pending_issues),
+          **({"title_review": title_review_metadata} if title_review_metadata is not None else {}),
           "origin": (run_metadata or {}).get("origin", "UNKNOWN"), "original_evidence_modified": False})
     (directory / "research_report.txt").write_text(
         "商品链接快照研究报告\n" + f"已索引原始观察：{len(observations)}\n未索引但保存的原始卡片：{pending_count}\n计入目标的有效去重链接候选：{len(eligible_ids)}\n"
@@ -292,7 +313,22 @@ def export_rows_report(*, observations, candidates, output_root, run_metadata=No
     return directory
 
 
-def export_report(store, run_id, output_root, source_registry=None, metrics=None):
+def _user_pause_sample(run):
+    if run.get("status") != "USER_PAUSED":
+        return None
+    value = run.get("user_paused_at")
+    start = run.get("task_started_at") or run.get("plan", {}).get("task_started_at") or run.get("started_at") or run.get("created_at")
+    try:
+        instant = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        beginning = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+        if instant.tzinfo is not None and beginning.tzinfo is not None and instant >= beginning:
+            return str(value)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def export_report(store, run_id, output_root, source_registry=None, metrics=None, *, title_review_manifest=None):
     loaded = store.load_run(run_id)
     run = loaded.get("run", {})
     sources = source_registry or run.get("sources", [])
@@ -308,7 +344,9 @@ def export_report(store, run_id, output_root, source_registry=None, metrics=None
             event.setdefault("stage", event.get("operation") or event.get("request_kind") or event.get("event_type") or event.get("kind", "unknown"))
             events.append(event)
         finished_at = None
-        if run.get("status") not in {"RUNNING", "CREATED", "NEW"}:
+        if run.get("status") == "USER_PAUSED":
+            finished_at = _user_pause_sample(run)
+        elif run.get("status") not in {"RUNNING", "CREATED", "NEW"}:
             start = datetime.fromisoformat((run.get("started_at") or run["created_at"]).replace("Z", "+00:00"))
             endings = []
             for name in ("finished_at", "completed_at", "ended_at"):
@@ -329,6 +367,13 @@ def export_report(store, run_id, output_root, source_registry=None, metrics=None
             target=run.get("target_unique_links", run.get("plan", {}).get("target_unique_links", 30000)))
     else:
         observations, candidates = list(store.iter_observations(run_id)), list(store.iter_candidates(run_id))
+        if run.get("status") == "USER_PAUSED":
+            metrics = dict(metrics)
+            metrics["finished_at"] = _user_pause_sample(run)
+            metrics["total_wall_seconds"] = None
+            if metrics["finished_at"]:
+                metrics["total_wall_seconds"] = (datetime.fromisoformat(metrics["finished_at"].replace("Z", "+00:00"))
+                    - datetime.fromisoformat(metrics["started_at"].replace("Z", "+00:00"))).total_seconds()
     continuation_events = store.events(run_id)
     parent_id = run.get("parent_run_id") or next((e.get("parent_run_id") for e in continuation_events
         if (e.get("kind") or e.get("event_type")) == "HISTORICAL_CONTINUATION_SEED"), None)
@@ -340,6 +385,24 @@ def export_report(store, run_id, output_root, source_registry=None, metrics=None
             pass
     metrics = _continuation_metrics(metrics, run, observations, store.pages(run_id),
         loaded.get("requests", []), continuation_events, parent_start)
+    if run.get("status") == "USER_PAUSED":
+        metrics = dict(metrics)
+        pause = _user_pause_sample(run)
+        metrics.update(finished_at=None, run_completed=False, user_paused_at=pause,
+            sample_observed_at=pause, timing_endpoint_kind="USER_PAUSE" if pause else "UNKNOWN_USER_PAUSE",
+            timing_scope="FIRST_TASK_START_THROUGH_USER_PAUSE_NOT_COMPLETION",
+            eta_remaining_seconds=None, ten_hour_target_passed=False,
+            include_report_export_in_task_wall=False,
+            throughput_interpretation="HISTORICAL_OBSERVATIONS_UNTIL_USER_PAUSE_NOT_ACTIVE_GOAL_PROJECTION")
+        if metrics.get("is_continuation"):
+            metrics.update(phase_sample_observed_at=pause, phase_ten_hour_target_passed=False)
+            metrics["continuation_capacity_model"] = {**metrics["continuation_capacity_model"],
+                "run_completed": False, "user_paused": True, "estimated_total_seconds": None,
+                "ten_hour_throughput_projection": None}
+        if not pause:
+            metrics.update(total_wall_seconds=None, unique_per_hour=None, unique_per_minute=None)
+            if metrics.get("is_continuation"):
+                metrics.update(phase_wall_seconds=None, cumulative_wall_seconds_including_idle_gap=None)
     from ..multisource.storage import read_sealed
     pending = loaded.get("manifest", {}).get("pending_page_journals", [])
     pending_rows, pending_errors = [], []
@@ -354,10 +417,28 @@ def export_report(store, run_id, output_root, source_registry=None, metrics=None
                     "index_status": "UNINDEXED_PRESERVED_RAW", "target_eligible": False})
         except (OSError, ValueError, KeyError, TypeError) as exc:
             pending_errors.append({"journal_path": item.get("journal_path"), "error": str(exc)})
+    title_metadata = None
+    if title_review_manifest is not None:
+        from .title_review import load_title_projection
+        # All semantic and binding checks live in the central review module.
+        # A corrupt manifest raises before creating any report directory.
+        projection = load_title_projection(title_review_manifest, store, run_id)
+        observations = _reviewed_title_rows(observations, projection, title_review_manifest)
+        candidates = _reviewed_title_rows(candidates, projection, title_review_manifest)
+        pending_rows = _reviewed_title_rows(pending_rows, projection, title_review_manifest)
+        title_metadata = {"manifest_path": str(title_review_manifest),
+            "manifest_sha256": hashlib.sha256(Path(title_review_manifest).read_bytes()).hexdigest(),
+            "observation_status_counts": dict(Counter(r["title_review_status"] for r in observations)),
+            "candidate_status_counts": dict(Counter(r["title_review_status"] for r in candidates)),
+            "unindexed_status_counts": dict(Counter(r["title_review_status"] for r in pending_rows)),
+            "original_titles_modified": False, "identity_counts_modified": False,
+            "usable_title_field": "product_title_for_research",
+            "unverified_title_policy": "NULL_RESEARCH_TITLE_KEEP_ORIGINAL_CAPTURED_TITLE"}
     directory = export_rows_report(observations=observations, candidates=candidates,
         output_root=output_root, run_metadata=run, metrics=metrics, pages=store.pages(run_id),
         sources=sources, qa=loaded.get("manifest", {}).get("qa", {}),
-        pending_journals=pending, pending_observations=pending_rows, pending_issues=pending_errors)
+        pending_journals=pending, pending_observations=pending_rows, pending_issues=pending_errors,
+        title_review_metadata=title_metadata)
     return {"report_directory": str(directory), "summary_path": str(directory / "summary.json"),
             "manifest_path": str(directory / "report_manifest.json")}
 

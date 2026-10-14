@@ -77,6 +77,36 @@ def test_running_legacy_metadata_never_reports_stopped_time_as_completion(tmp_pa
     store.close()
 
 
+def test_user_paused_report_uses_pause_sample_not_stale_stop_or_completion(tmp_path):
+    store = fixture_store(tmp_path)
+    store.update_run("resume_timing", status="USER_PAUSED", ended_at=STOP,
+        finished_at=STOP, completed_at=STOP, user_paused_at=END)
+    result = export_report(store, "resume_timing", tmp_path / "reports")
+    metric = json.loads(open(result["summary_path"], encoding="utf-8").read())["performance"]
+    assert metric["total_wall_seconds"] == 43200
+    assert metric["finished_at"] is None
+    assert metric["sample_observed_at"] == END
+    assert metric["run_completed"] is False
+    assert metric["timing_scope"] == "FIRST_TASK_START_THROUGH_USER_PAUSE_NOT_COMPLETION"
+    assert metric["eta_remaining_seconds"] is None
+    assert not metric["ten_hour_target_passed"]
+    assert store.get_run("resume_timing")["ended_at"] == STOP
+    store.close()
+
+
+@pytest.mark.parametrize("pause", [None, "bad", "2026-10-14T03:52:22", "2026-10-13T15:50:00Z"])
+def test_invalid_or_missing_pause_does_not_fall_back_to_stale_end(tmp_path, pause):
+    store = fixture_store(tmp_path)
+    store.update_run("resume_timing", status="USER_PAUSED", ended_at=STOP,
+        finished_at=STOP, user_paused_at=pause)
+    result = export_report(store, "resume_timing", tmp_path / "reports")
+    metric = json.loads(open(result["summary_path"], encoding="utf-8").read())["performance"]
+    assert metric["total_wall_seconds"] is None
+    assert metric["finished_at"] is None
+    assert metric["sample_observed_at"] is None
+    store.close()
+
+
 @pytest.mark.parametrize("bad_finish", ["not-a-time", "2026-10-14T03:52:22", "2026-10-13T15:50:00Z"])
 def test_invalid_finish_is_ignored_in_favor_of_valid_completion(tmp_path, bad_finish):
     store = fixture_store(tmp_path)

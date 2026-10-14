@@ -1,0 +1,6 @@
+{
+  "source_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\cc\\cc580ef4b8806bb6f3bf9a7b613451591561dfed7856dbc55fdb03043dec4bc5.html",
+  "source_sha256": "cc580ef4b8806bb6f3bf9a7b613451591561dfed7856dbc55fdb03043dec4bc5",
+  "fixture_sha256": "8de7f6d1433b829b7849cd151895acc42eae49d41085dfbddd50623d99b808c3",
+  "transform": "First5actual gridItemRoot cards unchanged, wrapper andsourcefaithfulH1text retained for recognition. Existing card href/title/price/rank/image alt intact."
+}

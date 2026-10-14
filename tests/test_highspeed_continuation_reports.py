@@ -48,6 +48,38 @@ def reports(store, tmp_path):
     return json.loads((directory / "summary.json").read_text(encoding="utf-8")), json.loads((directory / "capacity_model.json").read_text(encoding="utf-8"))
 
 
+def test_paused_continuation_uses_actual_pause_and_preserves_inherited_count_scope(tmp_path):
+    store = SnapshotStore(fresh=True)
+    store.run.update(status="USER_PAUSED", ended_at="2026-10-13T20:43:49Z",
+                     user_paused_at="2026-10-13T22:42:38Z")
+    summary, model = reports(store, tmp_path)
+    metric = summary["performance"]
+    assert metric["finished_at"] is None
+    assert metric["sample_observed_at"] == "2026-10-13T22:42:38Z"
+    assert metric["total_wall_seconds"] == metric["phase_wall_seconds"] == 7200
+    assert metric["inherited_unique_links"] == 2
+    assert metric["phase_new_unique_links"] == 1
+    assert metric["unique_per_hour"] == .5
+    assert metric["eta_remaining_seconds"] is None
+    assert not metric["run_completed"]
+    assert not metric["phase_ten_hour_target_passed"]
+    assert model["user_paused"]
+    assert model["estimated_total_seconds"] is None
+
+
+def test_pause_before_successor_phase_start_is_unknown_even_after_parent_start(tmp_path):
+    store = SnapshotStore(fresh=True)
+    store.run.update(status="USER_PAUSED", user_paused_at="2026-10-13T20:41:38Z")
+    summary, _ = reports(store, tmp_path)
+    metric = summary["performance"]
+    assert metric["finished_at"] is None
+    assert metric["sample_observed_at"] is None
+    assert metric["total_wall_seconds"] is None
+    assert metric["phase_wall_seconds"] is None
+    assert metric["cumulative_wall_seconds_including_idle_gap"] is None
+    assert metric["unique_per_hour"] is None
+
+
 def test_inherited_only_has_no_positive_phase_speed_or_capacity_projection(tmp_path):
     summary, model = reports(SnapshotStore(), tmp_path)
     metric = summary["performance"]

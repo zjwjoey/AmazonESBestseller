@@ -17,7 +17,7 @@ from .links import candidate_id, normalize_product_url
 from .sources import (discover_sources, normalize_source_url, same_source_category,
                       source_type_from_url, source_type_value)
 
-ADAPTER_VERSION = "link_first_adapters_v2.1"
+ADAPTER_VERSION = "link_first_adapters_v2.2.title_priority"
 _HEADINGS = {
     "BEST_SELLERS": (r"los mas vendidos", r"best\s*sellers"),
     "MOVERS_SHAKERS": (r"productos del momento", r"movers (?:and|&) shakers", r"movimientos y tendencias"),
@@ -94,6 +94,61 @@ def _raw_href(card):
     return str(links[0].get("href")) if links else None
 
 
+_TITLE_SELECTORS = (
+    "[data-product-title]",
+    "[class*='p13n-sc-css-line-clamp']",
+    ".p13n-sc-truncate-desktop-type2",
+    ".p13n-sc-truncate",
+    ".a-size-base-plus",
+    ".a-link-normal .a-size-base",
+)
+_METADATA_CLASSES = ("price", "a-icon-star", "a-icon-alt", "rating", "review-count")
+
+
+def _non_title_text(text):
+    value = re.sub(r"\s+", " ", _fold(text or "")).strip()
+    number = r"\d[\d., ]*"
+    money = r"(?:[€$£]\s*" + number + r"|" + number + r"\s*(?:€|eur|usd|gbp|\$|£))"
+    return bool(re.fullmatch(r"(?:(?:\d+\s+ofertas?\s+desde|desde|from|a partir de|precio:?)[ :]*\s*)?" + money + r"(?:\s*[-–]\s*" + money + r")?", value)
+        or re.fullmatch(r"[\d.,]+\s*(?:de|out of)\s*5\s*(?:estrellas|stars)(?:[, ]+[\d.,]+\s*(?:calificaciones|ratings))?", value)
+        or re.fullmatch(r"[\d.,]+\s*(?:calificaciones|ratings|valoraciones|resenas|reviews)", value))
+
+
+def _title_from_card(card):
+    """Prioritize actual title DOM, then literal image alt; never price order.
+
+    Selectors are evaluated separately because a comma selector returns the
+    earliest matching node in DOM order, even when that node is a price label.
+    """
+    for selector in _TITLE_SELECTORS:
+        for match_index, node in enumerate(card.select(selector)):
+            text = _text(node)
+            if not text or _non_title_text(text):
+                continue
+            ancestors = [node]
+            for parent in node.parents:
+                if parent is card:
+                    break
+                ancestors.append(parent)
+            if any(any(marker in cls for marker in _METADATA_CLASSES)
+                   for parent in ancestors for cls in parent.get("class", [])):
+                continue
+            anchor = node.find_parent("a", href=True)
+            if anchor is not None and not normalize_product_url(anchor.get("href"))["is_valid"]:
+                continue
+            if selector in _TITLE_SELECTORS[-2:] and re.fullmatch(r"[\d.,\s]+", text):
+                continue
+            return text, {"kind": "SOURCE_VISIBLE_PRODUCT_TITLE", "selector": selector,
+                "selector_match_index": match_index, "text_raw": text}
+    for match_index, image in enumerate(card.select("img[alt]")):
+        text = str(image.get("alt") or "").strip()
+        anchor = image.find_parent("a", href=True)
+        if text and not _non_title_text(text) and (anchor is None or normalize_product_url(anchor.get("href"))["is_valid"]):
+            return text, {"kind": "SOURCE_IMAGE_ALT", "selector": "img[alt]",
+                "selector_match_index": match_index, "text_raw": text}
+    return None, {"kind": "SOURCE_TITLE_MISSING", "text_raw": None}
+
+
 def _parse_cards(soup, *, source, run_id, snapshot_id, page_url, page_number,
                  observed_at, evidence_path, sha, representation, offset=0, fragment=False):
     rows = []
@@ -107,10 +162,7 @@ def _parse_cards(soup, *, source, run_id, snapshot_id, page_url, page_number,
             rank = int(raw) if raw and str(raw).isdigit() and int(raw) > 0 else None
         raw = _raw_href(card)
         link = normalize_product_url(raw, base_url=page_url)
-        title = _text(card.select_one("[data-product-title], .p13n-sc-truncate-desktop-type2, .p13n-sc-truncate, .a-size-base-plus, .a-link-normal .a-size-base"))
-        image = card.select_one("img[alt]")
-        if not title and image:
-            title = image.get("alt") or None
+        title, title_evidence = _title_from_card(card)
         scope = _scope(card, page_url)
         category_wrapper = next((p for p in card.parents if p.get("data-card-metrics-id") or p.get("data-category-url")), None)
         category_heading = _text(category_wrapper.select_one("h2, h3")) if category_wrapper else None
@@ -125,6 +177,7 @@ def _parse_cards(soup, *, source, run_id, snapshot_id, page_url, page_number,
             category_scope_evidence={"ranking_context_url": scope, "heading_raw": category_heading,
                 "evidence_sha256": sha},
             category_path=source.get("category_path", []), product_title_raw=title,
+            product_title_evidence={**title_evidence, "evidence_path": evidence_path, "evidence_sha256": sha},
             ranking_position=rank, rank_value=rank, rank_raw=rank_raw, rank_context=scope,
             rank_semantics=RANK_SEMANTICS[source["source_type"]], page_number=page_number,
             slot_position=slot, representation_slot=index, representation=representation,

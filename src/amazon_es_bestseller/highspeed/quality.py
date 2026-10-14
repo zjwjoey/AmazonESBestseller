@@ -41,7 +41,7 @@ def audit_run(store, run_id):
             raise ValueError("EVIDENCE_HASH_MISMATCH")
         return data.decode("utf-8")
 
-    keys = ("raw_product_url", "ranking_position", "rank_context", "product_title_raw", "source_id", "source_type")
+    keys = ("raw_product_url", "ranking_position", "rank_context", "source_id", "source_type")
     def signature(row):
         return tuple(str(row.get(key)) for key in keys)
 
@@ -61,6 +61,7 @@ def audit_run(store, run_id):
                     if (len(ids)!=1 or ids[0] not in parents or row.get("origin")!="HISTORICAL_REPLAY"
                             or row.get("is_derivation") is not True or row.get("parent_run_id")!=run.get("parent_run_id")
                             or row.get("observed_at")!=parents[ids[0]].get("observed_at")
+                            or row.get("product_title_raw")!=parents[ids[0]].get("product_title_raw")
                             or row.get("evidence_path")!=parents[ids[0]].get("evidence_path")):
                         raise ValueError("CONTINUATION_ROW_PROVENANCE_CHANGED")
                 if page.get("status")!="COMPLETE":
@@ -109,6 +110,18 @@ def audit_run(store, run_id):
                 origin=run.get("origin", "OFFLINE_FIXTURE"), acp_responses=fragments)
             if Counter(map(signature, raw)) != Counter(map(signature, parsed["observations"])):
                 fail("RAW_OBSERVATIONS_NOT_BOUND_TO_REPARSED_CARDS", page_url=page["page_url"])
+            from .continuation import _verify_original_titles
+            _verify_original_titles(raw)
+            current_titles={(signature(r),r.get("representation"),r.get("representation_slot")):r.get("product_title_raw")
+                for r in parsed["observations"]}
+            legacy_defects=[r for r in raw if r.get("parser_version")=="link_first_adapters_v2.1"
+                and r.get("product_title_raw")!=current_titles.get((signature(r),r.get("representation"),r.get("representation_slot")))]
+            if legacy_defects:
+                fail("KNOWN_LEGACY_TITLE_EXTRACTION_DEFECT",page_url=page["page_url"],
+                    original_title_parser_version="link_first_adapters_v2.1",
+                    corrected_title_parser_version=parsed["page"]["parser_version"],
+                    affected_observations=len(legacy_defects),raw_titles_preserved=True,
+                    correction_requires_separate_verified_projection=True)
             actual = parsed["page"]
             if actual.get("access_status") != "NORMAL" or not actual.get("source_context_valid") or not actual.get("source_type_verified"):
                 fail("PAGE_SOURCE_OR_ACCESS_INVALID", page_url=page["page_url"])

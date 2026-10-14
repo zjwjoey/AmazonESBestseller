@@ -6,11 +6,12 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 
 from ..multisource.storage import digest, immutable_json, read_sealed, sealed
-from .adapters import parse_page, _parse_cards
+from .adapters import parse_page, _parse_cards, _cards, _raw_href
+from . import adapters
 from .budgets import validate_plan
 
 MODE = "USER_AUTHORIZED_30000_CONTINUATION"
-KEYS = ("raw_product_url", "ranking_position", "rank_context", "product_title_raw", "source_id", "source_type")
+KEYS = ("raw_product_url", "ranking_position", "rank_context", "source_id", "source_type")
 
 
 def _signature(row):
@@ -47,6 +48,32 @@ def _parent_eligible(index_row, original_page):
         and original_page.get("source_type_verified") is True
         and original_page.get("source_context_valid") is True
         and index_row.get("source_evidence_eligible") is not False)
+
+
+def _verify_original_titles(raw_rows):
+    """Reproduce the declared original title parser, never rewrite its output."""
+    cache={}
+    for row in raw_rows:
+        path=row["evidence_path"];fragment=str(row.get("representation","")).startswith("ACP_")
+        key=(path,fragment)
+        if key not in cache:cache[key]=_cards(BeautifulSoup(Path(path).read_text(encoding="utf-8"),"lxml"),fragment)
+        slot=row.get("representation_slot")
+        if type(slot) is not int or slot<0 or slot>=len(cache[key]):
+            raise ValueError("CONTINUATION_ORIGINAL_TITLE_SLOT_CONFLICT")
+        card=cache[key][slot]
+        if _raw_href(card)!=row.get("raw_product_url"):
+            raise ValueError("CONTINUATION_ORIGINAL_TITLE_URL_CONFLICT")
+        if row.get("parser_version")=="link_first_adapters_v2.1":
+            node=card.select_one("[data-product-title], .p13n-sc-truncate-desktop-type2, .p13n-sc-truncate, .a-size-base-plus, .a-link-normal .a-size-base")
+            title=node.get_text(" ",strip=True) if node else None
+            image=card.select_one("img[alt]")
+            if not title and image:title=image.get("alt") or None
+        elif row.get("parser_version")==adapters.ADAPTER_VERSION:
+            title,_=adapters._title_from_card(card)
+        else:
+            raise ValueError("CONTINUATION_ORIGINAL_TITLE_PARSER_VERSION_UNSUPPORTED")
+        if title!=row.get("product_title_raw"):
+            raise ValueError("CONTINUATION_ORIGINAL_TITLE_NOT_BOUND_TO_DECLARED_PARSER")
 
 
 def validate_seed_provenance(page, plan, *, store):
@@ -110,6 +137,7 @@ def validate_seed_provenance(page, plan, *, store):
                 evidence_path=original["evidence_path"],sha=matching[-1]["sha256"],representation="SERVER")
         if Counter(map(_signature,journal["observations"])) != Counter(map(_signature,bound_rows)):
             raise ValueError("CONTINUATION_RAW_ROWS_NOT_BOUND_TO_CARDS")
+        _verify_original_titles(journal["observations"])
         if original.get("status") == "COMPLETE" and parsed["page"].get("status") != "COMPLETE":
             raise ValueError("CONTINUATION_COMPLETENESS_NOT_PROVEN")
         for field in ("access_status","source_type_verified","source_context_valid","actual_count"):

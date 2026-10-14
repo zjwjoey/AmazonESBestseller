@@ -149,6 +149,34 @@ def test_missing_parent_receipt_fails_successor_qa_without_live_relabel(tmp_path
     assert store.summary("child")["requests"]==0
 
 
+@pytest.mark.parametrize("damage",[None,"title","url","rank","source"])
+def test_frozen_legacy_price_title_remains_bound_without_rewriting_raw(tmp_path,damage):
+    store,parent,child=fixture(tmp_path)
+    source=parent['sources'][0]
+    html="<h1>Los más vendidos</h1><div data-expected-count='1'><div class='ranking-card'><span class='zg-bdg-text'>#1</span><a class='a-link-normal' href='/product/legacy-title'><span class='a-size-base p13n-sc-price'>9,99 €</span><div class='p13n-sc-css-line-clamp-3'>Real preserved product name</div></a></div></div>"
+    observed='2026-10-13T03:00:00Z'
+    request=store.reserve_request('parent',{'kind':'PAGE','url':URL,'source_id':'root','source_type':'BEST_SELLERS','observed_at':observed})
+    receipt=store.save_response('parent',request,{'text':html,'status_code':200,'access_state':'NORMAL','origin':'LIVE_CAPTURE',
+        'source_id':'root','source_type':'BEST_SELLERS','observed_at':observed,'final_url':URL})
+    parsed=parse_page(html,source=source,run_id='parent',page_url=URL,page_number=1,observed_at=observed,evidence_path=receipt['html_path'],origin='LIVE_CAPTURE')
+    parsed['observations'][0].update(product_title_raw='9,99 €',parser_version='link_first_adapters_v2.1')
+    parsed['observations'][0].pop('product_title_evidence',None)
+    if damage:
+        field,value={'title':('product_title_raw','Invented important attribute'),'url':('raw_product_url','/product/not-in-html'),
+            'rank':('ranking_position',2),'source':('source_type','MOST_GIFTED')}[damage]
+        parsed['observations'][0][field]=value
+    key=store.pages('parent')[0]['page_key'];store.commit_page('parent',key,parsed['page'],parsed['observations'])
+    before=list(map(tuple,store.db.execute("SELECT * FROM observations WHERE run_id='parent'")))
+    if damage:
+        with pytest.raises(ValueError,match='CONTINUATION_'):seed_successor(store,'parent',child)
+        assert store.db.execute("SELECT count(*) FROM observations WHERE run_id='child'").fetchone()[0]==0
+        return
+    seed_successor(store,'parent',child)
+    assert any(r['product_title_raw']=='9,99 €' for r in store.iter_observations('child'))
+    assert list(map(tuple,store.db.execute("SELECT * FROM observations WHERE run_id='parent'")))==before
+    assert not any(f['code']=='PAGE_EVIDENCE_AUDIT_FAILED' for f in audit_run(store,'child')['findings'])
+
+
 @pytest.mark.parametrize("unconfirmed",[False,True])
 def test_resume_skips_seed_complete_page_and_fetches_only_new_frozen_source(tmp_path,unconfirmed):
     store,parent,child=fixture(tmp_path,bad_source=unconfirmed)
