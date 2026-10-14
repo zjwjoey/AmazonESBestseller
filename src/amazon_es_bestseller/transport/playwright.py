@@ -7,6 +7,7 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 import hashlib
 import json
+from pathlib import Path
 from uuid import uuid4
 
 from ..access.detector import detect_access_status
@@ -83,6 +84,8 @@ class PlaywrightTransport:
         self._native_acp_requests = []
         self._manual_acp_allowance = None
         self._acp_capture_installed = False
+        self._active_carousel_owner = None
+        self._used_carousel_contracts = set()
 
     def install_bounded_acp_capture(self, *, on_capture=None) -> None:
         """Observe the site's request contract while aborting native ACP traffic.
@@ -120,6 +123,10 @@ class PlaywrightTransport:
                 "headers": headers, "parent_page_url": str(getattr(page, "url", "")),
                 "resource_type": request.resource_type,
                 "request_contract_source": "NATIVE_BROWSER_REQUEST_ABORTED"}
+            owner = self._active_carousel_owner
+            if owner and self._carousel_request_matches(evidence, owner):
+                evidence.update(ranking_context_binding=dict(owner["ranking_context_binding"]),
+                    native_carousel_owner={k:owner[k] for k in ("owner_id", "owner_path", "owner_params", "carousel_options_sha256")})
             self._native_acp_requests.append(evidence)
             if on_capture is not None:
                 on_capture(evidence)
@@ -129,6 +136,8 @@ class PlaywrightTransport:
             def clear_on_navigation(frame):
                 if frame == getattr(page, "main_frame", None):
                     self._native_acp_requests.clear()
+                    self._active_carousel_owner = None
+                    self._used_carousel_contracts.clear()
             on("framenavigated", clear_on_navigation)
         self._acp_capture_installed = True
 
@@ -139,6 +148,8 @@ class PlaywrightTransport:
         page = getattr(self.session, "page", None)
         if page is None or str(getattr(page, "url", "")) != referer:
             raise ValueError("ACP_NATIVE_CAPTURE_REQUIRES_CURRENT_SOURCE_PAGE")
+        if (descriptor.get("metadata") or {}).get("carousel") is True:
+            return self._prepare_carousel_descriptor(descriptor, referer=referer)
         expected = str(descriptor.get("url") or "")
         expected_parts = urlsplit(expected)
         parent = urlsplit(referer)
@@ -195,6 +206,89 @@ class PlaywrightTransport:
             })()""")
             page.wait_for_timeout(500)
         raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
+
+    @staticmethod
+    def _carousel_request_matches(captured, owner):
+        actual, parent = urlsplit(captured.get("url", "")), urlsplit(owner["referer"])
+        return bool(actual.scheme == "https" and actual.netloc == parent.netloc
+            and actual.path.startswith(owner["owner_path"].rstrip("/") + "/")
+            and captured.get("parent_page_url") == owner["referer"]
+            and captured.get("method") == "POST" and captured.get("payload")
+            and captured.get("headers", {}).get("x-amz-acp-params") == owner["owner_params"])
+
+    @staticmethod
+    def _saved_carousel_owner(descriptor, referer):
+        """Owner identity comes from exact saved DOM, not a guessed endpoint."""
+        from bs4 import BeautifulSoup
+        from ..highspeed.adapters import _cards, _scope
+        metadata = descriptor.get("metadata") or {}
+        try:
+            body = Path(descriptor["evidence_path"]).read_bytes()
+            if hashlib.sha256(body).hexdigest() != metadata["evidence_sha256"]:
+                raise ValueError()
+            soup = BeautifulSoup(body.decode("utf-8"), "lxml")
+            nodes = [n for n in soup.select("[data-card-metrics-id^='p13n-zg-list-carousel'] [data-a-carousel-options]")
+                     if n.get("data-a-carousel-options") == metadata["carousel_options_raw"]]
+            if len(nodes) != 1:
+                raise ValueError()
+            node = nodes[0]
+            wrapper = next(p for p in node.parents if p.get("data-card-metrics-id", "").startswith("p13n-zg-list-carousel"))
+            cards = [c for c in _cards(soup) if any(p is node for p in c.parents)]
+            if not cards or _scope(cards[0], referer) != metadata["ranking_context_url"]:
+                raise ValueError()
+            path, params = wrapper.get("data-acp-path"), wrapper.get("data-acp-params")
+            if not path or not path.startswith("/acp/") or not params or not wrapper.get("id"):
+                raise ValueError()
+            binding = {"source_id": descriptor["source_id"], "page_evidence_sha256": metadata["evidence_sha256"],
+                       "ranking_context_url": metadata["ranking_context_url"]}
+            if not binding["source_id"]:
+                raise ValueError()
+            return {"referer":referer, "owner_id":wrapper["id"], "owner_path":path,
+                "owner_params":params, "carousel_options_raw":metadata["carousel_options_raw"],
+                "carousel_options_sha256":hashlib.sha256(metadata["carousel_options_raw"].encode()).hexdigest(),
+                "ranking_context_binding":binding}
+        except (KeyError, ValueError, TypeError, OSError, StopIteration) as exc:
+            raise ValueError("ACP_CAROUSEL_OWNER_EVIDENCE_UNVERIFIED") from exc
+
+    def _prepare_carousel_descriptor(self, descriptor, *, referer):
+        owner = self._saved_carousel_owner(descriptor, referer)
+        page = self.session.page
+        self._active_carousel_owner = owner
+        try:
+            for attempt in range(7):
+                matches = []
+                for captured in self._native_acp_requests:
+                    key = (owner["owner_id"], hashlib.sha256(captured.get("payload", "").encode()).hexdigest())
+                    if (key not in self._used_carousel_contracts and self._carousel_request_matches(captured, owner)
+                            and captured.get("ranking_context_binding") == owner["ranking_context_binding"]
+                            and captured.get("native_carousel_owner", {}).get("owner_id") == owner["owner_id"]):
+                        matches.append((key,captured))
+                if len(matches) > 1:
+                    raise ValueError("ACP_CAROUSEL_NATIVE_CONTRACT_AMBIGUOUS")
+                if matches:
+                    key,captured = matches[0]
+                    self._used_carousel_contracts.add(key)
+                    # Exact observed endpoint/body; no grid batch derivation.
+                    return dict(descriptor, **captured)
+                if attempt == 6:
+                    break
+                result = page.evaluate("""(owner => {
+                    const wrapper = document.getElementById(owner.owner_id);
+                    if (!wrapper || wrapper.getAttribute('data-acp-path') !== owner.owner_path
+                        || wrapper.getAttribute('data-acp-params') !== owner.owner_params) return false;
+                    const carousel = Array.from(wrapper.querySelectorAll('[data-a-carousel-options]'))
+                        .filter(n => n.getAttribute('data-a-carousel-options') === owner.carousel_options_raw);
+                    if (carousel.length !== 1) return false;
+                    const next = carousel[0].querySelector('.a-carousel-goto-nextpage:not(.a-button-disabled) a, a.a-carousel-goto-nextpage, button.a-carousel-goto-nextpage');
+                    if (!next || next.getAttribute('aria-disabled') === 'true') return false;
+                    next.click(); return true;
+                })""", owner)
+                if result is not True:
+                    raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
+                page.wait_for_timeout(500)
+            raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
+        finally:
+            self._active_carousel_owner = None
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
         status = self.session.goto(url)

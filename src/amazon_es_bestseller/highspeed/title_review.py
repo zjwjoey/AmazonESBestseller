@@ -15,10 +15,20 @@ TITLE_REVIEW_VERSION = "source_title_review_v1"
 _TITLE_NODES = "[data-product-title], .p13n-sc-truncate-desktop-type2, .p13n-sc-truncate, [class*='line-clamp']"
 
 
+def _plan_title_version(plan):
+    versions = {adapters.parser_version(source) for source in plan["sources"]}
+    if len(versions) > 1:
+        raise ValueError("TITLE_REVIEW_MIXED_PARSER_PROFILES")
+    return next(iter(versions), adapters.ADAPTER_VERSION)
+
+
 def _source_title_proof(card, raw_url, title, evidence):
     if not isinstance(title,str) or not title.strip():return None
     # A price/rating-only value is never a fallback product title.
-    if re.fullmatch(r"\s*(?:[€$]\s*)?\d+[\d.,\s]*(?:[€$])?\s*",title) or re.fullmatch(r"[\d.,]+\s+de\s+5\s+estrellas",title,re.I):return None
+    semantic_numeric = (evidence.get("title_status") == "SOURCE_VISIBLE"
+                        and evidence.get("selector") in adapters._TITLE_SELECTORS[:4]
+                        and evidence.get("raw_product_url") == raw_url)
+    if (not semantic_numeric and re.fullmatch(r"\s*(?:[€$]\s*)?\d+[\d.,\s]*(?:[€$])?\s*",title)) or re.fullmatch(r"[\d.,]+\s+de\s+5\s+estrellas",title,re.I):return None
     for anchor in card.select("a[href]"):
         if anchor.get("href")!=raw_url:continue
         for node in anchor.select(_TITLE_NODES):
@@ -56,7 +66,7 @@ def project_title(captured, source, *, cache=None):
         "ranking_position":captured.get("ranking_position"),"rank_context":captured.get("rank_context"),
         "source_id":captured.get("source_id"),"source_type":captured.get("source_type"),
         "evidence_path":captured.get("evidence_path"),"source_html_sha256":captured.get("evidence_sha256"),
-        "title_review_version":TITLE_REVIEW_VERSION,"title_parser_version":adapters.ADAPTER_VERSION,
+        "title_review_version":TITLE_REVIEW_VERSION,"title_parser_version":adapters.parser_version(source),
         "is_derivation":True,"review_status":"UNVERIFIED","reason":None}
     try:
         if source.get("source_id")!=captured.get("source_id") or source.get("source_type")!=captured.get("source_type"):
@@ -85,7 +95,7 @@ def project_title(captured, source, *, cache=None):
         page_url=captured.get("page_url") or captured.get("source_url")
         if not page_url:raise ValueError("SOURCE_PAGE_URL_REQUIRED")
         parsed_key=("cards",path,expected,digest(source),page_url,representation,captured["run_id"],
-            captured.get("snapshot_id"),captured.get("observed_at"),captured.get("page_number"),adapters.ADAPTER_VERSION)
+            captured.get("snapshot_id"),captured.get("observed_at"),captured.get("page_number"),adapters.parser_version(source))
         if parsed_key not in cache:
             rows=adapters._parse_cards(soup,source=source,run_id=captured["run_id"],
                 snapshot_id=captured.get("snapshot_id"),page_url=page_url,page_number=captured.get("page_number"),
@@ -93,6 +103,20 @@ def project_title(captured, source, *, cache=None):
                 representation=representation,fragment=representation.startswith("ACP_"))
             cache[parsed_key]=(rows,adapters._cards(soup,representation.startswith("ACP_")))
         rows,cards=cache[parsed_key]
+        scope_proof=captured.get("category_scope_evidence") or {}
+        if (source.get("parser_profile")=="V3" and representation.startswith("ACP_")
+                and scope_proof.get("kind")=="EXPLICIT_NATIVE_REQUEST_CONTEXT_BINDING"):
+            body=Path(scope_proof["page_evidence_path"]).read_bytes()
+            if (digest(body)!=scope_proof.get("page_evidence_sha256")
+                    or scope_proof.get("acp_evidence_sha256")!=expected
+                    or scope_proof.get("source_id")!=source["source_id"]):
+                raise ValueError("ACP_CAROUSEL_CONTEXT_EVIDENCE_CONFLICT")
+            base=BeautifulSoup(body.decode("utf-8"),"lxml")
+            scopes={adapters._scope(card,page_url) for card in adapters._cards(base)}
+            context=scope_proof.get("ranking_context_url")
+            if context not in scopes or context!=captured.get("rank_context"):
+                raise ValueError("ACP_CAROUSEL_CONTEXT_EVIDENCE_CONFLICT")
+            rows=[dict(row,rank_context=context) for row in rows]
         matching=[r for r in rows if r["representation_slot"]==slot and r["raw_product_url"]==captured["raw_product_url"]
             and r["rank_context"]==captured.get("rank_context") and r["ranking_position"]==captured.get("ranking_position")]
         if len(matching)!=1:raise ValueError("CARD_URL_SLOT_RANK_CONTEXT_CONFLICT")
@@ -134,7 +158,7 @@ def review_titles(store, run_id, output_root):
             counts[projected["review_status"]]+=1
             handle.write(json.dumps(projected,ensure_ascii=False,allow_nan=False)+"\n")
     manifest={"schema_version":1,"run_id":run_id,"parent_started_at":run[1],"source_plan_sha256":digest(plan),
-        "is_derivation":True,"title_review_version":TITLE_REVIEW_VERSION,"title_parser_version":adapters.ADAPTER_VERSION,
+        "is_derivation":True,"title_review_version":TITLE_REVIEW_VERSION,"title_parser_version":_plan_title_version(plan),
         "indexed_observations":len(saved),"review_counts":dict(counts),"live_requests":0,
         "original_rows_modified":False,"identity_counts_modified":False,"snapshot_scope":"READ_ONLY_INDEX_TRANSACTION",
         "artifacts":{"title_corrections":{"path":str(output.resolve()),"sha256":digest(output.read_bytes())}}}
@@ -149,7 +173,7 @@ def load_title_projection(manifest_path, store, run_id):
     run=store.get_run(run_id)
     if (manifest.get("run_id")!=run_id or manifest.get("source_plan_sha256")!=digest(run["plan"])
             or manifest.get("title_review_version")!=TITLE_REVIEW_VERSION
-            or manifest.get("title_parser_version")!=adapters.ADAPTER_VERSION):
+            or manifest.get("title_parser_version")!=_plan_title_version(run["plan"])):
         raise ValueError("TITLE_REVIEW_RUN_PLAN_OR_VERSION_CONFLICT")
     reference=manifest["artifacts"]["title_corrections"]
     data=Path(reference["path"]).read_bytes()
@@ -179,7 +203,7 @@ def supplement_title_review(base_manifest_path, store, run_id, output_root):
     run=store.get_run(run_id)
     if (base.get("run_id")!=run_id or base.get("source_plan_sha256")!=digest(run["plan"])
             or base.get("title_review_version")!=TITLE_REVIEW_VERSION
-            or base.get("title_parser_version")!=adapters.ADAPTER_VERSION):
+            or base.get("title_parser_version")!=_plan_title_version(run["plan"])):
         raise ValueError("TITLE_REVIEW_BASE_RUN_OR_VERSION_CONFLICT")
     reference=base["artifacts"]["title_corrections"];data=Path(reference["path"]).read_bytes()
     if digest(data)!=reference["sha256"]:raise ValueError("TITLE_REVIEW_BASE_HASH_MISMATCH")

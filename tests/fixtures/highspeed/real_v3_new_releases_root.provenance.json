@@ -1,0 +1,10 @@
+{
+  "origin": "HISTORICAL_SAVED_PAGE_NOT_V3_LIVE",
+  "source_type": "NEW_RELEASES",
+  "page_url": "https://www.amazon.es/gp/new-releases",
+  "source_evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+  "sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+  "observed_at": "2026-10-13T20:59:21.432654Z",
+  "run_id": null,
+  "expected_card_count": 36
+}

@@ -18,6 +18,11 @@ from .sources import (discover_sources, normalize_source_url, same_source_catego
                       source_type_from_url, source_type_value)
 
 ADAPTER_VERSION = "link_first_adapters_v2.2.title_priority"
+V3_ADAPTER_VERSION = "link_first_adapters_v3.card_bound"
+
+
+def parser_version(source):
+    return V3_ADAPTER_VERSION if source.get("parser_profile") == "V3" else ADAPTER_VERSION
 _HEADINGS = {
     "BEST_SELLERS": (r"los mas vendidos", r"best\s*sellers"),
     "MOVERS_SHAKERS": (r"productos del momento", r"movers (?:and|&) shakers", r"movimientos y tendencias"),
@@ -149,10 +154,85 @@ def _title_from_card(card):
     return None, {"kind": "SOURCE_TITLE_MISSING", "text_raw": None}
 
 
+def _title_from_card_v3(card, raw_href):
+    """Literal title for this exact product anchor, never a neighbouring target."""
+    selectors = _TITLE_SELECTORS + ("img[alt]",)
+    targets = {a.get("href") for a in card.select("a[href]")
+               if normalize_product_url(a.get("href"))["is_valid"]}
+    for selector in selectors:
+        for index, node in enumerate(card.select(selector)):
+            image = selector == "img[alt]"
+            text = str(node.get("alt") or "").strip() if image else _text(node)
+            if not text or _non_title_text(text):
+                continue
+            ancestors = [node]
+            for parent in node.parents:
+                if parent is card:
+                    break
+                ancestors.append(parent)
+            if any(any(m in cls for m in _METADATA_CLASSES)
+                   for p in ancestors for cls in p.get("class", [])):
+                continue
+            anchor = node.find_parent("a", href=True)
+            if anchor is not None and anchor.get("href") != raw_href:
+                continue
+            if anchor is None and (selector != "[data-product-title]" or targets != {raw_href}):
+                continue
+            if selector in _TITLE_SELECTORS[-2:] and re.fullmatch(r"[\d.,\s]+", text):
+                continue
+            status = "TRUNCATED" if re.search(r"(?:\.{3}|\u2026)\s*$", text) else "IMAGE_ALT" if image else "SOURCE_VISIBLE"
+            return text, {"kind": "SOURCE_IMAGE_ALT" if image else "SOURCE_VISIBLE_PRODUCT_TITLE",
+                "selector": selector, "selector_match_index": index, "text_raw": text,
+                "raw_product_url": raw_href, "title_status": status}
+    return None, {"kind": "SOURCE_TITLE_MISSING", "text_raw": None,
+                  "raw_product_url": raw_href, "title_status": "MISSING"}
+
+
+def _v3_advertisement(card):
+    return any(n.get("data-ad-marker") or n.get("data-ad-id") or n.get("data-component-type") == "sp-sponsored-result"
+               for n in [card] + list(card.parents))
+
+
+def _content_state_v3(soup, page, rows, pending):
+    """Describe zero capacity without turning it into COMPLETE or a safe skip."""
+    if page["access_status"] != "NORMAL":
+        return "ACCESS_RESTRICTED", None
+    if not page["source_type_verified"] or not page["source_context_valid"]:
+        return "WRONG_SOURCE", None
+    if rows:
+        return "PRODUCT_CARDS", None
+    grid = soup.select_one("#zg-right-col .p13n-desktop-grid")
+    phrases = {"BEST_SELLERS": "(?:de los )?mas vendidos", "MOST_WISHED_FOR": "de los mas deseados",
+               "MOST_GIFTED": "de los mas regalados", "NEW_RELEASES": "(?:de las )?ultimas novedades",
+               "MOVERS_SHAKERS": "(?:de los )?productos del momento"}
+    if grid is not None and not pending:
+        try:
+            empty = json.loads(grid.get("data-client-recs-list", "null")) == []
+        except (ValueError, TypeError):
+            empty = False
+        if (empty and grid.select_one("#endOfList") is not None
+                and not grid.select_one(_CARD_SELECTOR + ", .zg-bdg-text, [data-expected-count], [data-acp-path]")
+                and not any(normalize_product_url(a["href"], base_url=page["page_url"])["is_valid"] for a in grid.select("a[href]"))):
+            for node in grid.find_all("h4", recursive=False):
+                message = _fold(" ".join(node.get_text(" ", strip=True).split()))
+                if re.fullmatch(r"lo sentimos, no hay productos " + phrases[page["source_type"]] + r" disponibles en esta categoria\. vuelve mas tarde\.", message):
+                    return "SOURCE_EMPTY", {"kind": "OFFICIAL_EMPTY_COMPONENT", "selector": "#zg-right-col .p13n-desktop-grid > h4",
+                        "message_raw": _text(node), "evidence_sha256": page["evidence_sha256"]}
+    if pending:
+        return "NATIVE_CONTINUATION_UNRESOLVED", None
+    right = soup.select_one("#zg-right-col")
+    if right is not None and right.find(True) is None and not right.get_text(strip=True):
+        if soup.select_one("#zg-left-col a[href], #zg_browseRoot a[href]"):
+            return "NAVIGATION_ONLY", None
+    return "PARSER_EMPTY_UNVERIFIED", None
+
+
 def _parse_cards(soup, *, source, run_id, snapshot_id, page_url, page_number,
                  observed_at, evidence_path, sha, representation, offset=0, fragment=False):
     rows = []
     for index, card in enumerate(_cards(soup, fragment)):
+        if source.get("parser_profile") == "V3" and _v3_advertisement(card):
+            continue
         badge = card.select_one(".zg-bdg-text, span.a-badge-text, [data-ranking-position]")
         rank_raw = _text(badge)
         match = re.search(r"#\s*(\d+)", rank_raw or "")
@@ -161,8 +241,13 @@ def _parse_cards(soup, *, source, run_id, snapshot_id, page_url, page_number,
             raw = badge.get("data-ranking-position")
             rank = int(raw) if raw and str(raw).isdigit() and int(raw) > 0 else None
         raw = _raw_href(card)
-        link = normalize_product_url(raw, base_url=page_url)
-        title, title_evidence = _title_from_card(card)
+        if source.get("parser_profile") == "V3":
+            from .v3_links import normalize_product_url_v3
+            link = normalize_product_url_v3(raw, base_url=page_url)
+        else:
+            link = normalize_product_url(raw, base_url=page_url)
+        title, title_evidence = (_title_from_card_v3(card, raw) if source.get("parser_profile") == "V3"
+                                 else _title_from_card(card))
         scope = _scope(card, page_url)
         category_wrapper = next((p for p in card.parents if p.get("data-card-metrics-id") or p.get("data-category-url")), None)
         category_heading = _text(category_wrapper.select_one("h2, h3")) if category_wrapper else None
@@ -183,7 +268,13 @@ def _parse_cards(soup, *, source, run_id, snapshot_id, page_url, page_number,
             slot_position=slot, representation_slot=index, representation=representation,
             observed_at=observed_at, evidence_path=evidence_path, evidence_sha256=sha,
             dedup_status="UNIQUE_LINK_CANDIDATE" if link["is_valid"] else "INVALID_PRODUCT_LINK",
-            parser_version=ADAPTER_VERSION)
+            parser_version=parser_version(source))
+        if source.get("parser_profile") == "V3":
+            row["product_title_status"] = title_evidence["title_status"]
+            from .ratings import extract_rating_fields
+            row.update(extract_rating_fields(card, raw_product_url=raw,
+                evidence_path=evidence_path, evidence_sha256=sha, observed_at=observed_at,
+                representation=representation, representation_slot=index))
         if source["source_type"] == "MOVERS_SHAKERS":
             for field, selector in (("current_sales_rank_raw", ".zg-sales-rank-current, [data-current-sales-rank]"),
                                     ("previous_sales_rank_raw", ".zg-sales-rank-previous, [data-previous-sales-rank]"),
@@ -218,7 +309,7 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
         "recognized_page_type": recognized, "source_type_verified": recognized,
         "source_context_valid": context_valid, "heading_raw": heading,
         "research_category": source.get("research_category"), "amazon_category": source.get("amazon_category"),
-        "rank_semantics": RANK_SEMANTICS[kind], "parser_version": ADAPTER_VERSION, "flags": []}
+        "rank_semantics": RANK_SEMANTICS[kind], "parser_version": parser_version(source), "flags": []}
     rows, pagination, pending, discovered = [], [], [], []
     expected, proof = None, None
     if access != "NORMAL" or not recognized or not context_valid:
@@ -228,7 +319,8 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
             page_url=page_url, page_number=page_number, observed_at=observed_at,
             evidence_path=evidence_path, sha=sha, representation="SERVER")
         expected_node = soup.select_one("[data-expected-count]")
-        recs_node = soup.select_one("[data-client-recs-list]")
+        recs_node = (soup.select_one("#zg-right-col .p13n-desktop-grid[data-client-recs-list]")
+            or soup.select_one(".p13n-desktop-grid[data-client-recs-list]") or soup.select_one("[data-client-recs-list]")) if source.get("parser_profile") == "V3" else soup.select_one("[data-client-recs-list]")
         entries = []
         if recs_node is not None:
             try:
@@ -256,11 +348,30 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
             response_path = response.get("evidence_path") if isinstance(response, dict) else None
             if not response_path:
                 page["flags"].append("ACP_EVIDENCE_PATH_MISSING")
+                if source.get("parser_profile") == "V3":
+                    continue
             response_soup = BeautifulSoup(body, "lxml")
-            rows.extend(_parse_cards(response_soup, source=source, run_id=run_id, snapshot_id=snapshot_id,
-                page_url=page_url, page_number=page_number, observed_at=observed_at,
+            response_time = timestamp(envelope.get("observed_at",response.get("observed_at",observed_at)))["observed_at"] if source.get("parser_profile") == "V3" and isinstance(response,dict) else observed_at
+            response_rows = _parse_cards(response_soup, source=source, run_id=run_id, snapshot_id=snapshot_id,
+                page_url=page_url, page_number=page_number, observed_at=response_time,
                 evidence_path=response_path or evidence_path, sha=digest(body.encode("utf-8")),
-                representation="ACP_" + str(response_index), offset=len(rows), fragment=True))
+                representation="ACP_" + str(response_index), offset=len(rows), fragment=True)
+            if (source.get("parser_profile") == "V3" and soup.select_one("[data-card-metrics-id^='p13n-zg-list-carousel']")
+                    and soup.select_one(".p13n-desktop-grid") is None):
+                binding = response.get("ranking_context_binding", {}) if isinstance(response, dict) else {}
+                contexts = {r["rank_context"] for r in rows if r["representation"] == "SERVER"}
+                context = binding.get("ranking_context_url")
+                if (context not in contexts or binding.get("source_id") != source["source_id"]
+                        or binding.get("page_evidence_sha256") != sha):
+                    page["flags"].append("ACP_CAROUSEL_CONTEXT_UNVERIFIED")
+                    continue
+                for row in response_rows:
+                    row["rank_context"] = context
+                    row["category_scope_evidence"] = {"ranking_context_url": context,
+                        "page_evidence_sha256": sha, "page_evidence_path": evidence_path,
+                        "source_id": source["source_id"], "acp_evidence_sha256": row["evidence_sha256"],
+                        "kind": "EXPLICIT_NATIVE_REQUEST_CONTEXT_BINDING"}
+            rows.extend(response_rows)
         # Carousel ACP has a distinct native contract. Do not pretend the first
         # unrelated carousel endpoint is the list-grid continuation endpoint.
         root = next((n for n in recs_node.parents if n.get("data-acp-path")), None) if recs_node is not None else None
@@ -297,6 +408,37 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
                 pagination.append(url)
         discovered = discover_sources(html, kind, page_url, research_mapping=research_mapping,
             evidence_path=evidence_path, observed_at=observed_at, origin=origin, soup=soup)
+        if source.get("parser_profile") == "V3":
+            carousel_groups = []
+            server_cards = _cards(soup)
+            for node in soup.select("[data-card-metrics-id^='p13n-zg-list-carousel'] [data-a-carousel-options]"):
+                raw_options = node.get("data-a-carousel-options")
+                try:
+                    options = json.loads(raw_options)
+                    ids = options.get("ajax", {}).get("id_list")
+                    if not isinstance(ids, list):
+                        raise ValueError()
+                except (ValueError, TypeError, AttributeError):
+                    page["flags"].append("CAROUSEL_METADATA_INVALID")
+                    continue
+                cards = [card for card in server_cards if any(parent is node for parent in card.parents)]
+                if not cards:
+                    # Navigation-only tiles/opaque IDs never become product rows.
+                    continue
+                context = _scope(cards[0], page_url)
+                group = {"ranking_context_url": context, "expected_count": len(ids),
+                    "actual_count": len({r["ranking_position"] for r in rows if r["rank_context"] == context and r["ranking_position"] is not None}),
+                    "evidence_path": evidence_path, "evidence_sha256": sha,
+                    "metadata_raw": raw_options, "selector": "[data-a-carousel-options]"}
+                carousel_groups.append(group)
+                if group["actual_count"] < group["expected_count"]:
+                    pending.append({"url": None, "method": "POST", "offset": group["actual_count"],
+                        "count": group["expected_count"] - group["actual_count"],
+                        "request_contract": "NATIVE_REQUEST_DISCOVERY_REQUIRED", "evidence_path": evidence_path,
+                        "metadata": {"carousel": True, "ranking_context_url": context,
+                            "carousel_options_raw": raw_options, "entries": ids,
+                            "evidence_sha256": sha}})
+            page["carousel_groups"] = carousel_groups
     # Preserve duplicate representations but don't call repeated carousel rank #1
     # a page-global identity or rank collision.
     slots = {}
@@ -329,5 +471,8 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
         expected_count_source=proof["kind"] if proof else "UNKNOWN", valid_link_count=sum(r["is_valid"] for r in rows),
         acp_pending=pending, acp_required=bool(pending), acp_complete=not pending,
         complete_evidence=[proof] if status == "COMPLETE" else [])
+    if source.get("parser_profile") == "V3":
+        state, state_proof = _content_state_v3(soup, page, rows, pending)
+        page.update(page_content_state=state, page_content_evidence=state_proof)
     return {"page": page, "observations": rows, "pagination": pagination,
             "discovered_sources": discovered, "acp_pending": pending}
