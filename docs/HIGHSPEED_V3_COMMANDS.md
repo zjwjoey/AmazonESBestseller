@@ -84,7 +84,7 @@ Inspect actual Windows commands/creation time before recovery; a PID file does n
 Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select-Object ProcessId,CreationDate,CommandLine
 & $v3Python -m amazon_es_bestseller.cli highspeed status --root $v3Store --run-id $v3Selected.run_id
 & $v3Python -m amazon_es_bestseller.cli highspeed qa --root $v3Store --run-id $v3Selected.run_id
-$v3ReportOut=Join-Path 'F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221' ('fresh_stage_QA_'+[guid]::NewGuid().ToString('N'))
+$v3ReportOut=Join-Path ('F:\AmazonESBestseller\交付文件\'+(Get-Date -Format 'yyyyMMdd')+'\HighSpeedSnapshotV3_dd3c9221') ('fresh_stage_QA_'+[guid]::NewGuid().ToString('N'))
 & $v3Python -m amazon_es_bestseller.cli highspeed report-v3 --root $v3Store --run-id $v3Selected.run_id --mapping-config (Join-Path $v3Worktree 'configs\highspeed\v3\category_mapping.reviewed.json') --out $v3ReportOut
 ```
 
