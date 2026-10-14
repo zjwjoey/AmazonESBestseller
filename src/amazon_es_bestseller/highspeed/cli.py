@@ -129,7 +129,12 @@ def _run_live_locked(args, store, plan, approval, *, entry_time):
         (store.root / "native_acp_contracts").mkdir(parents=True, exist_ok=True)
         def save_contract(value):
             save_native_contract(store, plan, value)
-        transport.install_bounded_acp_capture(on_capture=save_contract)
+        def record_local_replay(event):
+            store.append_event(plan['run_id'],{'kind':'NATIVE_CAROUSEL_LOCAL_UI_REPLAY',**event})
+        if plan.get('snapshot_contract_version')==3:
+            transport.install_bounded_acp_capture(on_capture=save_contract,on_local_replay=record_local_replay)
+        else:
+            transport.install_bounded_acp_capture(on_capture=save_contract)
         return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True)
 
 def dispatch(args):

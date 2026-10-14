@@ -202,6 +202,19 @@ def _audit_run_v3(store, run_id, run):
     from collections import OrderedDict
     replay_receipt_cache=OrderedDict()
     live=run.get('origin')=='LIVE_CAPTURE'
+    def capture_key(page):
+        return (page['page_key'],page.get('observed_at'),page.get('evidence_sha256'))
+    capture_pages=list(pages)
+    if live:
+        from .capture_history import live_observation_capture_pages
+        try:
+            row_pages.update(live_observation_capture_pages(store,run_id,rows))
+            known={capture_key(page) for page in capture_pages}
+            for parent in row_pages.values():
+                key=capture_key(parent)
+                if key not in known:known.add(key);capture_pages.append(parent)
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            findings.append({'code':'V3_ORIGINAL_CAPTURE_HISTORY_UNVERIFIED','severity':'ERROR','reason':str(exc)})
     fixture_execution=run.get('stage')=='T0' and run.get('origin')=='OFFLINE_FIXTURE'
     body_hashes={}
     def verify_body(path,sha):
@@ -242,7 +255,7 @@ def _audit_run_v3(store, run_id, run):
             if not live or row.get('origin') not in {None,'LIVE_CAPTURE'} or row.get('is_derivation') is True:return False
             expected_origin='LIVE_CAPTURE'
         binding=row_pages.get(row.get('observation_id'))
-        if not binding or identity(row) not in reparsed.get(binding['page_key'],set()):return False
+        if not binding or identity(row) not in reparsed.get(capture_key(binding),set()):return False
         kind='PAGE' if row.get('representation')=='SERVER' else 'ACP'
         for proof in receipts.get(row.get('evidence_path'),[]):
             if (proof.get('origin')==expected_origin and proof.get('run_id')==run_id
@@ -257,8 +270,8 @@ def _audit_run_v3(store, run_id, run):
         return False
     def context_for(row,card,source):
         page=row_pages.get(row.get('observation_id'))
-        return bool(page and identity(row) in reparsed.get(page['page_key'],set()))
-    for page in pages:
+        return bool(page and identity(row) in reparsed.get(capture_key(page),set()))
+    for page in capture_pages:
         try:
             journal=read_sealed(page['journal_path'])
             if journal.get('run_id')!=run_id or journal.get('page_key')!=page['page_key']:raise ValueError('JOURNAL_RUN_OR_PAGE_CONFLICT')
@@ -267,7 +280,8 @@ def _audit_run_v3(store, run_id, run):
                     or any(r.get('origin')!='LIVE_CAPTURE' or r.get('is_derivation') is True
                         or r.get('parent_run_id') or r.get('historical_page_journal_reference') for r in raw)):
                 fail('V3_LIVE_RUN_CONTAINS_HISTORICAL_DERIVATION',page_url=page['page_url'])
-            for row in raw:row_pages[row['observation_id']]=page
+            if not live:
+                for row in raw:row_pages[row['observation_id']]=page
             html=Path(page['evidence_path']).read_text(encoding='utf8')
             if digest(html.encode('utf8'))!=page['evidence_sha256']:raise ValueError('SERVER_HTML_SHA_CONFLICT')
             fragments=[];seen=set()
@@ -286,13 +300,28 @@ def _audit_run_v3(store, run_id, run):
                 fragments.append({**proof,'body':text,'evidence_path':row['evidence_path']})
             if live:
                 from .budgets import aware_time
+                parent_time=aware_time(page['observed_at'])
+                later_page_times=[aware_time(proof['observed_at']) for values in receipts.values() for proof in values
+                    if proof.get('kind')=='PAGE' and proof.get('page_key')==page['page_key']
+                    and proof.get('source_id')==source['source_id'] and proof.get('source_type')==source['source_type']
+                    and aware_time(proof['observed_at'])>parent_time]
+                next_capture_time=min(later_page_times) if later_page_times else None
+                def belongs_to_capture(proof):
+                    observed=aware_time(proof['observed_at'])
+                    if observed<parent_time or (next_capture_time is not None and observed>=next_capture_time):return False
+                    descriptor=proof.get('native_acp_descriptor') or {}
+                    binding=descriptor.get('ranking_context_binding') or {}
+                    if descriptor and (descriptor.get('evidence_path')!=page['evidence_path']
+                            or descriptor.get('parent_page_url')!=page['page_url']
+                            or binding.get('page_evidence_sha256')!=page['evidence_sha256']):return False
+                    return True
                 # Zero-card or restricted actual ACP responses also belong to
                 # this capture; dropping them could falsely imply COMPLETE.
                 extras=[proof for values in receipts.values() for proof in values
                     if proof.get('kind')=='ACP' and proof.get('page_key')==page['page_key']
                     and proof.get('source_id')==source['source_id'] and proof.get('source_type')==source['source_type']
                     and proof.get('html_path') not in seen
-                    and aware_time(proof['observed_at'])>=aware_time(page['observed_at'])]
+                    and belongs_to_capture(proof)]
                 for proof in sorted(extras,key=lambda value:aware_time(value['observed_at'])):
                     path=proof['html_path']
                     if path in seen:continue
@@ -304,8 +333,8 @@ def _audit_run_v3(store, run_id, run):
             parsed=parse_page(html,source=source,run_id=run_id,snapshot_id=run.get('snapshot_id',run_id),
                 page_url=page['page_url'],page_number=page.get('page_number'),observed_at=page['observed_at'],
                 evidence_path=page['evidence_path'],http_status=page.get('http_status',200),origin=run.get('origin','OFFLINE_FIXTURE'),acp_responses=fragments)
-            actual=parsed['page'];reparsed[page['page_key']]=set(map(identity,parsed['observations']))
-            source_states[page['page_key']]=actual.get('status','UNVERIFIED')
+            actual=parsed['page'];reparsed[capture_key(page)]=set(map(identity,parsed['observations']))
+            source_states[capture_key(page)]=actual.get('status','UNVERIFIED')
             if Counter(map(identity,raw))!=Counter(map(identity,parsed['observations'])):fail('V3_RAW_ROWS_NOT_BOUND_TO_FULL_REPARSE',page_url=page['page_url'])
             expected_rows={identity(r):r for r in parsed['observations']}
             field_keys=('product_title_raw','product_title_status','product_title_evidence','rating_raw','rating_value','rating_status','rating_source','rating_evidence','review_count_raw','review_count','review_count_status','review_count_evidence','rating_observed_at','rating_binding_evidence','rating_parser_version')
@@ -330,7 +359,8 @@ def _audit_run_v3(store, run_id, run):
         domain['receipt_semantics']='Local saved-file execution; status_code=200 is simulated and no new Amazon HTTP request occurred. Original historical capture provenance stays separately in the source plan.'
     missing_by_state=Counter()
     for row in rows:
-        state=source_states.get(row_pages.get(row.get('observation_id'),{}).get('page_key'),'UNVERIFIED')
+        parent=row_pages.get(row.get('observation_id'))
+        state=source_states.get(capture_key(parent),'UNVERIFIED') if parent else 'UNVERIFIED'
         for field in ('rating','review_count'):
             missing_by_state[(field,row.get(field+'_status','UNVERIFIED'),state)]+=1
     domain['field_status_by_reverified_page_state']=[{'field':field,'field_status':status,
@@ -356,4 +386,7 @@ def _audit_run_v3(store, run_id, run):
         'gate_passed':passed,'quality_gate_passed':passed,'findings':findings,'unique_valid_links':len(normalized),
         'normalized_unique_urls':len(normalized),'strict_independent_buyable_products':0,
         'source_types_with_valid_cards':sorted(types),'research_categories_with_valid_cards':sorted(categories),
-        'page_count':len(pages),'card_field_quality':domain}
+        'page_count':len(pages),'capture_page_count':len(capture_pages),
+        'retained_prior_capture_page_count':len(capture_pages)-len(pages),
+        'page_metric_scope':'Latest indexed pages; retained earlier immutable captures separately reverified for their own indexed observations',
+        'card_field_quality':domain}

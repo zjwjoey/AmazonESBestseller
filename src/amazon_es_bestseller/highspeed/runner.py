@@ -923,6 +923,9 @@ class HighSpeedRunner:
             response["native_acp_descriptor"]["headers"] = {str(k):str(v) for k,v in (descriptor.get("headers") or {}).items() if str(k).casefold() not in sensitive}
         save_start = aware_time(self.clock())
         receipt = self.store.save_response(plan["run_id"], reservation, response)
+        acknowledge=getattr(transport,'acknowledge_native_response',None)
+        if live and plan.get('snapshot_contract_version')==3 and kind=='ACP' and callable(acknowledge):
+            acknowledge(receipt)
         self.store.append_event(plan["run_id"], {"kind": "HTMLSAVE", "stage": "html_save",
             "duration_seconds": (aware_time(self.clock())-save_start).total_seconds(),
             "source_type": source["source_type"], "research_category": source.get("research_category")})

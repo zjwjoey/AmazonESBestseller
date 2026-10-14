@@ -109,8 +109,12 @@ class PlaywrightTransport:
         self._acp_capture_installed = False
         self._active_carousel_owner = None
         self._used_carousel_contracts = set()
+        self._prepared_carousel_requests = {}
+        self._pending_carousel_responses = {}
+        self._carousel_ui_replay = {}
+        self._on_local_replay = None
 
-    def install_bounded_acp_capture(self, *, on_capture=None) -> None:
+    def install_bounded_acp_capture(self, *, on_capture=None, on_local_replay=None) -> None:
         """Observe the site's request contract while aborting native ACP traffic.
 
         Only the scheduler's exact, one-shot metered request may pass this route.
@@ -121,6 +125,7 @@ class PlaywrightTransport:
             raise ValueError("ACP_CAPTURE_REQUIRES_PAGE")
         if self._acp_capture_installed:
             return
+        self._on_local_replay=on_local_replay
         def capture(route):
             request = route.request
             route_headers = {k.lower(): v for k, v in request.headers.items()}
@@ -134,6 +139,8 @@ class PlaywrightTransport:
                 wire_headers = all_headers() if callable(all_headers) else request.headers
                 route.continue_(headers={k: v for k, v in wire_headers.items()
                     if k.lower() != _CONTROLLED_ACP_NONCE_HEADER})
+                return
+            if self._fulfill_saved_carousel_response(route):
                 return
             route.abort()
             if request.resource_type not in {"xhr", "fetch"} or len(self._native_acp_requests) >= 64:
@@ -161,6 +168,9 @@ class PlaywrightTransport:
                     self._native_acp_requests.clear()
                     self._active_carousel_owner = None
                     self._used_carousel_contracts.clear()
+                    self._prepared_carousel_requests.clear()
+                    self._pending_carousel_responses.clear()
+                    self._carousel_ui_replay.clear()
             on("framenavigated", clear_on_navigation)
         self._acp_capture_installed = True
 
@@ -321,6 +331,8 @@ class PlaywrightTransport:
                 if matches:
                     key,captured = matches[0]
                     self._used_carousel_contracts.add(key)
+                    self._prepared_carousel_requests[(captured['url'],captured['method'],captured['payload'])]={
+                        'owner':dict(owner),'descriptor':dict(captured)}
                     # Exact observed endpoint/body; no grid batch derivation.
                     return dict(descriptor, **captured)
                 if attempt == 6:
@@ -458,6 +470,9 @@ class PlaywrightTransport:
             {"url": url, "method": str(method or "GET").upper(),
              "headers": browser_headers, "body": body, **({"measureTimings":True} if self.measure_timings else {})},
             )
+        except Exception:
+            self._pending_carousel_responses.clear();self._carousel_ui_replay.clear()
+            raise
         finally:
             self._manual_acp_allowance = None
         fetch_seconds=time.perf_counter()-fetch_started
@@ -465,6 +480,13 @@ class PlaywrightTransport:
         text = result.get("text") or ""
         final_url = str(result.get("url") or url)
         state = detect_access_status(status, text).value
+        prepared=self._prepared_carousel_requests.pop((url,str(method or 'GET').upper(),body or ''),None)
+        if state!='NORMAL':
+            self._pending_carousel_responses.clear();self._carousel_ui_replay.clear()
+        elif prepared and status==200 and final_url==url and str(getattr(page,'url',''))==prepared['owner']['referer']:
+            self._pending_carousel_responses[(url,str(method or 'GET').upper(),body or '')]={
+                **prepared,'text':text,'status_code':status,'final_url':final_url,
+                'actual_response_headers':dict(result.get('headers') or {})}
         failure = classify_failure(status_code=status, body=text, url=final_url)
         locale = locale_observation(text, requested_locale=self.requested_locale)
         fetch_start=result.get("fetchStarted")
@@ -483,6 +505,92 @@ class PlaywrightTransport:
                 'network_request_response_seconds':network_seconds,'network_measurement_source':'Browser ResourceTiming requestStart→responseEnd from this fetch; includes server wait, cache/ambiguous unknown',
                 'measurement_scope':'Browser JS fetch through complete body serialization; not pure network.'} if self.measure_timings else {},
             **locale)
+
+    @staticmethod
+    def _carousel_replay_key(owner,url,method,payload,headers):
+        selected={k.lower():v for k,v in headers.items() if k.lower() in {'accept','content-type','referer'}
+            or k.lower().startswith('x-amz-acp-')}
+        return (owner['referer'],owner['owner_id'],owner['owner_path'],owner['owner_params'],
+            owner['carousel_options_sha256'],json.dumps(owner['ranking_context_binding'],sort_keys=True),
+            url,method.upper(),payload,json.dumps(selected,sort_keys=True))
+
+    def acknowledge_native_response(self,receipt):
+        """Activate local UI delivery only after the actual response is durable.
+
+        No receipt is written here. A subsequent exact native retry can consume
+        these already captured bytes; it is not another HTTP response/candidate.
+        """
+        from ..multisource.storage import read_sealed
+        key=(receipt.get('request_url'),str(receipt.get('request_method') or '').upper(),receipt.get('request_payload') or '')
+        pending=self._pending_carousel_responses.pop(key,None)
+        if not pending:return False
+        try:
+            owner=pending['owner'];descriptor=pending['descriptor']
+            receipt_path=Path(receipt['evidence_path']).resolve();raw_receipt=receipt_path.read_bytes()
+            proof=read_sealed(receipt_path)
+            checked=('run_id','source_id','source_type','origin','status_code','access_state','request_url','request_method',
+                'request_payload','html_path','sha256','observed_at','page_key','native_acp_descriptor','ranking_context_binding')
+            if any(proof.get(k)!=receipt.get(k) for k in checked):return False
+            if (proof.get('origin')!='LIVE_CAPTURE' or proof.get('status_code')!=200 or proof.get('access_state')!='NORMAL'
+                    or proof.get('run_id')!=descriptor.get('run_id')
+                    or proof.get('source_id')!=owner['ranking_context_binding']['source_id']
+                    or proof.get('ranking_context_binding')!=owner['ranking_context_binding']
+                    or proof.get('request_url')!=pending['final_url'] or proof.get('final_url')!=pending['final_url']
+                    or str(getattr(self.session.page,'url',''))!=owner['referer']):return False
+            body=Path(proof['html_path']).read_bytes()
+            if hashlib.sha256(body).hexdigest()!=proof['sha256'] or body.decode('utf8')!=pending['text']:return False
+            if detect_access_status(proof['status_code'],pending['text']).value!='NORMAL':return False
+            native_path=Path(descriptor['native_contract_evidence_path']).resolve();native_bytes=native_path.read_bytes()
+            if hashlib.sha256(native_bytes).hexdigest()!=descriptor['native_contract_evidence_sha256']:return False
+            native=json.loads(native_bytes)
+            if 'payload_sha256' in native:native=read_sealed(native_path)
+            for k in ('url','method','payload','headers','parent_page_url','ranking_context_binding','native_carousel_owner','run_id'):
+                if native.get(k)!=descriptor.get(k):return False
+            if (native.get('request_contract_source')!='NATIVE_BROWSER_REQUEST_ABORTED'
+                    or native.get('resource_type') not in {'xhr','fetch'}
+                    or not self._carousel_request_matches(native,owner)):return False
+            supplied=proof.get('native_acp_descriptor') or {}
+            for k in ('url','method','payload','headers','ranking_context_binding','native_carousel_owner',
+                      'native_contract_evidence_path','native_contract_evidence_sha256'):
+                if supplied.get(k)!=descriptor.get(k):return False
+            parent=Path(supplied['evidence_path']).read_bytes()
+            if hashlib.sha256(parent).hexdigest()!=owner['ranking_context_binding']['page_evidence_sha256']:return False
+            verified_owner=self._saved_carousel_owner(supplied,owner['referer'])
+            if verified_owner!=owner:return False
+            self._carousel_ui_replay[self._carousel_replay_key(owner,native['url'],native['method'],native['payload'],native['headers'])]={
+                **pending,'receipt_reference':{'path':str(receipt_path),'sha256':hashlib.sha256(raw_receipt).hexdigest()},
+                'body_reference':{'path':proof['html_path'],'sha256':proof['sha256']}}
+            return True
+        except (OSError,ValueError,KeyError,TypeError):return False
+
+    def _fulfill_saved_carousel_response(self,route):
+        owner=self._active_carousel_owner
+        request=route.request
+        if not owner or request.resource_type not in {'xhr','fetch'}:return False
+        if str(getattr(self.session.page,'url',''))!=owner['referer']:return False
+        headers={k.lower():v for k,v in request.headers.items()}
+        if headers.get(_CONTROLLED_ACP_NONCE_HEADER):return False
+        key=self._carousel_replay_key(owner,request.url,request.method,request.post_data or '',headers)
+        entry=self._carousel_ui_replay.get(key)
+        if not entry:return False
+        try:
+            for reference in (entry['receipt_reference'],entry['body_reference']):
+                if hashlib.sha256(Path(reference['path']).read_bytes()).hexdigest()!=reference['sha256']:return False
+            if entry['status_code']!=200 or detect_access_status(200,entry['text']).value!='NORMAL':return False
+            # This content type is a local delivery instruction, not fabricated
+            # original HTTP header evidence. Original response headers stay raw.
+            original_headers=entry['actual_response_headers']
+            content_type=next((v for k,v in original_headers.items() if k.lower()=='content-type'),'text/html;charset=UTF-8')
+            route.fulfill(status=200,body=entry['text'],headers={'content-type':content_type})
+            self._carousel_ui_replay.pop(key,None)
+            if self._on_local_replay:
+                self._on_local_replay({'origin':'LOCAL_UI_REPLAY','new_network_request':False,
+                    'request_url':request.url,'request_payload_sha256':hashlib.sha256((request.post_data or '').encode()).hexdigest(),
+                    'owner_id':owner['owner_id'],'ranking_context_binding':owner['ranking_context_binding'],
+                    'original_receipt_reference':entry['receipt_reference'],'body_reference':entry['body_reference'],
+                    'local_delivery_content_type':content_type,'new_HTTP_receipt':False,'new_observations':0})
+            return True
+        except (OSError,ValueError,KeyError,TypeError):return False
 
     def requires_ajax_page_context(self, page_url: str) -> bool:
         """A saved HTML response cannot establish a fresh browser's origin.

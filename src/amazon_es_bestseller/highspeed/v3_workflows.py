@@ -372,8 +372,12 @@ def report_replay_v3(root,run_id,out,*,mapping_config=None,history_manifest=None
         rules=load_mapping_rules(rules_ref['path']);source_map={s['source_id']:s for s in sources}
         page_map={p['page_key']:p for p in pages}
         observation_pages={}
-        for page in pages:
-            for row in read_sealed(page['journal_path'])['observations']:observation_pages[row['observation_id']]=page
+        if not historical:
+            from .capture_history import live_observation_capture_pages
+            observation_pages=live_observation_capture_pages(store,run_id,rows)
+        else:
+            for page in pages:
+                for row in read_sealed(page['journal_path'])['observations']:observation_pages[row['observation_id']]=page
         observation_pages.update(supplement_pages)
         projection=[];mapping_errors=[];mapping_cache={}
         def derive(row,cache):
