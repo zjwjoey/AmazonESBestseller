@@ -176,3 +176,26 @@ def test_in_scope_fresh_reverify_preserves_earlier_capture_and_start(tmp_path):
         assert first['run']['started_at'] == second['run']['started_at']
     finally:
         store.close()
+
+
+def test_guarded_component_miss_preserves_unknown_and_visits_other_roots(tmp_path):
+    plan, a = setup_scope(tmp_path)
+    a['sources'][plan['sources'][0]['source_id']]['allow_native_acp'] = True
+    store = RunStore(a['store_root'])
+    class MissingContract(FakeTransport):
+        def __init__(self, *args):
+            super().__init__(*args); self.contexts = []
+        def prepare_ajax_descriptor(self, descriptor, **kwargs):
+            self.contexts.append(descriptor['metadata']['ranking_context_url'])
+            raise ValueError('ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED')
+    try:
+        t = MissingContract(plan, a)
+        result = V4T1Runner(store, clock=lambda: NOW, sleep=lambda n: None).run(plan, authorization=a, transport=t)
+        assert len(t.calls) == 8
+        assert len(set(t.contexts)) == 6
+        best = next(p for p in store.pages(plan['run_id']) if p['source_type'] == 'BEST_SELLERS')
+        assert len(best['continuation_failures']) == 6
+        assert best['completeness_status'] == 'UNKNOWN'
+        assert result['run']['quality_gate_passed'] is False
+    finally:
+        store.close()

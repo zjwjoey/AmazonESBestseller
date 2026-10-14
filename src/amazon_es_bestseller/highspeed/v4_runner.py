@@ -11,7 +11,7 @@ from pathlib import Path
 import time
 
 from ..multisource.storage import file_lock
-from .runner import HighSpeedRunner, _next_acp_pending
+from .runner import HighSpeedRunner, _next_acp_pending, continuation_unavailable
 from .budgets import utc_text, aware_time, budget_reason
 from .v4_authorization import validate_v4_authorization
 from .v4_adapters import parse_v4_page
@@ -76,6 +76,7 @@ class V4T1Runner:
                                 and aware_time(old['observed_at']) >= aware_time(receipt['observed_at'])
                                 and (old.get('ranking_context_binding') or {}).get('page_evidence_sha256') == receipt['sha256']):
                             acp.append(self._acp(old))
+                    component_failures = {}
                     def parse():
                         return parse_v4_page(response['text'], source=source, page_url=url, run_id=run_id,
                                   snapshot_id=plan['snapshot_id'], observed_at=receipt['observed_at'],
@@ -90,10 +91,12 @@ class V4T1Runner:
                              'source_representation': receipt.get('source_representation', 'RENDERED_DOM'),
                              'document_html_reference': {'path': receipt.get('document_html_path'), 'sha256': receipt.get('document_sha256')},
                              'rendered_html_reference': {'path': receipt.get('rendered_html_path'), 'sha256': receipt.get('rendered_sha256')},
+                             'continuation_failures': dict(component_failures),
                              'acp_captures': [{k: v for k, v in a.items() if k != 'body'} for a in acp]}
                         self.store.commit_page(run_id, key, p, parsed['observations'])
                     commit()  # Save initial cards before any continuation can fail.
                     attempted = set()
+                    excluded = set()
                     if (source['source_type'] in RANKED and not cached
                             and authorization['sources'][key].get('allow_native_acp') is True):
                         while parsed['acp_pending']:
@@ -102,15 +105,29 @@ class V4T1Runner:
                                                   for s in plan['sources'])
                             if plan['max_requests_per_run'] - self.store.summary(run_id)['requests'] <= remaining_pages:
                                 break
-                            descriptor = _next_acp_pending(parsed['acp_pending'], set(), v3=True)
+                            descriptor = _next_acp_pending(parsed['acp_pending'], excluded, v3=True)
                             if not descriptor:
                                 break
                             validate_v4_authorization(plan, authorization, e._gate(plan), now=e.clock(), store_root=self.store.root)
-                            descriptor = transport.prepare_ajax_descriptor({**descriptor, 'source_id': key}, referer=url)
+                            try:
+                                descriptor = transport.prepare_ajax_descriptor({**descriptor, 'source_id': key}, referer=url)
+                            except ValueError as exc:
+                                legacy = {'page': parsed['page'].get('legacy_page', {}), 'observations': parsed['observations']}
+                                if not continuation_unavailable(legacy, receipt, str(exc), e._gate(plan)):
+                                    raise
+                                context = descriptor['metadata']['ranking_context_url']
+                                excluded.add(context)
+                                self.store.append_event(run_id, {'kind': 'V4_NATIVE_COMPONENT_UNOBSERVED',
+                                    'source_id': key, 'ranking_context_url': context, 'reason': str(exc),
+                                    'completeness_status': 'UNKNOWN', 'source_success_not_proven': True})
+                                component_failures[context] = str(exc)
+                                commit()
+                                continue
                             native_key = (descriptor['url'], descriptor['method'], descriptor.get('payload'))
                             if native_key in attempted:
                                 self.store.append_event(run_id, {'kind': 'ACP_NO_PROGRESS', 'source_id': key})
-                                break
+                                excluded.add(descriptor['metadata']['ranking_context_url'])
+                                continue
                             attempted.add(native_key)
                             _, saved, last = e._request(plan, authorization, transport, source, descriptor['url'],
                                               'ACP', started, last, descriptor=descriptor, page_key=key)
