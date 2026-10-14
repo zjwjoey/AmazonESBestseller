@@ -10,6 +10,28 @@ from bs4 import BeautifulSoup
 from .v4_sources import amazon_url, RANKED
 
 
+def verify_pagination_reference(reference, source):
+    """One literal Next href in the same favorites result context."""
+    path=Path(reference['evidence_path'])
+    if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['evidence_sha256']:
+        raise ValueError('V4_PAGINATION_EVIDENCE_SHA_MISMATCH')
+    parent=reference['page_url']; url=reference['url']
+    soup=BeautifulSoup(path.read_bytes(),'lxml')
+    anchors=[a for a in soup.select('a.s-pagination-next[href], .a-pagination a[href]')
+             if a['href']==reference['raw_href'] and a.get_text(' ',strip=True)==reference['label_raw']]
+    if (not anchors or urljoin(parent,reference['raw_href'])!=url or not amazon_url(url)
+            or source['source_type']!='CUSTOMER_FAVORITES'
+            or source['source_subtype']!='CUSTOMER_FAVORITES_FILTERED_SEARCH'
+            or parent!=source['actual_source_url']):
+        raise ValueError('V4_PAGINATION_EXACT_NEXT_HREF_REQUIRED')
+    pq=parse_qs(urlsplit(parent).query); q=parse_qs(urlsplit(url).query)
+    if (urlsplit(url).path!='/s' or not pq.get('srs')
+            or any(pq.get(k)!=q.get(k) for k in ('i','srs','rh','s','fs'))
+            or q.get('page')!=[str(int((pq.get('page') or ['1'])[0])+1)]):
+        raise ValueError('V4_PAGINATION_SAME_CONTEXT_REQUIRED')
+    return reference
+
+
 def verify_discovered_source(source):
     e = source.get('navigation_evidence') or {}
     path = Path(e.get('evidence_path') or '__missing__')

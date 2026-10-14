@@ -187,7 +187,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
         raise ValueError('UNKNOWN_ORIGIN')
     if datetime.fromisoformat(observed_at.replace('Z', '+00:00')).tzinfo is None:
         raise ValueError('AWARE_CAPTURE_TIME_REQUIRED')
-    if not amazon_url(page_url) or page_url != source['actual_source_url']:
+    if not amazon_url(page_url) or page_url not in source.get('page_urls', [source['actual_source_url']]):
         raise ValueError('V4_EXACT_PAGE_SOURCE_REQUIRED')
     if origin == 'LIVE_CAPTURE' and http_status is None:
         raise ValueError('V4_ACTUAL_HTTP_RECEIPT_REQUIRED')

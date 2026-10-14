@@ -570,7 +570,10 @@ def _validate_v3_native_carousel(url, descriptor, scope, authorization, *, sourc
     if (parent not in scope.get('page_urls',[]) or not amazon_url(parent)
             or not amazon_url(url) or descriptor.get('url')!=url):
         raise ValueError('V3_CAROUSEL_PARENT_OR_URL_NOT_APPROVED')
-    if descriptor.get('request_contract_source')!='NATIVE_BROWSER_REQUEST_ABORTED' or descriptor.get('method')!='POST':
+    allowed_contracts={'NATIVE_BROWSER_REQUEST_ABORTED'}
+    if scope.get('allow_held_native_carousel') is True:
+        allowed_contracts.add('NATIVE_BROWSER_REQUEST_HELD')
+    if descriptor.get('request_contract_source') not in allowed_contracts or descriptor.get('method')!='POST':
         raise ValueError('V3_CAROUSEL_EXACT_ABORTED_POST_REQUIRED')
     payload=descriptor.get('payload')
     if not isinstance(payload,str) or not payload or hashlib.sha256(payload.encode('utf8')).hexdigest()!=descriptor.get('request_payload_sha256'):
@@ -578,7 +581,9 @@ def _validate_v3_native_carousel(url, descriptor, scope, authorization, *, sourc
     _,native_raw=_verified_reference({'path':descriptor.get('native_contract_evidence_path'),
         'sha256':descriptor.get('native_contract_evidence_sha256')},'V3_CAROUSEL_CAPTURE_EVIDENCE')
     native=json.loads(native_raw)
-    if (native.get('request_contract_source')!='NATIVE_BROWSER_REQUEST_ABORTED'
+    if (native.get('request_contract_source') not in allowed_contracts
+            or native.get('request_contract_source')!=descriptor.get('request_contract_source')
+            or native.get('request_contract_source')=='NATIVE_BROWSER_REQUEST_HELD' and native.get('request_sent') is not False
             or native.get('run_id')!=authorization.get('run_id') or native.get('parent_page_url')!=parent
             or native.get('resource_type') not in {'xhr','fetch'}
             or native.get('request_payload_sha256')!=descriptor.get('request_payload_sha256')

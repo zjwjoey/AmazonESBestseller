@@ -27,6 +27,9 @@ def validate_plan_v4(plan):
             raise ValueError('FINITE_DURATION_OR_PACING_REQUIRED:' + key)
     if plan['max_duration_hours'] > 10 or plan['request_pacing_seconds'] < 3:
         raise ValueError('V4_DURATION_OR_PACING_INVALID')
+    for key in ('max_native_requests_per_source','max_dynamic_requests_per_source'):
+        if key in plan and (type(plan[key]) is not int or not 1<=plan[key]<=plan['max_requests_per_run']):
+            raise ValueError('V4_BOUNDED_LOADING_LIMIT_REQUIRED:'+key)
     if plan.get('parallelism') != 1 or plan.get('category_cooldown_seconds') != 0 or plan.get('global_access_gate') is not True:
         raise ValueError('V4_SERIAL_GATE_AND_ZERO_COOLDOWN_REQUIRED')
     for key in ('detail_collection', 'translation', 'image_download', 'action_filtering'):
@@ -52,8 +55,13 @@ def validate_plan_v4(plan):
             # Future capacity extensions require the DOM proof validator.
             from .v4_navigation import verify_discovered_source
             verify_discovered_source(s)
-        if s.get('page_urls') != [s['actual_source_url']] or not amazon_url(s['actual_source_url']):
-            raise ValueError('V4_EXACT_ONE_SOURCE_PAGE_REQUIRED')
+        extra=s.get('pagination_evidence', [])
+        from .v4_navigation import verify_pagination_reference
+        for reference in extra:
+            verify_pagination_reference(reference,s)
+        if (s.get('page_urls') != [s['actual_source_url'], *[r['url'] for r in extra]]
+                or not amazon_url(s['actual_source_url'])):
+            raise ValueError('V4_EXACT_EVIDENCED_SOURCE_PAGES_REQUIRED')
     return plan
 
 
@@ -112,6 +120,11 @@ def authorize_v4_request(url, source, authorization, *, kind='PAGE', descriptor=
         if url not in scope.get('page_urls', []):
             raise ValueError('UNREVIEWED_SOURCE_URL')
         return
+    if kind=='ACP' and source['source_type'] in {'DEALS','AMAZON_HAUL'}:
+        if scope.get('allow_native_dynamic') is not True:
+            raise ValueError('V4_NATIVE_LOADING_NOT_APPROVED')
+        from .v4_loading import validate_dynamic_descriptor
+        return validate_dynamic_descriptor(url,source,scope,authorization,descriptor)
     if kind != 'ACP' or source['source_type'] not in RANKED or not scope.get('allow_native_acp'):
         raise ValueError('V4_NATIVE_LOADING_NOT_APPROVED')
     # Reuse V3's entire native byte/owner/parent/source validator. The explicit

@@ -33,7 +33,7 @@ def save_native_contract(store, plan, value):
     observed = {**value, "run_id": plan["run_id"], "captured_at": utc_text(),
         "request_payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
         "request_contract_parent_page_url": value.get("parent_page_url"),
-        "note": "Actual aborted native browser contract; not a successful response."}
+        "note": "Actual native browser contract held or aborted before network; not a successful response."}
     immutable_json(path, observed)
     value.update(request_contract_parent_page_url=value.get("parent_page_url"),
         request_payload_sha256=observed["request_payload_sha256"], run_id=plan["run_id"],

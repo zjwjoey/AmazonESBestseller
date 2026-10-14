@@ -38,8 +38,11 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
     quality = audit_v4(pages, observations, sources, require_live=stage != 'T0')
     qa_seconds = time.perf_counter() - qa_started
     candidates = build_candidates_v4(observations)
+    from .v4_coverage import loading_coverage
+    loading=loading_coverage(pages,sources)
     conservative = len({c['target_review_group'] for c in candidates if c['eligible_for_target']})
     coverage = {'schema_version': 4, 'run_id': run_id, 'stage': stage,
+                'loading_verification':loading,
                 'origin': 'OFFLINE_FIXTURE' if stage == 'T0' else 'LIVE_CAPTURE',
                 'sources': sources, 'pages': pages, 'disabled_supply': DISABLED_SUPPLY,
                 'raw_observations': len(observations), 'normalized_unique_links': len(candidates),
@@ -84,9 +87,12 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
         immutable_bytes(directory / name, body)
         refs.append({'name': name, 'bytes': len(body), 'sha256': hashlib.sha256(body).hexdigest()})
     immutable_json(directory / 'manifest.json', {'schema_version': 4, 'run_id': run_id, 'stage': stage,
-                    'passed': quality['central_full_dom_review_passed'] and stage == 'T0',
+                    'passed': quality['central_full_dom_review_passed'] and (stage == 'T0' or
+                        stage=='T1' and loading['all_loading_capabilities_observed']
+                        and {s['url'] for s in SEEDS}.issubset({p['page_url'] for p in pages if p['status']=='VERIFIED_WITH_PRODUCTS'})),
                     'pages': pages, 'sources': sources, 'observations': observations, 'files': refs,
-                    'live_protocol_validation': 'PENDING_SEPARATE_T1_APPROVAL',
+                    'loading_verification':loading,
+                    'live_protocol_validation': 'OBSERVED' if stage=='T1' and loading['all_loading_capabilities_observed'] else 'UNVERIFIED',
                     'new_live_candidates': len(candidates) if stage != 'T0' else 0,
                     'strict_independent_buyable_skus_confirmed': False})
     # Independently re-read both formats; counts and membership bytes must agree.

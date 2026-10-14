@@ -39,7 +39,7 @@ def run_live_v4(args):
             if any(r['status'] == 'RESERVED' for r in store.requests(plan['run_id'])):
                 raise ValueError('AMBIGUOUS_UNFINISHED_REQUESTS_NO_AUTO_RETRY')
             from ..access.browser import BrowserSession
-            from ..transport.playwright import PlaywrightTransport
+            from .v4_loading import V4LoadingTransport
             class BoundedSession(BrowserSession):
                 def goto(self, url, timeout_ms=45000):
                     self.last_document_response = None
@@ -49,7 +49,7 @@ def run_live_v4(args):
                 def load_lazy_ranking_content(self, *a, **kw):
                     return None
             with BoundedSession(headless=not args.headful, profile_dir=args.profile_dir) as session:
-                allowed = {s['actual_source_url'] for s in plan['sources']}
+                allowed = {u for s in plan['sources'] for u in s['page_urls']}
                 def bounded(route):
                     req = route.request
                     if req.resource_type == 'document' and req.url not in allowed:
@@ -68,12 +68,19 @@ def run_live_v4(args):
                         return
                     route.continue_()
                 session.page.route('**/*', bounded)
-                transport = PlaywrightTransport(session, measure_timings=True, preserve_document_body=True)
+                transport = V4LoadingTransport(session, store=store, plan=plan, measure_timings=True, preserve_document_body=True,
+                    hold_native_carousel=all(approval['sources'][s['source_id']].get('allow_held_native_carousel')
+                        for s in plan['sources'] if s['source_type'] in {'BEST_SELLERS','NEW_RELEASES'}))
                 transport.install_bounded_acp_capture(
                     on_capture=lambda value: save_native_contract(store, plan, value),
                     on_local_replay=lambda event: store.append_event(plan['run_id'], {'kind': 'NATIVE_CAROUSEL_LOCAL_UI_REPLAY', **event}))
-                return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True,
-                                  reverify_source_ids=args.reverify_source_id)
+                transport.install_dynamic_capture()
+                try:
+                    return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True,
+                                      reverify_source_ids=args.reverify_source_id)
+                finally:
+                    transport.cancel_dynamic()
+                    transport.abort_held_native_routes()
     finally:
         store.close()
 

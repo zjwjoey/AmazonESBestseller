@@ -46,17 +46,20 @@ class V4T1Runner:
                 raise ValueError('AMBIGUOUS_UNFINISHED_REQUESTS_NO_AUTO_RETRY')
             started = run['started_at']; last = self.store.latest_request_time()
             last = aware_time(last) if last else None
-            committed = {p['source_id'] for p in self.store.pages(run_id)} - set(reverify_source_ids)
+            committed = {p['page_url'] for p in self.store.pages(run_id)
+                         if p['source_id'] not in reverify_source_ids}
             self.store.update_run(run_id, status='RUNNING')
             stop = None
-            for source in plan['sources']:
-                if source['source_id'] in committed:
+            work=[(s,u) for s in plan['sources'] for u in s['page_urls']]
+            for source,url in work:
+                if url in committed:
                     continue
                 try:
                     reason = budget_reason(plan, self.store.summary(run_id), now=e.clock(), started_at=started)
                     if reason:
                         raise ValueError(reason)
-                    url = source['actual_source_url']; key = source['source_id']
+                    key = source['source_id'] if url==source['actual_source_url'] else source['source_id']+'_'+hashlib.sha256(url.encode()).hexdigest()[:12]
+                    sid=source['source_id']
                     existing = [r for r in self.store.iter_responses(run_id) if r.get('kind') == 'PAGE'
                                 and r.get('request_url') == url and r.get('access_state') == 'NORMAL']
                     if key in reverify_source_ids:
@@ -71,6 +74,10 @@ class V4T1Runner:
                         response, receipt, last = e._request(plan, authorization, transport, source, url,
                                                             'PAGE', started, last, page_key=key)
                     acp = []
+                    root_receipt=receipt
+                    dynamic_receipts=[]
+                    rendered_frames=[]
+                    derivation=None
                     for old in self.store.iter_responses(run_id):
                         if (old.get('kind') == 'ACP' and old.get('page_key') == key and old.get('access_state') == 'NORMAL'
                                 and aware_time(old['observed_at']) >= aware_time(receipt['observed_at'])
@@ -81,17 +88,19 @@ class V4T1Runner:
                         return parse_v4_page(response['text'], source=source, page_url=url, run_id=run_id,
                                   snapshot_id=plan['snapshot_id'], observed_at=receipt['observed_at'],
                                   evidence_path=receipt['html_path'], http_status=receipt.get('status_code'),
-                                  origin='LIVE_CAPTURE', acp_responses=acp)
+                                  origin='LIVE_CAPTURE', acp_responses=acp,
+                                  page_number=source['page_urls'].index(url)+1)
                     parsed = parse()
                     def commit():
                         p = {**parsed['page'], 'run_id': run_id, 'snapshot_id': plan['snapshot_id'],
-                             'page_key': key, 'source': source, 'capture_receipt_reference': e._receipt_ref(receipt),
+                             'page_key': key, 'source': source, 'capture_receipt_reference': e._receipt_ref(root_receipt),
                              'source_type_verified': bool(parsed['observations']), 'source_context_valid': True,
                              'execution_status': 'APPROVED_FRAME_RECORDED_NOT_COMPLETE',
                              'source_representation': receipt.get('source_representation', 'RENDERED_DOM'),
                              'document_html_reference': {'path': receipt.get('document_html_path'), 'sha256': receipt.get('document_sha256')},
                              'rendered_html_reference': {'path': receipt.get('rendered_html_path'), 'sha256': receipt.get('rendered_sha256')},
                              'continuation_failures': dict(component_failures),
+                             'rendered_derivation': derivation,
                              'acp_captures': [{k: v for k, v in a.items() if k != 'body'} for a in acp]}
                         self.store.commit_page(run_id, key, p, parsed['observations'])
                     commit()  # Save initial cards before any continuation can fail.
@@ -101,16 +110,17 @@ class V4T1Runner:
                             and authorization['sources'][key].get('allow_native_acp') is True):
                         while parsed['acp_pending']:
                             # Reserve one request for each still-unvisited exact root.
-                            remaining_pages = sum(s['source_id'] not in committed and s['source_id'] != key
-                                                  for s in plan['sources'])
+                            remaining_pages = sum(u not in committed and u != url for s,u in work)
                             if plan['max_requests_per_run'] - self.store.summary(run_id)['requests'] <= remaining_pages:
+                                break
+                            if len(attempted)>=plan.get('max_native_requests_per_source',50):
                                 break
                             descriptor = _next_acp_pending(parsed['acp_pending'], excluded, v3=True)
                             if not descriptor:
                                 break
                             validate_v4_authorization(plan, authorization, e._gate(plan), now=e.clock(), store_root=self.store.root)
                             try:
-                                descriptor = transport.prepare_ajax_descriptor({**descriptor, 'source_id': key}, referer=url)
+                                descriptor = transport.prepare_ajax_descriptor({**descriptor, 'source_id': sid}, referer=url)
                             except ValueError as exc:
                                 legacy = {'page': parsed['page'].get('legacy_page', {}), 'observations': parsed['observations']}
                                 if not continuation_unavailable(legacy, receipt, str(exc), e._gate(plan)):
@@ -132,9 +142,60 @@ class V4T1Runner:
                             _, saved, last = e._request(plan, authorization, transport, source, descriptor['url'],
                                               'ACP', started, last, descriptor=descriptor, page_key=key)
                             acp.append(self._acp(saved)); parsed = parse(); commit()
+                    if (not cached and source['source_type'] in {'DEALS','AMAZON_HAUL'}
+                            and authorization['sources'][sid].get('allow_native_dynamic')):
+                        for _ in range(plan.get('max_dynamic_requests_per_source',2)):
+                            remaining_pages=sum(u not in committed and u!=url for s,u in work)
+                            if plan['max_requests_per_run']-self.store.summary(run_id)['requests']<=remaining_pages:
+                                break
+                            descriptor=transport.prepare_dynamic(source,receipt)
+                            if descriptor is None:
+                                self.store.append_event(run_id,{'kind':'V4_DYNAMIC_CONTRACT_UNOBSERVED','source_id':sid,
+                                    'completeness_status':'UNKNOWN'})
+                                break
+                            _,saved,last=e._request(plan,authorization,transport,source,descriptor['url'],'ACP',
+                                started,last,descriptor=descriptor,page_key=key)
+                            dynamic_receipts.append(saved)
+                            # Capture actual rendered DOM only after its native
+                            # promise receives durable metered response bytes.
+                            transport.session.page.wait_for_timeout(600)
+                            body=transport.session.page.content()
+                            from ..access.detector import detect_access_status
+                            htmlref=self.store.save_html(body)
+                            state=detect_access_status(200,body).value
+                            if state!='NORMAL':
+                                self.store.set_gate(state,run_id=run_id,reason='V4_RENDERED_LOADING_ACCESS_SIGNAL',
+                                    evidence_path=htmlref['html_path'])
+                                e._persist_shared_stop(plan,state,{'evidence_path':htmlref['html_path']})
+                                raise ValueError('V4_RENDERED_LOADING_ACCESS_SIGNAL:'+state)
+                            if isinstance(htmlref,dict):
+                                path=htmlref['html_path'];sha=htmlref['sha256']
+                            else:
+                                path,sha=htmlref
+                            frame_time=utc_text(e.clock())
+                            rendered_frames.append({'path':str(path),'sha256':sha,'observed_at':frame_time})
+                            derivation={'root_html_sha256':root_receipt['sha256'],
+                                'root_observed_at':root_receipt['observed_at'],
+                                'dynamic_receipt_references':[e._receipt_ref(x) for x in dynamic_receipts],
+                                'local_ui_deliveries':list(transport.loading_events),
+                                'rendered_frames':list(rendered_frames),
+                                'rendered_observed_at':frame_time,'new_PAGE_request':False}
+                            previous_count=len(parsed['observations'])
+                            receipt={**root_receipt,'html_path':str(path),'sha256':sha,
+                                'observed_at':derivation['rendered_observed_at'],
+                                'source_representation':'RENDERED_DOM_DERIVATION',
+                                'document_html_path':None,'document_sha256':None,
+                                'rendered_html_path':str(path),'rendered_sha256':sha}
+                            response={**response,'text':body}
+                            parsed=parse();commit()
+                            self.store.append_event(run_id,{'kind':'V4_RENDERED_LOADING_FRAME','source_id':sid,
+                                'previous_cards':previous_count,'actual_cards':len(parsed['observations']),
+                                'rendered_derivation':derivation,'completeness_status':'UNKNOWN'})
+                            if len(parsed['observations'])<=previous_count:break
+                        transport.cancel_dynamic()
                     self.store.append_event(run_id, {'kind': 'V4_DISCOVERED_NAVIGATION', 'source_id': key,
                         'links': parsed['discovered_sources'], 'note': 'Discovery only, not visited or approved.'})
-                    committed.add(key)
+                    committed.add(url)
                     # A failed/unknown frame stops. It never becomes source-empty.
                     if not parsed['observations']:
                         raise ValueError('V4_SOURCE_FRAME_UNVERIFIED_SAVED_FOR_OFFLINE_DIAGNOSIS')
@@ -145,11 +206,16 @@ class V4T1Runner:
             pages = self.store.pages(run_id); rows = list(self.store.iter_observations(run_id))
             qa_started = time.perf_counter()
             quality = audit_v4(pages, rows, plan['sources'], require_live=True)
+            from .v4_coverage import loading_coverage
+            loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] else None
             self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW',
                     'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
-            stop = stop or 'V4_T1_INITIAL_SCOPE_EXHAUSTED_PROTOCOL_CAPACITY_STILL_UNVERIFIED'
+            stop = stop or ('V4_T1_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
+                else 'V4_T1_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
             self.store.update_run(run_id, status='STOPPED', stop_reason=stop, qa=quality,
-                    quality_gate_passed=False, finished_at=utc_text(e.clock()))
+                    quality_gate_passed=bool(loading and loading['all_loading_capabilities_observed']
+                        and len({p['source_id'] for p in pages if p['status']=='VERIFIED_WITH_PRODUCTS'})==8),
+                    loading_verification=loading, finished_at=utc_text(e.clock()))
             return {'run': self.store.get_run(run_id), 'summary': self.store.summary(run_id), 'quality': quality}
 
     @staticmethod

@@ -96,7 +96,8 @@ class PlaywrightTransport:
     def __init__(self, session, *, marketplace: str = "ES",
                  requested_locale: str = "es_ES", currency: str = "EUR",
                  postal_code: str | None = None, marketplace_id: str | None = None,
-                 measure_timings: bool = False, preserve_document_body: bool = False):
+                 measure_timings: bool = False, preserve_document_body: bool = False,
+                 hold_native_carousel: bool = False):
         self.session = session
         self.marketplace = marketplace
         self.requested_locale = requested_locale
@@ -105,6 +106,8 @@ class PlaywrightTransport:
         self.marketplace_id = marketplace_id
         self.measure_timings = measure_timings
         self.preserve_document_body = preserve_document_body
+        self.hold_native_carousel = hold_native_carousel
+        self._held_carousel_routes = {}
         self._native_acp_requests = []
         self._manual_acp_allowance = None
         self._acp_capture_installed = False
@@ -143,8 +146,8 @@ class PlaywrightTransport:
                 return
             if self._fulfill_saved_carousel_response(route):
                 return
-            route.abort()
             if request.resource_type not in {"xhr", "fetch"} or len(self._native_acp_requests) >= 64:
+                route.abort()
                 return
             headers = {k.lower(): v for k, v in request.headers.items()
                 if k.lower() in {"accept", "content-type", "referer"}
@@ -158,6 +161,13 @@ class PlaywrightTransport:
             if owner and self._carousel_request_matches(evidence, owner):
                 evidence.update(ranking_context_binding=dict(owner["ranking_context_binding"]),
                     native_carousel_owner={k:owner[k] for k in ("owner_id", "owner_path", "owner_params", "carousel_options_sha256")})
+            held = self.hold_native_carousel and owner and self._carousel_request_matches(evidence, owner)
+            if held:
+                evidence.update(request_contract_source='NATIVE_BROWSER_REQUEST_HELD', request_sent=False)
+                key = self._carousel_replay_key(owner, request.url, request.method, request.post_data or '', request.headers)
+                self._held_carousel_routes.setdefault(key, []).append(route)
+            else:
+                route.abort()
             self._native_acp_requests.append(evidence)
             if on_capture is not None:
                 on_capture(evidence)
@@ -166,6 +176,7 @@ class PlaywrightTransport:
         if callable(on):
             def clear_on_navigation(frame):
                 if frame == getattr(page, "main_frame", None):
+                    self.abort_held_native_routes()
                     self._native_acp_requests.clear()
                     self._active_carousel_owner = None
                     self._used_carousel_contracts.clear()
@@ -486,7 +497,8 @@ class PlaywrightTransport:
             body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             request_headers.setdefault("content-type", "application/json")
         browser_headers = dict(request_headers)
-        if self._acp_capture_installed and urlsplit(url).path.startswith("/acp/"):
+        if self._acp_capture_installed and (urlsplit(url).path.startswith("/acp/")
+                or urlsplit(url).path in getattr(self,'_native_dynamic_paths',set())):
             nonce = uuid4().hex
             # Keep the marker outside the actual request/evidence headers.
             browser_headers[_CONTROLLED_ACP_NONCE_HEADER] = nonce
@@ -596,7 +608,8 @@ class PlaywrightTransport:
             if 'payload_sha256' in native:native=read_sealed(native_path)
             for k in ('url','method','payload','headers','parent_page_url','ranking_context_binding','native_carousel_owner','run_id'):
                 if native.get(k)!=descriptor.get(k):return False
-            if (native.get('request_contract_source')!='NATIVE_BROWSER_REQUEST_ABORTED'
+            if (native.get('request_contract_source') not in ({'NATIVE_BROWSER_REQUEST_ABORTED','NATIVE_BROWSER_REQUEST_HELD'}
+                    if self.hold_native_carousel else {'NATIVE_BROWSER_REQUEST_ABORTED'})
                     or native.get('resource_type') not in {'xhr','fetch'}
                     or not self._carousel_request_matches(native,owner)):return False
             supplied=proof.get('native_acp_descriptor') or {}
@@ -610,6 +623,19 @@ class PlaywrightTransport:
             self._carousel_ui_replay[self._carousel_replay_key(owner,native['url'],native['method'],native['payload'],native['headers'])]={
                 **pending,'receipt_reference':{'path':str(receipt_path),'sha256':hashlib.sha256(raw_receipt).hexdigest()},
                 'body_reference':{'path':proof['html_path'],'sha256':proof['sha256']}}
+            # Resolve the original native promise only with a durable actual
+            # response. Aborting first can prevent AUI from ever advancing.
+            held_key=self._carousel_replay_key(owner,native['url'],native['method'],native['payload'],native['headers'])
+            held=self._held_carousel_routes.pop(held_key, [])
+            previous=self._active_carousel_owner
+            try:
+                self._active_carousel_owner=owner
+                if held:
+                    self._fulfill_saved_carousel_response(held[0])
+                    for extra in held[1:]:
+                        extra.abort()
+            finally:
+                self._active_carousel_owner=previous
             return True
         except (OSError,ValueError,KeyError,TypeError):return False
 
@@ -641,6 +667,15 @@ class PlaywrightTransport:
                     'local_delivery_content_type':content_type,'new_HTTP_receipt':False,'new_observations':0})
             return True
         except (OSError,ValueError,KeyError,TypeError):return False
+
+    def abort_held_native_routes(self):
+        for routes in self._held_carousel_routes.values():
+            for route in routes:
+                try:
+                    route.abort()
+                except Exception:
+                    pass  # Navigation may already have cancelled the route.
+        self._held_carousel_routes.clear()
 
     def requires_ajax_page_context(self, page_url: str) -> bool:
         """A saved HTML response cannot establish a fresh browser's origin.

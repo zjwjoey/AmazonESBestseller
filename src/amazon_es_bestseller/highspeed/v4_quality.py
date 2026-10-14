@@ -12,6 +12,60 @@ from .v4_adapters import parse_v4_page
 from .v3_links import normalize_product_url_v3
 
 
+def verify_rendered_derivation(page,root_receipt,source):
+    """DOM after local native promise delivery, never an extra HTTP receipt."""
+    d=page.get('rendered_derivation') or {}
+    if (page.get('source_representation')!='RENDERED_DOM_DERIVATION'
+            or d.get('new_PAGE_request') is not False
+            or d.get('root_html_sha256')!=root_receipt['sha256']
+            or d.get('root_observed_at')!=root_receipt['observed_at']
+            or d.get('rendered_observed_at')!=page['observed_at']
+            or not d.get('dynamic_receipt_references')):
+        raise ValueError('V4_RENDERED_DERIVATION_LINEAGE_REQUIRED')
+    from .v4_loading import validate_dynamic_descriptor
+    from .budgets import aware_time
+    if aware_time(page['observed_at'])<aware_time(root_receipt['observed_at']):
+        raise ValueError('V4_RENDERED_CAPTURE_TIME_INVALID')
+    delivered={x.get('request_id'):x for x in d.get('local_ui_deliveries',[])}
+    seen=set()
+    frames=d.get('rendered_frames',[])
+    if (len(frames)!=len(d['dynamic_receipt_references'])
+            or frames[-1]['sha256']!=page['evidence_sha256']
+            or frames[-1]['observed_at']!=page['observed_at']):
+        raise ValueError('V4_RENDERED_INTERMEDIATE_CHAIN_REQUIRED')
+    parent_sha=root_receipt['sha256']
+    for reference,frame in zip(d['dynamic_receipt_references'],frames):
+        path=Path(reference['path'])
+        if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['sha256']:
+            raise ValueError('V4_RENDERED_DYNAMIC_RECEIPT_SHA_MISMATCH')
+        r=read_sealed(path);desc=r.get('native_acp_descriptor') or {}
+        reserved=read_sealed(path.parent.parent/'requests'/(r['request_id']+'.reserved.json'))
+        event=delivered.get(r['request_id'],{})
+        if (r['request_id'] in seen or r.get('run_id')!=page['run_id']
+                or r.get('source_id')!=page['source_id'] or r.get('status_code')!=200
+                or r.get('access_state')!='NORMAL' or r.get('origin')!='LIVE_CAPTURE'
+                or r.get('kind')!='ACP' or r.get('request_url')!=desc.get('url')
+                or r.get('final_url')!=desc.get('url') or r.get('request_method')!=desc.get('method')
+                or r.get('request_payload')!=desc.get('payload')
+                or desc.get('parent_html_sha256')!=parent_sha
+                or reserved.get('run_id')!=page['run_id'] or reserved.get('url')!=r['request_url']
+                or reserved.get('kind')!='ACP' or reserved.get('source_id')!=page['source_id']
+                or event.get('receipt_reference')!=reference or event.get('origin')!='LOCAL_UI_REPLAY'
+                or event.get('new_network_request') is not False
+                or aware_time(r['observed_at'])>aware_time(page['observed_at'])):
+            raise ValueError('V4_RENDERED_DYNAMIC_ACTUAL_RECEIPT_REQUIRED')
+        if hashlib.sha256(Path(r['html_path']).read_bytes()).hexdigest()!=r['sha256']:
+            raise ValueError('V4_RENDERED_DYNAMIC_BODY_SHA_MISMATCH')
+        validate_dynamic_descriptor(r['request_url'],source,{'allow_native_dynamic':True},
+            {'run_id':page['run_id']},desc)
+        if (hashlib.sha256(Path(frame['path']).read_bytes()).hexdigest()!=frame['sha256']
+                or aware_time(frame['observed_at'])<aware_time(r['observed_at'])):
+            raise ValueError('V4_RENDERED_INTERMEDIATE_FRAME_INVALID')
+        parent_sha=frame['sha256']
+        seen.add(r['request_id'])
+    return True
+
+
 def build_candidates_v4(observations):
     groups = defaultdict(list)
     for row in observations:
@@ -118,6 +172,12 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                             or reserved.get('run_id') != page['run_id'] or reserved.get('kind') != 'ACP'
                             or reserved.get('url') != actual.get('request_url')):
                         raise ValueError('ACP_ORIGINAL_LIVE_RECEIPT_BINDING_REQUIRED')
+                    from .authorization import _validate_v3_native_carousel
+                    scope={'parser_profile':'V3','source_type':source['source_type'],
+                        'page_urls':source['page_urls'],'allow_native_acp':True,'allow_held_native_carousel':True}
+                    auth={'snapshot_contract_version':3,'run_id':page['run_id'],'sources':{page['source_id']:scope}}
+                    _validate_v3_native_carousel(actual['request_url'],actual['native_acp_descriptor'],scope,auth,
+                        source_id=page['source_id'])
                 acp.append({**ref, 'body': cb.decode('utf8')})
             parsed = parse_v4_page(body.decode('utf8'), source=source, page_url=page['page_url'],
                                    run_id=page['run_id'], snapshot_id=page.get('snapshot_id'),
@@ -132,11 +192,14 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                     raise ValueError('LIVE_RECEIPT_REFERENCE_SHA_MISMATCH')
                 receipt = read_sealed(receipt_path)
                 reservation = read_sealed(receipt_path.parent.parent / 'requests' / (receipt['request_id'] + '.reserved.json'))
+                derived=bool(page.get('rendered_derivation'))
+                if derived:
+                    verify_rendered_derivation(page,receipt,source)
                 if (page['origin'] != 'LIVE_CAPTURE' or receipt.get('run_id') != page['run_id']
                         or receipt.get('status_code') != 200 or receipt.get('access_state') != 'NORMAL'
-                        or receipt.get('sha256') != page['evidence_sha256']
+                        or not derived and receipt.get('sha256') != page['evidence_sha256']
                         or receipt.get('request_url') != page['page_url']
-                        or receipt.get('observed_at') != page['observed_at']
+                        or not derived and receipt.get('observed_at') != page['observed_at']
                         or reservation.get('run_id') != page['run_id']
                         or reservation.get('url') != page['page_url']
                         or reservation.get('kind') != 'PAGE' or reservation.get('origin') != 'LIVE_CAPTURE'):
@@ -193,11 +256,14 @@ def verify_stage_reference(reference, expected_stage):
                 or any(p['status'] != 'VERIFIED_WITH_PRODUCTS' for p in value['pages'])):
             raise ValueError('V4_T0_FULL_EIGHT_ENTRY_FIXTURE_PROOF_REQUIRED')
     # Collector protocols and capacity are independent of correct parsing.
-    required = ('native_best_continuation', 'native_new_continuation', 'favorites_pagination',
-                'deals_loading', 'haul_loading')
-    if expected_stage != 'T0' and not all(value.get('capability_receipts', {}).get(k) for k in required):
-        raise ValueError('V4_PRIOR_STAGE_PROTOCOL_PROOF_REQUIRED')
-    # Protocol receipts cannot yet be approved by a boolean-only summary.
-    if expected_stage != 'T0':
-        raise ValueError('V4_LIVE_CAPABILITY_RECEIPT_VALIDATOR_PENDING')
+    if expected_stage=='T1':
+        from .v4_sources import SEEDS
+        from .v4_coverage import loading_coverage
+        loading=loading_coverage(value['pages'],value['sources'])
+        if (not loading['all_loading_capabilities_observed'] or
+                not {s['url'] for s in SEEDS}.issubset({p['page_url'] for p in value['pages']
+                    if p['status']=='VERIFIED_WITH_PRODUCTS'})):
+            raise ValueError('V4_PRIOR_STAGE_PROTOCOL_PROOF_REQUIRED')
+    if expected_stage not in {'T0','T1'}:
+        raise ValueError('V4_T2_CAPACITY_RECEIPT_VALIDATOR_PENDING')
     return value

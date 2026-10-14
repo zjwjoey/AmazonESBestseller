@@ -14,3 +14,4 @@
 /tests/fixtures/highspeed_v4/*.html -text whitespace=-trailing-space
 /tests/fixtures/highspeed_v4/native_overlap/* -text whitespace=-trailing-space
 /tests/fixtures/highspeed_v4/native_consumed/* -text whitespace=-trailing-space
+/tests/fixtures/highspeed_v4/loading/* -text whitespace=-trailing-space
