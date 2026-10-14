@@ -123,6 +123,92 @@ def _probe_scope_summary(plan, bundle, committed, reason):
         'scope_note':'Probe completion is separate from COMPLETE page status and stage QA; restrictions and unknown/parser failures still stop.'}
 
 
+def reviewed_t1_diagnostic_failures(store, plan, authorization, gate, *, now=None):
+    """Validate exact user-reviewed failed-page exclusions for this T1 probe.
+
+    This returns scheduling decisions only. Failed pages, original journals,
+    completeness, target counts and stage QA are never changed or promoted.
+    """
+    references=(authorization or {}).get('t1_diagnostic_failure_reviews',[])
+    if not references:return []
+    if (plan.get('snapshot_contract_version')!=3 or plan.get('stage')!='T1'
+            or plan.get('origin')!='LIVE_CAPTURE' or plan.get('probe_all_reviewed_page_urls') is not True
+            or gate.get('state')!='NORMAL'):
+        raise ValueError('T1_DIAGNOSTIC_REVIEW_SCOPE_OR_GATE_INVALID')
+    current=aware_time(now);auth_expiry=aware_time(authorization['expires_at'])
+    pages={p['page_key']:p for p in store.pages(plan['run_id'])}
+    sources={s['source_id']:s for s in plan['sources']}
+    receipts=list(store.iter_responses(plan['run_id']))
+    def exact_ref(reference):
+        if not isinstance(reference,dict) or not reference.get('path') or not reference.get('sha256'):
+            raise ValueError('T1_DIAGNOSTIC_REFERENCE_REQUIRED')
+        path=Path(reference['path']).resolve()
+        if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['sha256']:
+            raise ValueError('T1_DIAGNOSTIC_REFERENCE_HASH_MISMATCH')
+        return path
+    result=[];seen=set()
+    for reference in references:
+        review=read_sealed(exact_ref(reference))
+        if (review.get('kind')!='T1_DIAGNOSTIC_FAILED_PAGE_RETAINED_APPROVAL'
+                or review.get('approved') is not True or review.get('approved_by')!='user_in_current_conversation'
+                or not review.get('approval_id') or review.get('run_id')!=plan['run_id']
+                or str(Path(review.get('store_root') or '').resolve())!=str(store.root.resolve())
+                or any(review.get(k) is not True for k in ('preserve_failed_unknown','no_quality_gate_relaxation','no_extra_source_scope'))
+                or not aware_time(review['reviewed_at'])<=current<aware_time(review['expires_at'])<=auth_expiry):
+            raise ValueError('T1_DIAGNOSTIC_USER_REVIEW_INVALID')
+        page=pages.get(review.get('page_key'));source=sources.get(review.get('source_id'))
+        if (not page or not source or review['page_key'] in seen or source['source_type']!='MOVERS_SHAKERS'
+                or review.get('source_type')!=source['source_type'] or page.get('source_id')!=source['source_id']
+                or page.get('source_type')!=source['source_type'] or page.get('origin')!='LIVE_CAPTURE'
+                or review.get('page_url')!=page.get('page_url') or review['page_url'] not in source['page_urls']
+                or review['page_url']!=SOURCE_ROOTS['MOVERS_SHAKERS']
+                or page.get('status')!='FAILED' or page.get('page_content_state')!='PARSER_EMPTY_UNVERIFIED'
+                or page.get('page_complete') is not False or page.get('actual_count')!=0
+                or page.get('raw_card_count')!=0 or set(page.get('flags',[]))!={'PAGE_CONTENT_MISSING'}
+                or page.get('source_type_verified') is not True or page.get('source_context_valid') is not True
+                or page.get('access_status')!='NORMAL'):
+            raise ValueError('T1_DIAGNOSTIC_FAILED_PAGE_BINDING_INVALID')
+        journal_path=exact_ref(review.get('original_page_journal_reference'))
+        html_path=exact_ref(review.get('html_reference'))
+        receipt_path=exact_ref(review.get('capture_receipt_reference'))
+        if (journal_path!=Path(page['journal_path']).resolve() or html_path!=Path(page['evidence_path']).resolve()
+                or review['html_reference']['sha256']!=page['evidence_sha256']):
+            raise ValueError('T1_DIAGNOSTIC_ORIGINAL_EVIDENCE_BINDING_INVALID')
+        journal=read_sealed(journal_path);proof=read_sealed(receipt_path)
+        indexed=next((r for r in receipts if Path(r['evidence_path']).resolve()==receipt_path),None)
+        if (journal.get('run_id')!=plan['run_id'] or journal.get('page_key')!=page['page_key']
+                or journal.get('observations')!=[] or not indexed
+                or any(journal['page'].get(k)!=page.get(k) for k in ('source_id','source_type','page_url','evidence_path','evidence_sha256','observed_at','status','actual_count','raw_card_count','origin'))
+                or any(proof.get(k)!=indexed.get(k) for k in ('run_id','source_id','source_type','html_path','sha256','observed_at','kind','page_key','origin'))
+                or proof.get('run_id')!=plan['run_id'] or proof.get('origin')!='LIVE_CAPTURE'
+                or proof.get('source_id')!=source['source_id'] or proof.get('source_type')!=source['source_type']
+                or proof.get('page_key')!=page['page_key'] or proof.get('kind')!='PAGE'
+                or proof.get('request_url')!=review['page_url'] or proof.get('final_url')!=review['page_url']
+                or proof.get('status_code')!=200 or proof.get('access_state')!='NORMAL'
+                or proof.get('observed_at')!=page['observed_at'] or Path(proof['html_path']).resolve()!=html_path
+                or proof.get('sha256')!=review['html_reference']['sha256']):
+            raise ValueError('T1_DIAGNOSTIC_ORIGINAL_CAPTURE_INVALID')
+        from .adapters import parse_page
+        checked=parse_page(html_path.read_text(encoding='utf8'),source=source,run_id=plan['run_id'],
+            snapshot_id=plan.get('snapshot_id',plan['run_id']),page_url=page['page_url'],
+            page_number=page.get('page_number'),observed_at=page['observed_at'],
+            evidence_path=str(html_path),origin='LIVE_CAPTURE',http_status=proof['status_code'])
+        actual=checked['page']
+        if (actual.get('access_status')!='NORMAL' or actual.get('source_type_verified') is not True
+                or actual.get('source_context_valid') is not True or actual.get('status')!='FAILED'
+                or actual.get('page_content_state')!='PARSER_EMPTY_UNVERIFIED' or actual.get('actual_count')!=0
+                or actual.get('raw_card_count')!=0 or set(actual.get('flags',[]))!={'PAGE_CONTENT_MISSING'}
+                or actual.get('page_complete') is not False or checked.get('observations') or checked.get('acp_pending')):
+            raise ValueError('T1_DIAGNOSTIC_OFFLINE_REPARSE_NOT_EXACT_FAILURE')
+        seen.add(page['page_key'])
+        result.append({'page_key':page['page_key'],'source_id':source['source_id'],'source_type':source['source_type'],
+            'page_url':page['page_url'],'approval_reference':dict(reference),'approval_id':review['approval_id'],
+            'original_page_journal_reference':review['original_page_journal_reference'],
+            'capture_receipt_reference':review['capture_receipt_reference'],'html_reference':review['html_reference'],
+            'preserved_status':'FAILED','preserved_completeness':'UNKNOWN','quality_gate_relaxed':False})
+    return result
+
+
 class HighSpeedRunner:
     def __init__(self, store, *, clock=None, sleep=None, parser=None, gate_reader=None, progress=None, qa_auditor=None):
         self.store = store
@@ -195,6 +281,11 @@ class HighSpeedRunner:
                 or (p.get("status") == "PARTIAL" and p.get("terminal_for_snapshot") is True)
                 or (p.get("status") == "FAILED" and p.get("source_navigation_only") is True
                     and source_navigation_only(p.get("source", {}), p.get("page_url", ""), {"page":p}))}
+            if resume:
+                for decision in reviewed_t1_diagnostic_failures(self.store,plan,authorization,self._gate(plan),now=self.clock()):
+                    committed.add(decision['page_key'])
+                    self.store.append_event(run_id,{'kind':'T1_DIAGNOSTIC_FAILED_PAGE_RETAINED',**decision,
+                        'scope_note':'Explicit user-reviewed T1 scheduling exclusion only; original failed evidence and strict stage QA retained.'})
             cached = {}
             for url,seed in seed_cache.items():
                 original = seed["latest_page"]
