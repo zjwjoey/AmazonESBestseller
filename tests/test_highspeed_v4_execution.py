@@ -153,3 +153,26 @@ def test_v4_cannot_adopt_a_historical_store(tmp_path):
         assert not t.calls
     finally:
         store.close()
+
+
+def test_in_scope_fresh_reverify_preserves_earlier_capture_and_start(tmp_path):
+    from datetime import timedelta
+    plan, a = setup_scope(tmp_path)
+    store = RunStore(a['store_root'])
+    now = [NOW]
+    try:
+        t = FakeTransport(plan, a)
+        runner = V4T1Runner(store, clock=lambda: now[0], sleep=lambda n: None)
+        first = runner.run(plan, authorization=a, transport=t)
+        old_ids = {r['observation_id'] for r in store.iter_observations(plan['run_id'])}
+        now[0] += timedelta(minutes=1)
+        second = runner.run(plan, authorization=a, transport=t, resume=True,
+                            reverify_source_ids=[plan['sources'][0]['source_id']])
+        assert len(t.calls) == 9
+        assert second['summary']['raw_count'] == 372
+        assert second['quality']['central_full_dom_review_passed'], second['quality']['errors'][:2]
+        assert second['quality']['reviewed_capture_frames'] == 9
+        assert old_ids.issubset({r['observation_id'] for r in store.iter_observations(plan['run_id'])})
+        assert first['run']['started_at'] == second['run']['started_at']
+    finally:
+        store.close()

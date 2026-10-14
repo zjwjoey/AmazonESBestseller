@@ -24,13 +24,16 @@ class V4T1Runner:
         self.store = store
         self.engine = HighSpeedRunner(store, clock=clock, sleep=sleep)
 
-    def run(self, plan, *, authorization, transport, resume=False, preheld_lock=False):
+    def run(self, plan, *, authorization, transport, resume=False, preheld_lock=False, reverify_source_ids=()):
         if plan.get('stage') != 'T1':
             raise ValueError('V4_T2_T3_REQUIRE_VERIFIED_DYNAMIC_PROTOCOLS')
         e = self.engine; run_id = plan['run_id']; entry = utc_text(e.clock())
         if self.store.db.execute('SELECT 1 FROM runs WHERE run_id<>? LIMIT 1', (run_id,)).fetchone():
             raise ValueError('V4_FRESH_STORE_NO_HISTORICAL_RUNS_REQUIRED')
         validate_v4_authorization(plan, authorization, e._gate(plan), now=e.clock(), store_root=self.store.root)
+        if (not set(reverify_source_ids).issubset({s['source_id'] for s in plan['sources']})
+                or reverify_source_ids and not resume):
+            raise ValueError('V4_REVERIFY_SAME_APPROVED_SOURCE_AND_RUN_REQUIRED')
         with ExitStack() as locks:
             locks.enter_context(nullcontext() if preheld_lock else self.store.run_lock(run_id))
             if not preheld_lock:
@@ -43,7 +46,7 @@ class V4T1Runner:
                 raise ValueError('AMBIGUOUS_UNFINISHED_REQUESTS_NO_AUTO_RETRY')
             started = run['started_at']; last = self.store.latest_request_time()
             last = aware_time(last) if last else None
-            committed = {p['source_id'] for p in self.store.pages(run_id)}
+            committed = {p['source_id'] for p in self.store.pages(run_id)} - set(reverify_source_ids)
             self.store.update_run(run_id, status='RUNNING')
             stop = None
             for source in plan['sources']:
@@ -56,6 +59,10 @@ class V4T1Runner:
                     url = source['actual_source_url']; key = source['source_id']
                     existing = [r for r in self.store.iter_responses(run_id) if r.get('kind') == 'PAGE'
                                 and r.get('request_url') == url and r.get('access_state') == 'NORMAL']
+                    if key in reverify_source_ids:
+                        existing = []
+                        self.store.append_event(run_id, {'kind': 'V4_T1_IN_SCOPE_REVERIFICATION', 'source_id': key,
+                            'page_url': url, 'reason': 'USER_AUTHORIZED_OFFLINE_FIX_THEN_BOUNDED_REVERIFY'})
                     cached = bool(existing)
                     if existing:
                         receipt = existing[-1]
@@ -65,7 +72,9 @@ class V4T1Runner:
                                                             'PAGE', started, last, page_key=key)
                     acp = []
                     for old in self.store.iter_responses(run_id):
-                        if old.get('kind') == 'ACP' and old.get('page_key') == key and old.get('access_state') == 'NORMAL':
+                        if (old.get('kind') == 'ACP' and old.get('page_key') == key and old.get('access_state') == 'NORMAL'
+                                and aware_time(old['observed_at']) >= aware_time(receipt['observed_at'])
+                                and (old.get('ranking_context_binding') or {}).get('page_evidence_sha256') == receipt['sha256']):
                             acp.append(self._acp(old))
                     def parse():
                         return parse_v4_page(response['text'], source=source, page_url=url, run_id=run_id,

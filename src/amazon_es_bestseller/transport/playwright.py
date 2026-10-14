@@ -327,7 +327,7 @@ class PlaywrightTransport:
                             and captured.get("native_carousel_owner", {}).get("owner_id") == owner["owner_id"]):
                         matches.append((key,captured))
                 if len(matches) > 1:
-                    raise ValueError("ACP_CAROUSEL_NATIVE_CONTRACT_AMBIGUOUS")
+                    matches = self._ordered_carousel_contracts(matches, owner)
                 if matches:
                     key,captured = matches[0]
                     self._used_carousel_contracts.add(key)
@@ -376,6 +376,34 @@ class PlaywrightTransport:
             raise ValueError("ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED")
         finally:
             self._active_carousel_owner = None
+
+    @staticmethod
+    def _ordered_carousel_contracts(matches, owner):
+        """Distinct real batches may overlap after visibility and Next events.
+
+        Accept FIFO only when every literal batch maps to the exact saved id
+        list. Never construct a batch, change bytes, or disambiguate unrelated
+        owners. Two different bodies for the same index range remain ambiguous.
+        """
+        try:
+            ids = json.loads(owner['carousel_options_raw'])['ajax']['id_list']
+            ranges = {}; selected = []
+            for key, captured in matches:
+                body = json.loads(captured['payload']); indexes = body['indexes']
+                if (not indexes or not all(type(i) is int and 0 <= i < len(ids) for i in indexes)
+                        or indexes != list(range(indexes[0], indexes[-1] + 1))
+                        or body['ids'] != [ids[i] for i in indexes]):
+                    raise ValueError('invalid literal batch')
+                signature = (captured['url'], captured['method'], captured['payload'],
+                             json.dumps(captured.get('headers', {}), sort_keys=True))
+                previous = ranges.get(tuple(indexes))
+                if previous is not None and previous != signature:
+                    raise ValueError('same range with different native bytes')
+                if previous is None:
+                    ranges[tuple(indexes)] = signature; selected.append((key, captured))
+            return selected
+        except (ValueError, KeyError, TypeError, IndexError):
+            raise ValueError('ACP_CAROUSEL_NATIVE_CONTRACT_AMBIGUOUS') from None
 
     def fetch_page(self, url: str, *, referer: str | None = None) -> TransportResponse:
         navigation_started=time.perf_counter()

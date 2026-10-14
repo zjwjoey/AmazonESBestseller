@@ -73,7 +73,23 @@ def audit_v4(pages, observations, sources, *, require_live=False):
     No hashes-only shortcut: SHA check is followed by a complete DOM parse.
     """
     errors = []; expected = {}; source_map = {s['source_id']: s for s in sources}
-    for page in pages:
+    # Reverification adds a new capture; earlier immutable journals remain part
+    # of the observation history and must not be compared with the newest DOM.
+    capture_pages = {}
+    for current in pages:
+        histories = []
+        if current.get('journal_path'):
+            journal = Path(current['journal_path'])
+            for path in journal.parent.glob(journal.name.split('_', 1)[0] + '_*.json'):
+                value = read_sealed(path)
+                if value.get('run_id') == current['run_id'] and value['page'].get('source_id') == current['source_id']:
+                    histories.append(value['page'])
+        for page in [*histories, current]:
+            key = (page['source_id'], page['evidence_sha256'], page['observed_at'])
+            previous = capture_pages.get(key)
+            if previous is None or len(page.get('acp_captures', [])) >= len(previous.get('acp_captures', [])):
+                capture_pages[key] = page
+    for page in capture_pages.values():
         try:
             path = Path(page['evidence_path']); body = path.read_bytes()
             if hashlib.sha256(body).hexdigest() != page['evidence_sha256']:
@@ -88,7 +104,8 @@ def audit_v4(pages, observations, sources, *, require_live=False):
             parsed = parse_v4_page(body.decode('utf8'), source=source, page_url=page['page_url'],
                                    run_id=page['run_id'], snapshot_id=page.get('snapshot_id'),
                                    observed_at=page['observed_at'], evidence_path=str(path),
-                                   http_status=page.get('http_status'), origin=page['origin'], acp_responses=acp)
+                                   http_status=page.get('http_status'), origin=page['origin'], acp_responses=acp,
+                                   parser_profile_version=page.get('parser_version'))
             for row in parsed['observations']:
                 expected[row['observation_id']] = row
             if require_live:
@@ -129,6 +146,7 @@ def audit_v4(pages, observations, sources, *, require_live=False):
         statuses[field] = dict(Counter(r.get(field + '_status', 'UNVERIFIED') for r in observations))
     return {'schema_version': 4, 'central_full_dom_review_passed': not errors, 'errors': errors,
             'reviewed_observations': len(observations), 'field_statuses': statuses,
+            'reviewed_capture_frames': len(capture_pages),
             'page_statuses': dict(Counter(p['status'] for p in pages)),
             'completeness_status': 'UNKNOWN', 'live_origin_required': require_live,
             'strict_independent_buyable_skus_confirmed': False}

@@ -67,7 +67,8 @@ def run_live_v4(args):
                 transport.install_bounded_acp_capture(
                     on_capture=lambda value: save_native_contract(store, plan, value),
                     on_local_replay=lambda event: store.append_event(plan['run_id'], {'kind': 'NATIVE_CAROUSEL_LOCAL_UI_REPLAY', **event}))
-                return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True)
+                return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True,
+                                  reverify_source_ids=args.reverify_source_id)
     finally:
         store.close()
 
@@ -85,6 +86,7 @@ def main(argv=None):
             p.add_argument('--' + opt, required=True)
         p.add_argument('--live', action='store_true'); p.add_argument('--headful', action='store_true')
         p.add_argument('--profile-dir')
+        p.add_argument('--reverify-source-id', action='append', default=[])
     p = sub.add_parser('report')
     for opt in ('root', 'run-id', 'out'):
         p.add_argument('--' + opt, required=True)

@@ -15,7 +15,8 @@ from ..access.detector import detect_access_status
 from .v3_links import normalize_product_url_v3
 from .v4_sources import RANKED, amazon_url, node_id
 
-VERSION = 'multisource_v4.1.card_bound'
+LEGACY_VERSION = 'multisource_v4.1.card_bound'
+VERSION = 'multisource_v4.2.capture_bound'
 SELECTORS = {
     'DEALS_ZONE': '[data-testid="product-card"][data-asin][data-deal-id]',
     'LIGHTNING_DEAL_FILTER': '[data-testid="product-card"][data-asin][data-deal-id]',
@@ -178,7 +179,10 @@ def _navigation(soup, source, page_url, sha):
 
 def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                   http_status=None, origin='OFFLINE_FIXTURE', snapshot_id=None, page_number=1,
-                  acp_responses=None):
+                  acp_responses=None, parser_profile_version=None):
+    version = parser_profile_version or VERSION
+    if version not in {VERSION, LEGACY_VERSION}:
+        raise ValueError('V4_UNKNOWN_PARSER_VERSION')
     if origin not in {'OFFLINE_FIXTURE', 'LIVE_CAPTURE', 'HISTORICAL_REPLAY'}:
         raise ValueError('UNKNOWN_ORIGIN')
     if datetime.fromisoformat(observed_at.replace('Z', '+00:00')).tzinfo is None:
@@ -194,7 +198,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
     page = {'source_type': source['source_type'], 'source_subtype': source['source_subtype'],
             'page_url': page_url, 'source_id': source['source_id'], 'origin': origin,
             'http_status': http_status, 'access_status': access, 'observed_at': observed_at,
-            'evidence_path': evidence_path, 'evidence_sha256': sha, 'parser_version': VERSION,
+            'evidence_path': evidence_path, 'evidence_sha256': sha, 'parser_version': version,
             'completeness_status': 'UNKNOWN', 'status': 'UNVERIFIED'}
     rows = []
     if not permitted:
@@ -256,8 +260,9 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                    source_url=source['actual_source_url'], source_page_url=page_url, page_url=page_url,
                    run_id=run_id, snapshot_id=snapshot_id or run_id, batch_id=run_id,
                    observed_at=row.get('observed_at', observed_at), origin=origin, evidence_path=row.get('evidence_path', evidence_path),
-                   evidence_sha256=row.get('evidence_sha256', sha), parser_version=VERSION,
-                   observation_id='v4obs_' + _sha(f'{run_id}|{sha}|{index}|{page_url}')[:32],
+                   evidence_sha256=row.get('evidence_sha256', sha), parser_version=version,
+                   observation_id='v4obs_' + _sha(f'{run_id}|{sha}|{index}|{page_url}' +
+                       ('|' + row.get('observed_at', observed_at) if version == VERSION else ''))[:32],
                    source_node_id=node_id(page_url), amazon_category_path=[],
                    amazon_category_l1=None, amazon_category_l2=None, amazon_category_l3=None, amazon_category_leaf=None,
                    research_category=None, category_mapping_status='UNKNOWN', source_completeness_status='UNKNOWN',
