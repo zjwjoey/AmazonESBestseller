@@ -144,6 +144,8 @@ def test_pending_templates_are_new_unapproved_live_disabled_and_literal_sources(
         plan=json.loads(Path(item['plan']['path']).read_text(encoding='utf-8'))
         auth=json.loads(Path(item['authorization']['path']).read_text(encoding='utf-8'))
         assert not plan['live_enabled'] and not auth['approved']
+        assert plan['probe_all_reviewed_page_urls'] is (stage=='T1')
+        assert auth['probe_all_reviewed_page_urls'] is plan['probe_all_reviewed_page_urls']
         assert Path(auth['store_root']).parents[1]==tmp_path/'machine_runtime'
         assert not Path(auth['store_root']).exists()
         assert item['browser_profile']==str(Path(auth['store_root']).parent/'browser_profile')
