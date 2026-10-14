@@ -102,11 +102,13 @@ def test_replay_never_overwrites_existing_or_historical_directory(tmp_path):
     with pytest.raises(ValueError,match='ALREADY_EXISTS'):replay_v3(root,'old',tmp_path,mapping_config=mapping)
 
 def test_pending_templates_are_new_unapproved_live_disabled_and_literal_sources(tmp_path):
-    root,mapping=old_capture(tmp_path);result=prepare_v3(root,'old',tmp_path/'plans',mapping_config=mapping)
+    root,mapping=old_capture(tmp_path);result=prepare_v3(root,'old',tmp_path/'plans',mapping_config=mapping,runtime_root=tmp_path/'machine_runtime')
     for stage,item in result['manifest']['stages'].items():
         plan=json.loads(Path(item['plan']['path']).read_text(encoding='utf-8'))
         auth=json.loads(Path(item['authorization']['path']).read_text(encoding='utf-8'))
         assert not plan['live_enabled'] and not auth['approved']
+        assert Path(auth['store_root']).parents[1]==tmp_path/'machine_runtime'
+        assert not Path(auth['store_root']).exists()
         assert plan['run_id']!='old' and plan['origin']=='LIVE_CAPTURE'
         assert plan['sources'][0]['page_urls']==['https://www.amazon.es/gp/bestsellers/home']
         assert plan['request_pacing_seconds']==3 and plan['parallelism']==1

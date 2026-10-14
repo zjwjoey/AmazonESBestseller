@@ -419,12 +419,13 @@ def verified_pending_navigation(pack_path):
     return result,reference
 
 
-def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_source_pack=None):
+def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_source_pack=None,runtime_root=None):
     """Literal prior navigation plan only; new LIVE batches remain unapproved."""
     from .contracts import DEFAULT_CONFIG
     from .schedule import source_order
     from .budgets import utc_text
     mapping_reference=_ref(mapping_config)
+    batch_runtime=Path(runtime_root).resolve() if runtime_root else Path(historical_root).resolve().parents[1]/'highspeed_v3_fresh_batches'
     rules=load_mapping_rules(mapping_config)
     if _ref(mapping_config)!=mapping_reference:raise ValueError('MAPPING_CONFIG_CHANGED_DURING_LOAD')
     with readonly_store(historical_root) as store:
@@ -471,7 +472,7 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
             'new_batch_required':True,'historical_evidence_is_not_new_capture':True,
             'review_status':'PENDING_EXACT_SOURCE_BUDGET_GATE_AND_STAGE_REVIEW','prior_stage_artifacts':[],
             'shared_access_gate_path':prior['plan'].get('shared_access_gate_path')}
-        runtime=directory/run_id/'store'
+        runtime=batch_runtime/run_id/'store'
         authorization={**{k:v for k,v in plan.items() if k!='sources'},'approved':False,'approved_by':None,
             'approval_id':None,'store_root':str(runtime),'reviewed_at':None,'expires_at':None,
             'access_gate_state':'NORMAL','stop_conditions':['CHALLENGE','BLOCKED','RATE_LIMITED','UNKNOWN','NETWORK_ERROR'],
@@ -488,6 +489,7 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
     manifest={'origin':'OFFLINE_PREPARATION','live_requests':0,'approved':False,'generated_at':utc_text(),
         'source_navigation_plan_reference':prior_ref,'mapping_config_reference':mapping_reference,'stages':outputs,'launcher':_ref(script),
         'pending_navigation_pack_reference':pending_reference,'new_literal_navigation_sources':len(new_sources),
+        'fresh_batch_runtime_root':str(batch_runtime),'runtime_directories_created':False,
         'T1_T2_T3_passed':False,'stage_gate_prerequisites_required':True}
     immutable_json(directory/'manifest.json',sealed(manifest));return {'directory':str(directory),'manifest':manifest}
 

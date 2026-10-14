@@ -148,7 +148,7 @@ def dispatch(args):
                 progress=lambda value: print(json.dumps({"kind":"V3_OFFLINE_REPLAY_PROGRESS", **value})))
         if operation == "report-v3":
             return report_replay_v3(args.root, args.run_id, args.out,mapping_config=args.mapping_config,history_manifest=args.history_manifest)
-        return prepare_v3(args.historical_root, args.historical_run_id, args.out, mapping_config=args.mapping_config,pending_source_pack=args.pending_source_pack)
+        return prepare_v3(args.historical_root, args.historical_run_id, args.out, mapping_config=args.mapping_config,pending_source_pack=args.pending_source_pack,runtime_root=args.runtime_root)
     if operation == "plan":
         pending = {**DEFAULT_CONFIG, "mode": "HIGH_SPEED_V2", "run_id": args.run_id,
             "snapshot_id": args.run_id, "stage": args.stage, "origin": "OFFLINE_FIXTURE" if args.stage == "T0" else "LIVE_CAPTURE",
@@ -233,7 +233,8 @@ def register(subparsers):
         op = operations.add_parser(name, help="Read-only old evidence; no LIVE requests")
         op.add_argument("--historical-root", required=True); op.add_argument("--historical-run-id", required=True)
         op.add_argument("--mapping-config", required=True); op.add_argument("--out", required=True)
-        if name == "prepare-v3":op.add_argument("--pending-source-pack")
+        if name == "prepare-v3":
+            op.add_argument("--pending-source-pack");op.add_argument("--runtime-root")
         op.set_defaults(func=command)
     op = operations.add_parser("report-v3", help="Full historical V3 DOM/receipt QA and contract export")
     op.add_argument("--root", required=True); op.add_argument("--run-id", required=True); op.add_argument("--out", required=True)

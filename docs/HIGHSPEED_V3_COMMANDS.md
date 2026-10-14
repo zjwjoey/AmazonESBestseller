@@ -30,4 +30,20 @@ The report includes full candidate CSV/JSONL and all observations, all source me
 
 New navigation entries remain individually `enabled=false` and every authorization source's `evidence.reviewed=false`. A global `live_enabled` or `approved` toggle does not review or authorize those exact scopes. Activation must explicitly review each selected literal source, its saved navigation proof and bounded page URLs, update its per-source enablement/review evidence, and bind that exact scope into the current authorization. Do not silently enable all newly discovered navigation entries.
 
+## Actual Windows paths for this offline delivery
+
+The final pending directory is `F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_v3_6e6c77c814144dcdb9883d42b15fc926`. Earlier pending directories are retained intermediate preparations; use this directory's sealed manifest. Fresh machine stores are declared under `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches`, outside delivery. Preparation does not create those stores or open a browser.
+
+The following command independently creates another unapproved preparation in a new GUID directory; it sends zero requests:
+
+```powershell
+$env:PYTHONPATH='C:\Users\Administrator\.codex\worktrees\highspeed-snapshot-v3\AmazonESBestseller\src'
+$env:PYTHONDONTWRITEBYTECODE='1'
+$env:PYTHONIOENCODING='utf-8'
+Remove-Item Env:RUN_LIVE -ErrorAction SilentlyContinue
+& 'C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe' -m amazon_es_bestseller.cli highspeed prepare-v3 --historical-root 'F:\AmazonESBestseller\runtime\night5000_20261013T155222Z\store' --historical-run-id 'continue30000_20261013T204238Z' --mapping-config 'C:\Users\Administrator\.codex\worktrees\highspeed-snapshot-v3\AmazonESBestseller\configs\highspeed\v3\category_mapping.reviewed.json' --pending-source-pack 'F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221\pending_new_navigation_evidence\new_sources.pending_review.json' --runtime-root 'F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches' --out 'F:\AmazonESBestseller\交付文件\20261014\HighSpeedSnapshotV3_dd3c9221'
+```
+
+For reviewed activation, the delivered launcher takes the exact plan/auth and runtime paths from the sealed stage manifest. Current T1 store is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t1_ead7481ebc84\store`, T2 is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t2_a9d8225fbc78\store`, and T3 is `F:\AmazonESBestseller\runtime\highspeed_v3_fresh_batches\v3_t3_b70c91f6c0a6\store`. These are pending references, not running batches. Preserve the pending originals; activate separately reviewed copies only after exact stage approval.
+
 T1 tests five real entries and current score bindings; it is needed even when three historical list roots yielded no cards. T2 measures real source supply/coverage/throughput. T3 starts a genuinely new capture batch only after explicit approval and strict preceding stage gates. Neither synthetic tests nor historical replay establish current supply or ten-hour feasibility. Access restrictions stop new requests; there is no CAPTCHA, proxy, cookie, account or IP bypass.
