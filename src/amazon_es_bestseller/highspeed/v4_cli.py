@@ -41,6 +41,11 @@ def run_live_v4(args):
             from ..access.browser import BrowserSession
             from ..transport.playwright import PlaywrightTransport
             class BoundedSession(BrowserSession):
+                def goto(self, url, timeout_ms=45000):
+                    self.last_document_response = None
+                    response = self.page.goto(url, wait_until='domcontentloaded', timeout=timeout_ms)
+                    self.last_document_response = response
+                    return response.status if response is not None else None
                 def load_lazy_ranking_content(self, *a, **kw):
                     return None
             with BoundedSession(headless=not args.headful, profile_dir=args.profile_dir) as session:
@@ -63,7 +68,7 @@ def run_live_v4(args):
                         return
                     route.continue_()
                 session.page.route('**/*', bounded)
-                transport = PlaywrightTransport(session, measure_timings=True)
+                transport = PlaywrightTransport(session, measure_timings=True, preserve_document_body=True)
                 transport.install_bounded_acp_capture(
                     on_capture=lambda value: save_native_contract(store, plan, value),
                     on_local_replay=lambda event: store.append_event(plan['run_id'], {'kind': 'NATIVE_CAROUSEL_LOCAL_UI_REPLAY', **event}))

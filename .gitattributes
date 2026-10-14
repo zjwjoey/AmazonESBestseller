@@ -13,3 +13,4 @@
 /tests/fixtures/highspeed/real_v3_t1_best_native_carousel_contract.json -text
 /tests/fixtures/highspeed_v4/*.html -text whitespace=-trailing-space
 /tests/fixtures/highspeed_v4/native_overlap/* -text whitespace=-trailing-space
+/tests/fixtures/highspeed_v4/native_consumed/* -text whitespace=-trailing-space

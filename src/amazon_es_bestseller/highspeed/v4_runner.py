@@ -87,6 +87,9 @@ class V4T1Runner:
                              'page_key': key, 'source': source, 'capture_receipt_reference': e._receipt_ref(receipt),
                              'source_type_verified': bool(parsed['observations']), 'source_context_valid': True,
                              'execution_status': 'APPROVED_FRAME_RECORDED_NOT_COMPLETE',
+                             'source_representation': receipt.get('source_representation', 'RENDERED_DOM'),
+                             'document_html_reference': {'path': receipt.get('document_html_path'), 'sha256': receipt.get('document_sha256')},
+                             'rendered_html_reference': {'path': receipt.get('rendered_html_path'), 'sha256': receipt.get('rendered_sha256')},
                              'acp_captures': [{k: v for k, v in a.items() if k != 'body'} for a in acp]}
                         self.store.commit_page(run_id, key, p, parsed['observations'])
                     commit()  # Save initial cards before any continuation can fail.

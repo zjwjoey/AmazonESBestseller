@@ -96,7 +96,7 @@ class PlaywrightTransport:
     def __init__(self, session, *, marketplace: str = "ES",
                  requested_locale: str = "es_ES", currency: str = "EUR",
                  postal_code: str | None = None, marketplace_id: str | None = None,
-                 measure_timings: bool = False):
+                 measure_timings: bool = False, preserve_document_body: bool = False):
         self.session = session
         self.marketplace = marketplace
         self.requested_locale = requested_locale
@@ -104,6 +104,7 @@ class PlaywrightTransport:
         self.postal_code = postal_code
         self.marketplace_id = marketplace_id
         self.measure_timings = measure_timings
+        self.preserve_document_body = preserve_document_body
         self._native_acp_requests = []
         self._manual_acp_allowance = None
         self._acp_capture_installed = False
@@ -442,12 +443,33 @@ class PlaywrightTransport:
             'lazy_browser_operation_seconds':lazy_seconds,'pure_network_seconds':None,
             'network_request_response_seconds':network_seconds,'network_measurement_source':'Browser PerformanceNavigationTiming requestStart→responseEnd; includes server wait, cache/ambiguous unknown',
             'measurement_scope':'Client operation wall; navigation includes browser/DOM/network and cannot be decomposed.'} if self.measure_timings else {}
-        return TransportResponse(status, final_url, text, access_state=state, timings=timings,
+        result = TransportResponse(status, final_url, text, access_state=state, timings=timings,
                                  failure=failure.to_dict() if failure else None,
                                  marketplace=self.marketplace,
                                  currency=self.currency, postal_code=self.postal_code,
                                  marketplace_id=self.marketplace_id, request_method="GET",
                                  request_url=url, request_headers={"referer": referer or ""}, **locale)
+        if self.preserve_document_body:
+            document = getattr(self.session, 'last_document_response', None)
+            if document is not None and document.url == final_url and document.status == status:
+                try:
+                    raw = document.text()  # Buffered bytes of this charged PAGE, no new request.
+                except Exception:
+                    raw = None
+                if isinstance(raw, str):
+                    value = dict(vars(result))
+                    value.update(http_document_html=raw, rendered_dom_html=text,
+                                 source_representation='RENDERED_DOM')
+                    raw_state = detect_access_status(status, raw).value
+                    if raw_state != 'NORMAL':
+                        value.update(text=raw, access_state=raw_state)
+                    elif state == 'NORMAL' and any(urlsplit(final_url).path == p or urlsplit(final_url).path.startswith(p + '/')
+                                                  for p in ('/gp/bestsellers', '/gp/new-releases')):
+                        # Ranked server cards and native owner attributes precede
+                        # AUI's attribute consumption. Keep the rendered frame too.
+                        value.update(text=raw, source_representation='HTTP_DOCUMENT_BODY')
+                    return value
+        return result
 
     def fetch_ajax(self, url: str, *, method: str = "GET", referer: str | None = None,
                    payload=None, headers=None) -> TransportResponse:

@@ -324,6 +324,12 @@ class RunStore:
             raise ValueError("RESPONSE_REQUIRES_OWN_RESERVED_REQUEST")
         reservation = json.loads(reserved["data_json"])
         response = dict(response)
+        for field, prefix in (('http_document_html', 'document'), ('rendered_dom_html', 'rendered')):
+            captured_text = response.pop(field, None)
+            if isinstance(captured_text, str):
+                representation = self.save_html(captured_text)
+                response[prefix + '_html_path'] = representation['html_path']
+                response[prefix + '_sha256'] = representation['sha256']
         text = response.pop("text", response.pop("body", ""))
         if isinstance(response.get("response"), dict):
             nested = dict(response["response"])
