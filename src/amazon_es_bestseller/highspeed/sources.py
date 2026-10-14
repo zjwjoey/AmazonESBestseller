@@ -70,3 +70,50 @@ def source_coverage(sources):
 
 
 coverage_matrix = source_coverage
+
+
+def detailed_coverage_matrix(sources, pages=(), observations=()):
+    """75-cell scoped evidence report, preserving historical versus current.
+
+    Inputs are parsed/audited records from one batch. This never sends requests,
+    marks a source currently AVAILABLE, or treats failure as verified EMPTY.
+    Target candidate identities must be supplied as target_group_id by the
+    current normalizer; raw URL count is intentionally not an identity fallback.
+    """
+    sources=list(sources); pages=list(pages); observations=list(observations)
+    matrix=[]
+    for kind in SOURCE_ROOTS:
+        for category in RESEARCH_CATEGORIES:
+            scoped=[s for s in sources if s.get('source_type')==kind and s.get('research_category')==category]
+            ids={s['source_id'] for s in scoped}
+            ps=[p for p in pages if p.get('source_id') in ids]
+            os=[o for o in observations if o.get('source_id') in ids]
+            verified=[p for p in ps if p.get('access_status')=='NORMAL'
+                      and p.get('source_type_verified') is True and p.get('source_context_valid') is True
+                      and p.get('evidence_path') and p.get('evidence_sha256')]
+            # An explicit source_empty parser decision is separate from failures.
+            empty=[p for p in verified if p.get('source_empty') is True
+                   and p.get('source_empty_evidence')]
+            with_cards=[p for p in verified if int(p.get('valid_link_count') or 0)>0]
+            completed=[p for p in verified if p.get('status')=='COMPLETE'
+                       and p.get('page_complete') is True and p.get('complete_evidence')
+                       and not p.get('flags')]
+            if with_cards:
+                status='HISTORICALLY_OBSERVED'; reason=None
+            elif empty and len(empty)==len(ps):
+                status='HISTORICALLY_VERIFIED_EMPTY'; reason='EXPLICIT_SOURCE_EMPTY_EVIDENCE'
+            else:
+                status='UNVERIFIED'
+                reason='NO_DISCOVERED_MAPPED_SOURCE' if not scoped else 'NOT_ATTEMPTED' if not ps else 'NO_VERIFIED_PRODUCT_CARDS'
+            matrix.append({'source_type':kind,'research_category':category,
+                'discovered_source_count':len(scoped),'verified_source_count':len({p['source_id'] for p in verified}),
+                'completed_page_count':len(completed),'extracted_observation_count':len(os),
+                'unique_link_candidate_count':len({o['target_group_id'] for o in os if o.get('target_group_id')
+                    and o.get('link_valid') is True}),
+                'source_status':status,'current_availability_verified':False,
+                'source_evidence':[{'source_id':s['source_id'],'discovery_evidence':s.get('discovery_evidence',[])} for s in scoped]
+                    +[{'page_url':p.get('page_url'),'evidence_path':p.get('evidence_path'),
+                       'evidence_sha256':p.get('evidence_sha256'),'observed_at':p.get('observed_at'),
+                       'origin':p.get('origin'),'status':p.get('status')} for p in ps],
+                'missing_reason':reason,'identity_count_missing':sum(1 for o in os if o.get('link_valid') is True and not o.get('target_group_id'))})
+    return matrix
