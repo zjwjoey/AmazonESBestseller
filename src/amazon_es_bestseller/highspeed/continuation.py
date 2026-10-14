@@ -70,6 +70,8 @@ def _verify_original_titles(raw_rows):
             if not title and image:title=image.get("alt") or None
         elif row.get("parser_version")==adapters.ADAPTER_VERSION:
             title,_=adapters._title_from_card(card)
+        elif row.get("parser_version")==adapters.V3_ADAPTER_VERSION:
+            title,_=adapters._title_from_card_v3(card,row.get("raw_product_url"))
         else:
             raise ValueError("CONTINUATION_ORIGINAL_TITLE_PARSER_VERSION_UNSUPPORTED")
         if title!=row.get("product_title_raw"):

@@ -103,6 +103,45 @@ def summarize_metrics(events, *, raw_count, valid_link_count, unique_count,
             "ten_hour_target_passed": bool(finish and unique_count >= target and wall <= 36000)}
 
 
+def summarize_v3_metrics(events, *, observations, started_at, finished_at=None,
+                         target=30000, origin="LIVE_CAPTURE", qa_passed=False):
+    """Separate immutable historical reuse from fresh evidence and full wall.
+
+    Stage sums can overlap (navigation includes browser waits). Missing timing
+    instrumentation stays unknown rather than becoming a fabricated zero.
+    """
+    rows = list(observations)
+    valid = [r for r in rows if r.get("candidate_id") and r.get("source_evidence_eligible") is not False]
+    fresh = [r for r in valid if r.get("origin") == "LIVE_CAPTURE" and r.get("is_derivation") is not True]
+    inherited = [r for r in valid if r.get("origin") == "HISTORICAL_REPLAY" or r.get("is_derivation") is True]
+    def urls(items):
+        return {r["normalized_product_url"] for r in items if r.get("normalized_product_url")}
+    fresh_urls, inherited_urls = urls(fresh), urls(inherited)
+    fresh_new = fresh_urls - inherited_urls
+    result = summarize_metrics(events, raw_count=len(rows), valid_link_count=len(valid),
+        unique_count=len(urls(valid)), started_at=started_at, finished_at=finished_at, target=target)
+    wall = result["total_wall_seconds"]
+    timing_names = {"actual_network_seconds":("navigation","acp"),
+        "browser_wait_seconds":("browser_wait",), "acp_continuation_seconds":("acp","acp_prepare"),
+        "parse_seconds":("parse",), "dedup_seconds":("dedup",),
+        "html_and_data_write_seconds":("html_save","persistence"), "qa_seconds":("qa",),
+        "request_failure_seconds":("request_failure",), "pacing_seconds":("pacing",)}
+    timing = {}
+    for name, stages in timing_names.items():
+        measured = [result["stages"][s]["total_seconds"] for s in stages if s in result["stages"]]
+        timing[name] = sum(measured) if measured else None
+    rate = len(fresh_new)*3600/wall if wall and wall>0 and origin=="LIVE_CAPTURE" else None
+    result.update(origin=origin, fresh_valid_observations=len(fresh), inherited_valid_observations=len(inherited),
+        inherited_unique_links=len(inherited_urls), fresh_unique_links=len(fresh_urls), fresh_new_unique_links=len(fresh_new),
+        fresh_unique_per_hour=rate, unique_per_hour=rate, unique_per_minute=rate/60 if rate is not None else None,
+        timing_breakdown=timing, timing_sums_are_non_additive=True,
+        network_timing_includes_browser_waits=True, qa_passed=qa_passed,
+        ten_hour_target_passed=bool(origin=="LIVE_CAPTURE" and finished_at and qa_passed
+            and not inherited_urls and len(fresh_new)>=target and wall is not None and wall<=36000),
+        performance_scope="FRESH_BATCH_START_THROUGH_FINAL_BASIC_QA_EXCLUDING_INHERITED_FROM_YIELD")
+    return result
+
+
 def estimate_capacity(sample, *, target=30000, max_hours=10):
     """Extrapolation does not verify unseen source supply or independent SKU identity."""
     raw = sample.get("raw_observations", 0)

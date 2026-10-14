@@ -18,11 +18,14 @@ from ..multisource.contracts import timestamp, canonical_page_url
 from ..multisource.storage import (atomic_json, canonical_bytes, digest, file_lock,
     immutable_bytes, immutable_json, read_sealed, sealed)
 from .links import normalize_product_url, candidate_id, NORMALIZER_VERSION
+from .v3_links import normalize_product_url_v3, NORMALIZER_VERSION as V3_NORMALIZER_VERSION
 
 
 @lru_cache(maxsize=100000)
 def _current_review_key(normalized_url, normalizer_version):
     """Cache pure derived review keys, never identity/auth/raw modifications."""
+    if normalizer_version == V3_NORMALIZER_VERSION:
+        return normalize_product_url_v3(normalized_url).get("normalized_product_url") or normalized_url
     return normalize_product_url(normalized_url).get("possible_duplicate_key") or normalized_url
 
 
@@ -37,6 +40,18 @@ def _json(value):
 
 
 class RunStore:
+    def normalizer_version(self, run_id):
+        # Plans are immutable. Cache only their resolver selection, avoiding a
+        # multi-megabyte plan decode for every candidate in read projections.
+        cache = self.__dict__.setdefault("_normalizer_versions", {})
+        if run_id not in cache:
+            row = self.db.execute("SELECT plan_json FROM runs WHERE run_id=?", (run_id,)).fetchone()
+            if row is None:
+                raise ValueError("HIGH_SPEED_RUN_NOT_FOUND")
+            plan = json.loads(row[0])
+            cache[run_id] = V3_NORMALIZER_VERSION if plan.get("snapshot_contract_version") == 3 else NORMALIZER_VERSION
+        return cache[run_id]
+
     def __init__(self, root):
         from .path_checks import validate_store_root
         self.root = validate_store_root(root)
@@ -391,7 +406,8 @@ class RunStore:
                 if plan.get("history_observation_limit") is not None and history_count + inserted > plan["history_observation_limit"]:
                     raise ValueError("HISTORY_OBSERVATION_STORAGE_BUDGET_EXHAUSTED")
                 url = raw.get("raw_product_url", raw.get("product_url_raw"))
-                normalized = normalize_product_url(url, base_url=page.get("page_url") or "https://www.amazon.es")
+                resolver = normalize_product_url_v3 if plan.get("snapshot_contract_version") == 3 else normalize_product_url
+                normalized = resolver(url, base_url=page.get("page_url") or "https://www.amazon.es")
                 valid = normalized.get("is_valid", bool(normalized.get("normalized_product_url")))
                 cid, status = None, "INVALID_PRODUCT_LINK"
                 if valid:
@@ -428,6 +444,10 @@ class RunStore:
                     "evidence_path": raw.get("evidence_path", page.get("evidence_path")),
                     "raw_sha256": raw_hash, "parent_observation_id": parent_oid}
                 row_data["source_evidence_eligible"] = source_eligible
+                if plan.get("snapshot_contract_version") == 3:
+                    for field in ("normalizer_version", "normalization_version", "normalization_evidence",
+                                  "unknown_query_parameters", "preserved_identity_parameters", "unreviewed_path_suffix"):
+                        row_data[field] = normalized.get(field)
                 row_data["source_binding_status"] = "VERIFIED_LIST_SOURCE" if source_eligible else "UNCONFIRMED_LIST_SOURCE"
                 self.db.execute("INSERT INTO observations VALUES(?,?,?,?,?,?,?)",
                     (oid, run_id, page_key, cid, str(url or ""), status, _json(row_data)))
@@ -537,23 +557,24 @@ class RunStore:
 
     def _base_candidates(self, run_id):
         groups = {}
+        version = self.normalizer_version(run_id)
         for row in self.db.execute("SELECT c.candidate_id,c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,)):
-            key = _current_review_key(row["url"], NORMALIZER_VERSION)
+            key = _current_review_key(row["url"], version)
             representative, members = groups.get(key, (row["candidate_id"], 0))
             groups[key] = (min(representative, row["candidate_id"]), members + 1)
         for row in self.db.execute("SELECT c.*,r.*,o.data_json FROM candidates c JOIN run_candidates r USING(candidate_id) "
                 "JOIN observations o ON o.observation_id=r.first_observation_id WHERE r.run_id=? ORDER BY r.rowid", (run_id,)):
             first = json.loads(row["data_json"])
-            current_key = _current_review_key(row["url"], NORMALIZER_VERSION)
+            current_key = _current_review_key(row["url"], version)
             representative, members = groups[current_key]
             yield {**first, "candidate_id": row["candidate_id"], "normalized_product_url": row["url"],
                 "first_seen": row["first_seen"], "first_observed_at": row["first_seen"], "last_seen": row["last_seen"],
                 "observation_count": row["observation_count"], "possible_duplicate_key": current_key,
                 "original_possible_duplicate_key": row["possible_key"],
                 "original_normalizer_version": first.get("normalizer_version"),
-                "current_normalizer_version": NORMALIZER_VERSION,
-                "possible_duplicate_key_version": NORMALIZER_VERSION,
-                "dedup_status": "POSSIBLE_DUPLICATE" if members > 1 else "UNIQUE_LINK_CANDIDATE",
+                "current_normalizer_version": version,
+                "possible_duplicate_key_version": version,
+                "dedup_status": "POSSIBLE_DUPLICATE" if members > 1 or (version == V3_NORMALIZER_VERSION and normalize_product_url_v3(row["url"]).get("dedup_status") == "POSSIBLE_DUPLICATE") else "UNIQUE_LINK_CANDIDATE",
                 "target_group_key": current_key,
                 "target_eligible": row["candidate_id"] == representative,
                 "url_identity_status": "IDENTITY_UNCONFIRMED", "strict_buyable_confirmed": False,
@@ -610,7 +631,8 @@ class RunStore:
         # conservative lower bound, not an automatic product merge.
         if self.db.execute("SELECT 1 FROM destination_reviews WHERE run_id=? LIMIT 1",(run_id,)).fetchone():
             return sum(c["target_eligible"] for c in self.iter_candidates(run_id))
-        return len({_current_review_key(row[0], NORMALIZER_VERSION)
+        version = self.normalizer_version(run_id)
+        return len({_current_review_key(row[0], version)
             for row in self.db.execute("SELECT c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,))})
 
     def normalized_candidate_count(self, run_id):
@@ -626,6 +648,8 @@ class RunStore:
         unique = self.candidate_count(run_id)
         possible_groups = {}
         for row in self.db.execute("SELECT c.url FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?", (run_id,)):
+            # Coarse routes describe possible duplicates only. V3 target
+            # counting above uses exact canonical identity bytes instead.
             key = _current_review_key(row[0], NORMALIZER_VERSION)
             possible_groups[key] = possible_groups.get(key, 0) + 1
         possible = sum(members for members in possible_groups.values() if members > 1)

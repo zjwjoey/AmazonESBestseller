@@ -24,6 +24,22 @@ def madrid_day(value=None):
 def validate_plan(plan):
     if plan.get("mode") != "HIGH_SPEED_V2" or plan.get("stage") not in {"T0", "T1", "T2", "T3"}:
         raise ValueError("HIGH_SPEED_STAGE_REQUIRED")
+    contract_version = plan.get("snapshot_contract_version", 2)
+    if type(contract_version) is not int or contract_version not in {2, 3}:
+        raise ValueError("UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION")
+    if contract_version == 3:
+        from .v3_links import NORMALIZER_VERSION
+        if plan.get("normalizer_version") != NORMALIZER_VERSION:
+            raise ValueError("V3_REVIEWED_NORMALIZER_REQUIRED")
+        if plan.get("request_pacing_seconds", 0) < 3:
+            raise ValueError("V3_SERIAL_THREE_SECOND_PACING_REQUIRED")
+        if any(s.get("parser_profile") != "V3" for s in plan.get("sources", [])):
+            raise ValueError("V3_PARSER_PROFILE_REQUIRED")
+        if plan.get("stage") == "T3" and plan.get("origin") == "LIVE_CAPTURE":
+            if (plan.get("new_batch_required") is not True or plan.get("parent_run_id")
+                    or plan.get("continuation_mode") or plan.get("seed_reference")
+                    or any(s.get("offline_pages") or s.get("seed_reference") for s in plan.get("sources", []))):
+                raise ValueError("V3_T3_FRESH_BATCH_REQUIRED")
     for field in (*LIMIT_FIELDS, "target_unique_links"):
         if isinstance(plan.get(field), bool) or not isinstance(plan.get(field), int) or plan[field] <= 0:
             raise ValueError("FINITE_POSITIVE_BUDGET_REQUIRED:" + field)
