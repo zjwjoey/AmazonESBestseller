@@ -247,6 +247,7 @@ class PlaywrightTransport:
         """Owner identity comes from exact saved DOM, not a guessed endpoint."""
         from bs4 import BeautifulSoup
         from ..highspeed.adapters import _cards, _scope
+        from ..highspeed.sources import normalize_source_url
         metadata = descriptor.get("metadata") or {}
         try:
             body = Path(descriptor["evidence_path"]).read_bytes()
@@ -270,11 +271,37 @@ class PlaywrightTransport:
             if not binding["source_id"]:
                 raise ValueError()
             return {"referer":referer, "owner_id":wrapper["id"], "owner_path":path,
+                "owner_card_metrics_id":wrapper["data-card-metrics-id"],
+                "owner_category_href":next((a['href'] for a in wrapper.select('a[href]')
+                    if normalize_source_url(a['href'],base_url=referer)==metadata['ranking_context_url']),None),
                 "owner_params":params, "carousel_options_raw":metadata["carousel_options_raw"],
                 "carousel_options_sha256":hashlib.sha256(metadata["carousel_options_raw"].encode()).hexdigest(),
                 "ranking_context_binding":binding}
         except (KeyError, ValueError, TypeError, OSError, StopIteration) as exc:
             raise ValueError("ACP_CAROUSEL_OWNER_EVIDENCE_UNVERIFIED") from exc
+
+    @staticmethod
+    def _live_carousel_owner_verified(current_html, owner):
+        """Initialized DOM identity; it never supplies endpoint, headers or POST."""
+        from bs4 import BeautifulSoup
+        from ..highspeed.adapters import _scope
+        if not isinstance(current_html,str):return False
+        soup=BeautifulSoup(current_html,'lxml')
+        wrappers=soup.find_all(id=owner['owner_id'])
+        if len(wrappers)!=1:return False
+        wrapper=wrappers[0]
+        if wrapper.get('data-card-metrics-id')!=owner['owner_card_metrics_id']:return False
+        nodes=[n for n in wrapper.select('[data-a-carousel-options]')
+            if n.get('data-a-carousel-options')==owner['carousel_options_raw']]
+        if len(nodes)!=1:return False
+        node=nodes[0];classes=set(node.get('class',[]))
+        if not {'a-carousel-initialized','p13n-carousel-initialized'}<=classes:return False
+        path,params=wrapper.get('data-acp-path'),wrapper.get('data-acp-params')
+        retained=path==owner['owner_path'] and params==owner['owner_params']
+        consumed=path is None and params is None and wrapper.get('data-mix-claimed')=='true'
+        if not retained and not consumed:return False
+        badge=node.select_one('.zg-bdg-text, span.a-badge-text')
+        return bool(badge and _scope(badge,owner['referer'])==owner['ranking_context_binding']['ranking_context_url'])
 
     def _prepare_carousel_descriptor(self, descriptor, *, referer):
         owner = self._saved_carousel_owner(descriptor, referer)
@@ -298,13 +325,33 @@ class PlaywrightTransport:
                     return dict(descriptor, **captured)
                 if attempt == 6:
                     break
+                # Normal visibility is necessary for below-fold AUI carousel
+                # initialization. Only serialize this exact owner, never invoke
+                # site factories or fabricate a native request.
+                current_html=page.evaluate("""(owner => {
+                    const wrapper=document.getElementById(owner.owner_id);
+                    if (!wrapper) return null;
+                    wrapper.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+                    return wrapper.outerHTML;
+                })""",owner)
+                if not self._live_carousel_owner_verified(current_html,owner):
+                    wait_started=time.perf_counter();page.wait_for_timeout(500)
+                    self.last_prepare_browser_wait_seconds+=time.perf_counter()-wait_started
+                    continue
                 result = page.evaluate("""(owner => {
                     const wrapper = document.getElementById(owner.owner_id);
-                    if (!wrapper || wrapper.getAttribute('data-acp-path') !== owner.owner_path
-                        || wrapper.getAttribute('data-acp-params') !== owner.owner_params) return false;
+                    if (!wrapper || wrapper.getAttribute('data-card-metrics-id') !== owner.owner_card_metrics_id) return false;
                     const carousel = Array.from(wrapper.querySelectorAll('[data-a-carousel-options]'))
                         .filter(n => n.getAttribute('data-a-carousel-options') === owner.carousel_options_raw);
                     if (carousel.length !== 1) return false;
+                    if (!carousel[0].classList.contains('a-carousel-initialized')
+                        || !carousel[0].classList.contains('p13n-carousel-initialized')) return false;
+                    const path=wrapper.getAttribute('data-acp-path'), params=wrapper.getAttribute('data-acp-params');
+                    const retained=path===owner.owner_path && params===owner.owner_params;
+                    const consumed=path===null && params===null && wrapper.getAttribute('data-mix-claimed')==='true';
+                    if (!retained && !consumed) return false;
+                    if (owner.owner_category_href && !Array.from(wrapper.querySelectorAll('a[href]'))
+                        .some(a=>a.getAttribute('href')===owner.owner_category_href)) return false;
                     const next = carousel[0].querySelector('.a-carousel-goto-nextpage:not(.a-button-disabled) a, a.a-carousel-goto-nextpage, button.a-carousel-goto-nextpage');
                     if (!next || next.getAttribute('aria-disabled') === 'true') return false;
                     next.click(); return true;

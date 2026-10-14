@@ -35,7 +35,7 @@ def test_saved_carousel_wrong_parent_or_group_never_prepares(field,value):
 
 def test_real_saved_owner_without_native_post_is_not_contract():
     descriptor,url=saved_descriptor()
-    page=SimpleNamespace(url=url,evaluate=lambda *args:False,route=lambda *args:None)
+    page=SimpleNamespace(url=url,evaluate=lambda *args:False,route=lambda *args:None,wait_for_timeout=lambda ms:None)
     transport=PlaywrightTransport(SimpleNamespace(page=page));transport.install_bounded_acp_capture()
     with pytest.raises(ValueError,match="CONTRACT_NOT_OBSERVED"):
         transport.prepare_ajax_descriptor(descriptor,referer=url)
@@ -51,6 +51,13 @@ def test_native_carousel_actor_only_uses_aborted_actual_request_byte_exact(tmp_p
         def route(self,pattern,callback):self.capture=callback
         def evaluate(self,script,argument):
             assert argument["owner_id"]==owner["owner_id"]
+            if 'wrapper.outerHTML' in script:
+                from bs4 import BeautifulSoup
+                soup=BeautifulSoup(Path(descriptor['evidence_path']).read_bytes(),'lxml')
+                wrapper=soup.find(id=owner['owner_id'])
+                node=wrapper.select_one('[data-a-carousel-options]')
+                node['class']=list(node.get('class',[]))+['a-carousel-initialized','p13n-carousel-initialized']
+                return str(wrapper)
             request=SimpleNamespace(url="https://www.amazon.es"+owner["owner_path"].rstrip("/")+"/mock-observed-only",method="POST",post_data='{"opaque":"site-byte-exact"}',resource_type="fetch",headers={"content-type":"application/json","x-amz-acp-params":owner["owner_params"]})
             self.capture(SimpleNamespace(request=request,abort=lambda:setattr(self,"aborted",self.aborted+1),continue_=lambda **kw:setattr(self,"continued",self.continued+1)))
             return True

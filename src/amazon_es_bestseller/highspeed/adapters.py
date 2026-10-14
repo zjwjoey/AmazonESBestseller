@@ -378,7 +378,16 @@ def parse_page(html, *, source, run_id, snapshot_id=None, page_url, page_number,
         # Metadata entries are opaque request evidence, never product candidates.
         distinct = {(r["rank_context"], r["ranking_position"]) for r in rows if r["ranking_position"] is not None}
         actual = len(distinct) if rows and all(r["ranking_position"] is not None for r in rows) else len(rows)
-        if (root is not None or entries) and (expected is None or actual < expected):
+        # A generic card wrapper may advertise ACP even when its actual ranking
+        # grid explicitly declares no products. Only the strict, source-specific
+        # official empty component can suppress that ancestor's false pending
+        # request; missing metadata or ordinary parser failures remain pending.
+        official_empty_v3 = (source.get("parser_profile") == "V3" and not rows and not acp_responses
+            and expected is None and len(soup.select("#zg-right-col .p13n-desktop-grid")) == 1
+            and _content_state_v3(soup, page, rows, [])[0] == "SOURCE_EMPTY")
+        if official_empty_v3:
+            page["empty_component_pending_policy_version"] = "official_empty_ancestor_pending_guard_v1"
+        if not official_empty_v3 and (root is not None or entries) and (expected is None or actual < expected):
             # Modern second pages may expose the full opaque client-rec list
             # without data-acp-path. Missing endpoint is a native-discovery
             # requirement, never proof that the incomplete prefix is final.

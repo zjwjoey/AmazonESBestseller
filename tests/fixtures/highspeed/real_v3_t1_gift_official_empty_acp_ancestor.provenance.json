@@ -1,0 +1,13 @@
+{
+  "origin": "ACTUAL_LIVE_T1_SAVED_HTML",
+  "actual_run_id": "v3_t1_9ade8e5793a8",
+  "source_url": "https://www.amazon.es/gp/most-gifted/grocery/6347360031",
+  "source_type": "MOST_GIFTED",
+  "captured_at": "2026-10-14T11:10:22.587182Z",
+  "original_html_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\html\\d4\\d45c6a4c640cda6c16db9a586f9ae123f0a4ff148e7e47d37d3b686752c3f2d0.html",
+    "sha256": "d45c6a4c640cda6c16db9a586f9ae123f0a4ff148e7e47d37d3b686752c3f2d0"
+  },
+  "fixture_sha256": "d45c6a4c640cda6c16db9a586f9ae123f0a4ff148e7e47d37d3b686752c3f2d0",
+  "diagnosis": "Official empty grid client recs=[] and endOfList; unrelated ancestor ACP path must not synthesize a pending continuation."
+}
