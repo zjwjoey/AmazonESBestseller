@@ -140,6 +140,19 @@ def _fields(card):
     return result
 
 
+def _foreign_target(card, raw):
+    """Opaque route token is a rejection guard only, never a dedup key."""
+    route = re.compile(r'/(?:dp|gp/product|product-reviews)/([^/?#]+)', re.I)
+    target = route.search(raw or '')
+    if not target:
+        return True
+    for a in card.select('a[href]'):
+        other = route.search(a['href'])
+        if other and other.group(1) != target.group(1):
+            return True
+    return False
+
+
 def _navigation(soup, source, page_url, sha):
     found, seen = [], set()
     selectors = ('a.s-pagination-next[href], .a-pagination a[href], a.s-pagination-item[href], '
@@ -223,6 +236,12 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                      'card_selector': SELECTORS[subtype], 'slot': slot,
                      'evidence_path': evidence_path, 'evidence_sha256': sha, 'title': title_proof}
             fields = _fields(card)
+            if _foreign_target(card, raw):
+                for field, value_key in [('rating', 'rating_value'), ('rating_count', 'rating_count'),
+                                         ('monthly_bought', 'monthly_bought_min'), ('price', 'current_price')]:
+                    fields[field + '_status'] = 'UNVERIFIED'
+                    fields[value_key] = None
+                fields['binding_doubts'] = ['MULTIPLE_FOREIGN_PRODUCT_TARGETS_IN_CARD']
             rows.append({**link, **fields, 'product_title_es': title, 'product_title_raw': title,
                          'product_title_status': status, 'product_title_evidence': {**(title_proof or {}), 'raw_product_url': raw},
                          'ranking_position': None, 'ranking_semantics': subtype,
