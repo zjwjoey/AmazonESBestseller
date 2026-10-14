@@ -210,6 +210,29 @@ def test_mapping_twice_cannot_wash_out_original_human_conflict():
     assert second==first
 
 
+def test_prior_plan_fixture_preserves_original_bytes_and_rejects_newline_rewrite(tmp_path):
+    import hashlib
+    from amazon_es_bestseller.highspeed.category_mapping import load_mapping_rules
+    fixture_path=Path('tests/fixtures/highspeed/v3_prior_category_plan.json')
+    provenance=json.loads(fixture_path.with_suffix('.provenance.json').read_text(encoding='utf8'))
+    body=fixture_path.read_bytes()
+    assert provenance['immutable_copy'] is True
+    assert hashlib.sha256(body).hexdigest()==provenance['original_sha256']
+    assert b'\r\n' in body
+    baseline=json.loads(Path('tests/fixtures/highspeed/v3_812_source_baseline.json').read_text(encoding='utf8'))
+    source=next(row['source'] for row in baseline['sources'] if row['source']['actual_source_url'].endswith('/1641736031'))
+    source=json.loads(json.dumps(source))
+    rules=load_mapping_rules('configs/highspeed/v3/category_mapping.reviewed.json')
+    assert map_category(source,rules)['category_mapping_status']=='SOURCE_CONFLICT'
+    rewritten=tmp_path/'plan_lf.json'
+    rewritten.write_bytes(body.replace(b'\r\n',b'\n'))
+    for proof in source['mapping_evidence']:
+        proof['plan_path']=str(rewritten)
+    # Semantically equal JSON is insufficient: exact prior evidence bytes are
+    # required and a silently converted checkout must not validate that proof.
+    assert map_category(source,rules)['category_mapping_status']=='VERIFIED'
+
+
 
 def test_unproved_original_prior_cannot_create_conflict_after_projection():
     source={'actual_source_url':'https://www.amazon.es/gp/bestsellers/toys/unknown','research_category':None,'original_research_category':'旅行','mapping_evidence':[{'reviewed':True}]}

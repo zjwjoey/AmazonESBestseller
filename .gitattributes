@@ -7,3 +7,6 @@
 /tests/fixtures/highspeed/v3_real_department_navigation.html -text
 /tests/fixtures/highspeed/v3_real_wish_department_navigation.html -text
 /tests/fixtures/highspeed/v3_category_node_evidence/*.html -text
+# Prior reviewed planning is also immutable SHA-bound evidence. Its original
+# CRLF bytes must survive Linux checkout so conflicts stay verifiable.
+/tests/fixtures/highspeed/v3_prior_category_plan.json -text
