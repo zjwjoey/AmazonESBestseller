@@ -45,7 +45,11 @@ def _fold(value):
 def _cards(soup, fragment=False):
     """Choose outer card nodes in DOM order, independent of identity attributes."""
     contexts = soup.select(_CONTEXT_SELECTOR)
-    nodes = soup.select(_CARD_SELECTOR)
+    # Actual native carousel ACP returns outer <li> fragments, without the
+    # server grid/p13n index markers. Preserve that exact card boundary so its
+    # rank, href, literal title and rating stay in the same representation slot.
+    selector = _CARD_SELECTOR + (", ol.a-carousel-content-fragment > li.a-carousel-card-fragment[aria-roledescription='slide']" if fragment else "")
+    nodes = soup.select(selector)
     accepted = []
     accepted_ids = set()
     context_ids = {id(n) for n in contexts}
