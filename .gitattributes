@@ -1,3 +1,8 @@
 # Saved HTML is evidence; preserve source whitespace instead of treating it as
 # a code-format defect in diff checks.
 /tests/fixtures/amazon_es/*.html whitespace=-trailing-space
+# V3 fixtures have byte-level SHA provenance. Never apply checkout newline
+# conversion to these newly introduced evidence files.
+/tests/fixtures/highspeed/real_v3_*.html -text
+/tests/fixtures/highspeed/v3_real_department_navigation.html -text
+/tests/fixtures/highspeed/v3_category_node_evidence/*.html -text
