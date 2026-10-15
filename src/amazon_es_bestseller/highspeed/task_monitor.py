@@ -109,7 +109,8 @@ def main(argv=None):
     plan=json.loads(Path(args.plan).read_text('utf8'));clock=read_sealed(args.clock)
     out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
     # Exactly one monitor for this run even after app/session restart.
-    with file_lock(out/(plan['run_id']+'.monitor.lock')):
+    if Path(args.clock).resolve()!=Path(plan['task_clock_path']).resolve():raise ValueError('MONITOR_EXACT_CLOCK_PATH_REQUIRED')
+    with file_lock(Path(args.clock).resolve().parent/(plan['run_id']+'.monitor.lock')):
         previous=out/'latest.json';start=json.loads(previous.read_text('utf8'))['observed_at'] if previous.exists() else clock['started_at']
         while True:
             value=snapshot(args.root,plan,clock,window_start=start)

@@ -33,3 +33,26 @@ def test_monitor_reads_real_saved_fixture_progress_without_network_and_excludes_
         assert result['task_elapsed_wall_seconds']==3600
         assert result['alerts'] and result['sources']['CUSTOMER_FAVORITES']['E_qualified_review_groups']>0
     finally:store.close()
+
+
+def test_one_run_monitor_lock_cannot_be_bypassed_by_another_output_directory(tmp_path,monkeypatch):
+    import threading,pytest
+    from amazon_es_bestseller.highspeed import task_monitor as monitor
+    from amazon_es_bestseller.highspeed.task_clock import start_task_clock
+    path=tmp_path/'clock.json';plan={'run_id':'TEST_ONLY','task_clock_path':str(path.resolve())}
+    start_task_clock(path,plan,'TEST_ONLY',now=NOW)
+    pp=tmp_path/'plan.json';pp.write_text(json.dumps(plan),'utf8')
+    entered=threading.Event();release=threading.Event();errors=[]
+    def fake(*a,**k):
+        entered.set();assert release.wait(5)
+        return {'observed_at':NOW.isoformat(),'remaining_wall_seconds':0}
+    monkeypatch.setattr(monitor,'snapshot',fake)
+    args=['--root',str(tmp_path),'--plan',str(pp),'--clock',str(path),'--out',str(tmp_path/'one'),'--once']
+    def first():
+        try:monitor.main(args)
+        except BaseException as e:errors.append(e)
+    t=threading.Thread(target=first);t.start();assert entered.wait(5)
+    try:
+        with pytest.raises(OSError):monitor.main([*args[:-3],'--out',str(tmp_path/'two'),'--once'])
+    finally:release.set();t.join(5)
+    assert not errors and not t.is_alive()
