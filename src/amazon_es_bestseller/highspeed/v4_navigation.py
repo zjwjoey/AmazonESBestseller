@@ -10,6 +10,19 @@ from bs4 import BeautifulSoup
 from .v4_sources import amazon_url, RANKED
 
 
+def exact_query_token_reordering(left,right):
+    """Only reorder unique, byte-identical query tokens; never drop parameters."""
+    a,b=urlsplit(left),urlsplit(right)
+    if (not amazon_url(left) or not amazon_url(right) or
+            (a.scheme,a.netloc,a.path,a.fragment)!=(b.scheme,b.netloc,b.path,b.fragment)):
+        return False
+    x=a.query.split('&');y=b.query.split('&')
+    if any(not token or '=' not in token for token in [*x,*y]):return left==right
+    if len({t.split('=',1)[0] for t in x})!=len(x) or len({t.split('=',1)[0] for t in y})!=len(y):
+        return False
+    return sorted(x)==sorted(y)
+
+
 def verify_pagination_reference(reference, source):
     """One literal Next href in the same favorites result context."""
     path=Path(reference['evidence_path'])

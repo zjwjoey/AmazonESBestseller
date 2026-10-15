@@ -117,7 +117,8 @@ def authorize_v4_request(url, source, authorization, *, kind='PAGE', descriptor=
         raise ValueError('V4_APPROVED_AMAZON_REQUEST_REQUIRED')
     scope = authorization.get('sources', {}).get(source['source_id'], {})
     if kind == 'PAGE':
-        if url not in scope.get('page_urls', []):
+        from .v4_navigation import exact_query_token_reordering
+        if not any(url==approved or exact_query_token_reordering(url,approved) for approved in scope.get('page_urls', [])):
             raise ValueError('UNREVIEWED_SOURCE_URL')
         return
     if kind=='ACP' and source['source_type'] in {'DEALS','AMAZON_HAUL'}:

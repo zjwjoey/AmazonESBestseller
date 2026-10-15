@@ -19,13 +19,32 @@ def dynamic_endpoint(url,kind):
         and path.endswith('/getLazyLoadedAsins'))
 
 
+def same_loading_view(view,root):
+    if view==root:return True
+    a,b=urlsplit(view),urlsplit(root)
+    if not amazon_url(view) or (a.scheme,a.netloc,a.path)!=(b.scheme,b.netloc,b.path) or a.fragment:return False
+    if b.path!='/deals':return False
+    q=parse_qs(a.query,keep_blank_values=True);base=parse_qs(b.query,keep_blank_values=True)
+    if any(len(v)!=1 for v in q.values()) or any(q.get(k)!=v for k,v in base.items()):return False
+    extra=set(q)-set(base)
+    allowed={'promotionsSearchLastSeenAsin','promotionsSearchStartIndex','promotionsSearchPageSize'}
+    if not extra or not extra.issubset(allowed):return False
+    import re
+    for k in extra:
+        if k.endswith('Asin'):
+            if not re.fullmatch('[A-Z0-9]{10}',q[k][0]):return False
+        elif not q[k][0].isdigit():return False
+    return True
+
+
 def validate_dynamic_descriptor(url, source, scope, authorization, descriptor):
     d=descriptor or {}
     if (scope.get('allow_native_dynamic') is not True or source['source_type'] not in PATHS
             or not amazon_url(url) or not dynamic_endpoint(url,source['source_type'])
             or d.get('url')!=url or d.get('source_id')!=source['source_id']
             or d.get('run_id')!=authorization['run_id']
-            or d.get('parent_page_url')!=source['actual_source_url']
+            or d.get('root_page_url',d.get('parent_page_url'))!=source['actual_source_url']
+            or not same_loading_view(d.get('parent_page_url',''),source['actual_source_url'])
             or d.get('method')!=('GET' if source['source_type']=='DEALS' else 'POST')
             or d.get('request_contract_source')!='NATIVE_BROWSER_REQUEST_HELD'):
         raise ValueError('V4_DYNAMIC_EXACT_NATIVE_SOURCE_REQUIRED')
@@ -34,7 +53,7 @@ def validate_dynamic_descriptor(url, source, scope, authorization, descriptor):
         raise ValueError('V4_DYNAMIC_NATIVE_SHA_MISMATCH')
     native=json.loads(raw)
     for k in ('url','method','payload','headers','parent_page_url','source_id','run_id',
-              'request_contract_source','source_type','parent_html_sha256','parent_html_path'):
+              'request_contract_source','source_type','parent_html_sha256','parent_html_path','root_page_url'):
         if native.get(k)!=d.get(k):
             raise ValueError('V4_DYNAMIC_NATIVE_BYTES_OR_BINDING_MISMATCH')
     if (native.get('request_sent') is not False or native.get('resource_type') not in {'xhr','fetch'}
@@ -76,6 +95,11 @@ class V4LoadingTransport(PlaywrightTransport):
         self.store=store;self.plan=plan;self.dynamic=[];self.dynamic_pending={}
         self._native_dynamic_paths=set(PATHS.values())
         self.loading_events=[]
+        self.current_document_url=None
+
+    def fetch_page(self,url,**kwargs):
+        self.current_document_url=url
+        return super().fetch_page(url,**kwargs)
 
     def install_dynamic_capture(self):
         for kind,path in PATHS.items():
@@ -89,7 +113,8 @@ class V4LoadingTransport(PlaywrightTransport):
                     route.continue_(headers={k:v for k,v in wire.items() if k.lower()!=_CONTROLLED_ACP_NONCE_HEADER})
                     return
                 source=next((s for s in self.plan['sources'] if s['source_type']==kind
-                    and s['actual_source_url']==self.session.page.url),None)
+                    and s['actual_source_url']==self.current_document_url
+                    and same_loading_view(self.session.page.url,s['actual_source_url'])),None)
                 if (not source or not amazon_url(req.url) or req.resource_type not in {'xhr','fetch'}
                         or len(self.dynamic)>=32):
                     route.abort();return
@@ -97,6 +122,7 @@ class V4LoadingTransport(PlaywrightTransport):
                 self.dynamic.append({'route':route,'value':{'url':req.url,'method':req.method.upper(),
                     'payload':req.post_data or '', 'headers':selected,'parent_page_url':self.session.page.url,
                     'source_id':source['source_id'],'source_type':kind,'resource_type':req.resource_type,
+                    'root_page_url':source['actual_source_url'],
                     'request_contract_source':'NATIVE_BROWSER_REQUEST_HELD','request_sent':False}})
             pattern='**'+path+'*' if kind=='DEALS' else '**/acp/**/haul-cx-infinite-scroll-body/**/getLazyLoadedAsins*'
             self.session.page.route(pattern,capture)
@@ -104,7 +130,7 @@ class V4LoadingTransport(PlaywrightTransport):
     def prepare_dynamic(self,source,receipt):
         page=self.session.page
         for attempt in range(4):
-            available=[x for x in self.dynamic if x['value']['parent_page_url']==page.url and not x.get('prepared')]
+            available=[x for x in self.dynamic if x['value']['root_page_url']==source['actual_source_url'] and not x.get('prepared')]
             if available:
                 item=available[0];item['prepared']=True
                 d=item['value'];d.update(parent_html_path=receipt['html_path'],parent_html_sha256=receipt['sha256'])
@@ -143,7 +169,8 @@ class V4LoadingTransport(PlaywrightTransport):
         validate_dynamic_descriptor(key[0],source,{'allow_native_dynamic':True},self.plan,d)
         item=next((x for x in self.dynamic if x.get('prepared') and not x.get('delivered')
             and (x['value']['url'],x['value']['method'],x['value']['payload'])==key),None)
-        if item is None or self.session.page.url!=d['parent_page_url']:return False
+        if (item is None or self.current_document_url!=source['actual_source_url']
+                or not same_loading_view(self.session.page.url,source['actual_source_url'])):return False
         body=Path(proof['html_path']).read_text(encoding='utf8')
         if body!=response.text:return False
         content_type=next((v for k,v in response.headers.items() if k.lower()=='content-type'),'application/json')
