@@ -75,10 +75,12 @@ def loading_coverage(pages,sources):
                     evidence.append({'capability':'favorites_pagination','source_id':sid,'page_url':page['page_url'],
                         'new_links':len(links-root[1]),'evidence_sha256':page['evidence_sha256']})
     current=[c for c in components if c['is_current_capture']]
+    ranked_sources={s['source_id'] for s in sources if s['source_type'] in {'BEST_SELLERS','NEW_RELEASES'}}
     return {'capabilities':capabilities,'all_loading_capabilities_observed':all(capabilities.values()),
         'finite_component_coverage':components,'evidence':evidence,
         'current_finite_components':len(current),
-        'current_finite_components_complete':bool(current) and all(c['status']=='COMPLETE_WITHIN_OBSERVED_METADATA' for c in current),
+        'current_finite_components_complete':bool(current) and {c['source_id'] for c in current}==ranked_sources
+            and all(c['expected_metadata_slots']>0 and c['status']=='COMPLETE_WITHIN_OBSERVED_METADATA' for c in current),
         'current_missing_metadata_slots':sum(len(c['missing_ranks']) for c in current),
         'global_source_completeness':'UNKNOWN','capacity_verified':False}
 
