@@ -56,3 +56,16 @@ def test_one_run_monitor_lock_cannot_be_bypassed_by_another_output_directory(tmp
         with pytest.raises(OSError):monitor.main([*args[:-3],'--out',str(tmp_path/'two'),'--once'])
     finally:release.set();t.join(5)
     assert not errors and not t.is_alive()
+
+
+def test_restart_requires_new_ten_minute_capture_observation_without_resetting_task_clock():
+    from amazon_es_bestseller.highspeed.task_monitor import observation_times
+    clock={'started_at':NOW.isoformat()}
+    events=[{'kind':'STOP','observed_at':(NOW+timedelta(minutes=20)).isoformat()}]
+    requests=[{'observed_at':(NOW+timedelta(minutes=1)).isoformat()},
+              {'observed_at':(NOW+timedelta(minutes=25)).isoformat()}]
+    epoch,times=observation_times(clock,events,requests)
+    assert epoch==NOW+timedelta(minutes=20) and times==[NOW+timedelta(minutes=25)]
+    assert (NOW+timedelta(minutes=26)-min(times)).total_seconds()==60
+    assert clock['started_at']==NOW.isoformat()
+    assert observation_times(clock,events,requests[:1])[1]==[]

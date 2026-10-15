@@ -28,6 +28,33 @@ def process_evidence(plan):
             'actual':actual}
 
 
+def observation_times(clock,events,requests):
+    stops=[aware_time(e['observed_at']) for e in events if e.get('kind')=='STOP' and e.get('observed_at')]
+    epoch=max(stops) if stops else aware_time(clock['started_at'])
+    times=[aware_time(q['observed_at']) for q in requests if aware_time(q['observed_at'])>epoch or not stops]
+    return epoch,times
+
+
+def _run_token(root,run_id):
+    path=Path(root)/'index.sqlite3'
+    if not path.is_file():return None
+    db=sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True,timeout=2)
+    try:
+        row=db.execute('SELECT status FROM runs WHERE run_id=?',(run_id,)).fetchone()
+        stop=db.execute("SELECT max(event_id) FROM events WHERE run_id=? AND json_extract(data_json,'$.kind')='STOP'",(run_id,)).fetchone()
+        return (row[0] if row else None,stop[0])
+    finally:db.close()
+
+
+def wait_for_next_sample(root,run_id,seconds):
+    # Lightweight status/STOP checks notice resume within30s even during the
+    # hourly interval; a new capture epoch receives a fresh10-minute observation.
+    token=_run_token(root,run_id);end=time.monotonic()+seconds
+    while time.monotonic()<end:
+        time.sleep(min(30,max(0,end-time.monotonic())))
+        if _run_token(root,run_id)!=token:return
+
+
 def snapshot(root,plan,clock,*,now=None,window_start=None):
     now=aware_time(now);start=aware_time(window_start or clock['started_at'])
     if clock['run_id']!=plan['run_id'] or clock['plan_sha256']!=digest(plan):raise ValueError('MONITOR_EXACT_RUN_PLAN_REQUIRED')
@@ -37,6 +64,7 @@ def snapshot(root,plan,clock,*,now=None,window_start=None):
         requests=[{**json.loads(r[0]),'status':r[1]} for r in db.execute('SELECT data_json,status FROM requests WHERE run_id=?',(plan['run_id'],))]
         pages=[json.loads(x[0]) for x in db.execute('SELECT data_json FROM pages WHERE run_id=?',(plan['run_id'],))]
         run=db.execute('SELECT metadata_json,status FROM runs WHERE run_id=?',(plan['run_id'],)).fetchone()
+        events=[json.loads(r[0]) for r in db.execute("SELECT data_json FROM events WHERE run_id=? AND json_extract(data_json,'$.kind')='STOP'",(plan['run_id'],))]
     finally:db.close()
     metrics=measure_three(rows,plan['run_id'],target_policy=plan['target_policy'])
     _,qualified,_,_=qualify_three(rows,plan['run_id'])
@@ -62,6 +90,7 @@ def snapshot(root,plan,clock,*,now=None,window_start=None):
         if not path.is_file():gate_values.append('UNKNOWN');continue
         value=json.loads(path.read_text('utf8'));gate_values.append(value.get('payload',value).get('state','UNKNOWN'))
     request_times=[aware_time(q['observed_at']) for q in requests]
+    observation_epoch,active_times=observation_times(clock,events,requests)
     active_new=new(first);seconds=(now-start).total_seconds();rate=active_new*3600/seconds if seconds>0 else None
     by_family={}
     for k,m in metrics['sources'].items():
@@ -89,12 +118,14 @@ def snapshot(root,plan,clock,*,now=None,window_start=None):
         'request_budget_remaining':max(0,plan['max_requests_per_run']-len(requests)),
         'last_request_at':utc_text(max(request_times)) if request_times else None,'gates':gate_values,
         'first_live_request_at':utc_text(min(request_times)) if request_times else None,
-        'live_observation_elapsed_seconds':(now-min(request_times)).total_seconds() if request_times else None,
-        'initial_ten_minute_observation_passed':bool(request_times and (now-min(request_times)).total_seconds()>=600
+        'observation_epoch_after_last_STOP':utc_text(observation_epoch),
+        'live_observation_elapsed_seconds':(now-min(active_times)).total_seconds() if active_times else None,
+        'initial_ten_minute_observation_passed':bool(active_times and (now-min(active_times)).total_seconds()>=600
             and (now-max(request_times)).total_seconds()<120 and process['verified']
             and state.get('status')=='RUNNING' and all(g=='NORMAL' for g in gate_values)
-            and metrics['F_global_conservative_review_groups']>0 and len(pages)>=2
-            and any(q['kind']=='ACP' and q['status']=='NORMAL' for q in requests)),
+            and any(t>observation_epoch for t in first.values())
+            and len({q['url'] for q in requests if q['kind']=='PAGE' and q['status']=='NORMAL' and aware_time(q['observed_at'])>observation_epoch})>=2
+            and any(q['kind']=='ACP' and q['status']=='NORMAL' and aware_time(q['observed_at'])>observation_epoch for q in requests)),
         'task_elapsed_wall_seconds':elapsed,'remaining_wall_seconds':max(0,(aware_time(clock['deadline'])-now).total_seconds()),
         'estimated_QA_seconds':reserve,'window_new_groups_per_hour':rate,
         'linear_remaining_capture_seconds':max(0,30000-len(first))*3600/rate if rate else None,
@@ -119,8 +150,8 @@ def main(argv=None):
             if args.once or value['remaining_wall_seconds']<=0:break
             # First10 minutes are observed every30s; then once per hour.
             observed=value['live_observation_elapsed_seconds']
-            delay=30 if observed is None or observed<600 else 3600
-            start=value['observed_at'];time.sleep(max(1,min(delay,value['remaining_wall_seconds'])))
+            delay=3600 if value['run_status']=='STOPPED' or any(g!='NORMAL' for g in value['gates']) else (30 if observed is None or observed<600 else 3600)
+            start=value['observed_at'];wait_for_next_sample(args.root,plan['run_id'],max(1,min(delay,value['remaining_wall_seconds'])))
     return value
 
 if __name__=='__main__':main()
