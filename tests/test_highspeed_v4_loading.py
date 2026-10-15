@@ -14,6 +14,7 @@ from amazon_es_bestseller.highspeed.store import RunStore
 from amazon_es_bestseller.multisource.storage import digest
 from amazon_es_bestseller.highspeed.cli import save_native_contract
 from types import SimpleNamespace
+import inspect
 
 ROOT=Path(__file__).parent/'fixtures/highspeed_v4/loading'
 PROOFS=json.loads((ROOT/'provenance.json').read_text(encoding='utf8'))
@@ -145,6 +146,30 @@ def test_actual_consumed_haul_DOM_requires_original_paired_HTTP_owner(tmp_path):
         validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':plan['run_id']},d)
         d['owner_document_reference']['sha256']='0'*64
         with pytest.raises(ValueError):validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':plan['run_id']},d)
+    finally:store.close()
+
+
+@pytest.mark.parametrize('kind',['DEALS','AMAZON_HAUL'])
+def test_playwright_route_callback_second_argument_is_not_source_kind(tmp_path,kind):
+    from amazon_es_bestseller.highspeed.v4_loading import V4LoadingTransport
+    plan,a=setup_scope(tmp_path);source=next(s for s in plan['sources'] if s['source_type']==kind)
+    source=next(s for s in plan['sources'] if s['source_type']==kind and
+        (kind!='DEALS' or s['source_subtype']=='LIGHTNING_DEAL_FILTER'))
+    native=json.loads((ROOT/('lightning_contract.json' if kind=='DEALS' else 'haul_scroll_contract.json')).read_text(encoding='utf8'))
+    callbacks={};page=SimpleNamespace(url=source['actual_source_url'],route=lambda p,c:callbacks.update({p:c}))
+    store=RunStore(a['store_root']);transport=V4LoadingTransport(SimpleNamespace(page=page),store=store,plan=plan)
+    transport.current_document_url=source['actual_source_url'];transport.install_dynamic_capture()
+    request=SimpleNamespace(url=native['url'],method=native['method'],post_data=native['payload'],headers=native.get('headers',{}),resource_type='fetch')
+    aborted=[];route=SimpleNamespace(request=request,abort=lambda:aborted.append(True),continue_=lambda **k:pytest.fail('unmetered request'))
+    callback=next(c for p,c in callbacks.items() if ('d2b' in p)==(kind=='DEALS'))
+    # Match Playwright's arity-dependent handler dispatch, which exposed this bug.
+    try:
+        if len(inspect.signature(callback).parameters)==2:callback(route,request)
+        else:callback(route)
+        assert not aborted and len(transport.dynamic)==1
+        assert transport.dynamic[0]['value']['source_id']==source['source_id']
+        assert transport.dynamic[0]['value']['request_sent'] is False
+        assert transport.dynamic[0]['value']['payload']==native['payload']
     finally:store.close()
 
 

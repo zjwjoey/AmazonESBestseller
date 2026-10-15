@@ -143,17 +143,23 @@ class V4LoadingTransport(PlaywrightTransport):
         self.current_document_url=None
         self._root_loading_receipt=None
         self._last_dynamic_receipt=None
+        self._last_recommendation_receipt=None
 
     def fetch_page(self,url,**kwargs):
         self.current_document_url=url
         self._root_loading_receipt=None
         self._last_dynamic_receipt=None
+        self._last_recommendation_receipt=None
         return super().fetch_page(url,**kwargs)
 
     def install_dynamic_capture(self):
         for kind,path in PATHS.items():
-            def capture(route,kind=kind):
+            def capture(route):
                 req=route.request
+                # Playwright passes Request as a second argument to callbacks
+                # declaring two parameters, including default parameters.
+                # Use a one-argument callback and derive the actual endpoint kind.
+                kind=next((k for k in PATHS if dynamic_endpoint(req.url,k)),None)
                 headers={k.lower():v for k,v in req.headers.items()}
                 key=(req.url,req.method.upper(),req.post_data or '',headers.get(_CONTROLLED_ACP_NONCE_HEADER))
                 if key==self._manual_acp_allowance and key[-1]:
@@ -194,8 +200,8 @@ class V4LoadingTransport(PlaywrightTransport):
                     root=self._root_loading_receipt
                     d.update(owner_document_reference={'path':root['document_html_path'],'sha256':root['document_sha256']},
                         root_capture_receipt_reference={'path':root['evidence_path'],'sha256':hashlib.sha256(Path(root['evidence_path']).read_bytes()).hexdigest()})
-                    if self._last_dynamic_receipt and self._last_dynamic_receipt['request_url'].split('?',1)[0].endswith('/getLazyLoadedAsins'):
-                        prev=self._last_dynamic_receipt
+                    if self._last_recommendation_receipt and d['url'].split('?',1)[0].endswith('/getAsins'):
+                        prev=self._last_recommendation_receipt
                         d['preceding_dynamic_receipt_reference']={'path':prev['evidence_path'],'sha256':hashlib.sha256(Path(prev['evidence_path']).read_bytes()).hexdigest()}
                 save_native_contract(self.store,self.plan,d)
                 d['captured_at']=json.loads(Path(d['native_contract_evidence_path']).read_text(encoding='utf8'))['captured_at']
@@ -252,6 +258,8 @@ class V4LoadingTransport(PlaywrightTransport):
             'request_id':receipt['request_id'],'request_url':key[0],
             'receipt_reference':{'path':receipt['evidence_path'],'sha256':hashlib.sha256(Path(receipt['evidence_path']).read_bytes()).hexdigest()}})
         self._last_dynamic_receipt=receipt
+        if receipt['request_url'].split('?',1)[0].endswith('/getLazyLoadedAsins'):
+            self._last_recommendation_receipt=receipt
         return True
 
     def has_pending_dynamic(self,source):
