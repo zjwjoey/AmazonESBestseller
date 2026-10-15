@@ -159,7 +159,7 @@ def test_capture_unavailable_never_falls_back_to_guessed_descriptor():
     t,p=transport(); p.inject=False
     with pytest.raises(ValueError,match="CONTRACT_NOT_OBSERVED"):
         t.prepare_ajax_descriptor({"url":ENDPOINT,"payload":"guess"},referer=PAGE)
-    assert p.scrolls==6
+    assert p.scrolls==24  # Finite 12-second local observation window.
 
 @pytest.mark.parametrize("url",["https://evil.example/acp/widget/nextPage", "https://www.amazon.es/dp/B000000001"])
 def test_capture_rejects_non_source_endpoint_without_scroll(url):

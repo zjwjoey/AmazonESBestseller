@@ -1,0 +1,14 @@
+{
+  "original_path": "F:\\AmazonESBestseller\\runtime\\three_source_5001_batches\\three_source_batch_b2d2886389c6\\store\\html\\a2\\a23f76c9911a1f4b7b1d7459bb27e99457e3a62c41f615ef01105e4c5a1c0a92.html",
+  "original_sha256": "a23f76c9911a1f4b7b1d7459bb27e99457e3a62c41f615ef01105e4c5a1c0a92",
+  "capture_time": "2026-10-15T13:00:48.469643Z",
+  "source_url": "https://www.amazon.es/gp/bestsellers/electronics/16063350031",
+  "http_status": 200,
+  "access_state": "NORMAL",
+  "actual_cards": 30,
+  "metadata_entries": 50,
+  "native_capture_count_at_3_seconds": 0,
+  "permanent_site_failure_proven": false,
+  "new_network_requests": 0,
+  "transform": "Original title and entire #zg preserved; no product/rec/rank edits"
+}

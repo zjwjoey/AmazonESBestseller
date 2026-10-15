@@ -211,7 +211,13 @@ class PlaywrightTransport:
                 or not expected_parts.path.startswith("/acp/") or not expected_parts.path.endswith("/nextPage")):
             raise ValueError("ACP_NATIVE_CAPTURE_ENDPOINT_INVALID")
         expected_params = (descriptor.get("headers") or {}).get("x-amz-acp-params")
-        for attempt in range(7):
+        # DOMContentLoaded can precede the grid's asynchronous widget startup.
+        # Observe local events for at most 12 seconds; no PAGE reload or native
+        # request is authorized/sent by waiting. Literal contract checks below
+        # remain mandatory and a missing contract still stops at the bound.
+        for attempt in range(25):
+            if str(getattr(page, "url", "")) != referer:
+                raise ValueError("ACP_NATIVE_CAPTURE_REQUIRES_CURRENT_SOURCE_PAGE")
             for captured in self._native_acp_requests:
                 actual_parts = urlsplit(captured["url"])
                 endpoint_matches = (actual_parts.scheme == "https" and actual_parts.netloc == parent.netloc
@@ -231,7 +237,7 @@ class PlaywrightTransport:
                         # Another ACP widget on this page is not this saved grid.
                         # Discovery requires the complete opaque rec/index proof.
                         continue
-            if attempt == 6:
+            if attempt == 24:
                 break
             expected_path = metadata.get("path") or (expected_parts.path.removesuffix("nextPage") if expected else None)
             expected_recs = metadata.get("client_recs_raw")

@@ -130,6 +130,14 @@ cannot substitute for export QA. Within each session identical saved grid-parent
 ownership uses one DOM parse with parent-byte checks on reuse; literal native
 contracts and batch payload validation continue for every request/receipt.
 
+Grid native discovery observes up to 24 local 500-ms waits after a normal
+document capture. An already captured contract returns immediately; a missing
+contract still stops after this finite window. This only waits/scrolls locally:
+it does not reload a PAGE, permit unmetered requests, synthesize a protocol or
+change the original request ceilings. Source navigation during the window is
+rejected. The retained electronics fixture still has 30 actual cards and 20
+unobserved metadata slots, not 50 collected products.
+
 The campaign merger re-audits each supplied batch's original store read-only,
 DOM, receipts and exports. Different tasks/campaigns, duplicate batch IDs,
 modified files, failed audits and old-stage reports block aggregation. Repeated
