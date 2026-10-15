@@ -109,12 +109,9 @@ def validate_plan_v4(plan):
             # Future capacity extensions require the DOM proof validator.
             from .v4_navigation import verify_discovered_source
             verify_discovered_source(s)
-        extra=s.get('pagination_evidence', [])
-        from .v4_navigation import verify_pagination_reference
-        for reference in extra:
-            verify_pagination_reference(reference,s)
-        if (s.get('page_urls') != [s['actual_source_url'], *[r['url'] for r in extra]]
-                or not amazon_url(s['actual_source_url'])):
+        from .v4_navigation import verify_pagination_chain
+        verify_pagination_chain(s)
+        if not amazon_url(s['actual_source_url']):
             raise ValueError('V4_EXACT_EVIDENCED_SOURCE_PAGES_REQUIRED')
     return plan
 

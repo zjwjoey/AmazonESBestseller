@@ -74,25 +74,39 @@ contributions are sample memberships/unique-only counts, not future capacity.
 Aggregation is one grouping pass plus sorting, and reuses existing transactional
 RunStore indexes. Offline duration does not demonstrate 3000 LIVE candidates/hour.
 
-## Current executable boundary and unresolved work
+## Current executable boundary and unresolved work (2026-10-15)
 
 `v4_cli` implements offline replay, pending plan generation, approval checking,
-and a bounded T1 entry/protocol diagnostic runner. The old CLI/runner explicitly
-reject V4 plans before browser work. The dedicated runner preserves the existing
-request reservations, shared/local gate, serial pacing, original start, locks,
-saved receipts, native BEST/NEW ACP validation and local UI replay.
+and bounded T1/T2 runners. The old CLI/runner rejects V4 plans before browser
+work. The dedicated runners preserve reservations, shared/local gates, serial
+pacing, original start, locks, receipts and local replay. Native BEST/NEW grid
+and carousel requests and captured Deals/Haul loading contracts now have
+receipt-level validators. Unknown protocols remain aborted discovery evidence.
 
-Non-ACP native fetch/XHR is aborted and saved as unapproved discovery evidence.
-There is no guessed Deals/Haul API, unmetered scroll loading, automatic pagination
-approval, or claim that those dynamic loading protocols have been implemented.
-This means a source that needs a new native protocol can stop T1 with its actual
-incomplete frame. That frame is NOT an official empty page. Later scoped T1
-diagnostics must establish and implement those exact contracts before T2/T3.
+The completed T2 diagnostic `v4_t2_15da5305d976` captured 2,274 observations,
+666 normalized URLs and 619 eligible conservative review groups using 84 charged
+requests, including 14 PAGE requests. Its final full-DOM/receipt review passed;
+the 2,000-group sample target was short by 1,381. All five loading capabilities
+were observed, but global source completeness and sustained 30,000-candidate
+supply remain unknown. The original lightning source's EXPLICIT_EMPTY evidence
+and all failed/stopped histories remain valid historical records.
 
-The prior-stage validator intentionally rejects LIVE capability summaries until
-the new protocols have receipt-level validators. T2/T3 execution is not enabled
-by this first development delivery. Full V4 development/acceptance is therefore
-not complete; source parsing, offline QA and controlled T1 preparation are ready.
+The saved-DOM navigation inventory and evidence-bound continuous Favorites
+pagination are implemented as offline development. `review-navigation` produces
+a disabled queue of literal URLs. Pagination plans validate an ordered sequence
+of saved Next links with consecutive page numbers and unchanged filter bytes;
+each destination still needs exact request approval. Next comes a separately
+reviewed supplementary T2 source plan and real capacity measurement. A navigation
+link proves only that the link was present, not that its destination supplies
+products. The current T2 approval is not extended by offline development or
+discovery. T3 execution remains closed; no promotion, fresh 30,000 collection,
+historical seeding or main merge is authorized.
+
+The development objective is 30,000 effective deduplicated product-link
+candidates. Confirmed independent buyable child-ASIN identity is a separate
+future product-detail check, not a prerequisite invented for this candidate
+phase. Retain variant parameters and identity doubts, and never relabel URL
+review groups as confirmed buyable SKUs.
 
 ## Commands
 

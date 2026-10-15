@@ -54,3 +54,28 @@ plan scope, request budgets, pacing or Access Gate checks.
 Offline tests: `python -m pytest tests/test_highspeed_v4_t2.py -q`.
 Simulated transports are test-only; their generated records are never delivered
 as actual T2 HTTP evidence. Official saved HTML remains the parser fixture source.
+
+## Offline navigation review after a capacity shortfall
+
+`python -m amazon_es_bestseller.highspeed.v4_cli review-navigation --t2 <T2 manifest>
+--out <output parent>` first repeats formal T2 central DOM and capacity validation,
+then inventories only literal navigation and Next anchors in the latest saved
+PAGE for each exact source URL. It includes ranked sidebars and root carousel
+category links, Favorites theme/refinement navigation and Next, and owned Deals
+filters and Haul navigation. Product, advertisement, history and footer links are
+excluded. No URLs are synthesized or fetched.
+
+The new UUID directory contains `navigation_inventory.json`,
+`pending_exact_urls.txt` and a SHA-256 `manifest.json`. Exact URL deduplication
+preserves all unknown query parameters and every anchor provenance. Each record
+retains the parent source, exact page, capture time, HTML SHA, literal href, label,
+DOM anchor hash and index. Parent empty and UNKNOWN completeness states survive.
+Statuses are ALREADY_OBSERVED, IGNORED_ROOT_ALIAS, PENDING_SOURCE_REVIEW,
+PENDING_PAGINATION_REVIEW or UNVERIFIED_CONTEXT. Unsupported Favorites theme
+destinations remain UNVERIFIED_CONTEXT rather than becoming approved search URLs.
+
+This artifact is a disabled review queue, not a new execution plan. Pending URLs
+do not demonstrate unseen product capacity, independent buyable SKU identity,
+approval, or readiness for T3. All approval/live/T3 flags stay false and new
+network requests remain zero. A supplementary T2 scope and budget still require
+separate review; the expired prior run is not extended or reset.

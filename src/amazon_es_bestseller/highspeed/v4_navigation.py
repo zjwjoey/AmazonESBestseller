@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit, parse_qs
+from urllib.parse import urljoin, urlsplit, parse_qs, unquote_plus
 
 from bs4 import BeautifulSoup
 
@@ -23,8 +23,34 @@ def exact_query_token_reordering(left,right):
     return sorted(x)==sorted(y)
 
 
-def verify_pagination_reference(reference, source):
-    """One literal Next href in the same favorites result context."""
+def _pagination_context(url):
+    """Keep all unknown filter bytes; only observed navigation tokens may vary."""
+    parsed = urlsplit(url)
+    if not amazon_url(url) or parsed.path != '/s':
+        raise ValueError('V4_PAGINATION_SAME_CONTEXT_REQUIRED')
+    query = {}
+    for token in parsed.query.split('&'):
+        key, separator, value = token.partition('=')
+        if (not separator or not key or key != unquote_plus(key) or key in query):
+            raise ValueError('V4_PAGINATION_SAME_CONTEXT_REQUIRED')
+        query[key] = value
+    page = query.get('page', '1')
+    if not page.isascii() or not page.isdigit() or page.startswith('0'):
+        raise ValueError('V4_PAGINATION_SAME_CONTEXT_REQUIRED')
+    if not query.get('srs'):
+        raise ValueError('V4_PAGINATION_SAME_CONTEXT_REQUIRED')
+    # These are the navigation-only query tokens observed in saved Favorites
+    # Next links. Do not expand this set to unknown filters or search terms.
+    context = {k: v for k, v in query.items() if k not in {'page', 'ref', 'ref_', 'qid', 'xpid'}}
+    return (parsed.scheme, parsed.netloc, parsed.path, parsed.fragment, context), int(page)
+
+
+def verify_pagination_reference(reference, source, *, parent_page_url=None):
+    """One literal Next href from the declared parent in the same source context.
+
+    Without an explicit parent this retains the original first-hop contract.
+    Plans must additionally validate the complete ordered evidence chain.
+    """
     path=Path(reference['evidence_path'])
     if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['evidence_sha256']:
         raise ValueError('V4_PAGINATION_EVIDENCE_SHA_MISMATCH')
@@ -32,17 +58,37 @@ def verify_pagination_reference(reference, source):
     soup=BeautifulSoup(path.read_bytes(),'lxml')
     anchors=[a for a in soup.select('a.s-pagination-next[href], .a-pagination a[href]')
              if a['href']==reference['raw_href'] and a.get_text(' ',strip=True)==reference['label_raw']]
+    expected_parent = source['actual_source_url'] if parent_page_url is None else parent_page_url
     if (not anchors or urljoin(parent,reference['raw_href'])!=url or not amazon_url(url)
             or source['source_type']!='CUSTOMER_FAVORITES'
             or source['source_subtype']!='CUSTOMER_FAVORITES_FILTERED_SEARCH'
-            or parent!=source['actual_source_url']):
+            or parent!=expected_parent
+            or expected_parent not in source.get('page_urls', [source['actual_source_url']])):
         raise ValueError('V4_PAGINATION_EXACT_NEXT_HREF_REQUIRED')
-    pq=parse_qs(urlsplit(parent).query); q=parse_qs(urlsplit(url).query)
-    if (urlsplit(url).path!='/s' or not pq.get('srs')
-            or any(pq.get(k)!=q.get(k) for k in ('i','srs','rh','s','fs'))
-            or q.get('page')!=[str(int((pq.get('page') or ['1'])[0])+1)]):
+    root_context, _ = _pagination_context(source['actual_source_url'])
+    parent_context, parent_number = _pagination_context(parent)
+    next_context, next_number = _pagination_context(url)
+    if root_context != parent_context or parent_context != next_context or next_number != parent_number + 1:
         raise ValueError('V4_PAGINATION_SAME_CONTEXT_REQUIRED')
     return reference
+
+
+def verify_pagination_chain(source):
+    """Verify every consecutive literal Next hop; this never grants LIVE scope."""
+    root = source['actual_source_url']
+    references = source.get('pagination_evidence', [])
+    if (not isinstance(references, list) or
+            source.get('page_urls') != [root, *[r['url'] for r in references]]):
+        raise ValueError('V4_EXACT_EVIDENCED_SOURCE_PAGES_REQUIRED')
+    parent = root
+    visited = {root}
+    for reference in references:
+        if reference.get('page_url') != parent or reference.get('url') in visited:
+            raise ValueError('V4_ORDERED_PAGINATION_CHAIN_REQUIRED')
+        verify_pagination_reference(reference, source, parent_page_url=parent)
+        parent = reference['url']
+        visited.add(parent)
+    return source
 
 
 def verify_discovered_source(source):

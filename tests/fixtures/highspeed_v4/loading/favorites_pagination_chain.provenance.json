@@ -1,0 +1,49 @@
+{
+  "purpose": "Offline real-DOM regression for exact Favorites root -> page 2 -> page 3 evidence chain. Page 3 URL is discovered only and not visited by this work.",
+  "origin": "COPIED_IMMUTABLE_SAVED_LIVE_HTML",
+  "source_run_id": "v4_t2_15da5305d976",
+  "plan_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t2_15da5305d976\\plan.approved.json",
+  "plan_file_sha256": "8034d57d80d3326d309cb4b713ce5033fd7315db237b0d7af7dc30a6730d09ba",
+  "source": {
+    "actual_source_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar",
+    "category_path": [],
+    "enabled": true,
+    "navigation_evidence": null,
+    "page_urls": [
+      "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar",
+      "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=xS_yw9HLYp9Uq&qid=1792026189&ref=sr_pg_1"
+    ],
+    "pagination_evidence": [
+      {
+        "evidence_path": "favorites_chain_page1.html",
+        "evidence_sha256": "1d4f862fa36479a761392694132c38b2e82cb9d4a95a962910121d40bb2803c8",
+        "label_raw": "Siguiente",
+        "page_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar",
+        "raw_href": "/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=xS_yw9HLYp9Uq&qid=1792026189&ref=sr_pg_1",
+        "url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=xS_yw9HLYp9Uq&qid=1792026189&ref=sr_pg_1"
+      }
+    ],
+    "parser_profile": "V4",
+    "research_category": null,
+    "source_id": "v4_aff702e22979e9008de842c4",
+    "source_status": "UNVERIFIED",
+    "source_subtype": "CUSTOMER_FAVORITES_FILTERED_SEARCH",
+    "source_type": "CUSTOMER_FAVORITES",
+    "url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar"
+  },
+  "files": [
+    {
+      "fixture": "favorites_chain_page1.html",
+      "original_evidence_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_completeness_20261015T005832Z\\store\\html\\1d\\1d4f862fa36479a761392694132c38b2e82cb9d4a95a962910121d40bb2803c8.html",
+      "sha256": "1d4f862fa36479a761392694132c38b2e82cb9d4a95a962910121d40bb2803c8",
+      "byte_identical": true
+    },
+    {
+      "fixture": "favorites_chain_page2.html",
+      "original_evidence_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t2_15da5305d976\\store\\html\\58\\58a1ddb7e3b52e3bfc2ddc20a233a8f9b969259aa265760238b99737233ec6a8.html",
+      "sha256": "58a1ddb7e3b52e3bfc2ddc20a233a8f9b969259aa265760238b99737233ec6a8",
+      "byte_identical": true
+    }
+  ],
+  "new_network_requests": 0
+}

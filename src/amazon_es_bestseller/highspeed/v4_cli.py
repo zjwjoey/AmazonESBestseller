@@ -103,6 +103,8 @@ def main(argv=None):
             p.add_argument('--runtime-root', required=True); p.add_argument('--shared-gate', required=True)
     p=sub.add_parser('prepare-t2')
     for opt in ('t0','t1','out','runtime-root','shared-gate'):p.add_argument('--'+opt,required=True)
+    p = sub.add_parser('review-navigation', help='Offline T2 saved-navigation inventory; no approval or network.')
+    p.add_argument('--t2', required=True); p.add_argument('--out', required=True)
     for name in ('check', 'run', 'resume'):
         p = sub.add_parser(name)
         for opt in ('root', 'plan', 'authorization'):
@@ -116,7 +118,12 @@ def main(argv=None):
     for opt in ('root', 'run-id', 'out'):
         p.add_argument('--' + opt, required=True)
     args = parser.parse_args(argv)
-    if args.operation=='prepare-t2':
+    if args.operation == 'review-navigation':
+        import hashlib
+        from .v4_frontier import review_navigation
+        path = Path(args.t2).resolve()
+        result = review_navigation({'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}, args.out)
+    elif args.operation=='prepare-t2':
         import hashlib
         from .v4_t2_prepare import prepare_t2
         refs=[{'path':str(Path(p).resolve()),'sha256':hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in (args.t0,args.t1)]
