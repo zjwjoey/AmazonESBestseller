@@ -108,6 +108,46 @@ def test_literal_real_loading_contract_requires_saved_product_context(tmp_path,k
     validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':d['run_id']},d)
 
 
+def test_actual_haul_get_asins_uses_owned_inline_ids_not_guessed_batches(tmp_path):
+    d=json.loads((ROOT/'haul_get_asins_contract.json').read_text(encoding='utf8'))
+    s=next(p['source'] for p in PROOFS if p['source']['source_type']=='AMAZON_HAUL')
+    parent=ROOT/'haul_get_asins_parent.html'
+    d.update(run_id='offline-get-asins',source_id=s['source_id'],source_type=s['source_type'],
+        parent_html_path=str(parent),parent_html_sha256=hashlib.sha256(parent.read_bytes()).hexdigest(),
+        request_contract_source='NATIVE_BROWSER_REQUEST_HELD',request_sent=False)
+    file=tmp_path/'native.json';immutable_json(file,d)
+    d.update(native_contract_evidence_path=str(file),native_contract_evidence_sha256=hashlib.sha256(file.read_bytes()).hexdigest())
+    validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':d['run_id']},d)
+    body=json.loads(d['payload']);body['asins'][0]='B000FAKE00';d['payload']=json.dumps(body)
+    with pytest.raises(ValueError):validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':d['run_id']},d)
+
+
+def test_actual_consumed_haul_DOM_requires_original_paired_HTTP_owner(tmp_path):
+    plan,a=setup_scope(tmp_path);s=next(x for x in plan['sources'] if x['source_type']=='AMAZON_HAUL')
+    store=RunStore(a['store_root']);store.begin_run(plan)
+    raw=(ROOT/'haul_get_asins_parent.html').read_text(encoding='utf8')
+    dom=(ROOT/'haul_get_asins_rendered.html').read_text(encoding='utf8')
+    try:
+        req=store.reserve_request(plan['run_id'],{'kind':'PAGE','url':s['actual_source_url'],'source_id':s['source_id'],
+            'source_type':s['source_type'],'observed_at':NOW.isoformat(),'origin':'LIVE_CAPTURE'})
+        r=store.save_response(plan['run_id'],req,{'kind':'PAGE','source_id':s['source_id'],'source_type':s['source_type'],
+            'request_url':s['actual_source_url'],'status_code':200,'access_state':'NORMAL','origin':'LIVE_CAPTURE',
+            'text':raw,'http_document_html':raw,'rendered_dom_html':dom,'observed_at':NOW.isoformat()})
+        d=json.loads((ROOT/'haul_get_asins_contract.json').read_text(encoding='utf8'))
+        parent=store.save_html(dom)
+        d.update(run_id=plan['run_id'],source_id=s['source_id'],source_type=s['source_type'],
+            parent_html_path=parent['html_path'],parent_html_sha256=parent['sha256'],
+            request_contract_source='NATIVE_BROWSER_REQUEST_HELD',request_sent=False,
+            owner_document_reference={'path':r['document_html_path'],'sha256':r['document_sha256']},
+            root_capture_receipt_reference={'path':r['evidence_path'],'sha256':hashlib.sha256(Path(r['evidence_path']).read_bytes()).hexdigest()})
+        file=tmp_path/'native.json';immutable_json(file,d)
+        d.update(native_contract_evidence_path=str(file),native_contract_evidence_sha256=hashlib.sha256(file.read_bytes()).hexdigest())
+        validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':plan['run_id']},d)
+        d['owner_document_reference']['sha256']='0'*64
+        with pytest.raises(ValueError):validate_dynamic_descriptor(d['url'],s,{'allow_native_dynamic':True},{'run_id':plan['run_id']},d)
+    finally:store.close()
+
+
 @pytest.mark.parametrize('bad',['url','payload','parent','root','run','approval','hash'])
 def test_dynamic_rejects_changed_native_bytes_or_unapproved_scope(tmp_path,bad):
     s,d=dynamic(tmp_path,'DEALS');a={'run_id':d['run_id']};scope={'allow_native_dynamic':True}

@@ -475,7 +475,7 @@ class PlaywrightTransport:
                     if raw_state != 'NORMAL':
                         value.update(text=raw, access_state=raw_state)
                     elif state == 'NORMAL' and any(urlsplit(final_url).path == p or urlsplit(final_url).path.startswith(p + '/')
-                                                  for p in ('/gp/bestsellers', '/gp/new-releases')):
+                                                  for p in ('/gp/bestsellers', '/gp/new-releases', '/-/en/haul/store')):
                         # Ranked server cards and native owner attributes precede
                         # AUI's attribute consumption. Keep the rendered frame too.
                         value.update(text=raw, source_representation='HTTP_DOCUMENT_BODY')

@@ -193,7 +193,8 @@ class V4T1Runner:
                             self.store.append_event(run_id,{'kind':'V4_RENDERED_LOADING_FRAME','source_id':sid,
                                 'previous_cards':previous_count,'actual_cards':len(parsed['observations']),
                                 'rendered_derivation':derivation,'completeness_status':'UNKNOWN'})
-                            if not {r['normalized_product_url'] for r in parsed['observations'] if r.get('is_valid')}-previous_links:break
+                            if (not {r['normalized_product_url'] for r in parsed['observations'] if r.get('is_valid')}-previous_links
+                                    and not getattr(transport,'has_pending_dynamic',lambda s:False)(source)):break
                         transport.cancel_dynamic()
                     self.store.append_event(run_id, {'kind': 'V4_DISCOVERED_NAVIGATION', 'source_id': key,
                         'links': parsed['discovered_sources'], 'note': 'Discovery only, not visited or approved.'})
