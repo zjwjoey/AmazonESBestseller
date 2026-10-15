@@ -42,6 +42,13 @@ def build_global_scope(base,prior_auth,proposal,*,run_id,created_at,task_referen
         live_enabled=True,request_pacing_seconds=3,parallelism=1,category_cooldown_seconds=0)
     # Preserve transport contract/source diagnostics and all safety flags.
     for key in ('seed_reference','parent_run_id','continuation_mode'):p.pop(key,None)
+    # Serial interleaving gives all three mandatory families early evidence.
+    # Literal source/page sets and each source's own page order are unchanged.
+    queues={k:[s for s in p['sources'] if s['source_type']==k] for k in FAMILIES}
+    p['sources']=[]
+    while any(queues.values()):
+        for kind in FAMILIES:
+            if queues[kind]:p['sources'].append(queues[kind].pop(0))
     a=deepcopy(prior_auth)
     a.update(approved=False,approved_by=None,approval_id=None,reviewed_at=None,expires_at=None,
              sources={},run_id=run_id,plan_sha256=digest(p))
@@ -53,22 +60,34 @@ def build_global_scope(base,prior_auth,proposal,*,run_id,created_at,task_referen
     return p,a
 
 
-def prepare_global_30000(proposal_ref,base_plan_ref,base_auth_ref,output,runtime_root,*,progress=None):
+def prepare_global_30000(proposal_ref,base_plan_ref,base_auth_ref,output,runtime_root,*,task_reference,qa_benchmark_reference,progress=None):
     def mark(phase):
         if progress:progress(phase)
     proposal=read_reference(proposal_ref);base=read_reference(base_plan_ref);old=read_reference(base_auth_ref)
     if old['plan_sha256']!=digest(base):raise ValueError('GLOBAL_BASE_PLAN_AUTH_MISMATCH')
     run_id='global30000_'+uuid.uuid4().hex[:12]
     directory=Path(output)/run_id;directory.mkdir(parents=True,exist_ok=False)
+    original_task=Path(task_reference['path']);task_bytes=original_task.read_bytes()
+    if hashlib.sha256(task_bytes).hexdigest()!=task_reference['sha256']:raise ValueError('GLOBAL_EXACT_CURRENT_TASK_REQUIRED')
+    immutable_bytes(directory/'current_task.txt',task_bytes)
+    benchmark=read_reference(qa_benchmark_reference)
+    raw=benchmark['report']['metrics']['A_raw_observations']
+    if not benchmark.get('central_DOM_passed') or not benchmark.get('independent_CSV_JSONL_passed') or raw<=0 or benchmark['seconds']<=0:
+        raise ValueError('REAL_FULL_REVIEW_BENCHMARK_REQUIRED')
     task=directory/'expansion_scope.txt'
-    immutable_bytes(task,('User requested PREPARATION ONLY of a finite 30000 global conservative candidate plan.\n'
-        'No LIVE expansion is approved. Exact proposal SHA: '+proposal_ref['sha256']+'\n'
+    immutable_bytes(task,('Prepare finite THREE SOURCE task: BEST>=5001, NEW>=5001, FAVORITES>=5001, GLOBAL>=30000.\n'
+        'Execution requires the separately recorded current task approval and NORMAL gates. Exact proposal SHA: '+proposal_ref['sha256']+'\n'
         '897 contexts / 1102 exact PAGE URLs; 6000 requests / 1200 PAGE / 4800 native; serial >=3s.\n'
         'Fresh LIVE observations only; independent buyable SKU identity NOT_VERIFIED.\n'
-        'Capture cap8.65h; planning reserves0.35h preflight and1h final QA within desired10h, not a speed guarantee.\n').encode())
-    task_ref={'path':str(task.resolve()),'sha256':hashlib.sha256(task.read_bytes()).hexdigest()}
+        'One immutable10h wall-clock includes preflight, stops, repairs, and final QA. Reserve QA from measured costs; never reset.\n').encode())
+    task_ref={'path':str((directory/'current_task.txt').resolve()),'sha256':hashlib.sha256(task_bytes).hexdigest()}
     p,a=build_global_scope(base,old,proposal,run_id=run_id,created_at=utc_text(),task_reference=task_ref)
     a['store_root']=str((Path(runtime_root)/run_id/'store').resolve())
+    p['task_clock_path']=str((Path(runtime_root)/run_id/'task_clock.json').resolve())
+    p['qa_reserve_policy']={'seconds_per_raw':benchmark['seconds']/raw,'safety_factor':1.2,
+        'fixed_seconds':900,'minimum_seconds':3600,'benchmark_reference':qa_benchmark_reference}
+    a['plan_sha256']=digest(p)
+    a['task_clock_reference']=None
     with prerequisite_review_session():
         mark('GLOBAL_FULL_SOURCE_AND_PRIOR_OFFLINE_REVIEW_STARTED')
         validate_plan_v4(p)
@@ -94,9 +113,12 @@ def prepare_global_30000(proposal_ref,base_plan_ref,base_auth_ref,output,runtime
         'request_cap':6000,'PAGE_cap':1200,'native_cap':4800,'capture_hours_cap':8.65,
         'total_ten_hour_delivery':'UNPROVEN','approved':False,'live_started':False,
         'target_policy':POLICY,'execution_engine_ready':True,
-        'launch_requires':['USER_EXPLICIT_EXPANSION_APPROVAL','CURRENT_COMMIT_CI_SUCCESS',
-                           'LIVE_NATIVE_AND_SPEED_STABILITY_REVIEW','FRESH_GATES_BUDGET_AUTH_CHECK'],
-        'input_references':[proposal_ref,base_plan_ref,base_auth_ref]}
+        'launch_requires':['CURRENT_USER_TASK_CONDITIONS_SATISFIED','CURRENT_COMMIT_CI_SUCCESS',
+                           'DATA_CORRECTNESS_AND_NATIVE_PROTOCOL_REVIEW','FRESH_GATES_BUDGET_AUTH_CHECK'],
+        'input_references':[proposal_ref,base_plan_ref,base_auth_ref,task_reference,qa_benchmark_reference],
+        'joint_quantity_goals':{'BEST_SELLERS':5001,'NEW_RELEASES':5001,'CUSTOMER_FAVORITES':5001,'GLOBAL':30000},
+        'qa_reserve_policy':p['qa_reserve_policy'],
+        'user_conditional_execution_authorization_recorded':True}
     immutable_json(directory/'summary.json',summary)
     immutable_json(directory/'manifest.json',{'summary':summary,'files':[{'name':f.name,
         'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(directory.iterdir()) if f.is_file()]})

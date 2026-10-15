@@ -163,7 +163,7 @@ def _export_three(store,run_id,output,*,progress=None):
         '审计问题：'+json.dumps(audit['errors'],ensure_ascii=False)]
     if plan.get('target_policy'):
         lines += ['',f'全局目标30,000；实际{metrics["F_global_conservative_review_groups"]}；缺口{metrics["global_shortfall"]}。',
-            '上表各来源5,001为诊断指标；本计划数量验收只使用全局合格保守组并集。达到数量不代表源范围完整或SKU身份已确认。']
+            '三个来源各至少5,001与全局至少30,000四项必须同时达成；达到数量不代表源范围完整或SKU身份已确认。']
     artifacts['最终验收报告.md']=('\n'.join(lines)+'\n').encode('utf8')
     mark('EXPORT_WRITE_AND_INDEPENDENT_ROUNDTRIP_STARTED')
     directory=Path(output)/('three_source_report_'+uuid.uuid4().hex);directory.mkdir(parents=True,exist_ok=False)
@@ -179,10 +179,19 @@ def _export_three(store,run_id,output,*,progress=None):
     history=[json.loads(line) for line in (directory/'全部原始商品观察.jsonl').read_text('utf8').splitlines()]
     if history!=rows:raise ValueError('THREE_INDEPENDENT_JSONL_MISMATCH')
     refs=[{'name':name,'sha256':hashlib.sha256((directory/name).read_bytes()).hexdigest()} for name in artifacts]
-    manifest={'schema_version':1,'contract':CONTRACT,'run_id':run_id,'campaign_id':plan['campaign_id'],
+    task_timing={}
+    if plan.get('target_policy'):
+        from .budgets import aware_time,utc_text
+        clock=read_sealed(plan['task_clock_path']);completed=aware_time()
+        within=completed<=aware_time(clock['deadline'])
+        task_timing={'task_started_at':clock['started_at'],'fixed_deadline':clock['deadline'],
+            'QA_completed_at':utc_text(completed),'task_elapsed_seconds':(completed-aware_time(clock['started_at'])).total_seconds(),
+            'QA_completed_before_deadline':within,'ten_hour_target_met':bool(accepted and within),
+            'QA_state_at_deadline':'COMPLETE' if within else 'NOT_COMPLETED_BY_DEADLINE'}
+    manifest={'task_timing':task_timing,'schema_version':1,'contract':CONTRACT,'run_id':run_id,'campaign_id':plan['campaign_id'],
         'campaign_created_at':plan['campaign_created_at'],'task_reference':plan['task_reference'],
         'execution':execution,'accepted':accepted,'acceptance':acceptance,'metrics':metrics,
         'receipt_audit':audit,'files':refs,'CSV_JSONL_independently_verified':True,'SKU_identity_status':'NOT_VERIFIED'}
     immutable_json(directory/'manifest.json',manifest)
     mark('EXPORT_INDEPENDENT_ROUNDTRIP_FINISHED')
-    return {'directory':str(directory),'acceptance':acceptance,'metrics':metrics,'accepted':accepted}
+    return {'directory':str(directory),'acceptance':acceptance,'metrics':metrics,'accepted':accepted,'task_timing':task_timing}

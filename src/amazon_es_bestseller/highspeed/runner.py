@@ -866,6 +866,10 @@ class HighSpeedRunner:
                         "duration_seconds":time.perf_counter()-pacing_started,"requested_sleep_seconds":max(0,delay)})
             # Approval, gate and elapsed budget may change while pacing.
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
+        if plan.get('target_policy'):
+            from .task_clock import request_stop_reason
+            reason=request_stop_reason(plan,authorization,self.store,now=self.clock())
+            if reason:raise ValueError(reason)
         if plan.get('collection_contract')=='V4_THREE_SOURCE_5001':
             from .three_contract import family_budget_for_store
             reason=family_budget_for_store(self.store,plan,source,kind)

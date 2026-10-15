@@ -5,7 +5,16 @@ from test_three_source_metrics import real_rows
 from amazon_es_bestseller.highspeed.three_contract import validate_three_plan
 from amazon_es_bestseller.highspeed.three_metrics import measure_three
 
-POLICY={'mode':'GLOBAL_CONSERVATIVE_REVIEW_GROUPS','target':30000,'fresh_live_only':True,'stop_at_page_boundary':True}
+from amazon_es_bestseller.highspeed.global_target import POLICY
+
+def bind_clock(p,a,tmp_path):
+    from amazon_es_bestseller.highspeed.task_clock import start_task_clock
+    from amazon_es_bestseller.multisource.storage import digest
+    from test_highspeed_v4_execution import NOW
+    p['task_clock_path']=str((tmp_path/'TEST_ONLY_clock.json').resolve())
+    p['qa_reserve_policy']={'seconds_per_raw':.34,'safety_factor':1.2,'fixed_seconds':900,'minimum_seconds':3600}
+    a['task_clock_reference']=start_task_clock(p['task_clock_path'],p,'TEST_ONLY',now=NOW)
+    a['plan_sha256']=digest(p)
 
 def global_plan(tmp_path):
     p,a=scope(tmp_path)
@@ -45,12 +54,15 @@ def test_global_acceptance_uses_union_threshold_and_still_requires_quality(monke
     from amazon_es_bestseller.highspeed import three_metrics as module
     from amazon_es_bestseller.highspeed.global_target import acceptance
     row=real_rows()[0]
+    input_rows=[]
+    for kind in ('BEST_SELLERS','NEW_RELEASES','CUSTOMER_FAVORITES'):
+        copy=deepcopy(row);copy['source_type']=kind;input_rows.append(copy)
     # Accounting boundary only; TEST_ONLY candidate projections are not DOM evidence.
     for n in (29999,30000):
         monkeypatch.setattr(module,'build_candidates_v4',lambda rows,n=n:([
             {'target_review_group':'TEST_ONLY_'+str(i),'eligible_for_target':True,'normalized_product_url':'TEST_ONLY_'+str(i)}
             for i in range(n)] if rows else []))
-        m=measure_three([row],'TEST_ONLY',target_policy=POLICY)
+        m=measure_three(input_rows,'TEST_ONLY',target_policy=POLICY)
         assert m['target_met']==(n==30000)
         assert not acceptance(m,False).startswith('ACCEPTED')
         assert acceptance(m,True).startswith('ACCEPTED')==(n==30000)
@@ -64,6 +76,7 @@ def test_global_policy_bound_in_authorization(tmp_path,monkeypatch):
     p,a=execution_scope(tmp_path,monkeypatch)
     p.update(target_policy=deepcopy(POLICY),target_unique_links=30000)
     a.update(plan_sha256=digest(p),target_unique_links=30000)
+    bind_clock(p,a,tmp_path)
     with pytest.raises(ValueError,match='THREE_EXACT_CAMPAIGN_APPROVAL_REQUIRED:target_policy'):
         validate_v4_authorization(p,a,{'state':'NORMAL'},now=NOW,store_root=a['store_root'])
     a['target_policy']=deepcopy(POLICY)
@@ -80,6 +93,7 @@ def test_global_run_and_export_keep_separate_target_and_source_diagnostics(tmp_p
     p,a=execution_scope(tmp_path,monkeypatch)
     p.update(target_policy=deepcopy(POLICY),target_unique_links=30000)
     a.update(target_policy=deepcopy(POLICY),plan_sha256=digest(p),target_unique_links=30000)
+    bind_clock(p,a,tmp_path)
     store=RunStore(a['store_root']);clock=[NOW]
     try:
         t=Advancing(p,a,clock)
@@ -102,6 +116,7 @@ def test_global_stop_at_page_boundary_never_requests_next_source(tmp_path,monkey
     p,a=execution_scope(tmp_path,monkeypatch)
     p.update(target_policy=deepcopy(POLICY),target_unique_links=30000)
     a.update(target_policy=deepcopy(POLICY),plan_sha256=digest(p),target_unique_links=30000)
+    bind_clock(p,a,tmp_path)
     store=RunStore(a['store_root']);clock=[NOW]
     try:
         t=Advancing(p,a,clock);runner=V4ThreeSourceRunner(store,clock=lambda:clock[0],sleep=lambda n:None)
@@ -132,7 +147,9 @@ def test_preparation_finite_limits_exact_scope_and_no_inherited_approval(tmp_pat
         'suggested_family_limits':deepcopy(FAMILY_LIMITS)}
     result,auth=build_global_scope(p,a,proposal,run_id='TEST_ONLY_GLOBAL',
         created_at=p['campaign_created_at'],task_reference=p['task_reference'])
-    assert result['sources']==sources and result['sources'] is not sources
+    assert {s['source_id'] for s in result['sources']}=={s['source_id'] for s in sources}
+    assert result['sources'] is not sources
+    assert [s['source_type'] for s in result['sources'][:3]]==['BEST_SELLERS','NEW_RELEASES','CUSTOMER_FAVORITES']
     assert result['max_requests_per_run']==6000 and result['max_pages_per_run']==1200
     assert result['max_duration_hours']==8.65 and result['request_pacing_seconds']==3
     assert auth['approved'] is False and auth['approval_id'] is None

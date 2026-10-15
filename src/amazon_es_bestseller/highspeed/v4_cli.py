@@ -118,7 +118,7 @@ def main(argv=None):
     for opt in ('t2', 'navigation', 'selection', 'out', 'runtime-root', 'shared-gate'):
         p.add_argument('--' + opt, required=True)
     p=sub.add_parser('prepare-global-30000',help='Offline freeze global30k scope; never starts LIVE or grants approval.')
-    for opt in ('proposal','base-plan','base-authorization','out','runtime-root'):p.add_argument('--'+opt,required=True)
+    for opt in ('proposal','base-plan','base-authorization','task','qa-benchmark','out','runtime-root'):p.add_argument('--'+opt,required=True)
     p=sub.add_parser('prepare-three-source',help='Offline exact-scope three-source 5001 campaign proposal.')
     for opt in ('t2','archive','selection','task','out','runtime-root','shared-gate'):p.add_argument('--'+opt,required=True)
     p.add_argument('--campaign',help='Prior plan from the same task/campaign; never a data seed.')
@@ -146,7 +146,8 @@ def main(argv=None):
         from .global_prepare import prepare_global_30000
         def ref(path):
             p=Path(path).resolve();return {'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
-        result=prepare_global_30000(ref(args.proposal),ref(args.base_plan),ref(args.base_authorization),args.out,args.runtime_root)
+        result=prepare_global_30000(ref(args.proposal),ref(args.base_plan),ref(args.base_authorization),args.out,args.runtime_root,
+            task_reference=ref(args.task),qa_benchmark_reference=ref(args.qa_benchmark))
     elif args.operation=='aggregate-three-source':
         import hashlib
         from .three_campaign import aggregate_campaign

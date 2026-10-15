@@ -22,6 +22,7 @@ class V4ThreeSourceRunner(V4T2Runner):
         self.store.db.execute("CREATE INDEX IF NOT EXISTS three_request_source ON requests "
             "(run_id,json_extract(data_json,'$.source_id'),kind)")
         self._global_target_met=None
+        self._global_metrics=None
         result=V4T1Runner.run(self,plan,**kwargs)
         execution=execution_for_store(self.store,plan['run_id'])
         rows=list(self.store.iter_observations(plan['run_id']));pages=self.store.pages(plan['run_id'])
@@ -46,7 +47,15 @@ class V4ThreeSourceRunner(V4T2Runner):
         if self._global_target_met is None:
             m=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
             self._global_target_met=m['target_met']
+            self._global_metrics=m
         return 'GLOBAL_30000_QUALIFIED_GROUPS_REACHED' if self._global_target_met else None
+
+    def should_collect_source(self,plan,source):
+        if not plan.get('target_policy'):return True
+        self.target_stop_reason(plan)
+        metrics=self._global_metrics
+        return (metrics['F_global_conservative_review_groups']<30000
+            or not metrics['sources'][source['source_type']]['target_met'])
 
     def defer_central_review_to_capacity(self):
         # audit_capacity performs the complete current-run DOM review itself.
@@ -88,6 +97,7 @@ class V4ThreeSourceRunner(V4T2Runner):
              'approved':False,'new_network_requests':0})
         metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan.get('target_policy'))
         self._global_target_met=metrics['target_met']
+        self._global_metrics=metrics
         self.store.append_event(plan['run_id'],{'kind':'THREE_SOURCE_PROGRESS','source_type':source['source_type'],
             'page_key':key,'metrics':metrics,
             'discovered_links_pending_review':len(rows)})

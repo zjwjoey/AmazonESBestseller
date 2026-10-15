@@ -70,7 +70,8 @@ def measure_three(observations, run_id, *, allowed_run_ids=None, target_policy=N
         others=set().union(*(source_groups[k] for k in FAMILIES if k!=kind))
         source_reports[kind]['groups_overlapping_other_sources']=len(source_groups[kind]&others)
         source_reports[kind]['source_exclusive_groups']=len(source_groups[kind]-others)
-    met=(len(all_groups)>=30000 if global_mode else all(r['target_met'] for r in source_reports.values()))
+    source_met=all(r['target_met'] for r in source_reports.values())
+    met=source_met and (len(all_groups)>=30000 if global_mode else True)
     return {'schema_version':1,'contract':CONTRACT,'run_id':run_id,'sources':source_reports,
         'A_raw_observations':len(current),
         'B_unique_raw_product_links':len({r['raw_product_url'] for r in current if r.get('raw_product_url')}),
@@ -81,7 +82,10 @@ def measure_three(observations, run_id, *, allowed_run_ids=None, target_policy=N
         'SKU_identity_status':'NOT_VERIFIED','target_met':met,
         **({'target_mode':'GLOBAL_CONSERVATIVE_REVIEW_GROUPS','global_target':30000,
             'global_shortfall':max(0,30000-len(all_groups)),
-            'source_targets_are_diagnostic_only':True} if global_mode else {}),
+            'source_targets_are_diagnostic_only':False,
+            'quantity_goals':{**{k:{'target':5001,'actual':source_reports[k]['E_qualified_review_groups'],
+                'shortfall':source_reports[k]['shortfall'],'met':source_reports[k]['target_met']} for k in FAMILIES},
+                'GLOBAL':{'target':30000,'actual':len(all_groups),'shortfall':max(0,30000-len(all_groups)),'met':len(all_groups)>=30000}}} if global_mode else {}),
         'acceptance':('QUANTITY_TARGET_MET_QA_STILL_REQUIRED' if met else
             'NOT_ACCEPTED — GLOBAL_30000_TARGET_NOT_MET' if global_mode else 'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET'),
         'excluded_noncurrent_or_nonlive_observations':excluded,'excluded_unqualified_observations':len(invalid),

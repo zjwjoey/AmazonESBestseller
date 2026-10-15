@@ -168,6 +168,9 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
     current = aware_time(now)
     if plan.get('collection_contract')=='V4_THREE_SOURCE_5001' and current<aware_time(plan['campaign_created_at']):
         raise ValueError('THREE_REQUEST_BEFORE_CAMPAIGN_CREATION')
+    if plan.get('target_policy'):
+        from .task_clock import validate_task_clock
+        validate_task_clock(plan,a,now=current)
     if not a.get('approval_id') or not a.get('approved_by'):
         raise ValueError('V4_NAMED_APPROVAL_REQUIRED')
     if (plan.get('collection_contract')=='V4_THREE_SOURCE_5001'

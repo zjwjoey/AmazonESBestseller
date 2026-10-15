@@ -61,6 +61,9 @@ class V4T1Runner:
                     break
                 if url in committed:
                     continue
+                if not self.should_collect_source(plan,source):
+                    self.store.append_event(run_id,{'kind':'SOURCE_MINIMUM_ALREADY_MET_GLOBAL_COMPLETE','source_id':source['source_id']})
+                    continue
                 try:
                     reason = budget_reason(plan, self.store.budget_counters(run_id), now=e.clock(), started_at=started)
                     if reason:
@@ -271,6 +274,9 @@ class V4T1Runner:
     def _acp(receipt):
         return {**receipt, 'body': Path(receipt['html_path']).read_text(encoding='utf8'),
                 'evidence_path': receipt['html_path'], 'evidence_sha256': receipt['sha256']}
+
+    def should_collect_source(self,plan,source):
+        return True
 
     def target_stop_reason(self,plan):
         return None
