@@ -68,5 +68,20 @@ def test_literal_saved_grid_rec_batches_keep_width_and_tail_without_new_ids():
 def test_grid_requires_explicit_native_scope_and_same_run():
     d,s,a=grid_request();a['sources']['kitchen']['allow_native_acp']=False
     with pytest.raises(ValueError):authorize_v4_request(d['url'],s,a,kind='ACP',descriptor=d)
+
+def test_saved_grid_batch_validates_after_canonical_checkpoint_key_sorting():
+    from amazon_es_bestseller.multisource.storage import canonical_bytes
+    original,s,a=grid_request()
+    native=json.loads(Path(original['native_contract_evidence_path']).read_text(encoding='utf8'))
+    for start in (38,46):
+        d=PlaywrightTransport._native_batch_descriptor({**original,'offset':start,'count':50-start},native)
+        d.update(source_id=s['source_id'],native_contract_evidence_path=original['native_contract_evidence_path'],
+            native_contract_evidence_sha256=original['native_contract_evidence_sha256'],
+            request_payload_sha256=hashlib.sha256(d['payload'].encode()).hexdigest(),
+            ranking_context_binding=original['ranking_context_binding'])
+        # Immutable checkpoints intentionally sort object keys, not payload strings.
+        sealed=json.loads(canonical_bytes(d))
+        assert sealed['payload']==d['payload']
+        authorize_v4_request(sealed['url'],s,a,kind='ACP',descriptor=sealed)
     d,s,a=grid_request();a['run_id']='other'
     with pytest.raises(ValueError):authorize_v4_request(d['url'],s,a,kind='ACP',descriptor=d)

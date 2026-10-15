@@ -232,4 +232,13 @@ def validate_v4_native_grid(url,descriptor,source,authorization):
         raise ValueError('V4_GRID_SOURCE_OR_BINDING_MISMATCH')
     # Existing exact captured request / opaque rec-object contract checks are
     # retained. No new endpoint, width, rec ID, or request shape is invented.
-    return validate_native_acp(url,descriptor,scope,authorization)
+    # Checkpoints canonically sort object keys, while request payload strings
+    # remain immutable. Rebuild rec objects using the original DOM JSON text's
+    # key order, rather than the sorted metadata projection. Full saved-DOM
+    # equality above still binds both representations and every opaque value.
+    metadata=descriptor['metadata']
+    entries=json.loads(metadata['client_recs_raw'])
+    if entries!=metadata['entries']:
+        raise ValueError('V4_GRID_LITERAL_RECS_MISMATCH')
+    proof={**descriptor,'metadata':{**metadata,'entries':entries}}
+    return validate_native_acp(url,proof,scope,authorization)
