@@ -41,6 +41,10 @@ def _verify_prerequisite(reference,stage):
     def collect(x):
         if isinstance(x,dict):
             for k,v in x.items():
+                # Live control state is checked independently before requests;
+                # changing it cannot invalidate immutable prior-stage DOM.
+                # Do not recursively collect its unrelated historical receipts.
+                if k=='shared_access_gate_path':continue
                 if isinstance(v,str) and (k=='path' or k.endswith('_path')) and Path(v).is_file():paths.add(Path(v))
                 elif isinstance(v,(dict,list)):collect(v)
         elif isinstance(x,list):

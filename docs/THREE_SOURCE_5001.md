@@ -64,6 +64,9 @@ the per-request hot path. An execution-local source-proof cache performs full
 initial DOM validation, then hashes every dependency, including historical
 reservation/receipt/body. Changed evidence repeats full validation. Final QA
 always independently re-reads full DOM and receipts.
+Mutable shared Access Gate state is checked separately before requests; it is
+not an immutable prior-stage DOM dependency. An explicitly verified Gate
+recovery must not trigger another full replay of unchanged T0/T1/T2 evidence.
 
 ## Historical navigation, preparation and reports
 

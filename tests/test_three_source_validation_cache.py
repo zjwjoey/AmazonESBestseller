@@ -49,3 +49,38 @@ def test_navigation_session_cache_does_not_share_mutable_rows_or_skip_byte_check
         body.write_text('changed TEST_ONLY cached HTML','utf8')
         with pytest.raises(ValueError):verify_navigation_reference(proof,parent)
         with pytest.raises(ValueError):discover_navigation(page,parent)
+
+
+def test_mutable_shared_gate_does_not_reparse_immutable_prior_stage_evidence(tmp_path,monkeypatch):
+    from amazon_es_bestseller.highspeed.v4_authorization import _verify_prerequisite
+    from amazon_es_bestseller.multisource.storage import digest,atomic_json
+    reference,body=envelope(tmp_path/'archive')
+    shared=tmp_path/'control'/'access_gate.json';atomic_json(shared,sealed({'state':'NETWORK_ERROR'}))
+    manifest=tmp_path/'TEST_ONLY_prior_stage.json';manifest.write_text('{}','utf8')
+    stage={'pages':[{'evidence_path':str(body)}],
+        'capacity_execution':{'plan':{'shared_access_gate_path':str(shared)}}}
+    calls=[]
+    def verify(*args):calls.append(args);return deepcopy(stage)
+    monkeypatch.setattr('amazon_es_bestseller.highspeed.v4_quality.verify_stage_reference',verify)
+    prior={'path':str(manifest),'sha256':digest(manifest.read_bytes())}
+    with prerequisite_review_session():
+        _verify_prerequisite(prior,'T2');assert len(calls)==1
+        atomic_json(shared,sealed({'state':'NORMAL','agent_handled':True}))
+        _verify_prerequisite(prior,'T2');assert len(calls)==1
+        # Creating a live lock alongside the mutable Gate is also control state.
+        (shared.parent/'highspeed_live.lock').write_bytes(b'')
+        _verify_prerequisite(prior,'T2');assert len(calls)==1
+        body.write_bytes(body.read_bytes()+b'\n<!-- TEST_ONLY changed evidence -->')
+        _verify_prerequisite(prior,'T2');assert len(calls)==2
+
+
+def test_cached_prior_proof_never_relaxes_current_gate_validation(tmp_path,monkeypatch):
+    from test_three_source_runner import execution_scope
+    from test_highspeed_v4_execution import NOW
+    from amazon_es_bestseller.highspeed.v4_authorization import validate_v4_authorization
+    p,a=execution_scope(tmp_path,monkeypatch)
+    with prerequisite_review_session():
+        validate_v4_authorization(p,a,{'state':'NORMAL'},now=NOW,store_root=a['store_root'])
+        for state in ('NETWORK_ERROR','CHALLENGE','UNKNOWN'):
+            with pytest.raises(ValueError,match='GLOBAL_ACCESS_GATE_BLOCKED'):
+                validate_v4_authorization(p,a,{'state':state},now=NOW,store_root=a['store_root'])
