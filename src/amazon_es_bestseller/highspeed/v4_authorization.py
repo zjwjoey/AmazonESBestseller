@@ -99,11 +99,19 @@ def validate_plan_v4(plan):
     sources = plan.get('sources', [])
     if not sources:
         raise ValueError('V4_SOURCES_REQUIRED')
+    three_source = plan.get('collection_contract') == 'V4_THREE_SOURCE_5001'
+    if three_source:
+        from .three_contract import validate_three_plan
+        validate_three_plan(plan)
     seen = set()
     for s in sources:
         if s.get('source_id') in seen or not s.get('source_id') or s.get('parser_profile') != 'V4':
             raise ValueError('V4_UNIQUE_SOURCE_PROFILE_REQUIRED')
         seen.add(s['source_id'])
+        if three_source:
+            from .three_contract import verify_source
+            verify_source(s)
+            continue
         seed = next((x for x in SEEDS if x['url'] == s.get('actual_source_url')), None)
         if not seed or any(seed[k] != s.get(k) for k in ('source_type', 'source_subtype')):
             # Future capacity extensions require the DOM proof validator.
@@ -149,6 +157,10 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
             raise ValueError('V4_EXACT_BUDGET_APPROVAL_REQUIRED:' + key)
     if set(a.get('sources', {})) != {s['source_id'] for s in plan['sources']}:
         raise ValueError('V4_EXACT_SOURCE_SET_REQUIRED')
+    if plan.get('collection_contract') == 'V4_THREE_SOURCE_5001':
+        for key in ('collection_contract','source_targets','source_budgets'):
+            if a.get(key) != plan[key]:
+                raise ValueError('THREE_EXACT_CAMPAIGN_APPROVAL_REQUIRED:'+key)
     for s in plan['sources']:
         scope = a['sources'][s['source_id']]
         for key in ('source_type', 'source_subtype', 'page_urls', 'parser_profile'):

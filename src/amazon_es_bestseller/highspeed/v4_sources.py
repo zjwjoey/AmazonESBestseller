@@ -24,6 +24,11 @@ SEEDS = [
 DISABLED_SUPPLY = {k: 'SOURCE_PRODUCT_SUPPLY_UNVERIFIED_OR_UNAVAILABLE'
                    for k in ('MOVERS_SHAKERS', 'MOST_WISHED_FOR', 'MOST_GIFTED')}
 RANKED = {'BEST_SELLERS', 'NEW_RELEASES'}
+# Explicit root in the separate three-source task. Preserve the original eight
+# diagnostic seeds and their strict acceptance contract unchanged.
+ADDITIONAL_ROOTS = [{'source_type':'CUSTOMER_FAVORITES',
+    'source_subtype':'CUSTOMERS_MOST_LOVED_CURATED_ZONE',
+    'url':'https://www.amazon.es/gp/browse.html?node=205103589031'}]
 
 
 def amazon_url(url):
@@ -39,7 +44,7 @@ def amazon_url(url):
 def source_for_url(url, *, navigation_evidence=None, source_type=None, source_subtype=None):
     if not amazon_url(url):
         raise ValueError('V4_AMAZON_SOURCE_URL_REQUIRED')
-    found = next((s for s in SEEDS if s['url'] == url), None)
+    found = next((s for s in [*SEEDS, *ADDITIONAL_ROOTS] if s['url'] == url), None)
     if found is None:
         # A non-seed is an explicit reviewed DOM discovery, never guessed paths.
         if not (navigation_evidence and navigation_evidence.get('raw_href')
