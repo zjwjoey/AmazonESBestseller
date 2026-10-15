@@ -20,6 +20,7 @@ CAPTURE_VERSION = 'multisource_v4.2.capture_bound'
 VERSION = 'multisource_v4.3.loading_context'
 PAGINATION_VERSION = 'multisource_v4.4.owned_ranked_pagination'
 CML_DOSSIER_VERSION = 'multisource_v4.5.cml_dossier'
+CML_HERO_VERSION = 'multisource_v4.6.cml_hero'
 CML_DOSSIER_SELECTOR = '.dcl-html-grid [data-cy="asin-faceout-container"]'
 SELECTORS = {
     'DEALS_ZONE': '[data-testid="product-card"][data-asin][data-deal-id]',
@@ -181,13 +182,13 @@ def _navigation(soup, source, page_url, sha):
     return found
 
 
-def _cml_dossier_context(soup,source,page_url):
+def _cml_dossier_context(soup,source,page_url,allow_owned_hero=False):
     if (source['source_type']!='CUSTOMER_FAVORITES' or source['source_subtype']!='CUSTOMERS_MOST_LOVED_CURATED_ZONE'
             or not urlsplit(page_url).path.startswith('/cml-')):return False
     nav=source.get('navigation_evidence') or {}
     headings={h.get_text(' ',strip=True) for h in soup.select('h1,h2')}
     canonical=soup.select('link[rel=canonical]')
-    if (nav.get('relationship')!='THEME_LINK' or nav.get('label_raw') not in headings
+    if (nav.get('relationship')!='THEME_LINK' or (nav.get('label_raw') not in headings and not (allow_owned_hero and any(n.get_text(' ',strip=True)==nav.get('label_raw') for n in soup.select('.template-renderer-wrapper #headline'))))
             or 'Los favoritos de los clientes' not in headings or len(canonical)!=1):return False
     url=canonical[0].get('href') or '';parts=urlsplit(url);nodes=parse_qs(parts.query).get('node',[])
     if (not amazon_url(url) or parts.path!='/b' or len(nodes)!=1 or not nodes[0].isascii() or not nodes[0].isdigit()):return False
@@ -200,7 +201,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                   acp_responses=None, parser_profile_version=None):
     version = parser_profile_version or (PAGINATION_VERSION if source['source_type'] in RANKED
         and page_url!=source['actual_source_url'] and source.get('pagination_evidence') else VERSION)
-    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION, PAGINATION_VERSION,CML_DOSSIER_VERSION}:
+    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION, PAGINATION_VERSION,CML_DOSSIER_VERSION,CML_HERO_VERSION}:
         raise ValueError('V4_UNKNOWN_PARSER_VERSION')
     if origin not in {'OFFLINE_FIXTURE', 'LIVE_CAPTURE', 'HISTORICAL_REPLAY'}:
         raise ValueError('UNKNOWN_ORIGIN')
@@ -219,10 +220,11 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
     access = detect_access_status(http_status, html).value
     # DOM fixtures have no HTTP measurement. UNKNOWN is not upgraded to NORMAL.
     permitted = access == 'NORMAL' or origin != 'LIVE_CAPTURE' and http_status is None and access == 'UNKNOWN'
-    if permitted and (parser_profile_version is None or version==CML_DOSSIER_VERSION):
+    if permitted and (parser_profile_version is None or version in {CML_DOSSIER_VERSION,CML_HERO_VERSION}):
         dossier=_cml_dossier_context(soup,source,page_url)
         if dossier:version=CML_DOSSIER_VERSION
-        elif version==CML_DOSSIER_VERSION:raise ValueError('V4_EXACT_CML_DOSSIER_CONTEXT_REQUIRED')
+        elif (parser_profile_version is None or version==CML_HERO_VERSION) and _cml_dossier_context(soup,source,page_url,allow_owned_hero=True):version=CML_HERO_VERSION
+        elif version in {CML_DOSSIER_VERSION,CML_HERO_VERSION}:raise ValueError('V4_EXACT_CML_DOSSIER_CONTEXT_REQUIRED')
     page = {'source_type': source['source_type'], 'source_subtype': source['source_subtype'],
             'page_url': page_url, 'source_id': source['source_id'], 'origin': origin,
             'http_status': http_status, 'access_status': access, 'observed_at': observed_at,
@@ -264,14 +266,14 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
         subtype = source['source_subtype']
         if subtype not in SELECTORS:
             raise ValueError('V4_UNSUPPORTED_SUBTYPE')
-        selector=CML_DOSSIER_SELECTOR if version==CML_DOSSIER_VERSION else SELECTORS[subtype]
+        selector=CML_DOSSIER_SELECTOR if version in {CML_DOSSIER_VERSION,CML_HERO_VERSION} else SELECTORS[subtype]
         cards = soup.select(selector)
         accepted = set()
         for card in cards:
             if not _eligible(card) or any(id(p) in accepted for p in card.parents):
                 continue
             accepted.add(id(card))
-            title, raw, status, title_proof = _title(card, 'CUSTOMER_FAVORITES_CATEGORY_BROWSE' if version==CML_DOSSIER_VERSION else subtype)
+            title, raw, status, title_proof = _title(card, 'CUSTOMER_FAVORITES_CATEGORY_BROWSE' if version in {CML_DOSSIER_VERSION,CML_HERO_VERSION} else subtype)
             link = normalize_product_url_v3(raw, base_url=page_url)
             slot = len(rows)
             proof = {'card_sha256': _sha(str(card)), 'raw_product_url': raw,
@@ -297,7 +299,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                    observed_at=row.get('observed_at', observed_at), origin=origin, evidence_path=row.get('evidence_path', evidence_path),
                    evidence_sha256=row.get('evidence_sha256', sha), parser_version=version,
                    observation_id='v4obs_' + _sha(f'{run_id}|{sha}|{index}|{page_url}' +
-                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION,PAGINATION_VERSION,CML_DOSSIER_VERSION} else ''))[:32],
+                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION,PAGINATION_VERSION,CML_DOSSIER_VERSION,CML_HERO_VERSION} else ''))[:32],
                    source_node_id=node_id(page_url), amazon_category_path=[],
                    amazon_category_l1=None, amazon_category_l2=None, amazon_category_l3=None, amazon_category_leaf=None,
                    research_category=None, category_mapping_status='UNKNOWN', source_completeness_status='UNKNOWN',
