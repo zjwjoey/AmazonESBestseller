@@ -181,6 +181,8 @@ def authorize_v4_request(url, source, authorization, *, kind='PAGE', descriptor=
         return validate_dynamic_descriptor(url,source,scope,authorization,descriptor)
     if kind != 'ACP' or source['source_type'] not in RANKED or not scope.get('allow_native_acp'):
         raise ValueError('V4_NATIVE_LOADING_NOT_APPROVED')
+    if not (descriptor.get('metadata') or {}).get('carousel'):
+        return validate_v4_native_grid(url,descriptor,source,authorization)
     # Reuse V3's entire native byte/owner/parent/source validator. The explicit
     # compatibility view changes no run IDs, actual bytes or receipt provenance.
     from .authorization import _validate_v3_native_carousel
@@ -188,3 +190,46 @@ def authorize_v4_request(url, source, authorization, *, kind='PAGE', descriptor=
     legacy_auth = {**authorization, 'snapshot_contract_version': 3,
                    'sources': {**authorization['sources'], source['source_id']: legacy_scope}}
     return _validate_v3_native_carousel(url, descriptor, legacy_scope, legacy_auth, source_id=source['source_id'])
+
+
+def saved_grid_binding(descriptor,source):
+    """Rebuild grid ownership from the actual saved page, never endpoint guesses."""
+    from urllib.parse import urlsplit,urlunsplit,parse_qsl,urlencode
+    from .v4_adapters import parse_v4_page
+    from .sources import same_source_category
+    d=descriptor;parent=d.get('request_contract_parent_page_url')
+    if parent not in source['page_urls'] or d.get('source_id')!=source['source_id']:
+        raise ValueError('V4_GRID_EXACT_SOURCE_REQUIRED')
+    body=Path(d['evidence_path']).read_bytes()
+    parsed=parse_v4_page(body.decode('utf8'),source=source,page_url=parent,run_id=d['run_id'],
+        observed_at='2000-01-01T00:00:00Z',evidence_path=d['evidence_path'],origin='OFFLINE_FIXTURE')
+    grids=[p for p in parsed['acp_pending'] if not p.get('metadata',{}).get('carousel')]
+    contexts={r['rank_context'] for r in parsed['observations']}
+    def category_view(value):
+        parts=urlsplit(value)
+        # The saved grid's heading links include the explicit display encoding.
+        # Preserve every other unknown query byte in category comparison.
+        query=[(k,v) for k,v in parse_qsl(parts.query,keep_blank_values=True) if (k,v)!=('ie','UTF8')]
+        return urlunsplit((parts.scheme,parts.netloc,parts.path,urlencode(query),parts.fragment))
+    if (len(grids)!=1 or grids[0]['metadata']!=d.get('metadata') or not grids[0].get('url')
+            or urlsplit(grids[0]['url']).path!=urlsplit(d['url']).path
+            or parsed['page']['status']!='VERIFIED_WITH_PRODUCTS'
+            or len(contexts)!=1 or not all(same_source_category(category_view(c),category_view(parent)) for c in contexts)
+            or (d.get('headers') or {}).get('x-amz-acp-params')!=grids[0]['metadata']['params']):
+        raise ValueError('V4_GRID_SAVED_DOM_OWNERSHIP_REQUIRED')
+    return {'source_id':source['source_id'],'page_evidence_sha256':hashlib.sha256(body).hexdigest(),
+        'ranking_context_url':next(iter(contexts))}
+
+
+def validate_v4_native_grid(url,descriptor,source,authorization):
+    from .authorization import validate_native_acp
+    scope=authorization.get('sources',{}).get(source['source_id'],{})
+    if (authorization.get('snapshot_contract_version')!=4 or scope.get('parser_profile')!='V4'
+            or scope.get('allow_native_acp') is not True or scope.get('source_type')!=source['source_type']
+            or scope.get('page_urls')!=source['page_urls'] or source['source_type'] not in RANKED
+            or descriptor.get('run_id')!=authorization.get('run_id')
+            or descriptor.get('ranking_context_binding')!=saved_grid_binding(descriptor,source)):
+        raise ValueError('V4_GRID_SOURCE_OR_BINDING_MISMATCH')
+    # Existing exact captured request / opaque rec-object contract checks are
+    # retained. No new endpoint, width, rec ID, or request shape is invented.
+    return validate_native_acp(url,descriptor,scope,authorization)

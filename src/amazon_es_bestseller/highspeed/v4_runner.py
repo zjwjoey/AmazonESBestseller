@@ -141,7 +141,8 @@ class V4T1Runner:
                                 descriptor = transport.prepare_ajax_descriptor({**descriptor, 'source_id': sid}, referer=url)
                             except ValueError as exc:
                                 legacy = {'page': parsed['page'].get('legacy_page', {}), 'observations': parsed['observations']}
-                                if not continuation_unavailable(legacy, receipt, str(exc), e._gate(plan)):
+                                if (not (descriptor.get('metadata') or {}).get('carousel')
+                                        or not continuation_unavailable(legacy, receipt, str(exc), e._gate(plan))):
                                     raise
                                 context = descriptor['metadata']['ranking_context_url']
                                 excluded.add(context)
@@ -151,8 +152,14 @@ class V4T1Runner:
                                 component_failures[context] = str(exc)
                                 commit()
                                 continue
+                            if not (descriptor.get('metadata') or {}).get('carousel'):
+                                from .v4_authorization import saved_grid_binding
+                                descriptor['ranking_context_binding']=saved_grid_binding(descriptor,source)
+                                descriptor['request_payload_sha256']=hashlib.sha256(descriptor['payload'].encode('utf8')).hexdigest()
                             native_key = (descriptor['url'], descriptor['method'], descriptor.get('payload'))
                             if native_key in attempted:
+                                if not (descriptor.get('metadata') or {}).get('carousel'):
+                                    raise ValueError('V4_GRID_NATIVE_NO_PROGRESS')
                                 self.store.append_event(run_id, {'kind': 'ACP_NO_PROGRESS', 'source_id': key})
                                 excluded.add(descriptor['metadata']['ranking_context_url'])
                                 continue

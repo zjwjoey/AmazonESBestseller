@@ -1,0 +1,12 @@
+{
+  "source_url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_kitchen_sm",
+  "run_id": "v4_t2_15da5305d976",
+  "observed_at": "2026-10-15T02:18:17.601612Z",
+  "html_sha256": "e51bbafa6532e5220eb773026e30bc8db5723738984d90cf730f24f7b1858698",
+  "native_contract_sha256": "50ab780b79c455f6b8489935608590694c727e37b262a45398afdc1170669a38",
+  "html_original": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t2_15da5305d976\\store\\html\\e5\\e51bbafa6532e5220eb773026e30bc8db5723738984d90cf730f24f7b1858698.html",
+  "native_original": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t2_15da5305d976\\store\\native_acp_contracts\\02622104c71745e8bf8c27d56508de2b.json",
+  "native_request_was_aborted": true,
+  "native_capture_is_not_successful_HTTP": true,
+  "note": "Real saved PAGE and exact aborted browser request. Fixtures are offline regression evidence; no response or successful grid continuation is claimed."
+}

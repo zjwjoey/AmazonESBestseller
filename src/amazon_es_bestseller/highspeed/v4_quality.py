@@ -176,8 +176,14 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                     scope={'parser_profile':'V3','source_type':source['source_type'],
                         'page_urls':source['page_urls'],'allow_native_acp':True,'allow_held_native_carousel':True}
                     auth={'snapshot_contract_version':3,'run_id':page['run_id'],'sources':{page['source_id']:scope}}
-                    _validate_v3_native_carousel(actual['request_url'],actual['native_acp_descriptor'],scope,auth,
-                        source_id=page['source_id'])
+                    if actual['native_acp_descriptor'].get('metadata',{}).get('carousel'):
+                        _validate_v3_native_carousel(actual['request_url'],actual['native_acp_descriptor'],scope,auth,
+                            source_id=page['source_id'])
+                    else:
+                        from .v4_authorization import validate_v4_native_grid
+                        grid_scope={**scope,'parser_profile':'V4'}
+                        validate_v4_native_grid(actual['request_url'],actual['native_acp_descriptor'],source,
+                            {'snapshot_contract_version':4,'run_id':page['run_id'],'sources':{page['source_id']:grid_scope}})
                 acp.append({**ref, 'body': cb.decode('utf8')})
             parsed = parse_v4_page(body.decode('utf8'), source=source, page_url=page['page_url'],
                                    run_id=page['run_id'], snapshot_id=page.get('snapshot_id'),
