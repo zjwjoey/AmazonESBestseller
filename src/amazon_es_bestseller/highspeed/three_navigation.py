@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from .v4_frontier import _excluded
 from .v4_sources import amazon_url, RANKED
 from .v4_navigation import verify_pagination_reference
+from ..multisource.storage import digest
 
 FAMILIES = ('BEST_SELLERS', 'NEW_RELEASES', 'CUSTOMER_FAVORITES')
 FAVORITES_ROOT = 'https://www.amazon.es/gp/browse.html?node=205103589031'
@@ -57,7 +58,33 @@ def _reference(a, positions, page, source, relationship):
         'approved': False, 'destination_product_supply': 'UNVERIFIED'}
 
 
+def _session_cache():
+    from .v4_authorization import _PREREQUISITES
+    return _PREREQUISITES.get()
+
+
+def _source_context(source,page_url):
+    return [source['source_id'],source['source_type'],source['source_subtype'],source['actual_source_url'],
+            page_url in source['page_urls']]
+
+
+def _check_dependency(reference):
+    if hashlib.sha256(Path(reference['evidence_path']).read_bytes()).hexdigest()!=reference['evidence_sha256']:
+        raise ValueError('THREE_NAV_HTML_SHA_MISMATCH')
+
+
 def discover_navigation(page, source):
+    cache=_session_cache()
+    if cache is None:return _discover_navigation(page,source)
+    fields={k:page.get(k) for k in ('source_id','source_type','source_subtype','page_url','evidence_path',
+        'evidence_sha256','observed_at','status','http_status','access_status')}
+    key=('THREE_DISCOVERY',digest(fields),digest(_source_context(source,page['page_url'])))
+    _check_dependency(page)
+    if key not in cache:cache[key]=_discover_navigation(page,source)
+    return deepcopy(cache[key])
+
+
+def _discover_navigation(page, source):
     if (source['source_type'] not in FAMILIES or page['source_id'] != source['source_id']
             or page['source_type'] != source['source_type']
             or page['page_url'] not in source['page_urls']):
@@ -140,6 +167,16 @@ def _verified_anchor(reference, source):
 
 
 def verify_navigation_reference(reference, source):
+    cache=_session_cache()
+    if cache is None:return _verify_navigation_reference(reference,source)
+    key=('THREE_NAV_PROOF',digest(reference),digest(_source_context(source,reference['page_url'])))
+    _check_dependency(reference)
+    if key not in cache:
+        _verify_navigation_reference(reference,source);cache[key]=True
+    return reference
+
+
+def _verify_navigation_reference(reference, source):
     _verified_anchor(reference, source)
     page = {'source_id': source['source_id'], 'source_type': source['source_type'],
         'source_subtype': source['source_subtype'], 'page_url': reference['page_url'],
@@ -152,6 +189,16 @@ def verify_navigation_reference(reference, source):
 
 
 def verify_next(reference, source, *, parent_page_url):
+    cache=_session_cache()
+    if cache is None:return _verify_next(reference,source,parent_page_url=parent_page_url)
+    key=('THREE_NEXT_PROOF',digest(reference),digest(_source_context(source,reference['page_url'])),parent_page_url)
+    _check_dependency(reference)
+    if key not in cache:
+        _verify_next(reference,source,parent_page_url=parent_page_url);cache[key]=True
+    return reference
+
+
+def _verify_next(reference, source, *, parent_page_url):
     # During discovery this check is pure and has no recursive rediscovery.
     _, a = _verified_anchor(reference, source)
     if reference['page_url'] != parent_page_url:

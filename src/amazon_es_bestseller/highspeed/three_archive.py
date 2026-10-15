@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from copy import deepcopy
 from urllib.parse import urlsplit
 from ..multisource.storage import read_sealed,immutable_json
 from .v4_adapters import parse_v4_page
@@ -15,6 +16,21 @@ from .three_navigation import discover_navigation,CONTRACT
 
 
 def historical_context(reference, *, expected_url=None, expected_type=None):
+    from .v4_authorization import _PREREQUISITES
+    from ..multisource.storage import digest
+    cache=_PREREQUISITES.get();key=('THREE_ARCHIVE_CONTEXT',digest(reference),expected_url,expected_type)
+    cached=cache.get(key) if cache is not None else None
+    if cached and all(p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest()==sha for p,sha in cached['files']):
+        return deepcopy(cached['value'])
+    result=_historical_context(reference,expected_url=expected_url,expected_type=expected_type)
+    if cache is not None:
+        path=Path(reference['path']);r=read_sealed(path)
+        paths=[path,Path(r['html_path']),path.parent.parent/'requests'/(r['request_id']+'.reserved.json')]
+        cache[key]={'value':deepcopy(result),'files':[(p,hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths]}
+    return result
+
+
+def _historical_context(reference, *, expected_url=None, expected_type=None):
     path=Path(reference['path'])
     if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['sha256']:
         raise ValueError('THREE_ARCHIVE_RECEIPT_SHA_MISMATCH')

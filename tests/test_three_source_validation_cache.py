@@ -9,6 +9,7 @@ from amazon_es_bestseller.highspeed.three_navigation import discover_navigation
 from amazon_es_bestseller.highspeed.three_contract import source_from_navigation
 from amazon_es_bestseller.highspeed.v4_authorization import prerequisite_review_session,validate_plan_v4
 from amazon_es_bestseller.multisource.storage import read_sealed,sealed,canonical_bytes
+from copy import deepcopy
 
 
 @pytest.mark.parametrize('changed',['html','reservation'])
@@ -32,3 +33,19 @@ def test_same_execution_avoids_reparse_but_rejects_changed_proof_bytes(tmp_path,
             rpath.write_bytes(canonical_bytes(sealed(q)))
         with pytest.raises(ValueError):validate_plan_v4(p)
         assert len(calls)>count
+
+
+def test_navigation_session_cache_does_not_share_mutable_rows_or_skip_byte_checks(tmp_path):
+    from amazon_es_bestseller.highspeed.three_navigation import verify_navigation_reference
+    reference,body=envelope(tmp_path)
+    parent,page=historical_context(reference)
+    with prerequisite_review_session():
+        first=discover_navigation(page,parent)
+        original=deepcopy(first)
+        first[0]['label_raw']='TEST_ONLY caller mutation'
+        assert discover_navigation(page,parent)==original
+        proof=next(r for r in original if '/kitchen/' in r['url'])
+        verify_navigation_reference(proof,parent);verify_navigation_reference(proof,parent)
+        body.write_text('changed TEST_ONLY cached HTML','utf8')
+        with pytest.raises(ValueError):verify_navigation_reference(proof,parent)
+        with pytest.raises(ValueError):discover_navigation(page,parent)
