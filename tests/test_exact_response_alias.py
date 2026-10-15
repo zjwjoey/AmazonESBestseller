@@ -95,3 +95,29 @@ def test_changed_restriction_gate_cannot_be_restored(tmp_path):
     with pytest.raises(ValueError,match='EXACT_SCOPE_GATE_REQUIRED'):
         restore_reviewed_alias_gate(store,{'run_id':a['run_id'],'sources':[s],'shared_access_gate_path':str(g)},a)
     assert read_sealed(g)['state']=='CHALLENGE'
+
+@pytest.mark.parametrize('status',[200,403])
+def test_scope_chain_keeps_only_legitimately_handled_network_failure(tmp_path,status):
+    from amazon_es_bestseller.multisource.storage import atomic_json
+    s,a,alias,r,g=setup(tmp_path);root=Path(a['store_root'])
+    normal=root/'prior_response.json';immutable_json(normal,sealed({
+        'status_code':status,'access_state':'NORMAL' if status==200 else 'BLOCKED',
+        'run_id':a['run_id'],'origin':'LIVE_CAPTURE','html_path':r['html_path'],'sha256':r['sha256']}))
+    network=root/'prior_network.json';immutable_json(network,sealed({'normal_verification_receipt':str(normal)}))
+    old={'state':'NORMAL','agent_handled_request_ids':['old_network'],'agent_recovery_evidence':str(network)}
+    scope=root/'prior_scope.json';immutable_json(scope,sealed({'kind':'USER_APPROVED_EXACT_RESPONSE_ALIAS_SCOPE_HANDLING',
+        'run_id':a['run_id'],'old_local_gate':{'previous_gate':old}}))
+    current=read_sealed(root/'access_gate.json');current['previous_gate']={'state':'NORMAL',
+        'agent_handled_request_ids':['old_network'],'scope_alias_handling_evidence':str(scope)}
+    atomic_json(root/'access_gate.json',sealed(current));alias['local_gate_sha256']=digest(current)
+    path=Path(a['response_alias_reference']['path']);path.write_text(json.dumps(alias),encoding='utf8')
+    a['response_alias_reference']['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+    store=Store(root,[{'request_id':'old_network','status':'NETWORK_ERROR'}])
+    plan={'run_id':a['run_id'],'sources':[s],'shared_access_gate_path':str(g)}
+    if status==200:
+        restore_reviewed_alias_gate(store,plan,a)
+        assert read_sealed(root/'access_gate.json')['agent_recovery_evidence']==str(network)
+        assert read_sealed(g)['state']=='NORMAL'
+    else:
+        with pytest.raises(ValueError,match='PRIOR_NETWORK_HANDLING_PROOF_REQUIRED'):restore_reviewed_alias_gate(store,plan,a)
+        assert read_sealed(g)['state']=='UNKNOWN'

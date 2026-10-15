@@ -94,8 +94,20 @@ def restore_reviewed_alias_gate(store,plan,auth):
         # Carry forward only the prior recorded, successful network handling;
         # do not mark any new transport failure/restriction as handled.
         previous=local.get('previous_gate') or {};handled=previous.get('agent_handled_request_ids',[])
+        network_evidence_path=previous.get('agent_recovery_evidence')
         if handled:
-            evidence=read_sealed(previous['agent_recovery_evidence'])
+            if not network_evidence_path and previous.get('scope_alias_handling_evidence'):
+                # A prior scope-only handling must retain its already verified
+                # network recovery, without treating the scope stop as access.
+                scope=read_sealed(previous['scope_alias_handling_evidence'])
+                if scope.get('run_id')!=plan['run_id'] or scope.get('kind')!='USER_APPROVED_EXACT_RESPONSE_ALIAS_SCOPE_HANDLING':
+                    raise ValueError('PRIOR_SCOPE_HANDLING_PROOF_REQUIRED')
+                old=scope['old_local_gate'].get('previous_gate') or {}
+                if old.get('state')!='NORMAL' or old.get('agent_handled_request_ids')!=handled:
+                    raise ValueError('PRIOR_SCOPE_HANDLING_IDS_MISMATCH')
+                network_evidence_path=old.get('agent_recovery_evidence')
+            if not network_evidence_path:raise ValueError('PRIOR_NETWORK_HANDLING_PROOF_REQUIRED')
+            evidence=read_sealed(network_evidence_path)
             check=read_sealed(evidence['normal_verification_receipt'])
             if (previous.get('state')!='NORMAL' or check.get('status_code')!=200 or check.get('access_state')!='NORMAL'
                     or check.get('run_id')!=plan['run_id'] or check.get('origin')!='LIVE_CAPTURE'
@@ -109,6 +121,7 @@ def restore_reviewed_alias_gate(store,plan,auth):
         path=store.root/'gate_recoveries'/(digest(evidence)[:24]+'.json');immutable_json(path,sealed(evidence))
         normal={'state':'NORMAL','agent_handled_request_ids':handled,'scope_alias_handling_evidence':str(path),
             'approval_id':alias['approval_id'],'previous_gate':local,'observed_at':utc_text()}
+        if network_evidence_path:normal['agent_recovery_evidence']=network_evidence_path
         atomic_json(store.root/'access_gate.json',sealed(normal),backup=True)
         atomic_json(shared,sealed({**normal,'previous_gate':prior}),backup=True)
         store.append_event(plan['run_id'],{'kind':'AUTHORIZED_RESPONSE_ALIAS_SCOPE_HANDLING','observed_at':utc_text(),'evidence_path':str(path)})
