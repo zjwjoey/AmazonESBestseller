@@ -216,7 +216,10 @@ class V4LoadingTransport(PlaywrightTransport):
                     if(footer)footer.scrollIntoView({block:'center',behavior:'instant'});
                     else if(c && c.length)c[c.length-1].scrollIntoView({block:'end',behavior:'instant'}); }""")
             else:
-                page.evaluate('() => window.scrollTo(0,document.body.scrollHeight)')
+                page.evaluate("""() => {const w=document.querySelector('[data-card-metrics-id*="haul-cx-infinite-scroll-body"]');
+                    const trigger=w && w.querySelector('[data-load-trigger="true"]');
+                    if(trigger)trigger.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+                    else if(w)w.scrollIntoView({block:'end',behavior:'instant'}); }""")
             page.wait_for_timeout(500)
         state=page.evaluate("""() => {const e=document.querySelector('[data-testid="load-more-footer"]');
             const r=e && e.getBoundingClientRect();return {view_url:location.href,scroll_y:scrollY,
