@@ -5,7 +5,9 @@ import json
 from urllib.parse import urlsplit,parse_qs
 
 from ..transport.playwright import PlaywrightTransport, _CONTROLLED_ACP_NONCE_HEADER
-from ..multisource.storage import read_sealed
+from ..multisource.storage import read_sealed,immutable_json
+from .budgets import utc_text
+from uuid import uuid4
 from .cli import save_native_contract
 from .v4_sources import amazon_url
 
@@ -164,7 +166,13 @@ class V4LoadingTransport(PlaywrightTransport):
                     and same_loading_view(self.session.page.url,s['actual_source_url'])),None)
                 if (not source or not amazon_url(req.url) or req.resource_type not in {'xhr','fetch'}
                         or len(self.dynamic)>=32):
-                    route.abort();return
+                    route.abort()
+                    immutable_json(self.store.root/'native_dynamic_rejections'/(uuid4().hex+'.json'),{
+                        'url':req.url,'method':req.method,'payload':req.post_data or '',
+                        'parent_view_url':self.session.page.url,'root_document_url':self.current_document_url,
+                        'source_id':source['source_id'] if source else None,'request_sent':False,
+                        'reason':'NO_APPROVED_CURRENT_DOCUMENT_CONTEXT_OR_ENDPOINT','observed_at':utc_text()})
+                    return
                 selected={k:v for k,v in headers.items() if k in {'accept','content-type','referer'} or k.startswith('x-amz-')}
                 self.dynamic.append({'route':route,'value':{'url':req.url,'method':req.method.upper(),
                     'payload':req.post_data or '', 'headers':selected,'parent_page_url':self.session.page.url,
@@ -204,6 +212,15 @@ class V4LoadingTransport(PlaywrightTransport):
             else:
                 page.evaluate('() => window.scrollTo(0,document.body.scrollHeight)')
             page.wait_for_timeout(500)
+        state=page.evaluate("""() => {const e=document.querySelector('[data-testid="load-more-footer"]');
+            const r=e && e.getBoundingClientRect();return {view_url:location.href,scroll_y:scrollY,
+                viewport_height:innerHeight,document_height:document.body.scrollHeight,
+                footer_rect:r ? {top:r.top,bottom:r.bottom,height:r.height}:null,
+                footer_style:e ? {display:getComputedStyle(e).display,visibility:getComputedStyle(e).visibility}:null,
+                ready_state:document.readyState};}""")
+        immutable_json(self.store.root/'loading_ui_diagnostics'/(uuid4().hex+'.json'),{
+            'source_id':source['source_id'],'root_document_url':self.current_document_url,
+            'state':state,'new_network_requests':0,'observed_at':utc_text()})
         return None
 
     def fetch_ajax(self,url,**kwargs):
