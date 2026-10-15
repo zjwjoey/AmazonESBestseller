@@ -185,3 +185,26 @@ def test_t2_resume_retains_both_explicit_approvals_without_resetting_start(tmp_p
         assert 'REQUEST_OUTSIDE_APPROVED_TIME' not in second['capacity']['errors']
         assert 'EXECUTION_APPROVAL_REQUIRED' not in second['capacity']['errors']
     finally:s.close()
+
+
+def test_interrupted_initial_capture_is_not_skipped_as_completed_on_t2_resume(tmp_path,monkeypatch):
+    p,a=t2_scope(tmp_path,monkeypatch);sid=p['sources'][0]['source_id']
+    a['sources'][sid]['allow_native_acp']=True;s=RunStore(a['store_root']);clock=[NOW]
+    class Interrupted(FakeTransport):
+        crash=True
+        def fetch_page(self,url):
+            value=super().fetch_page(url);clock[0]+=timedelta(seconds=5);return value
+        def prepare_ajax_descriptor(self,descriptor,**kwargs):
+            if self.crash:raise OSError('TEST_ONLY_INTERRUPTION_AFTER_INITIAL_CARDS')
+            raise ValueError('ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED')
+    try:
+        t=Interrupted(p,a);runner=V4T2Runner(s,clock=lambda:clock[0],sleep=lambda n:None)
+        first=runner.run(p,authorization=a,transport=t)
+        assert len(t.calls)==1
+        assert s.pages(p['run_id'])[0]['execution_status']=='APPROVED_FRAME_RECORDED_NOT_COMPLETE'
+        t.crash=False
+        second=runner.run(p,authorization=a,transport=t,resume=True)
+        assert len(t.calls)==9 and second['run']['started_at']==first['run']['started_at']
+        assert all(x['execution_status']=='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED' for x in s.pages(p['run_id']))
+        assert second['summary']['raw_count']>first['summary']['raw_count']
+    finally:s.close()

@@ -78,6 +78,11 @@ def audit_capacity(pages, observations, sources, execution):
     if times and (times[0]<started or times[-1]>finished):errors.append('REQUEST_TIME_OUTSIDE_EXECUTION')
     if intervals and min(intervals)<plan['request_pacing_seconds']:errors.append('PACING_VIOLATION')
     page_count=sum(q['kind']=='PAGE' for q in reservations)
+    for source in sources:
+        n=sum(q['kind']=='ACP' and q['source_id']==source['source_id'] for q in reservations)
+        limit=(plan.get('max_native_requests_per_source',50) if source['source_type'] in {'BEST_SELLERS','NEW_RELEASES'}
+               else plan.get('max_dynamic_requests_per_source',2))
+        if n>limit:errors.append('SOURCE_LOADING_LIMIT_EXCEEDED:'+source['source_id'])
     daily=Counter(madrid_day(q['observed_at']) for q in reservations)
     if len(reservations)>plan['max_requests_per_run'] or page_count>plan['max_pages_per_run']:
         errors.append('REQUEST_OR_PAGE_LIMIT_EXCEEDED')
@@ -116,6 +121,8 @@ def audit_capacity(pages, observations, sources, execution):
     expected={u for s in sources for u in s['page_urls']}
     if not expected.issubset({p['page_url'] for p in pages}):errors.append('APPROVED_PAGE_SCOPE_INCOMPLETE')
     if any(p['status'] not in {'VERIFIED_WITH_PRODUCTS','EXPLICIT_EMPTY'} for p in pages):errors.append('UNVERIFIED_SOURCE_FRAME')
+    if any(p.get('execution_status')!='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED' for p in pages):
+        errors.append('SOURCE_PAGE_SCOPE_NOT_EXECUTED')
     # Real checkpoints provide marginal growth; retained repeats never become new supply.
     seen=set();samples=[];batches=defaultdict(set)
     for r in observations:

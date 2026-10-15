@@ -26,6 +26,9 @@ explicit `--live` switch and profile handling as T1. An expired approval, change
 plan, blocked gate, ambiguous reservation or concurrent collector blocks new
 requests. Validated approval copies are persisted before the first request and
 retained across resume. Original start time and cumulative budgets do not reset.
+Initial cards are not a completed source-page scope. Interrupted native pages
+are reopened only at the exact approved URL and charged to the same run; completed
+pages are skipped. Per-source native/dynamic limits also accumulate across resume.
 
 `report` produces the existing six exports plus `capacity_report_v4.json`.
 Capacity acceptance re-reads the complete reservation/response directories,

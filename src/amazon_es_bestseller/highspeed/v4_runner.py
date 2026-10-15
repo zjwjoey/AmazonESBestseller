@@ -49,7 +49,8 @@ class V4T1Runner:
             started = run['started_at']; last = self.store.latest_request_time()
             last = aware_time(last) if last else None
             committed = {p['page_url'] for p in self.store.pages(run_id)
-                         if p['source_id'] not in reverify_source_ids}
+                         if p['source_id'] not in reverify_source_ids and (self.stage!='T2' or
+                             p.get('execution_status')=='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED')}
             self.store.update_run(run_id, status='RUNNING')
             stop = None
             work=[(s,u) for s in plan['sources'] for u in s['page_urls']]
@@ -68,6 +69,12 @@ class V4T1Runner:
                         existing = []
                         self.store.append_event(run_id, {'kind': 'V4_T1_IN_SCOPE_REVERIFICATION', 'source_id': key,
                             'page_url': url, 'reason': 'USER_AUTHORIZED_OFFLINE_FIX_THEN_BOUNDED_REVERIFY'})
+                    if (self.stage=='T2' and existing and (authorization['sources'][sid].get('allow_native_acp')
+                            or authorization['sources'][sid].get('allow_native_dynamic'))):
+                        # An interrupted capture has no active browser widget in
+                        # a resumed session. Reopen this exact approved page,
+                        # charged against the same budgets; keep all old bytes.
+                        existing=[]
                     cached = bool(existing)
                     if existing:
                         receipt = existing[-1]
@@ -87,6 +94,9 @@ class V4T1Runner:
                             acp.append(self._acp(old))
                     component_failures = {}
                     loading_stop_reason = None
+                    scope_executed=False
+                    def source_loading_count():
+                        return sum(q['source_id']==sid and q['kind']=='ACP' for q in self.store.requests(run_id))
                     def parse():
                         return parse_v4_page(response['text'], source=source, page_url=url, run_id=run_id,
                                   snapshot_id=plan['snapshot_id'], observed_at=receipt['observed_at'],
@@ -98,7 +108,8 @@ class V4T1Runner:
                         p = {**parsed['page'], 'run_id': run_id, 'snapshot_id': plan['snapshot_id'],
                              'page_key': key, 'source': source, 'capture_receipt_reference': e._receipt_ref(root_receipt),
                              'source_type_verified': bool(parsed['observations']), 'source_context_valid': True,
-                             'execution_status': 'APPROVED_FRAME_RECORDED_NOT_COMPLETE',
+                             'execution_status': 'APPROVED_SOURCE_PAGE_SCOPE_EXECUTED' if scope_executed
+                                else 'APPROVED_FRAME_RECORDED_NOT_COMPLETE',
                              'source_representation': receipt.get('source_representation', 'RENDERED_DOM'),
                              'document_html_reference': {'path': receipt.get('document_html_path'), 'sha256': receipt.get('document_sha256')},
                              'rendered_html_reference': {'path': receipt.get('rendered_html_path'), 'sha256': receipt.get('rendered_sha256')},
@@ -118,7 +129,7 @@ class V4T1Runner:
                             if plan['max_requests_per_run'] - self.store.summary(run_id)['requests'] <= remaining_pages:
                                 loading_stop_reason = 'RESERVED_REQUESTS_FOR_REMAINING_PAGES'
                                 break
-                            if len(attempted)>=plan.get('max_native_requests_per_source',50):
+                            if (source_loading_count() if self.stage=='T2' else len(attempted))>=plan.get('max_native_requests_per_source',50):
                                 loading_stop_reason = 'PER_SOURCE_NATIVE_REQUEST_CAP'
                                 break
                             descriptor = _next_acp_pending(parsed['acp_pending'], excluded, v3=True)
@@ -155,7 +166,8 @@ class V4T1Runner:
                     if (not cached and source['source_type'] in {'DEALS','AMAZON_HAUL'}
                             and parsed['page']['status']!='EXPLICIT_EMPTY'
                             and authorization['sources'][sid].get('allow_native_dynamic')):
-                        for _ in range(plan.get('max_dynamic_requests_per_source',2)):
+                        dynamic_limit=plan.get('max_dynamic_requests_per_source',2)
+                        for _ in range(max(0,dynamic_limit-(source_loading_count() if self.stage=='T2' else 0))):
                             remaining_pages=sum(u not in committed and u!=url for s,u in work)
                             if plan['max_requests_per_run']-self.store.summary(run_id)['requests']<=remaining_pages:
                                 break
@@ -212,6 +224,9 @@ class V4T1Runner:
                     # A failed/unknown frame stops. It never becomes source-empty.
                     if not parsed['observations'] and parsed['page']['status']!='EXPLICIT_EMPTY':
                         raise ValueError('V4_SOURCE_FRAME_UNVERIFIED_SAVED_FOR_OFFLINE_DIAGNOSIS')
+                    if self.stage=='T2':
+                        scope_executed=True
+                        commit()
                 except (ValueError, OSError) as exc:
                     stop = str(exc)
                     self.store.append_event(run_id, {'kind': 'STOP', 'reason': stop, 'observed_at': utc_text(e.clock())})
