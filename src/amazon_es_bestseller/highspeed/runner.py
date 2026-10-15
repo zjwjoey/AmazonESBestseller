@@ -973,7 +973,11 @@ class HighSpeedRunner:
             raise ValueError(state)
         if live:
             try:
-                authorize_request(response.get("url", url), source, authorization, kind=kind, descriptor=descriptor)
+                if plan.get('snapshot_contract_version')==4:
+                    from .response_alias import authorize_v4_response
+                    authorize_v4_response(receipt,source,authorization)
+                else:
+                    authorize_request(response.get("url", url), source, authorization, kind=kind, descriptor=descriptor)
             except ValueError:
                 if hasattr(self.store, "set_gate"):
                     self.store.set_gate("UNKNOWN", evidence_path=receipt["evidence_path"], run_id=plan["run_id"], reason="UNREVIEWED_REDIRECT")

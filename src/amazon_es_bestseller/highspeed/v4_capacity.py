@@ -70,8 +70,8 @@ def audit_capacity(pages, observations, sources, execution, *, three_source=Fals
             allowed=False
             for auth in matches:
                 try:
-                    for url in (q['url'],r.get('final_url')):
-                        authorize_v4_request(url,source_map[q['source_id']],auth,kind=q['kind'],descriptor=r.get('native_acp_descriptor'))
+                    from .response_alias import authorize_v4_response
+                    authorize_v4_response(r,source_map[q['source_id']],auth)
                     allowed=True;break
                 except ValueError:continue
             if not allowed:raise ValueError('REQUEST_NOT_IN_APPROVED_SCOPE')
