@@ -4,6 +4,7 @@ from datetime import date
 from functools import lru_cache
 import hashlib,re
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
 from .adapters import _cards
 from .budgets import aware_time
@@ -13,7 +14,7 @@ MONTHS={'enero':1,'febrero':2,'marzo':3,'abril':4,'mayo':5,'junio':6,'julio':7,
 
 
 def classify_card(card,observed_at):
-    signals=[];dates=[];preorder=False;available=False
+    signals=[];dates=[];preorder=False;available=False;release_declared=False
     for n in card.select('span, p'):
         if n.select_one('span, p') or n.find_parent('a',href=True):continue
         text=n.get_text(' ',strip=True)
@@ -22,19 +23,23 @@ def classify_card(card,observed_at):
             signals.append({'raw':text,'node_sha256':hashlib.sha256(str(n).encode('utf8')).hexdigest()})
             preorder=preorder or bool(re.match(r'^(Reservar|Preventa|Precompra|Pre-order)',text,re.I))
             available=available or bool(re.match(r'^(En stock|In stock)',text,re.I))
+            release_declared=release_declared or bool(re.match(r'^(Fecha de lanzamiento:|Este producto saldr[aá]|This item will be released on)',text,re.I))
             m=re.search(r'(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})',text,re.I)
             iso=re.search(r'\b(\d{4}-\d{2}-\d{2})\b',text)
             try:
                 d=date(int(m[3]),MONTHS[m[2].lower()],int(m[1])) if m else date.fromisoformat(iso[1]) if iso else None
                 if d:dates.append(d)
             except (ValueError,KeyError):pass
-    future=any(d>aware_time(observed_at).date() for d in dates)
+    future=any(d>aware_time(observed_at).astimezone(ZoneInfo('Europe/Madrid')).date() for d in dates)
     status=('SOURCE_CONFLICT' if available and (future or preorder) else
-        'FUTURE_RELEASE_VISIBLE' if future else 'PREORDER_VISIBLE' if preorder else
+        'FUTURE_RELEASE_VISIBLE' if future and release_declared else 'PREORDER_VISIBLE' if preorder else
+        'FUTURE_AVAILABILITY_VISIBLE' if future else
         'AVAILABLE_NOW_VISIBLE' if available else 'SCHEDULED_DATE_NOT_CONFIRMED_FUTURE' if dates else
         'RELEASE_SIGNAL_DATE_UNPARSED' if signals else 'NOT_DISPLAYED')
     return {'release_status':status,'release_signals_raw':[s['raw'] for s in signals],
         'release_declared_dates':[d.isoformat() for d in dates],'release_node_evidence':signals,
+        'explicit_release_signal_visible':release_declared,'preorder_signal_visible':preorder,
+        'release_date_comparison_timezone':'Europe/Madrid',
         'release_semantics':'VISIBLE_CARD_SIGNAL_NOT_CONFIRMED_BUYABLE_SKU'}
 
 

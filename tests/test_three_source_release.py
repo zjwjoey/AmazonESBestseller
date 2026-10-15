@@ -16,7 +16,8 @@ def test_real_page_future_release_banner_is_not_an_individual_product_claim():
     assert values and all(v['release_status'] in {'NOT_DISPLAYED','UNVERIFIED_CARD_BINDING'} for v in values.values())
 
 
-@pytest.mark.parametrize('html,status',[('<span>Disponible el 20 de noviembre de 2026</span>','FUTURE_RELEASE_VISIBLE'),
+@pytest.mark.parametrize('html,status',[('<span>Disponible el 20 de noviembre de 2026</span>','FUTURE_AVAILABILITY_VISIBLE'),
+    ('<span>Fecha de lanzamiento: 20 de noviembre de 2026</span>','FUTURE_RELEASE_VISIBLE'),
     ('<span>Reservar ahora</span>','PREORDER_VISIBLE'),('<span>En stock</span>','AVAILABLE_NOW_VISIBLE'),
     ('<span>Disponible el 1 de enero de 2026</span>','SCHEDULED_DATE_NOT_CONFIRMED_FUTURE'),
     ('<a href="/dp/TEST_ONLY"><span>Reservar ahora</span></a>','NOT_DISPLAYED'),
@@ -25,3 +26,10 @@ def test_test_only_availability_snippets_stay_card_bound(html,status):
     # Synthetic availability spans test the pure classifier, not product supply.
     card=BeautifulSoup('<div>'+html+'</div>','lxml').div
     assert classify_card(card,'2026-10-15T01:00:00Z')['release_status']==status
+
+
+def test_release_calendar_uses_madrid_date_across_utc_midnight_boundary():
+    card=BeautifulSoup('<div><span>Fecha de lanzamiento: 15 de octubre de 2026</span></div>','lxml').div
+    value=classify_card(card,'2026-10-14T23:30:00Z')
+    assert value['release_status']=='SCHEDULED_DATE_NOT_CONFIRMED_FUTURE'
+    assert value['release_date_comparison_timezone']=='Europe/Madrid'
