@@ -25,16 +25,24 @@ class V4ThreeSourceRunner(V4T2Runner):
         execution=execution_for_store(self.store,plan['run_id'])
         rows=list(self.store.iter_observations(plan['run_id']));pages=self.store.pages(plan['run_id'])
         audit=audit_capacity(pages,rows,plan['sources'],execution,three_source=True)
+        result['quality']=audit['central_quality']
+        self.store.append_event(plan['run_id'],{'kind':'THREE_COMBINED_DOM_RECEIPT_REVIEW',
+            'central_dom_passed':audit['central_quality']['central_full_dom_review_passed'],
+            'receipt_audit_passed':audit['diagnostic_passed'],'errors':audit['errors']})
         metrics=measure_three(rows,plan['run_id'])
         accepted=metrics['target_met'] and audit['diagnostic_passed']
         acceptance=('ACCEPTED — THREE_SOURCE_5001_CANDIDATES_QA_PASSED' if accepted else
             'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET' if not metrics['target_met'] else
             'NOT_ACCEPTED — THREE_SOURCE_QUALITY_AUDIT_FAILED')
-        self.store.update_run(plan['run_id'],quality_gate_passed=accepted,three_source_metrics=metrics,
+        self.store.update_run(plan['run_id'],quality_gate_passed=accepted,qa=audit['central_quality'],three_source_metrics=metrics,
             three_source_receipt_audit=audit,three_source_acceptance=acceptance,
             SKU_identity_status='NOT_VERIFIED',T3_execution_enabled=False)
         return {**result,'run':self.store.get_run(plan['run_id']),'metrics':metrics,'receipt_audit':audit,
                 'acceptance':acceptance}
+
+    def defer_central_review_to_capacity(self):
+        # audit_capacity performs the complete current-run DOM review itself.
+        return True
 
     def continue_after_source_stop(self,reason):
         return reason.startswith(('THREE_SOURCE_REQUEST_BUDGET_EXHAUSTED:',

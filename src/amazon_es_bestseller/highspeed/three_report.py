@@ -76,16 +76,31 @@ def completeness_three(pages,sources,loading,*,tree=None,observations=()):
                 if p['source_type']==k for c in p['finite_component_coverage'])} for k in FAMILIES}}
 
 
-def export_three(store,run_id,output):
+def export_three(store,run_id,output,*,progress=None):
+    # A fresh independent export proof, never the collector's warmed session.
+    # Within it identical navigation/grid proofs need one DOM review plus byte
+    # checks, while central current-run DOM and CSV/JSONL checks still run.
+    from .v4_authorization import prerequisite_review_session
+    with prerequisite_review_session():
+        return _export_three(store,run_id,output,progress=progress)
+
+
+def _export_three(store,run_id,output,*,progress=None):
+    def mark(phase):
+        if progress is not None:progress(phase)
+    mark('EXPORT_STORE_READ_STARTED')
     run=store.get_run(run_id);plan=run['plan'];validate_three_plan(plan)
     pages=store.pages(run_id);rows=list(store.iter_observations(run_id));sources=plan['sources']
     execution=execution_for_store(store,run_id)
+    mark('EXPORT_DOM_RECEIPT_AUDIT_STARTED')
     audit=audit_capacity(pages,rows,sources,execution,three_source=True)
+    mark('EXPORT_DOM_RECEIPT_AUDIT_FINISHED')
     metrics=measure_three(rows,run_id);current,qualified,invalid,excluded=qualify_three(rows,run_id)
     accepted=metrics['target_met'] and audit['diagnostic_passed']
     acceptance=('ACCEPTED — THREE_SOURCE_5001_CANDIDATES_QA_PASSED' if accepted else
         'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET' if not metrics['target_met'] else
         'NOT_ACCEPTED — THREE_SOURCE_QUALITY_AUDIT_FAILED')
+    mark('EXPORT_NAVIGATION_AND_COMPLETENESS_STARTED')
     tree=build_navigation_tree(pages,sources)
     completeness=completeness_three(pages,sources,audit['loading_measurements'],tree=tree,observations=rows)
     release=release_signals(rows)
@@ -93,6 +108,7 @@ def export_three(store,run_id,output):
     for candidate in candidates:
         candidate['campaign_id']=plan['campaign_id']
         candidate['export_QA_status']='CENTRAL_DOM_RECEIPTS_PASSED' if audit['diagnostic_passed'] else 'QA_FAILED_DO_NOT_USE'
+    mark('EXPORT_SERIALIZATION_STARTED')
     artifacts={}; csv_expected={}
     for kind in FAMILIES:
         own=annotate_release(build_candidates_v4([r for r in qualified if r['source_type']==kind]),release)
@@ -147,6 +163,7 @@ def export_three(store,run_id,output):
         '当前批次不代表整个多批次专项已完成；已批准范围以外的导航和Next全部待审。','',
         '审计问题：'+json.dumps(audit['errors'],ensure_ascii=False)]
     artifacts['最终验收报告.md']=('\n'.join(lines)+'\n').encode('utf8')
+    mark('EXPORT_WRITE_AND_INDEPENDENT_ROUNDTRIP_STARTED')
     directory=Path(output)/('three_source_report_'+uuid.uuid4().hex);directory.mkdir(parents=True,exist_ok=False)
     for name,body in artifacts.items():immutable_bytes(directory/name,body)
     # Re-read both interchanges and compare identities, groups and memberships.
@@ -165,4 +182,5 @@ def export_three(store,run_id,output):
         'execution':execution,'accepted':accepted,'acceptance':acceptance,'metrics':metrics,
         'receipt_audit':audit,'files':refs,'CSV_JSONL_independently_verified':True,'SKU_identity_status':'NOT_VERIFIED'}
     immutable_json(directory/'manifest.json',manifest)
+    mark('EXPORT_INDEPENDENT_ROUNDTRIP_FINISHED')
     return {'directory':str(directory),'acceptance':acceptance,'metrics':metrics,'accepted':accepted}

@@ -247,10 +247,13 @@ class V4T1Runner:
                     break
             pages = self.store.pages(run_id); rows = list(self.store.iter_observations(run_id))
             qa_started = time.perf_counter()
-            quality = audit_v4(pages, rows, plan['sources'], require_live=True)
+            deferred=self.defer_central_review_to_capacity()
+            quality = ({'central_full_dom_review_passed':False,'errors':[],
+                'review_status':'PENDING_COMBINED_CAPACITY_REVIEW'} if deferred else
+                audit_v4(pages, rows, plan['sources'], require_live=True))
             from .v4_coverage import loading_coverage
             loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] and self.stage!='T3' else None
-            self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW',
+            self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW_DEFERRED' if deferred else 'V4_CENTRAL_DOM_REVIEW',
                     'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
             stop = stop or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
                 else 'V4_'+self.stage+'_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
@@ -264,6 +267,9 @@ class V4T1Runner:
     def _acp(receipt):
         return {**receipt, 'body': Path(receipt['html_path']).read_text(encoding='utf8'),
                 'evidence_path': receipt['html_path'], 'evidence_sha256': receipt['sha256']}
+
+    def defer_central_review_to_capacity(self):
+        return False
 
     def _record_approval(self,plan,authorization):
         pass

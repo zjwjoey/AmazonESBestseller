@@ -241,6 +241,24 @@ def authorize_v4_request(url, source, authorization, *, kind='PAGE', descriptor=
 
 
 def saved_grid_binding(descriptor,source):
+    # Ownership is identical across literal batches and historical journal
+    # frames. Reuse only inside a review session, rehashing the parent bytes.
+    # Payload/native-contract validation still runs separately on every call.
+    from copy import deepcopy
+    cache=_PREREQUISITES.get()
+    if cache is None:return _saved_grid_binding(descriptor,source)
+    fields={k:descriptor.get(k) for k in ('source_id','run_id','request_contract_parent_page_url',
+        'evidence_path','metadata','url','headers')}
+    key=('V4_GRID_PARENT_DOM',digest([source,fields]))
+    path=Path(descriptor['evidence_path']);sha=hashlib.sha256(path.read_bytes()).hexdigest()
+    old=cache.get(key)
+    if old and old['sha256']==sha:return deepcopy(old['value'])
+    value=_saved_grid_binding(descriptor,source)
+    cache[key]={'sha256':sha,'value':deepcopy(value)}
+    return value
+
+
+def _saved_grid_binding(descriptor,source):
     """Rebuild grid ownership from the actual saved page, never endpoint guesses."""
     from urllib.parse import urlsplit,urlunsplit,parse_qsl,urlencode
     from .v4_adapters import parse_v4_page

@@ -120,6 +120,16 @@ owner document, root receipt and preceding receipt/body where present; changed
 source/scope/run/descriptor inputs also force full validation. Independent final
 QA outside a session continues to replay all DOM proofs.
 
+Candidate reads only resolve the frozen normalizer; they do not reauthorize
+live source evidence. Begin-run, live executors and export receipt audits still
+validate the complete source plan. The three-source runner delegates its final
+current-run DOM review to the combined capacity audit, rather than doing that
+same review twice. A deferred review is explicitly pending, never passed.
+Exports always start a new independent proof session, so collection proof caches
+cannot substitute for export QA. Within each session identical saved grid-parent
+ownership uses one DOM parse with parent-byte checks on reuse; literal native
+contracts and batch payload validation continue for every request/receipt.
+
 The campaign merger re-audits each supplied batch's original store read-only,
 DOM, receipts and exports. Different tasks/campaigns, duplicate batch IDs,
 modified files, failed audits and old-stage reports block aggregation. Repeated

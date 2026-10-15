@@ -39,7 +39,7 @@ def _json(value):
     return canonical_bytes(value).decode("utf-8")
 
 
-def _plan_normalizer_version(plan):
+def _plan_normalizer_version(plan, *, validate_evidence=True):
     version = plan.get("snapshot_contract_version", 2)
     if type(version) is not int or version not in {2, 3, 4}:
         raise ValueError("UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION")
@@ -47,7 +47,8 @@ def _plan_normalizer_version(plan):
         if plan.get('mode') != 'HIGH_SPEED_V4':
             raise ValueError('UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION')
         from .v4_authorization import validate_plan_v4
-        validate_plan_v4(plan)
+        if validate_evidence:
+            validate_plan_v4(plan)
     if version in {3, 4}:
         if plan.get("normalizer_version") != V3_NORMALIZER_VERSION:
             raise ValueError("V3_REVIEWED_NORMALIZER_REQUIRED")
@@ -65,7 +66,9 @@ class RunStore:
             if row is None:
                 raise ValueError("HIGH_SPEED_RUN_NOT_FOUND")
             plan = json.loads(row[0])
-            cache[run_id] = _plan_normalizer_version(plan)
+            # Reading an immutable data projection is not live authorization.
+            # Begin-run, executors and central export audits validate evidence.
+            cache[run_id] = _plan_normalizer_version(plan,validate_evidence=False)
         return cache[run_id]
 
     def __init__(self, root):
