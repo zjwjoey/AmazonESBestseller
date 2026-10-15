@@ -54,15 +54,19 @@ def loading_coverage(pages,sources):
                         'maximum_actual_ACP_rank':max_rank,'evidence_sha256':page['evidence_sha256']})
             if page.get('rendered_derivation'):
                 root=s['actual_source_url']
-                initial=next((f for f in frames if not f[0].get('rendered_derivation') and f[0]['page_url']==root),None)
+                derivation=page['rendered_derivation']
+                initial=next((f for f in frames if not f[0].get('rendered_derivation') and f[0]['page_url']==root
+                    and f[0]['evidence_sha256']==derivation['root_html_sha256']
+                    and f[0]['observed_at']==derivation['root_observed_at']),None)
                 if initial and links-initial[1]:
                     k='deals_loading' if s['source_type']=='DEALS' else 'haul_loading'
                     capabilities[k]=True
                     evidence.append({'capability':k,'source_id':sid,'new_links':len(links-initial[1]),
                         'evidence_sha256':page['evidence_sha256'],'dynamic_receipt_references':page['rendered_derivation']['dynamic_receipt_references']})
         if s['source_subtype']=='CUSTOMER_FAVORITES_FILTERED_SEARCH':
-            root=next((f for f in frames if f[0]['page_url']==s['actual_source_url']),None)
             for page,links,rows in frames:
+                previous=[f for f in frames if f[0]['page_url']==s['actual_source_url'] and f[0]['observed_at']<=page['observed_at']]
+                root=max(previous,key=lambda f:f[0]['observed_at']) if previous else None
                 if root and page['page_url']!=s['actual_source_url'] and links-root[1]:
                     capabilities['favorites_pagination']=True
                     evidence.append({'capability':'favorites_pagination','source_id':sid,'page_url':page['page_url'],
