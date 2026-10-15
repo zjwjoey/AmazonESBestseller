@@ -17,12 +17,12 @@ def process_evidence(plan):
     if os.name!='nt':return {'verified':False,'status':'WINDOWS_PROCESS_INSPECTION_UNAVAILABLE'}
     command=("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); "
              "Get-CimInstance Win32_Process -Filter 'ProcessId="+str(pid)+"' | "
-             "Select-Object ProcessId,CreationDate,CommandLine,KernelModeTime,UserModeTime,WorkingSetSize,ReadTransferCount,WriteTransferCount | ConvertTo-Json -Compress")
+             "Select-Object ProcessId,@{Name='CreationDate';Expression={$_.CreationDate.ToUniversalTime().ToString('o')}},CommandLine,KernelModeTime,UserModeTime,WorkingSetSize,ReadTransferCount,WriteTransferCount | ConvertTo-Json -Compress")
     result=subprocess.run(['powershell','-NoProfile','-Command',command],capture_output=True,text=True,
         encoding='utf8',errors='replace',timeout=20,creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode or not result.stdout.strip():return {'verified':False,'status':'PROCESS_EXITED_OR_UNAVAILABLE'}
     actual=json.loads(result.stdout)
-    matching=(actual.get('CommandLine') and plan['run_id'] in actual['CommandLine'] and
+    matching=(actual.get('ProcessId')==pid and actual.get('CommandLine') and plan['run_id'] in actual['CommandLine'] and
               abs((aware_time(actual['CreationDate'])-aware_time(record['CreationDate'])).total_seconds())<1)
     return {'verified':bool(matching),'status':'MATCHED' if matching else 'PID_REUSED_OR_COMMAND_MISMATCH',
             'actual':actual}
