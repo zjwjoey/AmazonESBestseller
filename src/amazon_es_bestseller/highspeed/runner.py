@@ -917,7 +917,13 @@ class HighSpeedRunner:
             state = detect_access_status(response.get("status_code"), response.get("text", "")).value
         except Exception as exc:
             response = {"status_code": None, "url": None, "text": "", "error": type(exc).__name__ + ": " + str(exc)}
+            diagnostics=getattr(exc,'transport_diagnostics',None)
+            if isinstance(diagnostics,dict):response['transport_diagnostics']=dict(diagnostics)
             state = "NETWORK_ERROR"
+            observed_status=(diagnostics or {}).get('HTTP_status_observed') if isinstance(diagnostics,dict) else None
+            if observed_status in {403,429} and type(observed_status) is int:
+                response['status_code']=observed_status
+                state=detect_access_status(observed_status,'').value
         response.update(access_state=state, observed_at=utc_text(observed), request_url=url,
             duration_seconds=time.perf_counter()-transaction_started if plan.get("snapshot_contract_version") == 3 else (aware_time(self.clock())-before).total_seconds(), origin=request["origin"],
             kind=kind, page_key=page_key, source_id=source["source_id"], source_type=source["source_type"],

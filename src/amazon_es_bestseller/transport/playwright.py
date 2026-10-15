@@ -110,6 +110,7 @@ class PlaywrightTransport:
         self._held_carousel_routes = {}
         self._native_acp_requests = []
         self._manual_acp_allowance = None
+        self._ajax_failure_observation = None
         self._acp_capture_installed = False
         self._active_carousel_owner = None
         self._used_carousel_contracts = set()
@@ -136,6 +137,8 @@ class PlaywrightTransport:
             key = (request.url, request.method.upper(), request.post_data or "",
                 route_headers.get(_CONTROLLED_ACP_NONCE_HEADER))
             if request.resource_type in {"xhr", "fetch"} and key == self._manual_acp_allowance:
+                if self._ajax_failure_observation is not None:
+                    self._ajax_failure_observation['route_decision']='CONTROLLED_REQUEST_CONTINUED'
                 self._manual_acp_allowance = None
                 # This local marker distinguishes the metered fetch from an
                 # identical automatic retry. It must never reach Amazon.
@@ -144,6 +147,9 @@ class PlaywrightTransport:
                 route.continue_(headers={k: v for k, v in wire_headers.items()
                     if k.lower() != _CONTROLLED_ACP_NONCE_HEADER})
                 return
+            if (self._ajax_failure_observation is not None and self._manual_acp_allowance
+                    and key[:3]==self._manual_acp_allowance[:3] and key[3]):
+                self._ajax_failure_observation['route_decision']='CONTROLLED_NONCE_MISMATCH_NOT_ALLOWED'
             if self._fulfill_saved_carousel_response(route):
                 return
             if request.resource_type not in {"xhr", "fetch"} or len(self._native_acp_requests) >= 64:
@@ -503,6 +509,25 @@ class PlaywrightTransport:
             body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             request_headers.setdefault("content-type", "application/json")
         browser_headers = dict(request_headers)
+        observation={'browser_failure':None,'HTTP_status_observed':None,'route_decision':None,
+                     'network_requests_retried':0}
+        self._ajax_failure_observation=observation
+        listeners=[]
+        def matches(request):
+            return (request.url==url and request.method.upper()==str(method or 'GET').upper()
+                    and (request.post_data or '')==(body or ''))
+        def failed(request):
+            try:
+                if matches(request):observation['browser_failure']=request.failure
+            except Exception:pass
+        def responded(response):
+            try:
+                if matches(response.request):observation['HTTP_status_observed']=response.status
+            except Exception:pass
+        on=getattr(page,'on',None);remove=getattr(page,'remove_listener',None)
+        if callable(on) and callable(remove):
+            for event,callback in [('requestfailed',failed),('response',responded)]:
+                on(event,callback);listeners.append((event,callback))
         if self._acp_capture_installed and (urlsplit(url).path.startswith("/acp/")
                 or urlsplit(url).path in getattr(self,'_native_dynamic_paths',set())):
             nonce = uuid4().hex
@@ -538,11 +563,19 @@ class PlaywrightTransport:
             {"url": url, "method": str(method or "GET").upper(),
              "headers": browser_headers, "body": body, **({"measureTimings":True} if self.measure_timings else {})},
             )
-        except Exception:
+        except Exception as error:
             self._pending_carousel_responses.clear();self._carousel_ui_replay.clear()
+            # Preserve Chromium's actual failure and our local route decision;
+            # no request, retry, Gate decision or exception identity is changed.
+            try:error.transport_diagnostics=dict(observation)
+            except Exception:pass
             raise
         finally:
             self._manual_acp_allowance = None
+            self._ajax_failure_observation = None
+            for event,callback in listeners:
+                try:remove(event,callback)
+                except Exception:pass
         fetch_seconds=time.perf_counter()-fetch_started
         status = result.get("status")
         text = result.get("text") or ""
