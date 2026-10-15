@@ -99,3 +99,15 @@ def test_v4_recovery_never_refreshes_an_access_restriction(tmp_path,monkeypatch,
         assert len(transport.calls)==1
         assert read_sealed(shared)['state']!='NORMAL'
     finally:store.close()
+
+
+def test_v4_recovery_rejects_a_new_local_challenge_even_if_shared_gate_is_network_error(tmp_path,monkeypatch):
+    store,p,a,r,shared,s,normal=setup(tmp_path,monkeypatch)
+    try:
+        store.set_gate('CHALLENGE')
+        transport=Transport([normal])
+        with pytest.raises(ValueError,match='RECOVERY_LOCAL_GATE'):
+            recheck_network_error(store,p,a,r,transport)
+        assert not transport.calls
+        assert store.get_gate()['state']=='CHALLENGE'
+    finally:store.close()

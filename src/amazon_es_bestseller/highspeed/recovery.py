@@ -20,6 +20,13 @@ def recheck_network_error(store, plan, authorization, recovery, transport, *, sl
     shared = Path(plan["shared_access_gate_path"])
     with store.run_lock(plan["run_id"]), file_lock(shared.parent / "highspeed_live.lock"):
         prior = read_sealed(shared)
+        def check_local_gate():
+            local=store.get_gate()
+            if local.get('state') not in {'NORMAL','NETWORK_ERROR'}:
+                raise ValueError('RECOVERY_LOCAL_GATE_RESTRICTED')
+            if recovery.get('local_gate_sha256') and digest(local)!=recovery['local_gate_sha256']:
+                raise ValueError('RECOVERY_LOCAL_GATE_CHANGED')
+        check_local_gate()
         if (prior.get("state") != "NETWORK_ERROR" or recovery.get("approved") is not True
                 or recovery.get("agent_verification_authorized") is not True
                 or recovery.get("gate_sha256") != digest(prior)
@@ -62,6 +69,7 @@ def recheck_network_error(store, plan, authorization, recovery, transport, *, sl
             if (current_gate.get("state") != "NETWORK_ERROR"
                     or digest(current_gate) != recovery["gate_sha256"]):
                 raise ValueError("RECOVERY_GATE_CHANGED")
+            check_local_gate()
             validate_authorization(plan,authorization,{"state":"NORMAL"},now=now,store_root=store.root)
             # Recovery spends the original run's time and family allocation;
             # it is not an independent pool or a reset of the stopped run.
