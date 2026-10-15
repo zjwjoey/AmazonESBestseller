@@ -79,3 +79,37 @@ do not demonstrate unseen product capacity, independent buyable SKU identity,
 approval, or readiness for T3. All approval/live/T3 flags stay false and new
 network requests remain zero. A supplementary T2 scope and budget still require
 separate review; the expired prior run is not extended or reset.
+
+## Fresh supplementary T2 proposal (offline only)
+
+`prepare-t2-supplement --t2 <manifest> --navigation <navigation manifest>
+--selection <selection JSON> --out <new parent> --runtime-root <runtime parent>
+--shared-gate <shared Gate>` repeats formal T2 DOM/capacity and T0/T1 reviews.
+It verifies the navigation artifact hashes, then re-extracts each selected
+anchor from its actual parent PAGE in that T2. A rewritten pending flag or
+rehashed invented URL cannot substitute for owned saved navigation evidence.
+
+The selection declares `existing_source_ids`, literal `new_source_urls`, ordered
+`pagination_urls`, a nonempty `reason`, and exactly these `budgets` fields:
+`max_requests_per_run`, `max_pages_per_run`, `max_duration_hours`,
+`max_native_requests_per_source`, `max_dynamic_requests_per_source`,
+`max_raw_observations_per_run`, `history_observation_limit`, `target_unique_links`.
+Its kind is `V4_T2_SUPPLEMENT_SELECTION` and schema_version is 1. The sample
+target remains 2,000 fresh conservative groups. All five source families must
+remain represented. Previously observed products are evidence, never seeds.
+
+The finite budget must cover the selected exact PAGE scope plus the declared
+per-source native/dynamic request caps. This is a budget envelope, not a promise
+of capacity, completion time, or actual requests. Retries consume the same
+cumulative budget; three-second serial pacing and all Access Gate stops remain.
+Ranking referral path aliases are grouped only for plan review and duplicate
+selection rejection; original request URLs, unknown queries, product URL
+normalization and original observations are unchanged.
+
+The new immutable proposal contains a disabled plan, unapproved authorization
+with no approval dates, exact PAGE URL list, source evidence and selection,
+original T1 explicit-empty pages, summary, and artifact SHA manifest. It reports
+both the disabled plan SHA and an enabled-plan SHA preview; no enabled plan is
+written. A separate user approval, current gate/budget/Git/preflight checks and
+fresh execution timestamps are still required to start. The prior expired
+authorization is provenance only. No T3 or 30,000 collection is enabled.

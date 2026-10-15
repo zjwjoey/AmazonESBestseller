@@ -95,8 +95,13 @@ The saved-DOM navigation inventory and evidence-bound continuous Favorites
 pagination are implemented as offline development. `review-navigation` produces
 a disabled queue of literal URLs. Pagination plans validate an ordered sequence
 of saved Next links with consecutive page numbers and unchanged filter bytes;
-each destination still needs exact request approval. Next comes a separately
-reviewed supplementary T2 source plan and real capacity measurement. A navigation
+each destination still needs exact request approval. `prepare-t2-supplement`
+now converts an explicit bounded selection into a fresh disabled T2 proposal,
+after repeating formal prerequisites and checking each selected anchor against
+its original T2 DOM. It preserves the prior empty-source evidence, exact URLs,
+finite budgets, unapproved authorization and both pending/enabled-preview plan
+hashes. See `V4_T2_CAPACITY.md` for the command and selection contract. Real
+capacity measurement still requires separate exact-plan approval. A navigation
 link proves only that the link was present, not that its destination supplies
 products. The current T2 approval is not extended by offline development or
 discovery. T3 execution remains closed; no promotion, fresh 30,000 collection,

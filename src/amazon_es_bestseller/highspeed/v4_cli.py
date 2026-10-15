@@ -103,6 +103,9 @@ def main(argv=None):
             p.add_argument('--runtime-root', required=True); p.add_argument('--shared-gate', required=True)
     p=sub.add_parser('prepare-t2')
     for opt in ('t0','t1','out','runtime-root','shared-gate'):p.add_argument('--'+opt,required=True)
+    p = sub.add_parser('prepare-t2-supplement', help='Offline saved-DOM supplementary T2 proposal; never LIVE.')
+    for opt in ('t2', 'navigation', 'selection', 'out', 'runtime-root', 'shared-gate'):
+        p.add_argument('--' + opt, required=True)
     p = sub.add_parser('review-navigation', help='Offline T2 saved-navigation inventory; no approval or network.')
     p.add_argument('--t2', required=True); p.add_argument('--out', required=True)
     for name in ('check', 'run', 'resume'):
@@ -118,7 +121,13 @@ def main(argv=None):
     for opt in ('root', 'run-id', 'out'):
         p.add_argument('--' + opt, required=True)
     args = parser.parse_args(argv)
-    if args.operation == 'review-navigation':
+    if args.operation == 'prepare-t2-supplement':
+        import hashlib
+        from .v4_supplement import prepare_t2_supplement
+        refs = [{'path': str(Path(p).resolve()), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()}
+                for p in (args.t2, args.navigation, args.selection)]
+        result = prepare_t2_supplement(*refs, args.out, args.runtime_root, args.shared_gate)
+    elif args.operation == 'review-navigation':
         import hashlib
         from .v4_frontier import review_navigation
         path = Path(args.t2).resolve()
