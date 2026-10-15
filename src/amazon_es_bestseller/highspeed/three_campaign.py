@@ -26,6 +26,7 @@ def aggregate_campaign(batch_references,output):
         if pack.get('contract')!=CONTRACT or not pack.get('CSV_JSONL_independently_verified'):
             raise ValueError('THREE_ONLY_FORMAL_CAMPAIGN_BATCH_REPORTS_ALLOWED')
         execution=pack['execution'];plan=execution['plan'];validate_three_plan(plan)
+        if plan.get('target_policy'):raise ValueError('GLOBAL_FRESH_SINGLE_RUN_REQUIRED')
         current=(plan['campaign_id'],plan['campaign_created_at'],plan['task_reference'])
         if identity is None:identity=current
         if current!=identity or plan['run_id'] in run_ids:

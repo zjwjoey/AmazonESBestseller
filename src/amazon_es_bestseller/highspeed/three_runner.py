@@ -21,6 +21,7 @@ class V4ThreeSourceRunner(V4T2Runner):
             "(run_id,json_extract(data_json,'$.source_type'),kind)")
         self.store.db.execute("CREATE INDEX IF NOT EXISTS three_request_source ON requests "
             "(run_id,json_extract(data_json,'$.source_id'),kind)")
+        self._global_target_met=None
         result=V4T1Runner.run(self,plan,**kwargs)
         execution=execution_for_store(self.store,plan['run_id'])
         rows=list(self.store.iter_observations(plan['run_id']));pages=self.store.pages(plan['run_id'])
@@ -29,16 +30,23 @@ class V4ThreeSourceRunner(V4T2Runner):
         self.store.append_event(plan['run_id'],{'kind':'THREE_COMBINED_DOM_RECEIPT_REVIEW',
             'central_dom_passed':audit['central_quality']['central_full_dom_review_passed'],
             'receipt_audit_passed':audit['diagnostic_passed'],'errors':audit['errors']})
-        metrics=measure_three(rows,plan['run_id'])
+        metrics=measure_three(rows,plan['run_id'],target_policy=plan.get('target_policy'))
         accepted=metrics['target_met'] and audit['diagnostic_passed']
-        acceptance=('ACCEPTED — THREE_SOURCE_5001_CANDIDATES_QA_PASSED' if accepted else
-            'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET' if not metrics['target_met'] else
-            'NOT_ACCEPTED — THREE_SOURCE_QUALITY_AUDIT_FAILED')
+        from .global_target import acceptance as target_acceptance
+        acceptance=target_acceptance(metrics,audit['diagnostic_passed'])
         self.store.update_run(plan['run_id'],quality_gate_passed=accepted,qa=audit['central_quality'],three_source_metrics=metrics,
             three_source_receipt_audit=audit,three_source_acceptance=acceptance,
             SKU_identity_status='NOT_VERIFIED',T3_execution_enabled=False)
         return {**result,'run':self.store.get_run(plan['run_id']),'metrics':metrics,'receipt_audit':audit,
                 'acceptance':acceptance}
+
+    def target_stop_reason(self,plan):
+        from .global_target import is_global_policy
+        if not is_global_policy(plan.get('target_policy')):return None
+        if self._global_target_met is None:
+            m=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
+            self._global_target_met=m['target_met']
+        return 'GLOBAL_30000_QUALIFIED_GROUPS_REACHED' if self._global_target_met else None
 
     def defer_central_review_to_capacity(self):
         # audit_capacity performs the complete current-run DOM review itself.
@@ -78,6 +86,8 @@ class V4ThreeSourceRunner(V4T2Runner):
         immutable_json(directory/(hashlib.sha256((key+parsed['page']['evidence_sha256']).encode()).hexdigest()+'.json'),
             {'contract':CONTRACT,'run_id':plan['run_id'],'page_key':key,'references':rows,
              'approved':False,'new_network_requests':0})
+        metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan.get('target_policy'))
+        self._global_target_met=metrics['target_met']
         self.store.append_event(plan['run_id'],{'kind':'THREE_SOURCE_PROGRESS','source_type':source['source_type'],
-            'page_key':key,'metrics':measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id']),
+            'page_key':key,'metrics':metrics,
             'discovered_links_pending_review':len(rows)})

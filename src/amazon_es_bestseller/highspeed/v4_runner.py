@@ -55,6 +55,10 @@ class V4T1Runner:
             stop = None
             work=[(s,u) for s in plan['sources'] for u in s['page_urls']]
             for source,url in work:
+                target_reason=self.target_stop_reason(plan)
+                if target_reason:
+                    stop=target_reason
+                    break
                 if url in committed:
                     continue
                 try:
@@ -255,7 +259,7 @@ class V4T1Runner:
             loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] and self.stage!='T3' else None
             self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW_DEFERRED' if deferred else 'V4_CENTRAL_DOM_REVIEW',
                     'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
-            stop = stop or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
+            stop = stop or self.target_stop_reason(plan) or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
                 else 'V4_'+self.stage+'_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
             self.store.update_run(run_id, status='STOPPED', stop_reason=stop, qa=quality,
                     quality_gate_passed=bool(loading and loading['all_loading_capabilities_observed']
@@ -267,6 +271,9 @@ class V4T1Runner:
     def _acp(receipt):
         return {**receipt, 'body': Path(receipt['html_path']).read_text(encoding='utf8'),
                 'evidence_path': receipt['html_path'], 'evidence_sha256': receipt['sha256']}
+
+    def target_stop_reason(self,plan):
+        return None
 
     def defer_central_review_to_capacity(self):
         return False

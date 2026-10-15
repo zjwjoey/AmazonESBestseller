@@ -31,7 +31,11 @@ def qualify_three(observations, run_id, *, allowed_run_ids=None):
     return current,qualified,invalid,excluded
 
 
-def measure_three(observations, run_id, *, allowed_run_ids=None):
+def measure_three(observations, run_id, *, allowed_run_ids=None, target_policy=None):
+    from .global_target import is_global_policy
+    global_mode=is_global_policy(target_policy)
+    if global_mode and allowed_run_ids is not None and set(allowed_run_ids)!={run_id}:
+        raise ValueError('GLOBAL_FRESH_SINGLE_RUN_REQUIRED')
     current,qualified,invalid,excluded=qualify_three(observations,run_id,allowed_run_ids=allowed_run_ids)
     source_reports={};all_groups=set();source_groups={};source_urls={}
     for kind in FAMILIES:
@@ -66,7 +70,7 @@ def measure_three(observations, run_id, *, allowed_run_ids=None):
         others=set().union(*(source_groups[k] for k in FAMILIES if k!=kind))
         source_reports[kind]['groups_overlapping_other_sources']=len(source_groups[kind]&others)
         source_reports[kind]['source_exclusive_groups']=len(source_groups[kind]-others)
-    met=all(r['target_met'] for r in source_reports.values())
+    met=(len(all_groups)>=30000 if global_mode else all(r['target_met'] for r in source_reports.values()))
     return {'schema_version':1,'contract':CONTRACT,'run_id':run_id,'sources':source_reports,
         'A_raw_observations':len(current),
         'B_unique_raw_product_links':len({r['raw_product_url'] for r in current if r.get('raw_product_url')}),
@@ -75,6 +79,10 @@ def measure_three(observations, run_id, *, allowed_run_ids=None):
         'E_sum_source_review_groups':sum(len(g) for g in source_groups.values()),
         'F_global_conservative_review_groups':len(all_groups),'G_verified_independent_buyable_SKUs':0,
         'SKU_identity_status':'NOT_VERIFIED','target_met':met,
-        'acceptance':'QUANTITY_TARGET_MET_QA_STILL_REQUIRED' if met else 'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET',
+        **({'target_mode':'GLOBAL_CONSERVATIVE_REVIEW_GROUPS','global_target':30000,
+            'global_shortfall':max(0,30000-len(all_groups)),
+            'source_targets_are_diagnostic_only':True} if global_mode else {}),
+        'acceptance':('QUANTITY_TARGET_MET_QA_STILL_REQUIRED' if met else
+            'NOT_ACCEPTED — GLOBAL_30000_TARGET_NOT_MET' if global_mode else 'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET'),
         'excluded_noncurrent_or_nonlive_observations':excluded,'excluded_unqualified_observations':len(invalid),
         'global_source_completeness':'UNKNOWN','thirty_thousand_supply_demonstrated':False}

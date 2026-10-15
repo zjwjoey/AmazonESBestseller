@@ -95,11 +95,10 @@ def _export_three(store,run_id,output,*,progress=None):
     mark('EXPORT_DOM_RECEIPT_AUDIT_STARTED')
     audit=audit_capacity(pages,rows,sources,execution,three_source=True)
     mark('EXPORT_DOM_RECEIPT_AUDIT_FINISHED')
-    metrics=measure_three(rows,run_id);current,qualified,invalid,excluded=qualify_three(rows,run_id)
+    metrics=measure_three(rows,run_id,target_policy=plan.get('target_policy'));current,qualified,invalid,excluded=qualify_three(rows,run_id)
     accepted=metrics['target_met'] and audit['diagnostic_passed']
-    acceptance=('ACCEPTED — THREE_SOURCE_5001_CANDIDATES_QA_PASSED' if accepted else
-        'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET' if not metrics['target_met'] else
-        'NOT_ACCEPTED — THREE_SOURCE_QUALITY_AUDIT_FAILED')
+    from .global_target import acceptance as target_acceptance
+    acceptance=target_acceptance(metrics,audit['diagnostic_passed'])
     mark('EXPORT_NAVIGATION_AND_COMPLETENESS_STARTED')
     tree=build_navigation_tree(pages,sources)
     completeness=completeness_three(pages,sources,audit['loading_measurements'],tree=tree,observations=rows)
@@ -151,7 +150,7 @@ def _export_three(store,run_id,output,*,progress=None):
         evidence[str(p)]={'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
     artifacts['原始证据索引.json']=canonical_bytes({'run_id':run_id,'campaign_id':plan['campaign_id'],
         'files':list(evidence.values()),'receipt_audit_passed':audit['diagnostic_passed']})
-    lines=['# 三来源5,001候选验收报告','',acceptance,'',
+    lines=[('# 全局30,000候选验收报告' if plan.get('target_policy') else '# 三来源5,001候选验收报告'),'',acceptance,'',
         f'批次：{run_id}；专项：{plan["campaign_id"]}。','',
         '| 来源 | 有效规范化URL | 合格保守组 | 距5,001缺口 |','|---|---:|---:|---:|']
     for k in FAMILIES:
@@ -162,6 +161,9 @@ def _export_three(store,run_id,output,*,progress=None):
         '数量验收、批准范围完整性、独立可购SKU身份分别判断。Amazon全站及未访问类目完整性未知。',
         '当前批次不代表整个多批次专项已完成；已批准范围以外的导航和Next全部待审。','',
         '审计问题：'+json.dumps(audit['errors'],ensure_ascii=False)]
+    if plan.get('target_policy'):
+        lines += ['',f'全局目标30,000；实际{metrics["F_global_conservative_review_groups"]}；缺口{metrics["global_shortfall"]}。',
+            '上表各来源5,001为诊断指标；本计划数量验收只使用全局合格保守组并集。达到数量不代表源范围完整或SKU身份已确认。']
     artifacts['最终验收报告.md']=('\n'.join(lines)+'\n').encode('utf8')
     mark('EXPORT_WRITE_AND_INDEPENDENT_ROUNDTRIP_STARTED')
     directory=Path(output)/('three_source_report_'+uuid.uuid4().hex);directory.mkdir(parents=True,exist_ok=False)

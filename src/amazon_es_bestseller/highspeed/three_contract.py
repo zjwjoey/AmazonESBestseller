@@ -64,8 +64,11 @@ def verify_source(source, visited=None):
 
 
 def validate_three_plan(plan):
+    from .global_target import is_global_policy
+    global_mode=is_global_policy(plan.get('target_policy'))
+    expected_target=30000 if global_mode else 15003
     if (plan.get('collection_contract') != CONTRACT or plan.get('stage') != 'T3'
-            or plan.get('target_unique_links') != 15003
+            or (type(plan.get('target_unique_links')) is not int or plan.get('target_unique_links') != expected_target)
             or plan.get('source_targets') != {k:5001 for k in FAMILIES}
             or any(type(v) is not int for v in plan['source_targets'].values())
             or not plan['sources'] or not {s['source_type'] for s in plan['sources']}.issubset(FAMILIES)

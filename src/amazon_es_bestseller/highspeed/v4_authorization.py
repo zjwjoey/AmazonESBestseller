@@ -193,8 +193,8 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
     if set(a.get('sources', {})) != {s['source_id'] for s in plan['sources']}:
         raise ValueError('V4_EXACT_SOURCE_SET_REQUIRED')
     if plan.get('collection_contract') == 'V4_THREE_SOURCE_5001':
-        for key in ('collection_contract','source_targets','source_budgets','campaign_id','campaign_created_at','task_reference'):
-            if digest(a.get(key)) != digest(plan[key]):
+        for key in ('collection_contract','source_targets','source_budgets','campaign_id','campaign_created_at','task_reference','target_policy'):
+            if digest(a.get(key)) != digest(plan.get(key)):
                 raise ValueError('THREE_EXACT_CAMPAIGN_APPROVAL_REQUIRED:'+key)
     checked_evidence={}
     for s in plan['sources']:
