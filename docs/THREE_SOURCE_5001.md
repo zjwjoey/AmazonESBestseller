@@ -111,6 +111,15 @@ page-two context remains replayable for history, while new captures retain the
 actual page number and ranks. `ie=UTF8` added by an owned Next is not a category
 change, and unknown filters or forged Next proofs are still rejected.
 
+Older offline root fixtures may omit `page_urls`; their exact
+`actual_source_url` alone supplies page number 1. A different page URL still
+fails unless it belongs to an explicit ordered page list. Dynamic native
+descriptor validation is reused only within an execution review session after
+its full proof succeeds. Each reuse rehashes the native contract, parent DOM,
+owner document, root receipt and preceding receipt/body where present; changed
+source/scope/run/descriptor inputs also force full validation. Independent final
+QA outside a session continues to replay all DOM proofs.
+
 The campaign merger re-audits each supplied batch's original store read-only,
 DOM, receipts and exports. Different tasks/campaigns, duplicate batch IDs,
 modified files, failed audits and old-stage reports block aggregation. Repeated

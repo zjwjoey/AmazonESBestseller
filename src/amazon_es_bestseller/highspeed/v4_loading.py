@@ -41,6 +41,32 @@ def same_loading_view(view,root):
 
 
 def validate_dynamic_descriptor(url, source, scope, authorization, descriptor):
+    # Repeated journal frames contain the same owned native request proof.
+    # Reuse its DOM review only inside one execution, with every consumed file
+    # byte checked again. Final QA outside a session always runs the full proof.
+    from .v4_authorization import _PREREQUISITES
+    from ..multisource.storage import digest
+    cache=_PREREQUISITES.get()
+    if cache is None:
+        return _validate_dynamic_descriptor(url,source,scope,authorization,descriptor)
+    key=('V4_DYNAMIC_REVIEW',digest([url,source,scope,authorization.get('run_id'),descriptor]))
+    old=cache.get(key)
+    if old and all(p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest()==sha for p,sha in old):
+        return None
+    _validate_dynamic_descriptor(url,source,scope,authorization,descriptor)
+    d=descriptor
+    paths={Path(d['native_contract_evidence_path']),Path(d['parent_html_path'])}
+    for name in ('owner_document_reference','root_capture_receipt_reference','preceding_dynamic_receipt_reference'):
+        reference=d.get(name)
+        if reference:
+            path=Path(reference['path']);paths.add(path)
+            if name=='preceding_dynamic_receipt_reference':
+                paths.add(Path(read_sealed(path)['html_path']))
+    cache[key]=[(p,hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths]
+    return None
+
+
+def _validate_dynamic_descriptor(url, source, scope, authorization, descriptor):
     d=descriptor or {}
     if (scope.get('allow_native_dynamic') is not True or source['source_type'] not in PATHS
             or not amazon_url(url) or not dynamic_endpoint(url,source['source_type'])

@@ -25,7 +25,7 @@ def loading_coverage(pages,sources):
         s=source_map[page['source_id']]
         parsed=parse_v4_page(Path(page['evidence_path']).read_text(encoding='utf8'),source=s,
             page_url=page['page_url'],run_id=page['run_id'],observed_at=page['observed_at'],
-            page_number=s['page_urls'].index(page['page_url'])+1,
+            page_number=s.get('page_urls',[s['actual_source_url']]).index(page['page_url'])+1,
             evidence_path=page['evidence_path'],http_status=page.get('http_status'),origin=page['origin'],
             acp_responses=[{**x,'body':Path(x['evidence_path']).read_text(encoding='utf8')} for x in page.get('acp_captures',[])],
             parser_profile_version=page['parser_version'])
