@@ -84,6 +84,7 @@ class V4T1Runner:
                                 and (old.get('ranking_context_binding') or {}).get('page_evidence_sha256') == receipt['sha256']):
                             acp.append(self._acp(old))
                     component_failures = {}
+                    loading_stop_reason = None
                     def parse():
                         return parse_v4_page(response['text'], source=source, page_url=url, run_id=run_id,
                                   snapshot_id=plan['snapshot_id'], observed_at=receipt['observed_at'],
@@ -100,6 +101,7 @@ class V4T1Runner:
                              'document_html_reference': {'path': receipt.get('document_html_path'), 'sha256': receipt.get('document_sha256')},
                              'rendered_html_reference': {'path': receipt.get('rendered_html_path'), 'sha256': receipt.get('rendered_sha256')},
                              'continuation_failures': dict(component_failures),
+                             'loading_stop_reason': loading_stop_reason,
                              'rendered_derivation': derivation,
                              'acp_captures': [{k: v for k, v in a.items() if k != 'body'} for a in acp]}
                         self.store.commit_page(run_id, key, p, parsed['observations'])
@@ -112,11 +114,14 @@ class V4T1Runner:
                             # Reserve one request for each still-unvisited exact root.
                             remaining_pages = sum(u not in committed and u != url for s,u in work)
                             if plan['max_requests_per_run'] - self.store.summary(run_id)['requests'] <= remaining_pages:
+                                loading_stop_reason = 'RESERVED_REQUESTS_FOR_REMAINING_PAGES'
                                 break
                             if len(attempted)>=plan.get('max_native_requests_per_source',50):
+                                loading_stop_reason = 'PER_SOURCE_NATIVE_REQUEST_CAP'
                                 break
                             descriptor = _next_acp_pending(parsed['acp_pending'], excluded, v3=True)
                             if not descriptor:
+                                loading_stop_reason = 'REMAINING_COMPONENT_CONTRACT_UNOBSERVED'
                                 break
                             validate_v4_authorization(plan, authorization, e._gate(plan), now=e.clock(), store_root=self.store.root)
                             try:
@@ -142,6 +147,9 @@ class V4T1Runner:
                             _, saved, last = e._request(plan, authorization, transport, source, descriptor['url'],
                                               'ACP', started, last, descriptor=descriptor, page_key=key)
                             acp.append(self._acp(saved)); parsed = parse(); commit()
+                        if not parsed['acp_pending']:
+                            loading_stop_reason = 'OBSERVED_FINITE_METADATA_EXHAUSTED'
+                        commit()  # Persist the reason; stopping does not imply completeness.
                     if (not cached and source['source_type'] in {'DEALS','AMAZON_HAUL'}
                             and parsed['page']['status']!='EXPLICIT_EMPTY'
                             and authorization['sources'][sid].get('allow_native_dynamic')):

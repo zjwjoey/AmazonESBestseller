@@ -100,6 +100,8 @@ def main(argv=None):
         p.add_argument('--profile-dir')
         p.add_argument('--reverify-source-id', action='append', default=[])
     p = sub.add_parser('report')
+    p.add_argument('--retain-lightning-empty', action='store_true',
+                   help='Explicit user acceptance of the real empty lightning source; strict eight-product result remains separate.')
     for opt in ('root', 'run-id', 'out'):
         p.add_argument('--' + opt, required=True)
     args = parser.parse_args(argv)
@@ -112,8 +114,11 @@ def main(argv=None):
         store = RunStore(args.root)
         try:
             run = store.get_run(args.run_id)
+            accepted=([s['actual_source_url'] for s in run['plan']['sources']
+                if s['source_subtype']=='LIGHTNING_DEAL_FILTER'] if args.retain_lightning_empty else [])
             result = export_v4(store.pages(args.run_id), list(store.iter_observations(args.run_id)),
                                 run['plan']['sources'], args.out, run_id=args.run_id, stage=run['stage'],
+                                accepted_empty_urls=accepted,
                                 request_receipts=list(store.iter_responses(args.run_id)))
         finally:
             store.close()

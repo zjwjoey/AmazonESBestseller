@@ -36,6 +36,9 @@ def loading_coverage(pages,sources):
                 and r.get('ranking_position') is not None and r.get('is_valid') and r.get('product_title_raw')}
             expected=set(range(1,group['expected_count']+1))
             components.append({'source_id':s['source_id'],'ranking_context_url':group['ranking_context_url'],
+                'capture_sha256':page['evidence_sha256'],'capture_observed_at':page['observed_at'],
+                'is_current_capture':any(p['source_id']==page['source_id'] and
+                    p['evidence_sha256']==page['evidence_sha256'] and p['observed_at']==page['observed_at'] for p in pages),
                 'expected_metadata_slots':group['expected_count'],'observed_unique_ranks':len(ranks),
                 'missing_ranks':sorted(expected-ranks),'outside_metadata_ranks':sorted(ranks-expected),
                 'status':'COMPLETE_WITHIN_OBSERVED_METADATA' if ranks==expected else 'PARTIAL',
@@ -71,6 +74,46 @@ def loading_coverage(pages,sources):
                     capabilities['favorites_pagination']=True
                     evidence.append({'capability':'favorites_pagination','source_id':sid,'page_url':page['page_url'],
                         'new_links':len(links-root[1]),'evidence_sha256':page['evidence_sha256']})
+    current=[c for c in components if c['is_current_capture']]
     return {'capabilities':capabilities,'all_loading_capabilities_observed':all(capabilities.values()),
         'finite_component_coverage':components,'evidence':evidence,
+        'current_finite_components':len(current),
+        'current_finite_components_complete':bool(current) and all(c['status']=='COMPLETE_WITHIN_OBSERVED_METADATA' for c in current),
+        'current_missing_metadata_slots':sum(len(c['missing_ranks']) for c in current),
         'global_source_completeness':'UNKNOWN','capacity_verified':False}
+
+
+def assess_capacity_readiness(pages, sources, loading, *, central_dom_review_passed,
+                              accepted_empty_urls=()):
+    """Planning decision, not a stage authorization or global completeness claim.
+
+    Only the explicitly accepted lightning filter may be retained empty. The
+    caller must run central DOM/receipt QA first; historical captures cannot
+    conceal a gap in the current capture.
+    """
+    from .v4_sources import SEEDS
+    allowed={s['url'] for s in SEEDS if s['source_subtype']=='LIGHTNING_DEAL_FILTER'}
+    accepted=set(accepted_empty_urls)
+    if not accepted.issubset(allowed):
+        raise ValueError('V4_ONLY_EXPLICIT_LIGHTNING_EMPTY_EXCEPTION_ALLOWED')
+    roots={s['actual_source_url'] for s in sources}
+    blockers=[]; retained=[]
+    if roots!={s['url'] for s in SEEDS}:blockers.append('EIGHT_APPROVED_ROOTS_REQUIRED')
+    if not central_dom_review_passed:blockers.append('CENTRAL_DOM_RECEIPT_QA_FAILED')
+    for url in sorted(roots):
+        frames=[p for p in pages if p['page_url']==url]
+        if len(frames)!=1:
+            blockers.append('CURRENT_ROOT_FRAME_REQUIRED:'+url);continue
+        p=frames[0]
+        if p['status']=='VERIFIED_WITH_PRODUCTS':continue
+        if (url in accepted and p['status']=='EXPLICIT_EMPTY' and
+                p.get('http_status')==200 and p.get('access_status')=='NORMAL' and
+                p.get('actual_card_count')==0 and p.get('source_empty_evidence')):
+            retained.append(url)
+        else:blockers.append('ROOT_NOT_VERIFIED:'+url)
+    if not loading.get('all_loading_capabilities_observed'):blockers.append('LOADING_CAPABILITY_MISSING')
+    if not loading.get('current_finite_components_complete'):blockers.append('CURRENT_FINITE_COMPONENT_GAPS')
+    return {'ready_for_T2_plan':not blockers,'blockers':blockers,'retained_real_empty_sources':retained,
+        'global_source_completeness':'UNKNOWN','capacity_verified':False,
+        'T2_live_authorized':False,'T3_live_authorized':False,
+        'decision_scope':'Capacity-test readiness only; strict eight-product result remains separate. No request authorization.'}

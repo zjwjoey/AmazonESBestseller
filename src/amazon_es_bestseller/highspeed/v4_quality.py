@@ -260,9 +260,16 @@ def verify_stage_reference(reference, expected_stage):
         from .v4_sources import SEEDS
         from .v4_coverage import loading_coverage
         loading=loading_coverage(value['pages'],value['sources'])
-        if (not loading['all_loading_capabilities_observed'] or
-                not {s['url'] for s in SEEDS}.issubset({p['page_url'] for p in value['pages']
-                    if p['status']=='VERIFIED_WITH_PRODUCTS'})):
+        products={s['url'] for s in SEEDS}.issubset({p['page_url'] for p in value['pages']
+                    if p['status']=='VERIFIED_WITH_PRODUCTS'})
+        accepted=value.get('accepted_empty_source_urls',[])
+        if accepted:
+            from .v4_coverage import assess_capacity_readiness
+            if value.get('acceptance_policy')!='USER_EXPLICIT_RETAIN_REAL_SOURCE_EMPTY':
+                raise ValueError('V4_EMPTY_SOURCE_ACCEPTANCE_POLICY_REQUIRED')
+            products=assess_capacity_readiness(value['pages'],value['sources'],loading,
+                central_dom_review_passed=True,accepted_empty_urls=accepted)['ready_for_T2_plan']
+        if not loading['all_loading_capabilities_observed'] or not products:
             raise ValueError('V4_PRIOR_STAGE_PROTOCOL_PROOF_REQUIRED')
     if expected_stage not in {'T0','T1'}:
         raise ValueError('V4_T2_CAPACITY_RECEIPT_VALIDATOR_PENDING')

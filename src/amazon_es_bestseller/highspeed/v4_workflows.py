@@ -31,18 +31,25 @@ def csv_bytes(records):
     return stream.getvalue().encode('utf-8-sig')
 
 
-def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timings=None, request_receipts=None):
+def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timings=None, request_receipts=None,
+              accepted_empty_urls=()):
     directory = Path(output) / ('report_v4_' + uuid.uuid4().hex)
     directory.mkdir(parents=True, exist_ok=False)
     qa_started = time.perf_counter()
     quality = audit_v4(pages, observations, sources, require_live=stage != 'T0')
     qa_seconds = time.perf_counter() - qa_started
     candidates = build_candidates_v4(observations)
-    from .v4_coverage import loading_coverage
+    from .v4_coverage import loading_coverage, assess_capacity_readiness
     loading=loading_coverage(pages,sources)
+    readiness=assess_capacity_readiness(pages,sources,loading,
+        central_dom_review_passed=quality['central_full_dom_review_passed'] and stage=='T1',
+        accepted_empty_urls=accepted_empty_urls)
+    strict_roots_passed={s['url'] for s in SEEDS}.issubset({p['page_url'] for p in pages
+        if p['status']=='VERIFIED_WITH_PRODUCTS'})
     conservative = len({c['target_review_group'] for c in candidates if c['eligible_for_target']})
     coverage = {'schema_version': 4, 'run_id': run_id, 'stage': stage,
                 'loading_verification':loading,
+                'capacity_planning_readiness':readiness,
                 'origin': 'OFFLINE_FIXTURE' if stage == 'T0' else 'LIVE_CAPTURE',
                 'sources': sources, 'pages': pages, 'disabled_supply': DISABLED_SUPPLY,
                 'raw_observations': len(observations), 'normalized_unique_links': len(candidates),
@@ -89,9 +96,13 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
     immutable_json(directory / 'manifest.json', {'schema_version': 4, 'run_id': run_id, 'stage': stage,
                     'passed': quality['central_full_dom_review_passed'] and (stage == 'T0' or
                         stage=='T1' and loading['all_loading_capabilities_observed']
-                        and {s['url'] for s in SEEDS}.issubset({p['page_url'] for p in pages if p['status']=='VERIFIED_WITH_PRODUCTS'})),
+                        and (readiness['ready_for_T2_plan'] if accepted_empty_urls else strict_roots_passed)),
+                    'strict_eight_entry_products_passed':strict_roots_passed,
+                    'accepted_empty_source_urls':sorted(set(accepted_empty_urls)),
+                    'acceptance_policy':'USER_EXPLICIT_RETAIN_REAL_SOURCE_EMPTY' if accepted_empty_urls else 'STRICT_EIGHT_PRODUCT_ROOTS',
                     'pages': pages, 'sources': sources, 'observations': observations, 'files': refs,
                     'loading_verification':loading,
+                    'capacity_planning_readiness':readiness,
                     'live_protocol_validation': 'OBSERVED' if stage=='T1' and loading['all_loading_capabilities_observed'] else 'UNVERIFIED',
                     'new_live_candidates': len(candidates) if stage != 'T0' else 0,
                     'strict_independent_buyable_skus_confirmed': False})
