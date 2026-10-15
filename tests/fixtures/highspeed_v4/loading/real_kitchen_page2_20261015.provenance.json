@@ -1,0 +1,10 @@
+{
+  "source_path": "F:\\AmazonESBestseller\\runtime\\three_source_5001_batches\\three_source_batch_b2d2886389c6\\store\\html\\77\\7735ca2aee7d8cf88f9dc72e6411298227e35542ace5c566e8da9b3f15693714.html",
+  "source_sha256": "7735ca2aee7d8cf88f9dc72e6411298227e35542ace5c566e8da9b3f15693714",
+  "fixture_sha256": "f283aa1f3f2962249596f88aff79dbcce80fd9a2c0e76231b0b3b558b4ca16e3",
+  "source_page_url": "https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_pg_2_kitchen?ie=UTF8&pg=2",
+  "source_request_id": "req_bc1951e36e704f8d9fc196a3bc56f76c",
+  "source_HTTP_status": 200,
+  "observed_at": "2026-10-15T10:44:00.910945Z",
+  "transform": "Actual title and complete #zg ranking/navigation subtree serialized from saved PAGE. Ranking cards, links, titles, rank numbers, opaque grid metadata and sidebar are retained; no products or ranks invented. Original HTML remains immutable at source_path."
+}

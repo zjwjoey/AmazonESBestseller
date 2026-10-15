@@ -187,6 +187,7 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                 acp.append({**ref, 'body': cb.decode('utf8')})
             parsed = parse_v4_page(body.decode('utf8'), source=source, page_url=page['page_url'],
                                    run_id=page['run_id'], snapshot_id=page.get('snapshot_id'),
+                                   page_number=source['page_urls'].index(page['page_url'])+1,
                                    observed_at=page['observed_at'], evidence_path=str(path),
                                    http_status=page.get('http_status'), origin=page['origin'], acp_responses=acp,
                                    parser_profile_version=page.get('parser_version'))

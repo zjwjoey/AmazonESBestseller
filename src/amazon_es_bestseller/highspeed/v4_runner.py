@@ -123,7 +123,7 @@ class V4T1Runner:
                     attempted = set()
                     excluded = set()
                     if (source['source_type'] in RANKED and not cached
-                            and authorization['sources'][key].get('allow_native_acp') is True):
+                            and authorization['sources'][sid].get('allow_native_acp') is True):
                         while parsed['acp_pending']:
                             # Reserve one request for each still-unvisited exact root.
                             remaining_pages = self.remaining_page_work(plan,work,committed,url)
@@ -226,7 +226,7 @@ class V4T1Runner:
                             if (not {r['normalized_product_url'] for r in parsed['observations'] if r.get('is_valid')}-previous_links
                                     and not getattr(transport,'has_pending_dynamic',lambda s:False)(source)):break
                         transport.cancel_dynamic()
-                    self.store.append_event(run_id, {'kind': 'V4_DISCOVERED_NAVIGATION', 'source_id': key,
+                    self.store.append_event(run_id, {'kind': 'V4_DISCOVERED_NAVIGATION', 'source_id': sid, 'page_key': key,
                         'links': parsed['discovered_sources'], 'note': 'Discovery only, not visited or approved.'})
                     committed.add(url)
                     # A failed/unknown frame stops. It never becomes source-empty.

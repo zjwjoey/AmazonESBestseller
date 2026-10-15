@@ -18,6 +18,7 @@ from .v4_sources import RANKED, amazon_url, node_id
 LEGACY_VERSION = 'multisource_v4.1.card_bound'
 CAPTURE_VERSION = 'multisource_v4.2.capture_bound'
 VERSION = 'multisource_v4.3.loading_context'
+PAGINATION_VERSION = 'multisource_v4.4.owned_ranked_pagination'
 SELECTORS = {
     'DEALS_ZONE': '[data-testid="product-card"][data-asin][data-deal-id]',
     'LIGHTNING_DEAL_FILTER': '[data-testid="product-card"][data-asin][data-deal-id]',
@@ -181,8 +182,9 @@ def _navigation(soup, source, page_url, sha):
 def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                   http_status=None, origin='OFFLINE_FIXTURE', snapshot_id=None, page_number=1,
                   acp_responses=None, parser_profile_version=None):
-    version = parser_profile_version or VERSION
-    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION}:
+    version = parser_profile_version or (PAGINATION_VERSION if source['source_type'] in RANKED
+        and page_url!=source['actual_source_url'] and source.get('pagination_evidence') else VERSION)
+    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION, PAGINATION_VERSION}:
         raise ValueError('V4_UNKNOWN_PARSER_VERSION')
     if origin not in {'OFFLINE_FIXTURE', 'LIVE_CAPTURE', 'HISTORICAL_REPLAY'}:
         raise ValueError('UNKNOWN_ORIGIN')
@@ -190,6 +192,11 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
         raise ValueError('AWARE_CAPTURE_TIME_REQUIRED')
     if not amazon_url(page_url) or page_url not in source.get('page_urls', [source['actual_source_url']]):
         raise ValueError('V4_EXACT_PAGE_SOURCE_REQUIRED')
+    if version==PAGINATION_VERSION:
+        from .three_navigation import verify_chain
+        if source['source_type'] not in RANKED or page_url==source['actual_source_url']:
+            raise ValueError('V4_OWNED_RANKED_NEXT_PAGE_REQUIRED')
+        verify_chain(source)
     if origin == 'LIVE_CAPTURE' and http_status is None:
         raise ValueError('V4_ACTUAL_HTTP_RECEIPT_REQUIRED')
     soup = BeautifulSoup(html or '', 'lxml'); sha = _sha(html or '')
@@ -208,7 +215,13 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
     kind = source['source_type']
     if kind in RANKED:
         from .adapters import parse_page, _cards
-        legacy = parse_page(html, source={**source, 'parser_profile': 'V3'}, page_url=page_url,
+        legacy_source={**source,'parser_profile':'V3'}
+        if version==PAGINATION_VERSION:
+            # The exact owned Next chain above proves the page's category.
+            # Keep the original source identity in V4 rows; the legacy parser
+            # must not mistake the native Next's added ie=UTF8 for a category.
+            legacy_source['actual_source_url']=page_url
+        legacy = parse_page(html, source=legacy_source, page_url=page_url,
                             run_id=run_id, snapshot_id=snapshot_id or run_id, page_number=page_number,
                             observed_at=observed_at, evidence_path=evidence_path,
                             http_status=200 if http_status is None and origin != 'LIVE_CAPTURE' else http_status,
@@ -263,7 +276,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                    observed_at=row.get('observed_at', observed_at), origin=origin, evidence_path=row.get('evidence_path', evidence_path),
                    evidence_sha256=row.get('evidence_sha256', sha), parser_version=version,
                    observation_id='v4obs_' + _sha(f'{run_id}|{sha}|{index}|{page_url}' +
-                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION} else ''))[:32],
+                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION,PAGINATION_VERSION} else ''))[:32],
                    source_node_id=node_id(page_url), amazon_category_path=[],
                    amazon_category_l1=None, amazon_category_l2=None, amazon_category_l3=None, amazon_category_leaf=None,
                    research_category=None, category_mapping_status='UNKNOWN', source_completeness_status='UNKNOWN',

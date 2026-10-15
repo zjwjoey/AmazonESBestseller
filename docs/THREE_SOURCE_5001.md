@@ -104,6 +104,13 @@ card with explicit dates/raw evidence; the global future-release banner is not
 an item-level assertion. No signal means unknown release status, not confirmed
 ordinary available stock or independent buyability.
 
+Ranked secondary pages use `multisource_v4.4.owned_ranked_pagination` only after
+verifying the literal ordered Next chain. Source authorization remains keyed by
+source ID; the hashed page key is only a checkpoint. The original v4.3 failed
+page-two context remains replayable for history, while new captures retain the
+actual page number and ranks. `ie=UTF8` added by an owned Next is not a category
+change, and unknown filters or forged Next proofs are still rejected.
+
 The campaign merger re-audits each supplied batch's original store read-only,
 DOM, receipts and exports. Different tasks/campaigns, duplicate batch IDs,
 modified files, failed audits and old-stage reports block aggregation. Repeated
