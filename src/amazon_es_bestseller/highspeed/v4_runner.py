@@ -1,7 +1,7 @@
-"""Bounded T1 entry/protocol diagnostics using existing durable request engine.
+"""Shared bounded V4 serial engine with separately approved stage subclasses.
 
-T2/T3 remain closed until actual new-source loading protocol proofs exist.
 UNKNOWN completeness is preserved even when every approved root was visited.
+The three-source campaign does not enable unmarked/generic T3 execution.
 """
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class V4T1Runner:
             started = run['started_at']; last = self.store.latest_request_time()
             last = aware_time(last) if last else None
             committed = {p['page_url'] for p in self.store.pages(run_id)
-                         if p['source_id'] not in reverify_source_ids and (self.stage!='T2' or
+                         if p['source_id'] not in reverify_source_ids and (self.stage not in {'T2','T3'} or
                              p.get('execution_status')=='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED')}
             self.store.update_run(run_id, status='RUNNING')
             stop = None
@@ -58,7 +58,7 @@ class V4T1Runner:
                 if url in committed:
                     continue
                 try:
-                    reason = budget_reason(plan, self.store.summary(run_id), now=e.clock(), started_at=started)
+                    reason = budget_reason(plan, self.store.budget_counters(run_id), now=e.clock(), started_at=started)
                     if reason:
                         raise ValueError(reason)
                     key = source['source_id'] if url==source['actual_source_url'] else source['source_id']+'_'+hashlib.sha256(url.encode()).hexdigest()[:12]
@@ -69,7 +69,7 @@ class V4T1Runner:
                         existing = []
                         self.store.append_event(run_id, {'kind': 'V4_T1_IN_SCOPE_REVERIFICATION', 'source_id': key,
                             'page_url': url, 'reason': 'USER_AUTHORIZED_OFFLINE_FIX_THEN_BOUNDED_REVERIFY'})
-                    if (self.stage=='T2' and existing and (authorization['sources'][sid].get('allow_native_acp')
+                    if (self.stage in {'T2','T3'} and existing and (authorization['sources'][sid].get('allow_native_acp')
                             or authorization['sources'][sid].get('allow_native_dynamic'))):
                         # An interrupted capture has no active browser widget in
                         # a resumed session. Reopen this exact approved page,
@@ -96,7 +96,8 @@ class V4T1Runner:
                     loading_stop_reason = None
                     scope_executed=False
                     def source_loading_count():
-                        return sum(q['source_id']==sid and q['kind']=='ACP' for q in self.store.requests(run_id))
+                        return self.store.db.execute("SELECT count(*) FROM requests WHERE run_id=? AND kind='ACP' "
+                            "AND json_extract(data_json,'$.source_id')=?",(run_id,sid)).fetchone()[0]
                     def parse():
                         return parse_v4_page(response['text'], source=source, page_url=url, run_id=run_id,
                                   snapshot_id=plan['snapshot_id'], observed_at=receipt['observed_at'],
@@ -125,11 +126,11 @@ class V4T1Runner:
                             and authorization['sources'][key].get('allow_native_acp') is True):
                         while parsed['acp_pending']:
                             # Reserve one request for each still-unvisited exact root.
-                            remaining_pages = sum(u not in committed and u != url for s,u in work)
-                            if plan['max_requests_per_run'] - self.store.summary(run_id)['requests'] <= remaining_pages:
+                            remaining_pages = self.remaining_page_work(plan,work,committed,url)
+                            if plan['max_requests_per_run'] - self.store.budget_counters(run_id)['requests'] <= remaining_pages:
                                 loading_stop_reason = 'RESERVED_REQUESTS_FOR_REMAINING_PAGES'
                                 break
-                            if (source_loading_count() if self.stage=='T2' else len(attempted))>=plan.get('max_native_requests_per_source',50):
+                            if (source_loading_count() if self.stage in {'T2','T3'} else len(attempted))>=plan.get('max_native_requests_per_source',50):
                                 loading_stop_reason = 'PER_SOURCE_NATIVE_REQUEST_CAP'
                                 break
                             descriptor = _next_acp_pending(parsed['acp_pending'], excluded, v3=True)
@@ -174,9 +175,9 @@ class V4T1Runner:
                             and parsed['page']['status']!='EXPLICIT_EMPTY'
                             and authorization['sources'][sid].get('allow_native_dynamic')):
                         dynamic_limit=plan.get('max_dynamic_requests_per_source',2)
-                        for _ in range(max(0,dynamic_limit-(source_loading_count() if self.stage=='T2' else 0))):
-                            remaining_pages=sum(u not in committed and u!=url for s,u in work)
-                            if plan['max_requests_per_run']-self.store.summary(run_id)['requests']<=remaining_pages:
+                        for _ in range(max(0,dynamic_limit-(source_loading_count() if self.stage in {'T2','T3'} else 0))):
+                            remaining_pages=self.remaining_page_work(plan,work,committed,url)
+                            if plan['max_requests_per_run']-self.store.budget_counters(run_id)['requests']<=remaining_pages:
                                 break
                             descriptor=transport.prepare_dynamic(source,receipt)
                             if descriptor is None:
@@ -229,12 +230,18 @@ class V4T1Runner:
                         'links': parsed['discovered_sources'], 'note': 'Discovery only, not visited or approved.'})
                     committed.add(url)
                     # A failed/unknown frame stops. It never becomes source-empty.
-                    if not parsed['observations'] and parsed['page']['status']!='EXPLICIT_EMPTY':
+                    if (not parsed['observations'] and parsed['page']['status']!='EXPLICIT_EMPTY'
+                            and not self.accept_navigation_frame(plan,source,parsed,receipt)):
                         raise ValueError('V4_SOURCE_FRAME_UNVERIFIED_SAVED_FOR_OFFLINE_DIAGNOSIS')
-                    if self.stage=='T2':
+                    if self.stage in {'T2','T3'}:
                         scope_executed=True
                         commit()
+                    self.after_page(plan,source,key,parsed)
                 except (ValueError, OSError) as exc:
+                    if self.continue_after_source_stop(str(exc)):
+                        self.store.append_event(run_id, {'kind':'SOURCE_BUDGET_STOP','source_id':source['source_id'],
+                            'reason':str(exc),'observed_at':utc_text(e.clock())})
+                        continue
                     stop = str(exc)
                     self.store.append_event(run_id, {'kind': 'STOP', 'reason': stop, 'observed_at': utc_text(e.clock())})
                     break
@@ -242,7 +249,7 @@ class V4T1Runner:
             qa_started = time.perf_counter()
             quality = audit_v4(pages, rows, plan['sources'], require_live=True)
             from .v4_coverage import loading_coverage
-            loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] else None
+            loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] and self.stage!='T3' else None
             self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW',
                     'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
             stop = stop or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
@@ -260,3 +267,15 @@ class V4T1Runner:
 
     def _record_approval(self,plan,authorization):
         pass
+
+    def accept_navigation_frame(self,plan,source,parsed,receipt):
+        return False
+
+    def continue_after_source_stop(self,reason):
+        return False
+
+    def after_page(self,plan,source,key,parsed):
+        pass
+
+    def remaining_page_work(self,plan,work,committed,current_url):
+        return sum(u not in committed and u!=current_url for s,u in work)

@@ -37,18 +37,17 @@ def _body(page):
     return BeautifulSoup(body, 'lxml')
 
 
-def _reference(a, soup, page, source, relationship):
+def _reference(a, positions, page, source, relationship):
     url = urljoin(page['page_url'], a['href'])
     parts = urlsplit(url)
     ids = re.findall(r'(?<=/)\d+(?=/|$)', parts.path)
     query = parse_qs(parts.query)
     node = (query.get('node') or query.get('srs') or ids[-1:] or [None])[0]
-    all_anchors = soup.select('a[href]')
     return {'url': url, 'raw_href': a['href'], 'label_raw': a.get_text(' ', strip=True),
         'page_url': page['page_url'], 'parent_source_id': source['source_id'],
         'parent_source_type': source['source_type'], 'parent_source_subtype': source['source_subtype'],
         'evidence_path': page['evidence_path'], 'evidence_sha256': page['evidence_sha256'],
-        'anchor_dom_index': next(i for i, x in enumerate(all_anchors) if x is a),
+        'anchor_dom_index': positions[id(a)],
         'anchor_dom_sha256': hashlib.sha256(str(a).encode('utf8')).hexdigest(),
         'observed_at': page['observed_at'], 'parent_status': page['status'],
         'parent_http_status': page.get('http_status'), 'parent_access_status': page.get('access_status'),
@@ -64,6 +63,7 @@ def discover_navigation(page, source):
             or page['page_url'] not in source['page_urls']):
         raise ValueError('THREE_NAV_EXACT_SOURCE_REQUIRED')
     soup = _body(page)
+    positions={id(a):i for i,a in enumerate(soup.select('a[href]'))}
     selectors = ('#zg-left-col a[href], #zg_browseRoot a[href], [aria-label="Árbol de navegación"] a[href], '
         '[data-card-metrics-id^="p13n-zg-list-carousel"] a[href], .a-pagination .a-last a[href]')
     if source['source_type'] == 'CUSTOMER_FAVORITES':
@@ -102,7 +102,19 @@ def discover_navigation(page, source):
                 continue
         else:
             relationship = 'RESULTS_ENTRY'
-        ref = _reference(a, soup, page, source, relationship)
+        ref = _reference(a, positions, page, source, relationship)
+        if (source['source_type']=='CUSTOMER_FAVORITES' and relationship=='THEME_LINK'
+                and not (parsed.path.startswith('/cml-') or parsed.path=='/most-loved-fashion'
+                         or parsed.path in {'/b','/gp/browse.html'} and parse_qs(parsed.query).get('node'))):
+            # The real CML root also promotes Amazon Resale in a dcl-iwt tile.
+            # Tile ownership alone cannot relabel another zone as Favorites.
+            ref.update(relationship='OUTSIDE_SOURCE_LINK',status='UNVERIFIED',
+                       source_scope_reason='OUTSIDE_FAVORITES_COLLECTION_NAMESPACE')
+        if source['source_type']=='CUSTOMER_FAVORITES' and relationship=='RESULTS_ENTRY':
+            q=parse_qs(parsed.query);parent_q=parse_qs(urlsplit(page['page_url']).query)
+            parent_node=(parent_q.get('srs') or parent_q.get('node') or [None])[0]
+            if parsed.path!='/s' or not q.get('srs') or parent_node and q['srs']!=[parent_node]:
+                ref.update(status='UNVERIFIED',source_scope_reason='FAVORITES_RESULT_COLLECTION_UNVERIFIED')
         if relationship == 'NEXT_PAGE':
             try: verify_next(ref, source, parent_page_url=page['page_url'])
             except ValueError: ref['status'] = 'UNVERIFIED'
@@ -187,19 +199,27 @@ def build_navigation_tree(pages, sources):
         key = family + '|' + category_key(url)
         n = nodes.setdefault(key, {'node_id':key, 'source_type':family,'actual_urls':[], 'name_es_raw':[],
             'browse_node_id':browse, 'parent_ids':[], 'paths':[], 'visit_status':'UNVISITED',
+            'node_kinds':[],
             'product_observations':None,'ranking_range':None,'page_completeness':'UNVERIFIED',
             'leaf_confirmed':False,'approved':False})
         if url not in n['actual_urls']:n['actual_urls'].append(url)
         if label and label not in n['name_es_raw']:n['name_es_raw'].append(label)
         return key
+    for s in sources:
+        if s['source_type'] in FAMILIES:
+            key=node(s['actual_source_url'],s['source_type'])
+            nodes[key]['node_kinds'].append('DECLARED_SOURCE_CONTEXT')
     for p in pages:
         s = by_id[p['source_id']]
         if s['source_type'] not in FAMILIES:continue
-        root = node(p['page_url'], s['source_type'])
-        nodes[root]['visit_status'] = p['status']; nodes[root]['page_completeness'] = p.get('completeness_status','UNKNOWN')
-        nodes[root]['product_observations'] = p.get('actual_card_count')
+        root = node(p['page_url'], s['source_type'],(p.get('legacy_page') or {}).get('amazon_category'))
+        if p['observed_at']>=nodes[root].get('last_observed_at',''):
+            nodes[root]['last_observed_at']=p['observed_at']
+            nodes[root]['visit_status'] = p['status']; nodes[root]['page_completeness'] = p.get('completeness_status','UNKNOWN')
+            nodes[root]['product_observations'] = p.get('actual_card_count')
         for r in discover_navigation(p,s):
             child = node(r['url'],s['source_type'],r['label_raw'],r['browse_node_id'])
+            if r['relationship'] not in nodes[child]['node_kinds']:nodes[child]['node_kinds'].append(r['relationship'])
             edges.append({'parent_context_id':root,'destination_id':child,'relationship':r['relationship'],'evidence':r})
             if r['relationship'] == 'CHILD_CATEGORY' and child != root:
                 if root not in nodes[child]['parent_ids']:nodes[child]['parent_ids'].append(root)
@@ -212,5 +232,5 @@ def build_navigation_tree(pages, sources):
         return [p+[key] for parent in parents for p in paths(parent,visited|{key})]
     for key,n in nodes.items():n['paths'] = paths(key,set())
     return {'schema_version':1,'contract':CONTRACT,'nodes':list(nodes.values()),'edges':edges,
-        'pending_navigation':pending,'global_tree_complete':False,'new_network_requests':0,
+        'pending_navigation':pending,'global_tree_complete':False,'navigation_extraction_new_network_requests':0,
         'note':'Saved known scope only. No hierarchy inferred from URL depth; themes/facets/Next are separate edges.'}

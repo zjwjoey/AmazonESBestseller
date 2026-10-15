@@ -866,7 +866,13 @@ class HighSpeedRunner:
                         "duration_seconds":time.perf_counter()-pacing_started,"requested_sleep_seconds":max(0,delay)})
             # Approval, gate and elapsed budget may change while pacing.
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
-        counters = self.store.summary(plan["run_id"])
+        if plan.get('collection_contract')=='V4_THREE_SOURCE_5001':
+            from .three_contract import family_budget_for_store
+            reason=family_budget_for_store(self.store,plan,source,kind)
+            if reason:raise ValueError(reason)
+            counters=self.store.budget_counters(plan['run_id'])
+        else:
+            counters = self.store.summary(plan["run_id"])
         reverification=getattr(self,'_t1_reverification_context',None)
         if reverification and not aware_time(reverification['review']['reviewed_at'])<=aware_time(self.clock())<aware_time(reverification['review']['expires_at']):
             raise ValueError('T1_REVERIFICATION_REVIEW_EXPIRED')

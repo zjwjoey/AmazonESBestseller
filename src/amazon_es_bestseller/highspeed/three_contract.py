@@ -4,6 +4,8 @@ import hashlib
 from urllib.parse import urlsplit
 from .three_navigation import CONTRACT, FAMILIES, FAVORITES_ROOT, verify_navigation_reference, verify_chain
 from .v4_sources import SEEDS, source_for_url
+from .budgets import aware_time
+from pathlib import Path
 
 
 def source_from_navigation(reference, parent):
@@ -28,12 +30,20 @@ def verify_source(source, visited=None):
         raise ValueError('THREE_NAVIGATION_LINEAGE_CYCLE_OR_LIMIT')
     if source['source_id'] != 'v4_' + hashlib.sha256(url.encode()).hexdigest()[:24]:
         raise ValueError('THREE_EXACT_SOURCE_ID_REQUIRED')
+    historical=bool(source.get('historical_capture_reference'))
+    if historical:
+        from .three_archive import historical_context
+        expected,_=historical_context(source['historical_capture_reference'],expected_url=url,expected_type=source['source_type'])
+        if source['source_subtype']!=expected['source_subtype']:
+            raise ValueError('THREE_ARCHIVE_SUBTYPE_MISMATCH')
     seed = next((s for s in SEEDS if s['url']==url and s['source_type'] in FAMILIES), None)
     if url == FAVORITES_ROOT:
         seed = {'source_type':'CUSTOMER_FAVORITES','source_subtype':'CUSTOMERS_MOST_LOVED_CURATED_ZONE'}
     if seed:
         if any(source[k] != seed[k] for k in ('source_type','source_subtype')):
             raise ValueError('THREE_ROOT_TYPE_MISMATCH')
+    elif historical:
+        pass
     elif source.get('navigation_contract') == CONTRACT:
         parent = source['navigation_parent']
         verify_source(parent, visited | {url})
@@ -58,16 +68,24 @@ def validate_three_plan(plan):
             or plan.get('target_unique_links') != 15003
             or plan.get('source_targets') != {k:5001 for k in FAMILIES}
             or any(type(v) is not int for v in plan['source_targets'].values())
-            or {s['source_type'] for s in plan['sources']} != set(FAMILIES)
+            or not plan['sources'] or not {s['source_type'] for s in plan['sources']}.issubset(FAMILIES)
             or any(plan.get(k) for k in ('seed_reference','parent_run_id','continuation_mode'))):
         raise ValueError('THREE_INDEPENDENT_5001_FRESH_TARGETS_REQUIRED')
+    if not isinstance(plan.get('campaign_id'),str) or not plan['campaign_id'].startswith('three_source_5001_'):
+        raise ValueError('THREE_CAMPAIGN_ID_REQUIRED')
+    aware_time(plan['campaign_created_at'])
+    task=plan.get('task_reference') or {}
+    if not Path(task.get('path','__missing__')).is_file() or hashlib.sha256(Path(task['path']).read_bytes()).hexdigest()!=task.get('sha256'):
+        raise ValueError('THREE_EXACT_TASK_REFERENCE_REQUIRED')
     budgets = plan.get('source_budgets', {})
     if set(budgets) != set(FAMILIES): raise ValueError('THREE_EXACT_FAMILY_BUDGETS_REQUIRED')
     for kind, limits in budgets.items():
         if set(limits) != {'requests','PAGE','native'}:
             raise ValueError('THREE_FINITE_FAMILY_BUDGET_REQUIRED')
-        if any(type(v) is not int or v < (0 if k=='native' else 1) for k,v in limits.items()):
+        if any(type(v) is not int or v < 0 for v in limits.values()):
             raise ValueError('THREE_FINITE_FAMILY_BUDGET_REQUIRED')
+        if any(s['source_type']==kind for s in plan['sources']) and (limits['requests']<1 or limits['PAGE']<1):
+            raise ValueError('THREE_ACTIVE_FAMILY_POSITIVE_BUDGET_REQUIRED')
         if limits['requests'] < limits['PAGE'] + limits['native']:
             raise ValueError('THREE_FAMILY_ENVELOPE_EXCEEDS_REQUESTS')
         if kind == 'CUSTOMER_FAVORITES' and limits['native'] != 0:
@@ -89,4 +107,14 @@ def family_budget_reason(plan, source, reservations, kind):
         return 'THREE_SOURCE_PAGE_BUDGET_EXHAUSTED:'+family
     if kind=='ACP' and sum(r['kind']=='ACP' for r in rows) >= limits['native']:
         return 'THREE_SOURCE_NATIVE_BUDGET_EXHAUSTED:'+family
+    return None
+
+
+def family_budget_for_store(store,plan,source,kind):
+    counts=dict(store.db.execute("SELECT kind,count(*) FROM requests WHERE run_id=? "
+        "AND json_extract(data_json,'$.source_type')=? GROUP BY kind",(plan['run_id'],source['source_type'])))
+    limits=plan['source_budgets'][source['source_type']];family=source['source_type']
+    if sum(counts.values())>=limits['requests']:return 'THREE_SOURCE_REQUEST_BUDGET_EXHAUSTED:'+family
+    if kind=='PAGE' and counts.get('PAGE',0)>=limits['PAGE']:return 'THREE_SOURCE_PAGE_BUDGET_EXHAUSTED:'+family
+    if kind=='ACP' and counts.get('ACP',0)>=limits['native']:return 'THREE_SOURCE_NATIVE_BUDGET_EXHAUSTED:'+family
     return None

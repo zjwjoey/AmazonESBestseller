@@ -39,3 +39,72 @@ specific finite URL set, request/PAGE/native budgets, duration, stop policy,
 plan SHA and independent authorization must be reviewed. Further discovered
 URLs remain pending until another exact-scope approval. Historical T2 findings
 are planning evidence, never a new campaign seed or fulfilled 5,001 quota.
+
+## Execution and recovery
+
+`v4_cli run/resume/check` accepts T3 only with the exact three-source contract;
+ordinary T3 plans remain rejected. The dedicated subclass reuses V4 page/native
+capture, metering, serial pacing, shared run/gate locks, immutable start and
+reservations. Per-family request/PAGE/native caps are checked before reservation
+and accumulate across resume. A family budget stop does not consume another
+family's allocation; access restrictions and unknown safety stop the whole run.
+Interrupted native pages require a charged reopen of the same approved URL;
+finished scope pages use the existing checkpoint. Discovered navigation is
+persisted as pending evidence and never appended to the executable work list.
+
+One campaign may contain several separately approved fresh batches. A batch may
+cover a subset of the three families, but all three campaign targets stay 5,001.
+Its task SHA, campaign ID and original creation time are approval-bound. Neither
+request nor approval may predate campaign creation. A new batch never resets an
+interrupted run's budgets: it needs new exact-scope approval. Old T2 and 30,026
+records are not eligible campaign inputs.
+
+Request safety uses SQL-only budget counters; candidate summaries are outside
+the per-request hot path. An execution-local source-proof cache performs full
+initial DOM validation, then hashes every dependency, including historical
+reservation/receipt/body. Changed evidence repeats full validation. Final QA
+always independently re-reads full DOM and receipts.
+
+## Historical navigation, preparation and reports
+
+```text
+python -m amazon_es_bestseller.highspeed.v4_cli review-three-archive --root <old store> --out <new inventory JSON>
+python -m amazon_es_bestseller.highspeed.v4_cli prepare-three-source --t2 <formal T2 manifest> --archive <inventory JSON> --selection <selection JSON> --task <task text> --out <new parent> --runtime-root <runtime parent> --shared-gate <existing Gate>
+python -m amazon_es_bestseller.highspeed.v4_cli report --root <approved fresh store> --run-id <same run> --out <new parent>
+python -m amazon_es_bestseller.highspeed.v4_cli aggregate-three-source --batch <batch1 manifest> --batch <batch2 manifest> --out <new parent>
+```
+
+Archive inspection uses SQLite `mode=ro`, actual sealed HTTP200/NORMAL PAGE
+receipts and their matching reservations/body. The current parser must recognize
+actual ranked products before that old page becomes a navigation context. Old
+products are discarded from this import. Old run/time/body SHA remain evidence,
+not proof of current destination supply. Unknown hierarchy remains a forest.
+
+Selection kind is `THREE_SOURCE_5001_SELECTION`, with a nonempty `reason`, exact
+unique `seed_urls`, `prior_source_ids`, `historical_source_urls`,
+`navigation_source_urls`, ordered `pagination_urls`, `source_budgets`, and
+`limits`. Family budgets use `requests`, `PAGE`, `native`; totals must equal
+global limits. `limits` contains exactly `max_duration_hours`,
+`max_native_requests_per_source`, `max_raw_observations_per_run`,
+`history_observation_limit`. `--campaign <prior same-task plan>` retains campaign
+identity, not its data or request budget. Each generated plan is disabled and
+authorization is unapproved without dates. Pending and enabled-preview SHAs are
+both reported; no enabled file or browser is produced.
+
+Full DOM, original reservation/approval/request/body checks precede the twelve
+requested exports. CSV/JSONL counts, URLs, conservative groups, memberships and
+SHA are independently reread. Grid coverage uses actual declared rank values,
+including page-two 51--100; missing ACP slots stay PARTIAL. Favorites terminal
+status requires affirmative disabled-Next evidence. Missing links alone cannot
+prove completeness. NEW future/preorder/stock signals are derived from the same
+card with explicit dates/raw evidence; the global future-release banner is not
+an item-level assertion. No signal means unknown release status, not confirmed
+ordinary available stock or independent buyability.
+
+The campaign merger re-audits each supplied batch's original store read-only,
+DOM, receipts and exports. Different tasks/campaigns, duplicate batch IDs,
+modified files, failed audits and old-stage reports block aggregation. Repeated
+products across batches remain raw history but add no source/global groups.
+Quantity, scoped completeness and independent SKU identity have separate results.
+Below any source's minimum the exact outcome remains
+`NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET`.

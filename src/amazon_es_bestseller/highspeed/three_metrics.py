@@ -7,10 +7,12 @@ from .adapters import _non_title_text
 from .budgets import aware_time
 
 
-def measure_three(observations, run_id):
+def qualify_three(observations, run_id, *, allowed_run_ids=None):
+    allowed={run_id} if allowed_run_ids is None else set(allowed_run_ids)
+    if not allowed or run_id not in allowed:raise ValueError('THREE_EXPLICIT_VERIFIED_BATCH_IDS_REQUIRED')
     current=[]; excluded=0
     for row in observations:
-        if row.get('run_id')!=run_id or row.get('origin')!='LIVE_CAPTURE':
+        if row.get('run_id') not in allowed or row.get('origin')!='LIVE_CAPTURE':
             excluded+=1;continue
         if row.get('source_type') not in FAMILIES:raise ValueError('THREE_FOREIGN_SOURCE')
         current.append(row)
@@ -20,11 +22,17 @@ def measure_three(observations, run_id):
         if (norm['is_valid'] and norm['normalized_product_url']==row.get('normalized_product_url')
                 and row.get('product_title_es') and not _non_title_text(row['product_title_es'])
                 and not row.get('binding_doubts') and row.get('source_evidence')
+                and row.get('source_evidence_eligible') is not False and row.get('target_eligible') is not False
                 and row.get('evidence_path') and row.get('evidence_sha256')):
             # Recompute conservative identity with the current normalizer;
             # never trust a persisted or externally supplied group-count flag.
             qualified.append({**row,'possible_duplicate_key':norm['possible_duplicate_key']})
         else:invalid.append(row)
+    return current,qualified,invalid,excluded
+
+
+def measure_three(observations, run_id, *, allowed_run_ids=None):
+    current,qualified,invalid,excluded=qualify_three(observations,run_id,allowed_run_ids=allowed_run_ids)
     source_reports={};all_groups=set();source_groups={};source_urls={}
     for kind in FAMILIES:
         raw=[r for r in current if r['source_type']==kind]

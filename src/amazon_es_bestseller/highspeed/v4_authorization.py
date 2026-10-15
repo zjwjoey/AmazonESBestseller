@@ -35,7 +35,7 @@ def _verify_prerequisite(reference,stage):
     key=(stage,reference['path'],reference['sha256'])
     old=cache.get(key)
     if (old and all(p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest()==sha for p,sha in old['files'])
-            and all(sorted(p.name for p in d.iterdir() if p.is_file())==names for d,names in old['directories'])):return
+            and all(sorted(p.name for p in d.iterdir() if p.is_file())==names for d,names in old['directories'])):return old['value']
     value=verify_stage_reference(reference,stage)
     paths={Path(reference['path'])}
     def collect(x):
@@ -61,8 +61,9 @@ def _verify_prerequisite(reference,stage):
             if p.parent.name=='responses':
                 paths.update(p.parent.parent.joinpath('requests').glob('*.reserved.json'))
     dirs={p.parent for p in paths}
-    cache[key]={'files':[(p,hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths],
+    cache[key]={'value':value,'files':[(p,hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths],
         'directories':[(d,sorted(p.name for p in d.iterdir() if p.is_file())) for d in dirs]}
+    return value
 
 
 def validate_plan_v4(plan):
@@ -103,6 +104,14 @@ def validate_plan_v4(plan):
     if three_source:
         from .three_contract import validate_three_plan
         validate_three_plan(plan)
+    # Execution-local DOM verification cache. Every subsequent request still
+    # hashes each unique navigation dependency; a changed byte repeats the full
+    # proof validation. Offline/final QA receives no cache and reparses normally.
+    cache=_PREREQUISITES.get()
+    scope_key=('SOURCE_SCOPE',digest(sources),plan.get('collection_contract'))
+    cached=cache.get(scope_key) if cache is not None else None
+    if cached is not None and all(p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest()==sha for p,sha in cached):
+        return plan
     seen = set()
     for s in sources:
         if s.get('source_id') in seen or not s.get('source_id') or s.get('parser_profile') != 'V4':
@@ -121,6 +130,23 @@ def validate_plan_v4(plan):
         verify_pagination_chain(s)
         if not amazon_url(s['actual_source_url']):
             raise ValueError('V4_EXACT_EVIDENCED_SOURCE_PAGES_REQUIRED')
+    if cache is not None:
+        paths=set()
+        def collect(value):
+            if isinstance(value,dict):
+                for k,v in value.items():
+                    if k in {'evidence_path','html_path','path'} and isinstance(v,str) and Path(v).is_file():paths.add(Path(v))
+                    elif k=='historical_capture_reference' and isinstance(v,dict):
+                        from ..multisource.storage import read_sealed
+                        receipt_path=Path(v['path']);receipt=read_sealed(receipt_path)
+                        paths.add(receipt_path)
+                        paths.add(receipt_path.parent.parent/'requests'/(receipt['request_id']+'.reserved.json'))
+                        collect(receipt)
+                    elif isinstance(v,(dict,list)):collect(v)
+            elif isinstance(value,list):
+                for v in value:collect(v)
+        collect(sources)
+        cache[scope_key]=[(p,hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths]
     return plan
 
 
@@ -136,8 +162,13 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
             or a.get('stage') != plan['stage'] or a.get('plan_sha256') != digest(plan)):
         raise ValueError('V4_EXACT_STAGE_RUN_PLAN_APPROVAL_REQUIRED')
     current = aware_time(now)
+    if plan.get('collection_contract')=='V4_THREE_SOURCE_5001' and current<aware_time(plan['campaign_created_at']):
+        raise ValueError('THREE_REQUEST_BEFORE_CAMPAIGN_CREATION')
     if not a.get('approval_id') or not a.get('approved_by'):
         raise ValueError('V4_NAMED_APPROVAL_REQUIRED')
+    if (plan.get('collection_contract')=='V4_THREE_SOURCE_5001'
+            and aware_time(a['reviewed_at'])<aware_time(plan['campaign_created_at'])):
+        raise ValueError('THREE_APPROVAL_BEFORE_CAMPAIGN_CREATION')
     if not aware_time(a['reviewed_at']) <= current < aware_time(a['expires_at']):
         raise ValueError('AUTHORIZATION_EXPIRED_OR_NOT_YET_VALID')
     if store_root is None or a.get('store_root') != str(Path(store_root).resolve()):
@@ -158,16 +189,20 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
     if set(a.get('sources', {})) != {s['source_id'] for s in plan['sources']}:
         raise ValueError('V4_EXACT_SOURCE_SET_REQUIRED')
     if plan.get('collection_contract') == 'V4_THREE_SOURCE_5001':
-        for key in ('collection_contract','source_targets','source_budgets'):
-            if a.get(key) != plan[key]:
+        for key in ('collection_contract','source_targets','source_budgets','campaign_id','campaign_created_at','task_reference'):
+            if digest(a.get(key)) != digest(plan[key]):
                 raise ValueError('THREE_EXACT_CAMPAIGN_APPROVAL_REQUIRED:'+key)
+    checked_evidence={}
     for s in plan['sources']:
         scope = a['sources'][s['source_id']]
         for key in ('source_type', 'source_subtype', 'page_urls', 'parser_profile'):
             if scope.get(key) != s.get(key):
                 raise ValueError('V4_EXACT_SOURCE_APPROVAL_REQUIRED:' + key)
         ref = scope.get('evidence') or {}
-        if not ref.get('reviewed') or hashlib.sha256(Path(ref['path']).read_bytes()).hexdigest() != ref.get('sha256'):
+        path=Path(ref.get('path','__missing__'))
+        if path not in checked_evidence and path.is_file():
+            checked_evidence[path]=hashlib.sha256(path.read_bytes()).hexdigest()
+        if not ref.get('reviewed') or checked_evidence.get(path) != ref.get('sha256'):
             raise ValueError('V4_SOURCE_EVIDENCE_REQUIRED')
     for stage in {'T1': (), 'T2': ('T0', 'T1'), 'T3': ('T0', 'T1', 'T2')}[plan['stage']]:
         _verify_prerequisite(a.get('prerequisites', {}).get(stage), stage)

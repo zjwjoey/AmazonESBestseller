@@ -11,7 +11,7 @@ from .v4_quality import audit_v4, build_candidates_v4
 FAMILIES={'BEST_SELLERS','NEW_RELEASES','CUSTOMER_FAVORITES','DEALS','AMAZON_HAUL'}
 
 
-def audit_capacity(pages, observations, sources, execution):
+def audit_capacity(pages, observations, sources, execution, *, three_source=False):
     """Re-read every reservation/receipt and DOM, including failed attempts.
 
     A valid diagnostic is distinct from sufficient measured supply for T3.
@@ -19,9 +19,14 @@ def audit_capacity(pages, observations, sources, execution):
     """
     errors=[]; receipts=[]; reservations=[]
     plan=execution['plan'];run_id=plan['run_id']
+    families=FAMILIES
+    if three_source:
+        from .three_contract import validate_three_plan, FAMILIES as THREE_FAMILIES
+        validate_three_plan(plan)
+        families={s['source_type'] for s in sources}
     quality=audit_v4(pages,observations,sources,require_live=True)
     if not quality['central_full_dom_review_passed']:errors.append('CENTRAL_DOM_QA_FAILED')
-    if plan.get('stage')!='T2' or plan.get('sources')!=sources:errors.append('EXACT_T2_PLAN_REQUIRED')
+    if plan.get('stage')!=('T3' if three_source else 'T2') or plan.get('sources')!=sources:errors.append('EXACT_T2_PLAN_REQUIRED')
     try:
         from .v4_authorization import validate_plan_v4, authorize_v4_request,validate_v4_authorization
         validate_plan_v4(plan)
@@ -57,6 +62,9 @@ def audit_capacity(pages, observations, sources, execution):
             if (q['run_id']!=run_id or q['plan_sha256']!=digest(plan) or q['origin']!='LIVE_CAPTURE'
                     or q['source_id']!=r['source_id'] or q['kind']!=r['kind'] or q['url']!=r['request_url']
                     or q['observed_at']!=r['observed_at']):raise ValueError('RESERVATION_BINDING_MISMATCH')
+            if three_source and (q.get('source_type')!=source_map[q['source_id']]['source_type']
+                    or r.get('source_type')!=source_map[q['source_id']]['source_type']):
+                raise ValueError('THREE_RECEIPT_FAMILY_BINDING_MISMATCH')
             matches=[a for a in approvals if aware_time(a['reviewed_at'])<=aware_time(q['observed_at'])<aware_time(a['expires_at'])]
             if not matches:raise ValueError('REQUEST_OUTSIDE_APPROVED_TIME')
             allowed=False
@@ -72,9 +80,12 @@ def audit_capacity(pages, observations, sources, execution):
     except (OSError,ValueError,KeyError,TypeError) as exc:errors.append(str(exc))
     times=sorted(aware_time(q['observed_at']) for q in reservations)
     started=aware_time(execution['started_at']);finished=aware_time(execution['finished_at'])
+    if three_source and started<aware_time(plan['campaign_created_at']):errors.append('OLD_RUN_BEFORE_CAMPAIGN_CREATED')
     elapsed=(finished-started).total_seconds()
     intervals=[(b-a).total_seconds() for a,b in zip(times,times[1:])]
-    if elapsed<=0 or elapsed>plan['max_duration_hours']*3600:errors.append('DURATION_OUTSIDE_PLAN')
+    if elapsed<=0 or not three_source and elapsed>plan['max_duration_hours']*3600:errors.append('DURATION_OUTSIDE_PLAN')
+    if three_source and times and (times[-1]-started).total_seconds()>=plan['max_duration_hours']*3600:
+        errors.append('REQUEST_AFTER_CAMPAIGN_DEADLINE')
     if times and (times[0]<started or times[-1]>finished):errors.append('REQUEST_TIME_OUTSIDE_EXECUTION')
     if intervals and min(intervals)<plan['request_pacing_seconds']:errors.append('PACING_VIOLATION')
     page_count=sum(q['kind']=='PAGE' for q in reservations)
@@ -89,11 +100,17 @@ def audit_capacity(pages, observations, sources, execution):
     if any(n>plan['max_requests_per_day'] for n in daily.values()):errors.append('DAY_LIMIT_EXCEEDED')
     if len(observations)>min(plan['max_raw_observations_per_run'],plan['history_observation_limit']):
         errors.append('OBSERVATION_LIMIT_EXCEEDED')
+    if three_source:
+        for family,limits in plan['source_budgets'].items():
+            own=[q for q in reservations if q.get('source_type')==family]
+            if (len(own)>limits['requests'] or sum(q['kind']=='PAGE' for q in own)>limits['PAGE']
+                    or sum(q['kind']=='ACP' for q in own)>limits['native']):
+                errors.append('THREE_SOURCE_CUMULATIVE_BUDGET_EXCEEDED:'+family)
     candidates=build_candidates_v4(observations)
     groups={c['target_review_group'] for c in candidates if c['eligible_for_target']}
     targets={c['normalized_product_url']:c['target_review_group'] for c in candidates if c['eligible_for_target']}
     metrics=[]; measured=set()
-    for kind in sorted(FAMILIES):
+    for kind in sorted(families):
         rows=[r for r in observations if r['source_type']==kind and r['origin']=='LIVE_CAPTURE']
         urls={r['normalized_product_url'] for r in rows if r.get('is_valid')}
         other={r['normalized_product_url'] for r in observations if r['source_type']!=kind and r.get('is_valid')}
@@ -111,16 +128,17 @@ def audit_capacity(pages, observations, sources, execution):
             'mean_PAGE_seconds':_mean([r.get('duration_seconds',0) for r in rs if r['kind']=='PAGE']),
             'observed_capacity_lower_bound':len({targets[u] for u in urls if u in targets}),
             'capacity_unit':'CONSERVATIVE_URL_REVIEW_GROUPS_NOT_CONFIRMED_SKUS','global_capacity_status':'UNKNOWN'})
-    if measured!=FAMILIES:errors.append('FIVE_FAMILY_MEASUREMENT_INCOMPLETE')
+    if measured!=families:errors.append('THREE_SOURCE_MEASUREMENT_INCOMPLETE' if three_source else 'FIVE_FAMILY_MEASUREMENT_INCOMPLETE')
     from .v4_coverage import loading_coverage
     loading=loading_coverage(pages,sources)
-    if not loading['all_loading_capabilities_observed']:errors.append('T2_LOADING_MEASUREMENT_INCOMPLETE')
-    for kind in ('DEALS','AMAZON_HAUL'):
+    if not three_source and not loading['all_loading_capabilities_observed']:errors.append('T2_LOADING_MEASUREMENT_INCOMPLETE')
+    for kind in (() if three_source else ('DEALS','AMAZON_HAUL')):
         if sum(r['kind']=='ACP' and r['source_type']==kind for r in receipts)<2:
             errors.append('TWO_LOADING_RECEIPTS_REQUIRED:'+kind)
     expected={u for s in sources for u in s['page_urls']}
     if not expected.issubset({p['page_url'] for p in pages}):errors.append('APPROVED_PAGE_SCOPE_INCOMPLETE')
-    if any(p['status'] not in {'VERIFIED_WITH_PRODUCTS','EXPLICIT_EMPTY'} for p in pages):errors.append('UNVERIFIED_SOURCE_FRAME')
+    allowed_statuses={'VERIFIED_WITH_PRODUCTS','EXPLICIT_EMPTY'}|({'NAVIGATION_ONLY'} if three_source else set())
+    if any(p['status'] not in allowed_statuses for p in pages):errors.append('UNVERIFIED_SOURCE_FRAME')
     if any(p.get('execution_status')!='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED' for p in pages):
         errors.append('SOURCE_PAGE_SCOPE_NOT_EXECUTED')
     # Real checkpoints provide marginal growth; retained repeats never become new supply.
@@ -133,7 +151,14 @@ def audit_capacity(pages, observations, sources, execution):
     active_seconds=(samples[-1][0]-samples[0][0]).total_seconds() if len(samples)>1 else 0
     growth=(samples[-1][1]-samples[0][1]) if samples else 0
     rate=growth*3600/active_seconds if active_seconds>0 else None
-    return {'schema_version':1,'stage':'T2','run_id':run_id,'diagnostic_passed':not errors,
+    scope_issues=[]
+    if three_source:
+        # Data/receipt QA is separate from unfinished approved scope. Missing
+        # pages never become COMPLETE, but safe captured rows remain auditable
+        # across separately approved campaign batches.
+        scoped={'THREE_SOURCE_MEASUREMENT_INCOMPLETE','APPROVED_PAGE_SCOPE_INCOMPLETE','SOURCE_PAGE_SCOPE_NOT_EXECUTED'}
+        scope_issues=sorted(set(errors)&scoped);errors=[e for e in errors if e not in scoped]
+    return {'schema_version':1,'stage':'T3' if three_source else 'T2','run_id':run_id,'diagnostic_passed':not errors,
         'errors':sorted(set(errors)),'central_full_dom_review_passed':quality['central_full_dom_review_passed'],
         'actual_requests':len(reservations),'actual_PAGE':page_count,'minimum_request_interval_seconds':min(intervals) if intervals else None,
         'elapsed_wall_seconds':elapsed,'raw_observations':len(observations),'normalized_unique_links':len(candidates),
@@ -144,7 +169,8 @@ def audit_capacity(pages, observations, sources, execution):
         'rate_scope':'First-to-last eligible capture window; subtracts the entire initial capture baseline. Not a sustained-rate guarantee.',
         'linear_30000_hours_if_sample_rate_persists':30000/rate if rate else None,
         'global_source_completeness':'UNKNOWN','thirty_thousand_supply_demonstrated':len(groups)>=30000 and not errors,
-        'T3_execution_enabled':False,'strict_independent_buyable_SKUs_confirmed':False}
+        'T3_execution_enabled':False,'strict_independent_buyable_SKUs_confirmed':False,
+        **({'central_quality':quality,'scope_issues':scope_issues,'approved_scope_complete':not scope_issues} if three_source else {})}
 
 
 def _mean(values):

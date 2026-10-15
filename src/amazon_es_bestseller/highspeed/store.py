@@ -393,7 +393,9 @@ class RunStore:
             self.db.execute("INSERT OR REPLACE INTO pending_pages VALUES(?,?,?)", (run_id, str(path), len(rows)))
             raise
         self.db.execute("DELETE FROM pending_pages WHERE run_id=? AND journal_path=?", (run_id,str(path)))
-        return {"page_key": page_key, "observation_count": len(rows), **self.summary(run_id)}
+        counters = (self.budget_counters(run_id) if run['plan'].get('collection_contract')=='V4_THREE_SOURCE_5001'
+                    else self.summary(run_id))
+        return {"page_key": page_key, "observation_count": len(rows), **counters}
 
     def _index_page(self, value, journal_path, plan):
         run_id, page_key, page = value["run_id"], value["page_key"], value["page"]
@@ -666,6 +668,14 @@ class RunStore:
 
     def normalized_candidate_count(self, run_id):
         return self.db.execute("SELECT count(*) FROM run_candidates WHERE run_id=?", (run_id,)).fetchone()[0]
+
+    def budget_counters(self, run_id):
+        """Request safety counters only; no candidate projection or URL scans."""
+        return {'requests':self.db.execute('SELECT count(*) FROM requests WHERE run_id=?',(run_id,)).fetchone()[0],
+            'page_requests':self.db.execute("SELECT count(*) FROM requests WHERE run_id=? AND kind='PAGE'",(run_id,)).fetchone()[0],
+            'requests_by_day':dict(self.db.execute('SELECT local_day,count(*) FROM requests GROUP BY local_day').fetchall()),
+            'observations':self.db.execute('SELECT count(*) FROM observations WHERE run_id=?',(run_id,)).fetchone()[0],
+            'history_observations':self.db.execute('SELECT count(*) FROM observations').fetchone()[0]}
 
     def summary(self, run_id):
         requests = self.db.execute("SELECT count(*) FROM requests WHERE run_id=?", (run_id,)).fetchone()[0]

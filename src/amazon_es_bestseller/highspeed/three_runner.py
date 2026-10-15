@@ -1,0 +1,75 @@
+"""Three-source scheduling through the verified serial V4 receipt engine."""
+import hashlib
+from pathlib import Path
+from ..multisource.storage import immutable_json
+from .three_navigation import CONTRACT, discover_navigation
+from .three_contract import validate_three_plan
+from .three_metrics import measure_three
+from .v4_runner import V4T1Runner
+from .v4_t2_runner import V4T2Runner
+from .v4_capacity import audit_capacity, execution_for_store
+
+
+class V4ThreeSourceRunner(V4T2Runner):
+    stage='T3'
+
+    def run(self,plan,**kwargs):
+        validate_three_plan(plan)
+        # Derived indexes only in this fresh campaign store. Avoid repeatedly
+        # parsing every large reservation JSON just to count a source budget.
+        self.store.db.execute("CREATE INDEX IF NOT EXISTS three_request_family ON requests "
+            "(run_id,json_extract(data_json,'$.source_type'),kind)")
+        self.store.db.execute("CREATE INDEX IF NOT EXISTS three_request_source ON requests "
+            "(run_id,json_extract(data_json,'$.source_id'),kind)")
+        result=V4T1Runner.run(self,plan,**kwargs)
+        execution=execution_for_store(self.store,plan['run_id'])
+        rows=list(self.store.iter_observations(plan['run_id']));pages=self.store.pages(plan['run_id'])
+        audit=audit_capacity(pages,rows,plan['sources'],execution,three_source=True)
+        metrics=measure_three(rows,plan['run_id'])
+        accepted=metrics['target_met'] and audit['diagnostic_passed']
+        acceptance=('ACCEPTED — THREE_SOURCE_5001_CANDIDATES_QA_PASSED' if accepted else
+            'NOT_ACCEPTED — THREE_SOURCE_5001_TARGET_NOT_MET' if not metrics['target_met'] else
+            'NOT_ACCEPTED — THREE_SOURCE_QUALITY_AUDIT_FAILED')
+        self.store.update_run(plan['run_id'],quality_gate_passed=accepted,three_source_metrics=metrics,
+            three_source_receipt_audit=audit,three_source_acceptance=acceptance,
+            SKU_identity_status='NOT_VERIFIED',T3_execution_enabled=False)
+        return {**result,'run':self.store.get_run(plan['run_id']),'metrics':metrics,'receipt_audit':audit,
+                'acceptance':acceptance}
+
+    def continue_after_source_stop(self,reason):
+        return reason.startswith(('THREE_SOURCE_REQUEST_BUDGET_EXHAUSTED:',
+            'THREE_SOURCE_PAGE_BUDGET_EXHAUSTED:','THREE_SOURCE_NATIVE_BUDGET_EXHAUSTED:'))
+
+    def remaining_page_work(self,plan,work,committed,current_url):
+        from .three_contract import family_budget_for_store
+        blocked=set()
+        for kind in {s['source_type'] for s in plan['sources']}:
+            source=next(s for s in plan['sources'] if s['source_type']==kind)
+            if family_budget_for_store(self.store,plan,source,'PAGE'):blocked.add(kind)
+        return sum(u not in committed and u!=current_url and s['source_type'] not in blocked for s,u in work)
+
+    def accept_navigation_frame(self,plan,source,parsed,receipt):
+        # Missing cards plus sidebar is insufficient: reject unresolved product
+        # metadata, unknown source states and unsafe HTTP/access conditions.
+        page=parsed['page']
+        if (receipt.get('status_code')!=200 or receipt.get('access_state')!='NORMAL'
+                or page['status']!='NAVIGATION_ONLY' or parsed['acp_pending']
+                or page.get('legacy_page',{}).get('expected_count')):
+            return False
+        from bs4 import BeautifulSoup
+        soup=BeautifulSoup(Path(page['evidence_path']).read_bytes(),'lxml')
+        from .v4_frontier import _excluded
+        if any(not _excluded(n) for n in soup.select('[data-asin], [data-client-recs-list], [data-expected-count]')):
+            return False
+        refs=discover_navigation(page,source)
+        return any(r['status']=='PENDING_REVIEW' and r['relationship'] in {'THEME_LINK','CHILD_CATEGORY','RESULTS_ENTRY'} for r in refs)
+
+    def after_page(self,plan,source,key,parsed):
+        rows=discover_navigation(parsed['page'],source)
+        directory=self.store.root/'runs'/plan['run_id']/'navigation'
+        immutable_json(directory/(hashlib.sha256((key+parsed['page']['evidence_sha256']).encode()).hexdigest()+'.json'),
+            {'contract':CONTRACT,'run_id':plan['run_id'],'page_key':key,'references':rows,
+             'approved':False,'new_network_requests':0})
+        self.store.append_event(plan['run_id'],{'kind':'THREE_SOURCE_PROGRESS','source_type':source['source_type'],
+            'page_key':key,'metrics':measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id']),
+            'discovered_links_pending_review':len(rows)})

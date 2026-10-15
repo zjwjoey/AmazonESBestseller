@@ -29,9 +29,14 @@ def _run_live_v4(args):
         raise ValueError('V4_FRESH_RUN_DIRECTORY_REQUIRED')
     store = RunStore(args.root)
     try:
-        if plan['stage'] not in {'T1','T2'}:
+        three_source=plan.get('collection_contract')=='V4_THREE_SOURCE_5001'
+        if plan['stage'] not in {'T1','T2'} and not (three_source and plan['stage']=='T3'):
             raise ValueError('V4_T3_EXECUTION_DISABLED')
-        runner = (V4T2Runner if plan['stage']=='T2' else V4T1Runner)(store)
+        if three_source:
+            from .three_runner import V4ThreeSourceRunner
+            runner=V4ThreeSourceRunner(store)
+        else:
+            runner = (V4T2Runner if plan['stage']=='T2' else V4T1Runner)(store)
         validate_v4_authorization(plan, approval, runner.engine._gate(plan), store_root=store.root)
         if args.operation == 'check':
             return {'authorized_now': True, 'stage': plan['stage'], 'browser_started': False}
@@ -62,6 +67,12 @@ def _run_live_v4(args):
                 def bounded(route):
                     req = route.request
                     if req.resource_type == 'document' and req.url not in allowed:
+                        parent=getattr(req,'redirected_from',None)
+                        immutable_json(store.root/'navigation_discovery_contracts'/(uuid.uuid4().hex+'.json'),{
+                            'kind':'UNAPPROVED_DOCUMENT_ABORTED','url':req.url,'method':req.method,
+                            'redirected_from_url':parent.url if parent else None,
+                            'run_id':plan['run_id'],'observed_at':utc_text(),
+                            'request_sent':False,'approved':False,'destination_supply':'UNVERIFIED'})
                         route.abort(); return
                     if req.resource_type in {'xhr', 'fetch'}:
                         # Unknown new-source protocols are evidence to review,
@@ -106,6 +117,13 @@ def main(argv=None):
     p = sub.add_parser('prepare-t2-supplement', help='Offline saved-DOM supplementary T2 proposal; never LIVE.')
     for opt in ('t2', 'navigation', 'selection', 'out', 'runtime-root', 'shared-gate'):
         p.add_argument('--' + opt, required=True)
+    p=sub.add_parser('prepare-three-source',help='Offline exact-scope three-source 5001 campaign proposal.')
+    for opt in ('t2','archive','selection','task','out','runtime-root','shared-gate'):p.add_argument('--'+opt,required=True)
+    p.add_argument('--campaign',help='Prior plan from the same task/campaign; never a data seed.')
+    p=sub.add_parser('review-three-archive',help='Read-only historical PAGE navigation; no candidate seed or HTTP.')
+    p.add_argument('--root',required=True);p.add_argument('--out',required=True)
+    p=sub.add_parser('aggregate-three-source',help='Offline re-audit and deduplicate fresh same-campaign batches.')
+    p.add_argument('--batch',action='append',required=True);p.add_argument('--out',required=True)
     p = sub.add_parser('review-navigation', help='Offline T2 saved-navigation inventory; no approval or network.')
     p.add_argument('--t2', required=True); p.add_argument('--out', required=True)
     for name in ('check', 'run', 'resume'):
@@ -121,7 +139,22 @@ def main(argv=None):
     for opt in ('root', 'run-id', 'out'):
         p.add_argument('--' + opt, required=True)
     args = parser.parse_args(argv)
-    if args.operation == 'prepare-t2-supplement':
+    if args.operation=='aggregate-three-source':
+        import hashlib
+        from .three_campaign import aggregate_campaign
+        refs=[{'path':str(Path(p).resolve()),'sha256':hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.batch]
+        result=aggregate_campaign(refs,args.out)
+    elif args.operation=='review-three-archive':
+        from .three_archive import inspect_archive
+        result=inspect_archive(args.root,args.out)
+    elif args.operation=='prepare-three-source':
+        import hashlib
+        from .three_prepare import prepare_three
+        def reference(path):
+            p=Path(path).resolve();return {'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+        result=prepare_three(*[reference(p) for p in (args.t2,args.archive,args.selection,args.task)],
+            args.out,args.runtime_root,args.shared_gate,campaign_reference=reference(args.campaign) if args.campaign else None)
+    elif args.operation == 'prepare-t2-supplement':
         import hashlib
         from .v4_supplement import prepare_t2_supplement
         refs = [{'path': str(Path(p).resolve()), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()}
@@ -146,6 +179,11 @@ def main(argv=None):
         store = RunStore(args.root)
         try:
             run = store.get_run(args.run_id)
+            if run['plan'].get('collection_contract')=='V4_THREE_SOURCE_5001':
+                from .three_report import export_three
+                result=export_three(store,args.run_id,args.out)
+                print(json.dumps(result,ensure_ascii=False,indent=2))
+                return result
             accepted=([s['actual_source_url'] for s in run['plan']['sources']
                 if s['source_subtype']=='LIGHTNING_DEAL_FILTER'] if args.retain_lightning_empty else [])
             result = export_v4(store.pages(args.run_id), list(store.iter_observations(args.run_id)),

@@ -107,6 +107,11 @@ products. The current T2 approval is not extended by offline development or
 discovery. T3 execution remains closed; no promotion, fresh 30,000 collection,
 historical seeding or main merge is authorized.
 
+The later three-source task uses a separate `V4_THREE_SOURCE_5001` campaign
+contract and independent exact-plan approval. Its T3 marker does not promote
+the earlier five-family diagnostic or open generic 30,000 collection. See
+`THREE_SOURCE_5001.md` for source-specific quotas, batches and execution limits.
+
 The development objective is 30,000 effective deduplicated product-link
 candidates. Confirmed independent buyable child-ASIN identity is a separate
 future product-detail check, not a prerequisite invented for this candidate

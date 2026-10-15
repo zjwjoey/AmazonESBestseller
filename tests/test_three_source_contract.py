@@ -3,11 +3,16 @@ import pytest
 from amazon_es_bestseller.highspeed import three_contract as contract
 from amazon_es_bestseller.multisource.storage import digest
 from test_highspeed_v4_execution import setup_scope, NOW
+import hashlib
 
 
 def scope(tmp_path):
     plan, auth = setup_scope(tmp_path)
+    auth['reviewed_at']='2026-10-14T14:59:30Z'
+    task=tmp_path/'TEST_ONLY_task.txt';task.write_text('TEST_ONLY three-source task','utf8')
     plan.update(stage='T3', collection_contract=contract.CONTRACT, target_unique_links=15003,
+        campaign_id='three_source_5001_TEST_ONLY',campaign_created_at='2026-10-14T14:59:00Z',
+        task_reference={'path':str(task),'sha256':hashlib.sha256(task.read_bytes()).hexdigest()},
         source_targets={k:5001 for k in contract.FAMILIES},
         source_budgets={k:{'requests':20,'PAGE':10,'native':0 if k=='CUSTOMER_FAVORITES' else 10} for k in contract.FAMILIES},
         max_requests_per_run=60,max_requests_per_day=60,max_pages_per_run=30)
@@ -20,7 +25,7 @@ def test_exact_three_families_and_independent_targets(tmp_path):
     for change in ('target','family','seed','total','float','goal'):
         bad=deepcopy(plan)
         if change=='target':bad['source_targets']['NEW_RELEASES']=5000
-        elif change=='family':bad['sources']=bad['sources'][:1]
+        elif change=='family':bad['sources'][0]['source_type']='DEALS'
         elif change=='seed':bad['seed_reference']={'old':True}
         elif change=='total':bad['max_requests_per_run']=61
         elif change=='float':bad['source_budgets']['BEST_SELLERS']['requests']=20.0
@@ -58,6 +63,7 @@ def test_campaign_authorization_requires_same_targets_and_family_budgets(tmp_pat
     plan,a=scope(tmp_path)
     a.update(stage='T3',sources={k:v for k,v in a['sources'].items() if k in {s['source_id'] for s in plan['sources']}},
         collection_contract=contract.CONTRACT,source_targets=deepcopy(plan['source_targets']),
+        campaign_id=plan['campaign_id'],campaign_created_at=plan['campaign_created_at'],task_reference=plan['task_reference'],
         source_budgets=deepcopy(plan['source_budgets']),plan_sha256=digest(plan))
     for k in ('target_unique_links','max_requests_per_run','max_requests_per_day','max_pages_per_run'):a[k]=plan[k]
     monkeypatch.setattr('amazon_es_bestseller.highspeed.v4_authorization._verify_prerequisite',lambda *args:None)

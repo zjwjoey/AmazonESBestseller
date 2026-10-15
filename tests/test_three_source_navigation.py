@@ -31,6 +31,14 @@ def test_real_favorites_themes_are_owned_pending_links_not_products():
     nav.verify_navigation_reference(home, s)
 
 
+def test_real_favorites_promo_tile_does_not_promote_amazon_resale_to_collection():
+    p,s=context(FIX/'highspeed_v4/F07_favorites_global_complete.html',source_for_url(SEEDS[4]['url']))
+    rows=nav.discover_navigation(p,s)
+    resale=next(r for r in rows if '/amazonresale?' in r['url'])
+    assert resale['status']=='UNVERIFIED' and resale['relationship']=='OUTSIDE_SOURCE_LINK'
+    with pytest.raises(ValueError):nav.verify_navigation_reference(resale,s)
+
+
 def test_real_kitchen_children_and_ranked_next_page_are_distinct():
     url = 'https://www.amazon.es/gp/bestsellers/kitchen/ref=zg_bs_kitchen_sm'
     s = source_for_url(SEEDS[0]['url']); s.update(actual_source_url=url, page_urls=[url])
