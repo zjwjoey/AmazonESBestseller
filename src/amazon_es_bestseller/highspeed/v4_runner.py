@@ -20,12 +20,13 @@ from .v4_quality import audit_v4
 
 
 class V4T1Runner:
+    stage = 'T1'
     def __init__(self, store, *, clock=None, sleep=None):
         self.store = store
         self.engine = HighSpeedRunner(store, clock=clock, sleep=sleep)
 
     def run(self, plan, *, authorization, transport, resume=False, preheld_lock=False, reverify_source_ids=()):
-        if plan.get('stage') != 'T1':
+        if plan.get('stage') != self.stage:
             raise ValueError('V4_T2_T3_REQUIRE_VERIFIED_DYNAMIC_PROTOCOLS')
         e = self.engine; run_id = plan['run_id']; entry = utc_text(e.clock())
         if self.store.db.execute('SELECT 1 FROM runs WHERE run_id<>? LIMIT 1', (run_id,)).fetchone():
@@ -44,6 +45,7 @@ class V4T1Runner:
                 raise ValueError('IMMUTABLE_RUN_PLAN_MISMATCH')
             if any(r['status'] == 'RESERVED' for r in self.store.requests(run_id)):
                 raise ValueError('AMBIGUOUS_UNFINISHED_REQUESTS_NO_AUTO_RETRY')
+            self._record_approval(plan,authorization)
             started = run['started_at']; last = self.store.latest_request_time()
             last = aware_time(last) if last else None
             committed = {p['page_url'] for p in self.store.pages(run_id)
@@ -221,8 +223,8 @@ class V4T1Runner:
             loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] else None
             self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW',
                     'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
-            stop = stop or ('V4_T1_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
-                else 'V4_T1_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
+            stop = stop or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
+                else 'V4_'+self.stage+'_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
             self.store.update_run(run_id, status='STOPPED', stop_reason=stop, qa=quality,
                     quality_gate_passed=bool(loading and loading['all_loading_capabilities_observed']
                         and len({p['source_id'] for p in pages if p['status']=='VERIFIED_WITH_PRODUCTS'})==8),
@@ -233,3 +235,6 @@ class V4T1Runner:
     def _acp(receipt):
         return {**receipt, 'body': Path(receipt['html_path']).read_text(encoding='utf8'),
                 'evidence_path': receipt['html_path'], 'evidence_sha256': receipt['sha256']}
+
+    def _record_approval(self,plan,authorization):
+        pass

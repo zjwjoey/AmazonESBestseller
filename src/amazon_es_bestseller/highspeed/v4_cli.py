@@ -10,24 +10,33 @@ import uuid
 from ..multisource.storage import immutable_json, file_lock
 from .budgets import budget_reason, utc_text
 from .cli import load_json, save_native_contract
-from .v4_authorization import validate_v4_authorization
+from .v4_authorization import validate_v4_authorization, prerequisite_review_session
 from .v4_runner import V4T1Runner
+from .v4_t2_runner import V4T2Runner
+from .v4_capacity import execution_for_store
 from .v4_workflows import replay_v4, prepare_v4, export_v4
 
 
 def run_live_v4(args):
+    with prerequisite_review_session():
+        return _run_live_v4(args)
+
+
+def _run_live_v4(args):
     from .store import RunStore
     plan = load_json(args.plan); approval = load_json(args.authorization)
     if Path(args.root).resolve().parent.name != plan['run_id']:
         raise ValueError('V4_FRESH_RUN_DIRECTORY_REQUIRED')
     store = RunStore(args.root)
     try:
-        runner = V4T1Runner(store)
+        if plan['stage'] not in {'T1','T2'}:
+            raise ValueError('V4_T3_EXECUTION_DISABLED')
+        runner = (V4T2Runner if plan['stage']=='T2' else V4T1Runner)(store)
         validate_v4_authorization(plan, approval, runner.engine._gate(plan), store_root=store.root)
         if args.operation == 'check':
             return {'authorized_now': True, 'stage': plan['stage'], 'browser_started': False}
-        if not args.live or plan['stage'] != 'T1':
-            raise ValueError('V4_EXPLICIT_T1_LIVE_SWITCH_REQUIRED')
+        if not args.live:
+            raise ValueError('V4_EXPLICIT_T1_T2_LIVE_SWITCH_REQUIRED')
         with ExitStack() as locks:
             locks.enter_context(store.run_lock(plan['run_id']))
             locks.enter_context(file_lock(Path(plan['shared_access_gate_path']).parent / 'highspeed_live.lock'))
@@ -92,6 +101,8 @@ def main(argv=None):
         p = sub.add_parser(name); p.add_argument('--fixtures', required=True); p.add_argument('--out', required=True)
         if name == 'prepare':
             p.add_argument('--runtime-root', required=True); p.add_argument('--shared-gate', required=True)
+    p=sub.add_parser('prepare-t2')
+    for opt in ('t0','t1','out','runtime-root','shared-gate'):p.add_argument('--'+opt,required=True)
     for name in ('check', 'run', 'resume'):
         p = sub.add_parser(name)
         for opt in ('root', 'plan', 'authorization'):
@@ -105,7 +116,12 @@ def main(argv=None):
     for opt in ('root', 'run-id', 'out'):
         p.add_argument('--' + opt, required=True)
     args = parser.parse_args(argv)
-    if args.operation == 'replay':
+    if args.operation=='prepare-t2':
+        import hashlib
+        from .v4_t2_prepare import prepare_t2
+        refs=[{'path':str(Path(p).resolve()),'sha256':hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in (args.t0,args.t1)]
+        result=prepare_t2(*refs,args.out,args.runtime_root,args.shared_gate)
+    elif args.operation == 'replay':
         result = replay_v4(args.fixtures, args.out)
     elif args.operation == 'prepare':
         result = prepare_v4(args.fixtures, args.out, args.runtime_root, args.shared_gate)
@@ -119,6 +135,7 @@ def main(argv=None):
             result = export_v4(store.pages(args.run_id), list(store.iter_observations(args.run_id)),
                                 run['plan']['sources'], args.out, run_id=args.run_id, stage=run['stage'],
                                 accepted_empty_urls=accepted,
+                                capacity_execution=execution_for_store(store,args.run_id) if run['stage']=='T2' else None,
                                 request_receipts=list(store.iter_responses(args.run_id)))
         finally:
             store.close()

@@ -271,6 +271,16 @@ def verify_stage_reference(reference, expected_stage):
                 central_dom_review_passed=True,accepted_empty_urls=accepted)['ready_for_T2_plan']
         if not loading['all_loading_capabilities_observed'] or not products:
             raise ValueError('V4_PRIOR_STAGE_PROTOCOL_PROOF_REQUIRED')
-    if expected_stage not in {'T0','T1'}:
+    if expected_stage=='T2':
+        from .v4_capacity import audit_capacity
+        capacity=audit_capacity(value['pages'],value['observations'],value['sources'],value['capacity_execution'])
+        if not capacity['diagnostic_passed'] or capacity!=value.get('capacity_audit'):
+            raise ValueError('V4_T2_CAPACITY_RECOMPUTATION_FAILED')
+        ref=next((r for r in value['files'] if r['name']=='capacity_report_v4.json'),None)
+        report=path.parent/'capacity_report_v4.json'
+        if (not ref or hashlib.sha256(report.read_bytes()).hexdigest()!=ref['sha256']
+                or json.loads(report.read_text(encoding='utf8'))!=capacity):
+            raise ValueError('V4_T2_CAPACITY_ARTIFACT_MISMATCH')
+    if expected_stage not in {'T0','T1','T2'}:
         raise ValueError('V4_T2_CAPACITY_RECEIPT_VALIDATOR_PENDING')
     return value

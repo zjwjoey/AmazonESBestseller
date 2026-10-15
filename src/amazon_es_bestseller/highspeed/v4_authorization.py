@@ -3,12 +3,66 @@ from __future__ import annotations
 
 import hashlib
 import math
+import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from .budgets import LIMIT_FIELDS, aware_time
 from .v3_links import NORMALIZER_VERSION
 from .v4_sources import SEEDS, RANKED, amazon_url
 from ..multisource.storage import digest
+
+_PREREQUISITES=ContextVar('v4_execution_prerequisites',default=None)
+
+
+@contextmanager
+def prerequisite_review_session():
+    """One execution only. Initial DOM review, then all dependency byte hashes.
+
+    A changed dependency triggers the full review again. Public stage validation
+    and final export always perform central DOM review independently.
+    """
+    token=_PREREQUISITES.set({})
+    try:yield
+    finally:_PREREQUISITES.reset(token)
+
+
+def _verify_prerequisite(reference,stage):
+    from .v4_quality import verify_stage_reference
+    cache=_PREREQUISITES.get()
+    if cache is None or not reference:return verify_stage_reference(reference,stage)
+    key=(stage,reference['path'],reference['sha256'])
+    old=cache.get(key)
+    if (old and all(p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest()==sha for p,sha in old['files'])
+            and all(sorted(p.name for p in d.iterdir() if p.is_file())==names for d,names in old['directories'])):return
+    value=verify_stage_reference(reference,stage)
+    paths={Path(reference['path'])}
+    def collect(x):
+        if isinstance(x,dict):
+            for k,v in x.items():
+                if isinstance(v,str) and (k=='path' or k.endswith('_path')) and Path(v).is_file():paths.add(Path(v))
+                elif isinstance(v,(dict,list)):collect(v)
+        elif isinstance(x,list):
+            for v in x:collect(v)
+    collect(value)
+    # Journal history participates in central QA. Freeze every adjacent journal
+    # and all its nested receipt/native/HTML references, not just latest frames.
+    for page in value.get('pages',[]):
+        if page.get('journal_path'):
+            p=Path(page['journal_path'])
+            for j in p.parent.glob(p.name.split('_',1)[0]+'_*.json'):
+                paths.add(j);collect(json.loads(j.read_text(encoding='utf8')))
+    visited=set()
+    while paths-visited:
+        p=(paths-visited).pop();visited.add(p)
+        if p.suffix=='.json':
+            collect(json.loads(p.read_text(encoding='utf8')))
+            if p.parent.name=='responses':
+                paths.update(p.parent.parent.joinpath('requests').glob('*.reserved.json'))
+    dirs={p.parent for p in paths}
+    cache[key]={'files':[(p,hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths],
+        'directories':[(d,sorted(p.name for p in d.iterdir() if p.is_file())) for d in dirs]}
 
 
 def validate_plan_v4(plan):
@@ -107,8 +161,7 @@ def validate_v4_authorization(plan, authorization, gate, *, now=None, store_root
         if not ref.get('reviewed') or hashlib.sha256(Path(ref['path']).read_bytes()).hexdigest() != ref.get('sha256'):
             raise ValueError('V4_SOURCE_EVIDENCE_REQUIRED')
     for stage in {'T1': (), 'T2': ('T0', 'T1'), 'T3': ('T0', 'T1', 'T2')}[plan['stage']]:
-        from .v4_quality import verify_stage_reference
-        verify_stage_reference(a.get('prerequisites', {}).get(stage), stage)
+        _verify_prerequisite(a.get('prerequisites', {}).get(stage), stage)
     return a
 
 

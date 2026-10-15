@@ -32,18 +32,23 @@ def csv_bytes(records):
 
 
 def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timings=None, request_receipts=None,
-              accepted_empty_urls=()):
+              accepted_empty_urls=(), capacity_execution=None):
     directory = Path(output) / ('report_v4_' + uuid.uuid4().hex)
     directory.mkdir(parents=True, exist_ok=False)
     qa_started = time.perf_counter()
     quality = audit_v4(pages, observations, sources, require_live=stage != 'T0')
     qa_seconds = time.perf_counter() - qa_started
     candidates = build_candidates_v4(observations)
+    capacity=None
+    if stage=='T2':
+        if capacity_execution is None:raise ValueError('V4_T2_EXECUTION_EVIDENCE_REQUIRED')
+        from .v4_capacity import audit_capacity
+        capacity=audit_capacity(pages,observations,sources,capacity_execution)
     from .v4_coverage import loading_coverage, assess_capacity_readiness
     loading=loading_coverage(pages,sources)
     readiness=assess_capacity_readiness(pages,sources,loading,
         central_dom_review_passed=quality['central_full_dom_review_passed'] and stage=='T1',
-        accepted_empty_urls=accepted_empty_urls)
+        accepted_empty_urls=accepted_empty_urls) if stage=='T1' else None
     strict_roots_passed={s['url'] for s in SEEDS}.issubset({p['page_url'] for p in pages
         if p['status']=='VERIFIED_WITH_PRODUCTS'})
     conservative = len({c['target_review_group'] for c in candidates if c['eligible_for_target']})
@@ -53,8 +58,10 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
                 'origin': 'OFFLINE_FIXTURE' if stage == 'T0' else 'LIVE_CAPTURE',
                 'sources': sources, 'pages': pages, 'disabled_supply': DISABLED_SUPPLY,
                 'raw_observations': len(observations), 'normalized_unique_links': len(candidates),
-                'conservative_review_groups': conservative, 'target': 30000,
-                'target_shortfall': max(0, 30000 - conservative), 'completeness_status': 'UNKNOWN',
+                'conservative_review_groups': conservative,
+                'target':capacity_execution['plan']['target_unique_links'] if stage=='T2' else 30000,
+                'target_shortfall':max(0,(capacity_execution['plan']['target_unique_links'] if stage=='T2' else 30000)-conservative),
+                'ultimate_target':30000,'completeness_status': 'UNKNOWN',
                 'fresh_live_observations': sum(r['origin'] == 'LIVE_CAPTURE' for r in observations)}
     performance = {'schema_version': 4, 'run_id': run_id, 'stage': stage, **(timings or {}),
                    'central_full_dom_review_seconds': qa_seconds,
@@ -89,6 +96,7 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
         'performance_v4.json': canonical_bytes(performance),
         'source_contribution_v4.csv': csv_bytes(contribution_v4(observations, candidates)),
     }
+    if capacity is not None:artifacts['capacity_report_v4.json']=canonical_bytes(capacity)
     refs = []
     for name, body in artifacts.items():
         immutable_bytes(directory / name, body)
@@ -96,7 +104,9 @@ def export_v4(pages, observations, sources, output, *, run_id, stage='T0', timin
     immutable_json(directory / 'manifest.json', {'schema_version': 4, 'run_id': run_id, 'stage': stage,
                     'passed': quality['central_full_dom_review_passed'] and (stage == 'T0' or
                         stage=='T1' and loading['all_loading_capabilities_observed']
-                        and (readiness['ready_for_T2_plan'] if accepted_empty_urls else strict_roots_passed)),
+                        and (readiness['ready_for_T2_plan'] if accepted_empty_urls else strict_roots_passed)
+                        or stage=='T2' and capacity['diagnostic_passed']),
+                    'capacity_execution':capacity_execution,'capacity_audit':capacity,
                     'strict_eight_entry_products_passed':strict_roots_passed,
                     'accepted_empty_source_urls':sorted(set(accepted_empty_urls)),
                     'acceptance_policy':'USER_EXPLICIT_RETAIN_REAL_SOURCE_EMPTY' if accepted_empty_urls else 'STRICT_EIGHT_PRODUCT_ROOTS',
