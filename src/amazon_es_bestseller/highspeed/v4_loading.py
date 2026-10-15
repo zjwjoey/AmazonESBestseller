@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import json
+import time
 from urllib.parse import urlsplit,parse_qs
 
 from ..transport.playwright import PlaywrightTransport, _CONTROLLED_ACP_NONCE_HEADER
@@ -150,7 +151,35 @@ class V4LoadingTransport(PlaywrightTransport):
         self._root_loading_receipt=None
         self._last_dynamic_receipt=None
         self._last_recommendation_receipt=None
-        return super().fetch_page(url,**kwargs)
+        result=super().fetch_page(url,**kwargs)
+        source=next((s for s in self.plan['sources'] if s['actual_source_url']==url and s['source_type']=='DEALS'),None)
+        if not source:return result
+        value=dict(result) if isinstance(result,dict) else dict(vars(result))
+        from ..access.detector import detect_access_status
+        from .v4_adapters import parse_v4_page
+        text=value.get('text','');code=value.get('status_code')
+        if code!=200 or detect_access_status(code,text).value!='NORMAL':return result
+        def ready(body):
+            parsed=parse_v4_page(body,source=source,page_url=url,run_id=self.plan['run_id'],
+                observed_at=utc_text(),evidence_path='',origin='OFFLINE_FIXTURE',http_status=code)
+            return parsed['page']['status'] in {'VERIFIED_WITH_PRODUCTS','EXPLICIT_EMPTY'}
+        if ready(text):return result
+        initial=self.store.save_html(text);began=time.perf_counter();outcome='UNVERIFIED_TIMEOUT'
+        for _ in range(12):
+            # Local rendering only. Existing routes still hold/abort every
+            # implicit XHR; this never refreshes or releases a network request.
+            self.session.page.wait_for_timeout(250)
+            text=self.session.page.content()
+            state=detect_access_status(code,text).value
+            if state!='NORMAL':outcome='ACCESS_STOP';break
+            if not same_loading_view(self.session.page.url,url):
+                state='UNKNOWN';outcome='VIEW_CHANGED_STOP';break
+            if ready(text):outcome='DOM_READY';break
+        value.update(text=text,rendered_dom_html=text,access_state=state,
+            render_settle={'initial_dom_reference':{'path':initial['html_path'],'sha256':initial['sha256']},
+                'outcome':outcome,'new_network_requests':0,'max_local_wait_iterations':12,
+                'duration_seconds':time.perf_counter()-began})
+        return value
 
     def install_dynamic_capture(self):
         for kind,path in PATHS.items():
