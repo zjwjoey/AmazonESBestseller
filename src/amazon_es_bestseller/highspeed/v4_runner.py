@@ -51,9 +51,9 @@ class V4T1Runner:
             committed = {p['page_url'] for p in self.store.pages(run_id)
                          if p['source_id'] not in reverify_source_ids and (self.stage not in {'T2','T3'} or
                              p.get('execution_status')=='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED')}
-            self.store.update_run(run_id, status='RUNNING')
+            self.execution_started(plan)
             stop = None
-            work=[(s,u) for s in plan['sources'] for u in s['page_urls']]
+            work=self.execution_work(plan)
             for source,url in work:
                 target_reason=self.target_stop_reason(plan)
                 if target_reason:
@@ -252,23 +252,33 @@ class V4T1Runner:
                     stop = str(exc)
                     self.store.append_event(run_id, {'kind': 'STOP', 'reason': stop, 'observed_at': utc_text(e.clock())})
                     break
-            pages = self.store.pages(run_id); rows = list(self.store.iter_observations(run_id))
-            qa_started = time.perf_counter()
-            deferred=self.defer_central_review_to_capacity()
-            quality = ({'central_full_dom_review_passed':False,'errors':[],
-                'review_status':'PENDING_COMBINED_CAPACITY_REVIEW'} if deferred else
-                audit_v4(pages, rows, plan['sources'], require_live=True))
-            from .v4_coverage import loading_coverage
-            loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] and self.stage!='T3' else None
-            self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW_DEFERRED' if deferred else 'V4_CENTRAL_DOM_REVIEW',
-                    'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
-            stop = stop or self.target_stop_reason(plan) or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
-                else 'V4_'+self.stage+'_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
-            self.store.update_run(run_id, status='STOPPED', stop_reason=stop, qa=quality,
-                    quality_gate_passed=bool(loading and loading['all_loading_capabilities_observed']
-                        and len({p['source_id'] for p in pages if p['status']=='VERIFIED_WITH_PRODUCTS'})==8),
-                    loading_verification=loading, finished_at=utc_text(e.clock()))
-            return {'run': self.store.get_run(run_id), 'summary': self.store.summary(run_id), 'quality': quality}
+            return self.finish_execution(plan, stop)
+
+    def execution_work(self, plan):
+        return [(s,u) for s in plan['sources'] for u in s['page_urls']]
+
+    def execution_started(self, plan):
+        self.store.update_run(plan['run_id'], status='RUNNING')
+
+    def finish_execution(self, plan, stop):
+        run_id=plan['run_id']; e=self.engine
+        pages = self.store.pages(run_id); rows = list(self.store.iter_observations(run_id))
+        qa_started = time.perf_counter()
+        deferred=self.defer_central_review_to_capacity()
+        quality = ({'central_full_dom_review_passed':False,'errors':[],
+            'review_status':'PENDING_COMBINED_CAPACITY_REVIEW'} if deferred else
+            audit_v4(pages, rows, plan['sources'], require_live=True))
+        from .v4_coverage import loading_coverage
+        loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] and self.stage!='T3' else None
+        self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW_DEFERRED' if deferred else 'V4_CENTRAL_DOM_REVIEW',
+                'duration_seconds': time.perf_counter() - qa_started, 'errors': quality['errors']})
+        stop = stop or self.target_stop_reason(plan) or ('V4_'+self.stage+'_LOADING_SCOPE_EXECUTED' if loading and loading['all_loading_capabilities_observed']
+            else 'V4_'+self.stage+'_LOADING_SCOPE_EXECUTED_INCOMPLETE_PROOFS')
+        self.store.update_run(run_id, status='STOPPED', stop_reason=stop, qa=quality,
+                quality_gate_passed=bool(loading and loading['all_loading_capabilities_observed']
+                    and len({p['source_id'] for p in pages if p['status']=='VERIFIED_WITH_PRODUCTS'})==8),
+                loading_verification=loading, finished_at=utc_text(e.clock()))
+        return {'run': self.store.get_run(run_id), 'summary': self.store.summary(run_id), 'quality': quality}
 
     @staticmethod
     def _acp(receipt):

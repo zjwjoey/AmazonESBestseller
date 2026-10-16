@@ -309,6 +309,21 @@ class RunStore:
                 raise ValueError("DAILY_REQUEST_BUDGET_EXHAUSTED")
             if kind == "PAGE" and page_count >= limits["max_pages_per_run"]:
                 raise ValueError("RUN_PAGE_BUDGET_EXHAUSTED")
+            if limits.get('collection_contract')=='V4_THREE_SOURCE_5001':
+                # Same BEGIN IMMEDIATE transaction as INSERT: a second lane
+                # cannot spend a family slot checked by an earlier connection.
+                family=request.get('source_type')
+                if family not in limits['source_budgets']:
+                    raise ValueError('THREE_REQUEST_FAMILY_REQUIRED')
+                counts=dict(self.db.execute("SELECT kind,count(*) FROM requests WHERE run_id=? "
+                    "AND json_extract(data_json,'$.source_type')=? GROUP BY kind",(run_id,family)))
+                cap=limits['source_budgets'][family]
+                if sum(counts.values())>=cap['requests']:
+                    raise ValueError('THREE_SOURCE_REQUEST_BUDGET_EXHAUSTED:'+family)
+                if kind=='PAGE' and counts.get('PAGE',0)>=cap['PAGE']:
+                    raise ValueError('THREE_SOURCE_PAGE_BUDGET_EXHAUSTED:'+family)
+                if kind=='ACP' and counts.get('ACP',0)>=cap['native']:
+                    raise ValueError('THREE_SOURCE_NATIVE_BUDGET_EXHAUSTED:'+family)
             cap_names = ("max_requests_per_run", "max_requests_per_day", "max_pages_per_run",
                 "max_raw_observations_per_run", "history_observation_limit", "max_duration_hours")
             compact_request = {k: v for k, v in request.items() if k != "limits"}

@@ -38,6 +38,13 @@ def _run_live_v4(args):
         else:
             runner = (V4T2Runner if plan['stage']=='T2' else V4T1Runner)(store)
         validate_v4_authorization(plan, approval, runner.engine._gate(plan), store_root=store.root)
+        lane_path=getattr(args,'three_lane_approval',None)
+        lane_approval=load_json(lane_path) if lane_path else None
+        if lane_approval:
+            from .three_lane import validate_lane_approval
+            if not three_source or args.reverify_source_id:
+                raise ValueError('THREE_LANES_SAME_RUN_NO_REVERIFY_OVERRIDE')
+            validate_lane_approval(plan,approval,lane_approval,store.root,runner.engine.clock())
         if args.operation == 'check':
             return {'authorized_now': True, 'stage': plan['stage'], 'browser_started': False}
         if not args.live:
@@ -63,6 +70,11 @@ def _run_live_v4(args):
                 def load_lazy_ranking_content(self, *a, **kw):
                     return None
             with BoundedSession(headless=not args.headful, profile_dir=args.profile_dir) as session:
+                if lane_approval:
+                    from .three_lane import run_three_lanes
+                    from .three_lane_browser import lane_browser_transports
+                    with lane_browser_transports(session,store,plan,approval) as transports:
+                        return run_three_lanes(store,plan,approval,transports,lane_approval,preheld_lock=True)
                 allowed = {u for s in plan['sources'] for u in s['page_urls']}
                 def bounded(route):
                     req = route.request
@@ -134,6 +146,7 @@ def main(argv=None):
             p.add_argument('--' + opt, required=True)
         p.add_argument('--live', action='store_true'); p.add_argument('--headful', action='store_true')
         p.add_argument('--profile-dir')
+        p.add_argument('--three-lane-approval',help='Explicit same-run mode sidecar; one global request dispatcher.')
         p.add_argument('--reverify-source-id', action='append', default=[])
     p = sub.add_parser('report')
     p.add_argument('--retain-lightning-empty', action='store_true',

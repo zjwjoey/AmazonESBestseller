@@ -875,6 +875,8 @@ class HighSpeedRunner:
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
             if v4:
                 authorize_request(url, source, authorization, kind=kind, descriptor=descriptor)
+        admission_guard=getattr(self,'_admission_guard',None)
+        if admission_guard is not None:admission_guard()
         if plan.get('target_policy'):
             from .task_clock import request_stop_reason
             reason=request_stop_reason(plan,authorization,self.store,now=self.clock())

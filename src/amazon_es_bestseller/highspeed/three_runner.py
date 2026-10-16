@@ -24,6 +24,9 @@ class V4ThreeSourceRunner(V4T2Runner):
         self._global_target_met=None
         self._global_metrics=None
         result=V4T1Runner.run(self,plan,**kwargs)
+        return self.finish_three_source(plan,result)
+
+    def finish_three_source(self,plan,result):
         reason=result['run'].get('stop_reason') or ''
         boundary=(reason=='GLOBAL_30000_QUALIFIED_GROUPS_REACHED' or reason=='TASK_FINAL_QA_RESERVE_REACHED'
             or reason.startswith('V4_T3_LOADING_SCOPE_EXECUTED')
