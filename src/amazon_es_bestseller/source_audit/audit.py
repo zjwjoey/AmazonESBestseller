@@ -16,6 +16,7 @@ from ..quality.category_provenance import audit_category_provenance
 from ..quality.detail_identity import audit_detail_identity
 from ..quality.detail_structure import audit_detail_structure
 from .contracts import SUCCESS, TEXT_FIELDS, file_sha
+from .field_checks import check_numbers, explicit_spec_conflicts
 
 REPLAY_FIELDS = (
     "title_es_raw", "brand_raw", "current_price_raw", "reference_price_raw",
@@ -23,6 +24,7 @@ REPLAY_FIELDS = (
     "feature_bullets_raw", "product_description_raw", "detail_category_trail",
     "parent_asin", "rating_raw", "review_count_raw", "monthly_bought_raw",
     "category_evidence", "image_url",
+    "variation_family_asins", "variation_evidence", "parent_asin_evidence",
 )
 REPLAY_SELECTORS = {
     "title_es_raw": "#productTitle", "selected_variation_raw": "#twister",
@@ -148,6 +150,11 @@ def audit_product(snapshot, task, outcome):
             severity="P0", state="SOURCE_BLOCKED" if replay.get("status") == "ACCESS_STOP" else "IDENTITY_REVIEW")
         return product, issues, proposals
     actual = replay["record"]
+    if record.get('product_url') and (not safe_url(record['product_url']) or
+            normalize(record['product_url']) != normalize(actual.get('product_url', ''))):
+        add('product_url', 'PRODUCT_URL_IDENTITY_CONFLICT', '商品展示链接与活动商品URL不一致。', severity='P0', state='IDENTITY_REVIEW')
+        product['preparation_status'] = 'IDENTITY_BLOCKED'
+        return product, issues, proposals
     if record.get("asin") != actual.get("asin") or record.get("resolved_asin") != actual.get("resolved_asin"):
         add("*", "ASIN_REPLAY_MISMATCH", "保存详情身份与活动商品HTML不一致。", severity="P0", state="IDENTITY_REVIEW")
         product["preparation_status"] = "IDENTITY_BLOCKED"
@@ -177,11 +184,14 @@ def audit_product(snapshot, task, outcome):
                           severity="P1", state="OFFLINE_REPARSE_AVAILABLE", repair=True, value=record.get(field))
             finding["source_field_name"] = field
             finding["after"] = actual.get(field)
+            if field in {'parent_asin', 'brand_raw', 'selected_variation_raw', 'variation_family_asins', 'variation_evidence', 'parent_asin_evidence'}:
+                finding['offline_repair_allowed'] = False
+                finding['suggested_action'] = 'KEEP_AND_VERIFY_SOURCE'
             proposals.append({"candidate_id": task.get("candidate_id"), "selection_id": task.get("selection_id"),
                 "asin": record.get("asin"), "field_name": field, "before": record.get(field),
                 "after": actual.get(field), "source_evidence_reference": dict(evidence),
                 "proof": "EXACT_HTML_CURRENT_EXISTING_PARSER", "application_status": "PROPOSAL_ONLY",
-                "safe_copy_eligible": field not in {"parent_asin", "brand_raw", "selected_variation_raw"},
+                "safe_copy_eligible": field not in {"parent_asin", "brand_raw", "selected_variation_raw", "variation_family_asins", "variation_evidence", "parent_asin_evidence"},
                 "source_value_sha256": digest(record.get(field)), "repaired_value_sha256": digest(actual.get(field)),
                 "requires_reaudit": True})
     for field, value in contents.items():
@@ -298,6 +308,14 @@ def audit_product(snapshot, task, outcome):
             add("discount_rate", "DISCOUNT_UNVERIFIED", "数值折扣需同时绑定有效当前价和明确参考价，约定0–1比例。", state="SOURCE_CONFLICT")
     if record.get("specification_es"):
         add("specification_es", "DERIVED_SPEC_UNVERIFIED", "核心规格为衍生字段；当前版本不把未绑定来源优先级的摘要直接交模型。", state="UNVERIFIED")
+    check_numbers(record, actual, add)
+    conflicts = explicit_spec_conflicts(contents)
+    if conflicts:
+        add('specification_es', 'SPEC_EVIDENCE_CONFLICT', '明确规格来源存在同维度矛盾，不自动选择正确值。',
+            severity='P1', state='SOURCE_CONFLICT', value=conflicts)
+    product['business_field_statuses'] = {
+        i['field_name']: 'SOURCE_REVIEW_REQUIRED' for i in issues
+        if i['severity'] in {'P0', 'P1'} or i['audit_status'] in {'SOURCE_CONFLICT', 'UNVERIFIED', 'IDENTITY_REVIEW'}}
     for field, value in contents.items():
         relevant = [i for i in issues if i["field_name"] in {field, "*"}]
         if any(i["severity"] in {"P0", "P1"} or i["audit_status"] in {"SOURCE_CONFLICT", "UNVERIFIED", "STRUCTURE_INVALID"} for i in relevant):
@@ -329,7 +347,7 @@ def audit_product(snapshot, task, outcome):
                 "priority": ["selected_variation_raw", "title_es_raw", "explicit_attribute_evidence"],
                 "derived_text_sha256": digest(candidate.encode("utf8"))}
             break
-    if derived and (not record.get("specification_es") or record["specification_es"] == derived):
+    if derived and not conflicts and (not record.get("specification_es") or record["specification_es"] == derived):
         contents["specification_es"] = derived
         fields["specification_es"] = "READY"
         product["specification_derivation"] = derivation
@@ -345,7 +363,7 @@ def audit_product(snapshot, task, outcome):
     return product, issues, proposals
 
 
-def audit_snapshot(snapshot, *, expected_count=None):
+def audit_snapshot(snapshot, *, expected_count=None, _record_overrides=None):
     snapshot.verify()
     tasks, rows = snapshot.tasks(), snapshot.rows()
     if not all(isinstance(t, dict) for t in tasks) or not all(isinstance(r, dict) for r in rows):
@@ -425,18 +443,25 @@ def audit_snapshot(snapshot, *, expected_count=None):
             batch_issue("DUPLICATE_DETAIL_ROW", "相同candidate有重复详情，禁止最后一条覆盖。")
         by_candidate[cid] = row
     products, issues, proposals = [], list(global_issues), []
+    original_records = {}
     for task in tasks:
         try:
             outcome = snapshot.outcome(task, by_candidate)
         except (OSError, ValueError, KeyError, TypeError):
             outcome = {"status": "PARSE_FAILED"}
+        original_records[task.get('candidate_id')] = outcome.get('record') or {}
+        if _record_overrides is not None:
+            outcome = {**outcome, 'record': _record_overrides[task['candidate_id']]}
         product, found, repairs = audit_product(snapshot, task, outcome)
+        if _record_overrides is not None:
+            product['original_source_record'] = original_records[task.get('candidate_id')]
+            product['record_version'] = 'DERIVED_REAUDITED'
         products.append(product); issues.extend(found); proposals.extend(repairs)
         row = by_candidate.get(task.get("candidate_id"))
         csv_input = any(n.endswith(".csv") and n.startswith("details") for n in snapshot.files) and not any(
             n in snapshot.files for n in ("details_5500_raw.jsonl", "details.jsonl", "details.json"))
         compare_row = row.get("record", row) if row is not None else None
-        raw = product["raw_record"]
+        raw = original_records[task.get('candidate_id')]
         matches = compare_row == raw
         if csv_input and isinstance(compare_row, dict) and set(compare_row) == set(raw):
             matches = all((compare_row[key] == value if isinstance(value, (list, dict))
@@ -446,6 +471,30 @@ def audit_snapshot(snapshot, *, expected_count=None):
                                  "导出详情与权威任务checkpoint不同。", severity="P0", state="SOURCE_CONFLICT"))
             product["preparation_status"] = "NOT_READY"
             product["field_statuses"] = {key: "SOURCE_REVIEW_REQUIRED" for key in product["field_statuses"]}
+    # Check every declared export, not only the preferred format.
+    authoritative = original_records
+    for name in ('details_5500_raw.jsonl', 'details.jsonl', 'details.json', 'details_5500.csv', 'details.csv'):
+        if name not in snapshot.files:
+            continue
+        seen = set()
+        for row in snapshot.rows(name):
+            cid = row.get('candidate_id') if isinstance(row, dict) else None
+            view = row.get('record', row) if isinstance(row, dict) else None
+            raw = authoritative.get(cid)
+            matches = view == raw and raw is not None
+            if name.endswith('.csv') and isinstance(view, dict) and raw is not None and set(view) == set(raw):
+                matches = all(view[k] == (v if isinstance(v, (list, dict)) else '' if v is None else str(v)) for k, v in raw.items())
+            if cid in seen or not matches:
+                batch_issue('EXPORT_CHECKPOINT_MISMATCH', f'{name}与checkpoint冲突或重复；candidate={cid}')
+            seen.add(cid)
+        expected = {p['candidate_id'] for p in products if p['collection_status'] in SUCCESS and p['raw_record']}
+        if seen != expected:
+            batch_issue('EXPORT_CHECKPOINT_MISMATCH', f'{name}成功商品集合与checkpoint不一致。')
+    for task in tasks:
+        name = 'tasks/' + str(task.get('task_id') or '') + '/parsed_detail.json'
+        if name in snapshot.files and snapshot.json(name) != authoritative.get(task.get('candidate_id')):
+            batch_issue('PARSED_CHECKPOINT_MISMATCH', f'{name}与checkpoint不一致。')
+    issues.extend(i for i in global_issues if i not in issues)
     if final_accepted and any(p["collection_status"] not in SUCCESS or not p["identity_passed"] for p in products):
         final_accepted = False
         batch_issue("FINAL_REPLAY_NOT_SUCCESSFUL", "最终验收声明与逐任务有效详情回放不一致。")

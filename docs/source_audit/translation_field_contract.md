@@ -1,9 +1,11 @@
 # Translation Preparation V1 field contract
 
-Version: `translation-preparation-v1.0`. This is an offline input contract, not
+Version: `translation-preparation-v1.1`. This is an offline input contract, not
 a translated product or a model request. No collector or translation service
 is started by this package. Source records are retained byte-for-byte in the
-snapshot and as original objects in `raw_record`.
+snapshot. `raw_record` is the audited version; `original_source_record` always
+retains the original object. `record_version` explicitly distinguishes
+ORIGINAL_AUDITED from DERIVED_REAUDITED; derived records bind the repair manifest.
 
 ## Identity and evidence
 
@@ -79,4 +81,20 @@ translation cache is overwritten. Any subsequent model call or production
 integration belongs to the original Detail5500 task after human approval.
 Derived specifications carry source-field, source hash, output text hash and
 method evidence separately; they never overwrite the original raw record.
+
+Business fields with unverified numeric/source/identity evidence remain preserved
+in raw_record and original_source_record but are excluded from trusted
+passthrough_fields. business_field_statuses explains each exclusion. Prices and
+numeric quality findings do not automatically block unrelated valid text units.
+
+Every text unit is rebound to its audited field/list position; scalar source text
+cannot pass by merely updating its own hash. IDs, semantic keys, protected terms,
+category context and source evidence are regenerated for validation. Derived specs
+also require matching builder output and preimage/output hashes.
+
+The supported repair path is repair-copy -> reaudit-repair -> prepare-translation.
+Re-audit verifies the original audit/snapshot, allowed patches and complete ledger,
+then compares derived fields to the original HTML while separately retaining the
+original checkpoint/export consistency checks. It produces a new audit bundle;
+preparation revalidates the repair chain. Manual candidates stay unapproved.
 

@@ -18,7 +18,15 @@ ISSUE_FIELDS = ("candidate_id", "selection_id", "asin", "field_name", "issue_cod
 def run_audit(source, out, *, expected_count=None):
     separate(source, out)
     snapshot = Snapshot(source)
+    separate(snapshot.manifest['source_root'], out)
     result = audit_snapshot(snapshot, expected_count=expected_count)
+    publish_audit_result(result, out, inputs={"snapshot_manifest_sha256": snapshot.sha256,
+                                             "snapshot_directory": str(snapshot.root)})
+    snapshot.verify()
+    return result["summary"]
+
+
+def publish_audit_result(result, out, *, inputs):
     rows = result["issues"]
     identity_queue = [row for row in rows if row["audit_status"] == "IDENTITY_REVIEW" or row["severity"] == "P0"]
     coverage_fields = ("field_name", "input_products", "valid", "missing", "source_not_displayed", "blocked_or_review")
@@ -28,10 +36,7 @@ def run_audit(source, out, *, expected_count=None):
         "source_field_coverage.csv": csv_bytes(result["coverage"], coverage_fields),
         "identity_review_queue.csv": csv_bytes(identity_queue, ISSUE_FIELDS),
         "source_repair_candidates.jsonl": jsonl(result["repairs"]),
-    }, kind="source_audit", inputs={"snapshot_manifest_sha256": snapshot.sha256,
-                                     "snapshot_directory": str(snapshot.root)})
-    snapshot.verify()
-    return result["summary"]
+    }, kind="source_audit", inputs=inputs)
 
 
 def _audit_bundle(directory):
@@ -47,6 +52,13 @@ def bound_snapshot(manifest, out):
     if source.sha256 != manifest["inputs"]["snapshot_manifest_sha256"]:
         raise ValueError("AUDIT_SNAPSHOT_BINDING_MISMATCH")
     separate(source.root, out)
+    # Original collector and its evidence are also outside writable outputs.
+    separate(source.manifest['source_root'], out)
+    if manifest['inputs'].get('repair_directory'):
+        from .repair import verify_repair
+        _, _, repair_sha = verify_repair(manifest['inputs']['repair_directory'])
+        if repair_sha != manifest['inputs'].get('repair_manifest_sha256'):
+            raise ValueError('REAUDIT_REPAIR_BINDING_MISMATCH')
     return source
 
 
@@ -62,7 +74,8 @@ def repair_plan(audit, out):
     candidates = _read_lines(directory / "source_repair_candidates.jsonl")
     issues = _read_lines(directory / "source_audit_issues.jsonl")
     plan = {
-        "audit_manifest_sha256": sha, "automatic_offline_candidates": len(candidates),
+        "audit_manifest_sha256": sha, "automatic_offline_candidates": sum(bool(c.get('safe_copy_eligible')) for c in candidates),
+        "manual_candidates": sum(not c.get('safe_copy_eligible') for c in candidates),
         "automatic_means_proven_proposal_not_production_apply": True,
         "manual_review_issues": sum(not i["offline_repair_allowed"] and i["audit_status"] != "SOURCE_NOT_DISPLAYED" for i in issues),
         "issue_status_counts": dict(Counter(i["audit_status"] for i in issues)),
@@ -100,6 +113,9 @@ def prepare_translation(audit, out, *, cache=None):
     products = _read_lines(directory / "audited_products.jsonl")
     result = prepare(products, input_manifest_sha256=sha, cache_memory=cache_memory)
     validation = validate_preparation(result)
+    source.verify()
+    if cache and file_sha(cache) != cache_evidence['sha256']:
+        raise ValueError('CACHE_CHANGED_DURING_PREPARATION')
     contract = Path(__file__).resolve().parents[3] / "docs/source_audit/translation_field_contract.md"
     publish(out, {"translation_ready_products.jsonl": jsonl(result["products"]),
                   "translation_units.jsonl": jsonl(result["units"]),

@@ -44,16 +44,37 @@ $outRoot = 'F:\AmazonESBestseller\outputs\source_audit_v1_20261016'
 & $py -m amazon_es_bestseller.source_audit.cli audit --input "$outRoot\frozen_copy" --out "$outRoot\audit" --expected-count 5500
 & $py -m amazon_es_bestseller.source_audit.cli repair-plan --audit "$outRoot\audit" --out "$outRoot\repair_plan"
 & $py -m amazon_es_bestseller.source_audit.cli repair-copy --audit "$outRoot\audit" --out "$outRoot\derived_repair_copy"
+& $py -m amazon_es_bestseller.source_audit.cli reaudit-repair --repair "$outRoot\derived_repair_copy" --out "$outRoot\derived_reaudit"
+& $py -m amazon_es_bestseller.source_audit.cli prepare-translation --audit "$outRoot\derived_reaudit" --out "$outRoot\derived_translation_preparation"
 & $py -m amazon_es_bestseller.source_audit.cli prepare-translation --audit "$outRoot\audit" --out "$outRoot\translation_preparation"
 & $py -m amazon_es_bestseller.source_audit.cli report --audit "$outRoot\audit"
 ```
 
 These are usage templates, not claims that formal 5,500 audit has executed.
-Preparation consumes audited original READY fields, not an unreviewed repaired
+Preparation consumes audited READY fields, not an unreviewed repaired
 copy. `repair-copy` outputs NOT_REAUDITED independent derived records and a
 per-field application ledger. It does not auto-approve repairs. Brand, selected
 variation and parent relation differences remain manual review, even when a
 reparse candidate exists. All source facts remain accessible.
+
+`reaudit-repair` (rule source-audit-v1.2) verifies the original audit and frozen
+snapshot, reconstructs the exact allowed patch set, checks every ledger and
+derived record, then replays derived values against the original HTML. Original
+checkpoints, parsed_detail and exports are still compared against the ORIGINAL
+record; they are never rewritten to make a repair pass. Its output is a new
+source_audit bundle accepted by prepare-translation, with repair/original audit/
+snapshot hashes. The repair chain is revalidated again before preparation.
+Unapproved manual values stay held. Nested repair chains are explicitly rejected.
+
+Version 1.2 checks all declared exports and parsed detail files, display URL
+identity, variation metadata, normalized numbers against HTML-derived raw evidence,
+and unambiguous same-dimension capacity/weight/power/voltage conflicts. Multi-values
+are not guessed. Business values requiring review remain in raw_record plus
+business_field_statuses but are omitted from trusted passthrough_fields.
+All text units are rebound to source fields/positions or verified derived evidence,
+with regenerated IDs, semantic keys and protection terms. Old-rule audits require
+re-audit; unmodified frozen snapshots remain usable. This is preparation, not
+authorization to translate or apply data to production.
 
 To replay the checked-in saved real HTML without Amazon:
 

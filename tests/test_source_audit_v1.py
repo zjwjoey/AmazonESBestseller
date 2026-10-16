@@ -87,6 +87,154 @@ def run_case(tmp_path, *, change=None, html=HTML, status="SUCCESS", export_forma
     return audit_snapshot(Snapshot(snap)), source, snap
 
 
+def test_review_normalized_numbers_are_quarantined(tmp_path):
+    result, _, _ = run_case(tmp_path, change=lambda r: r.update(current_price=999.0, rating_value=99.0, monthly_bought_min=999999))
+    names = {i['field_name'] for i in result['issues']}
+    assert {'current_price', 'rating_value', 'monthly_bought_min'} <= names
+    p = prepare(result['products'], input_manifest_sha256='a' * 64)['products'][0]
+    assert 'current_price' not in p['passthrough_fields']
+    assert p['raw_record']['current_price'] == 999.0
+
+
+def test_review_product_url_wrong_asin_blocks(tmp_path):
+    result, _, _ = run_case(tmp_path, change=lambda r: r.update(product_url='https://www.amazon.es/dp/B000000000'))
+    assert result['products'][0]['preparation_status'] == 'IDENTITY_BLOCKED'
+
+
+def test_review_all_exports_compared(tmp_path):
+    from amazon_es_bestseller.source_audit.contracts import csv_bytes
+    source, snap = tmp_path/'s', tmp_path/'f'
+    _, r, _ = make_batch(source, export_format='jsonl')
+    wrong = {**r, 'title_es_raw': 'OTRO PRODUCTO'}
+    (source/'details_5500.csv').write_bytes(csv_bytes([wrong], list(wrong)))
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    result = audit_snapshot(Snapshot(snap))
+    assert not result['summary']['batch_integrity_passed']
+    assert any(i['issue_code'] == 'EXPORT_CHECKPOINT_MISMATCH' for i in result['issues'])
+
+
+def test_review_parsed_detail_compared(tmp_path):
+    source, snap = tmp_path/'s', tmp_path/'f'
+    _, r, _ = make_batch(source)
+    (source/'tasks/detail_0/parsed_detail.json').write_text(json.dumps({**r, 'asin':'B000000000'}), encoding='utf8')
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    result = audit_snapshot(Snapshot(snap))
+    assert not result['summary']['batch_integrity_passed']
+    assert any(i['issue_code'] == 'PARSED_CHECKPOINT_MISMATCH' for i in result['issues'])
+
+
+def test_review_family_metadata_needs_html_proof(tmp_path):
+    result, _, _ = run_case(tmp_path, change=lambda r: r.update(variation_family_asins=['B000000000']))
+    assert any(i['field_name'] == 'variation_family_asins' for i in result['issues'])
+
+
+def test_review_same_capacity_conflict_held(tmp_path):
+    html = HTML.replace('<div id="availability">', '<div id="variation_name"><span class="selection">900 ml</span></div><div id="availability">')
+    result, _, _ = run_case(tmp_path, html=html)
+    assert any(i['issue_code'] == 'SPEC_EVIDENCE_CONFLICT' for i in result['issues'])
+    assert result['products'][0]['field_statuses']['specification_es'] != 'READY'
+
+
+def test_review_title_source_rehash_not_enough(tmp_path):
+    from amazon_es_bestseller.source_audit.translation_prep import validate_preparation
+    result, _, _ = run_case(tmp_path)
+    prep = prepare(result['products'], input_manifest_sha256='a' * 64)
+    u = next(u for u in prep['units'] if u['field_name'] == 'title_es_raw')
+    u['source_text_es'] = 'OTRO PRODUCTO 999 kg'
+    u['source_text_sha256'] = digest(u['source_text_es'].encode('utf8'))
+    with pytest.raises(ValueError):
+        validate_preparation(prep)
+
+
+def test_review_manual_brand_not_automatic(tmp_path):
+    _, _, snap = run_case(tmp_path, change=lambda r: r.update(brand_raw='Inventada'))
+    run_audit(snap, tmp_path/'a')
+    p = repair_plan(tmp_path/'a', tmp_path/'p')
+    assert p['automatic_offline_candidates'] == 0
+    assert p['manual_candidates'] == 1
+
+
+def test_review_repair_reaudit_prepare_closed_loop(tmp_path):
+    from amazon_es_bestseller.source_audit.repair import repair_copy, reaudit_repair
+    _, source, snap = run_case(tmp_path, change=lambda r: r.update(attributes='collapsed'))
+    original = file_sha(source/'tasks/detail_0/checkpoint.json')
+    run_audit(snap, tmp_path/'a')
+    repair_copy(tmp_path/'a', tmp_path/'r')
+    reaudit_repair(tmp_path/'r', tmp_path/'reaudit')
+    prepare_translation(tmp_path/'reaudit', tmp_path/'prep')
+    products = [json.loads(s) for s in (tmp_path/'prep/translation_ready_products.jsonl').read_text(encoding='utf8').splitlines()]
+    assert products[0]['field_statuses']['attributes'] == 'READY'
+    assert isinstance(products[0]['raw_record']['attributes'], list)
+    assert file_sha(source/'tasks/detail_0/checkpoint.json') == original
+
+
+@pytest.mark.parametrize('field,value', [('current_price', True), ('rating_value', 6.0),
+    ('rating_count', -1), ('monthly_bought_min', '100')])
+def test_review_numeric_type_and_range(tmp_path, field, value):
+    result, _, _ = run_case(tmp_path, change=lambda r: r.update({field:value}))
+    assert any(i['field_name'] == field and i['issue_code'] == 'NORMALIZED_NUMBER_UNVERIFIED' for i in result['issues'])
+
+
+def test_review_correct_parallel_artifacts_are_accepted(tmp_path):
+    from amazon_es_bestseller.source_audit.contracts import csv_bytes
+    source, snap = tmp_path/'s', tmp_path/'f'
+    _, r, _ = make_batch(source, export_format='jsonl')
+    (source/'details_5500.csv').write_bytes(csv_bytes([r], list(r)))
+    (source/'tasks/detail_0/parsed_detail.json').write_text(json.dumps(r), encoding='utf8')
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    assert audit_snapshot(Snapshot(snap))['summary']['batch_integrity_passed']
+
+
+def test_review_equivalent_units_do_not_conflict(tmp_path):
+    html = HTML.replace('<div id="availability">', '<div id="variation_name"><span class="selection">0,5 L</span></div><div id="availability">')
+    result, _, _ = run_case(tmp_path, html=html)
+    assert not any(i['issue_code'] == 'SPEC_EVIDENCE_CONFLICT' for i in result['issues'])
+    assert result['products'][0]['field_statuses']['specification_es'] == 'READY'
+
+
+@pytest.mark.parametrize('mutation', ['ledger', 'derived', 'binding'])
+def test_review_repair_forged_self_consistent_bundle_rejected(tmp_path, mutation):
+    from amazon_es_bestseller.source_audit.repair import repair_copy, reaudit_repair
+    _, _, snap = run_case(tmp_path, change=lambda r: r.update(attributes='collapsed'))
+    run_audit(snap, tmp_path/'a')
+    repair_copy(tmp_path/'a', tmp_path/'r')
+    manifest_path = tmp_path/'r/manifest.json'
+    manifest = read_json(manifest_path)
+    if mutation == 'binding':
+        manifest['inputs']['audit_manifest_sha256'] = '0' * 64
+    else:
+        name = 'source_repair_application_ledger.jsonl' if mutation == 'ledger' else 'source_repaired_products.jsonl'
+        path = tmp_path/'r'/name
+        if mutation == 'ledger':
+            path.write_bytes(b'')
+        else:
+            rows = [json.loads(s) for s in path.read_text(encoding='utf8').splitlines()]
+            rows[0]['derived_record']['product_url'] = 'https://www.amazon.es/dp/B000000000'
+            path.write_bytes(b''.join(canonical_bytes(r)+b'\n' for r in rows))
+        manifest['files'][name] = file_sha(path)
+    manifest_path.write_bytes(canonical_bytes(manifest))
+    with pytest.raises(ValueError):
+        reaudit_repair(tmp_path/'r', tmp_path/'reaudit')
+    assert not (tmp_path/'reaudit/manifest.json').exists()
+
+
+def test_review_reaudit_cli_idempotent_and_manual_stays_held(tmp_path):
+    from amazon_es_bestseller.source_audit.repair import repair_copy
+    _, _, snap = run_case(tmp_path, change=lambda r: r.update(attributes='collapsed', brand_raw='Inventada'))
+    run_audit(snap, tmp_path/'a')
+    repair_copy(tmp_path/'a', tmp_path/'r')
+    args = ['reaudit-repair', '--repair', str(tmp_path/'r'), '--out', str(tmp_path/'reaudit')]
+    assert main(args) == 0
+    first = file_sha(tmp_path/'reaudit/manifest.json')
+    assert main(args) == 0
+    assert file_sha(tmp_path/'reaudit/manifest.json') == first
+    prepare_translation(tmp_path/'reaudit', tmp_path/'prep')
+    row = json.loads((tmp_path/'prep/translation_ready_products.jsonl').read_text(encoding='utf8'))
+    assert row['raw_record']['brand_raw'] == 'Inventada'
+    assert 'brand_raw' not in row['passthrough_fields']
+    assert row['field_statuses']['attributes'] == 'READY'
+
+
 def test_current_html_replay_identity_and_independent_fields(tmp_path):
     result, _, _ = run_case(tmp_path)
     p = result["products"][0]

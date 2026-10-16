@@ -46,7 +46,12 @@ def prepare(products, *, input_manifest_sha256, cache_memory=None):
             "candidate_id": product["candidate_id"], "selection_id": product["selection_id"],
             "asin": product["asin"], "preparation_status": product["preparation_status"],
             "raw_record": record, "field_statuses": fields,
-            "passthrough_fields": {k: record[k] for k in PROTECTED_FIELDS if k in record},
+            "original_source_record": product.get('original_source_record', record),
+            "record_version": product.get('record_version', 'ORIGINAL_AUDITED'),
+            "passthrough_fields": {k: record[k] for k in PROTECTED_FIELDS if k in record and product.get('business_field_statuses', {}).get(k) != 'SOURCE_REVIEW_REQUIRED'},
+            "business_field_statuses": product.get('business_field_statuses', {}),
+            "translation_source": product['translation_source'],
+            "specification_derivation": product.get('specification_derivation'),
             "source_evidence_reference": product["source_evidence_reference"], "translation_unit_ids": [],
         }
 
@@ -136,6 +141,7 @@ def prepare(products, *, input_manifest_sha256, cache_memory=None):
     counts = Counter(u["preparation_status"] for u in units)
     return {
         "products": ready_products, "units": units, "glossary": glossary,
+        "input_manifest_sha256": input_manifest_sha256,
         "summary": {"input_products": len(products), "translation_ready_products": len(ready_products),
                     "excluded_products": len(skipped_products), "translation_unit_total": len(units),
                     "actual_model_units_before_dedup": sum(u["model_translation_required"] for u in units),
@@ -181,4 +187,33 @@ def validate_preparation(result):
     references = [uid for product in result["products"] for uid in product["translation_unit_ids"]]
     if len(references) != len(by_id) or set(references) != set(by_id):
         raise ValueError("TRANSLATION_PRODUCT_UNIT_BINDING_INVALID")
+    # A self-consistent text hash does not prove ownership by this source field.
+    from .audit import _contents
+    from ..normalization.specification import build_spec_es
+    for product in result['products']:
+        original = _contents(product['raw_record'])
+        for field, value in product['translation_source'].items():
+            if field == 'specification_es' and product.get('specification_derivation'):
+                proof = product['specification_derivation']
+                source_field = proof['source_field']
+                source = original.get(source_field)
+                args = {'selected_variation_raw': 'variant', 'title_es_raw': 'title_es', 'attributes': 'attributes'}
+                if (source_field not in args or digest(source) != proof['source_value_sha256'] or
+                        build_spec_es(**{args[source_field]: source}) != value or
+                        digest(value.encode('utf8')) != proof['derived_text_sha256']):
+                    raise ValueError('TRANSLATION_DERIVATION_BINDING_INVALID')
+            elif value != original.get(field):
+                raise ValueError('TRANSLATION_SOURCE_PROJECTION_INVALID')
+    expected = prepare(result['products'], input_manifest_sha256=result['input_manifest_sha256'])
+    invariants = ('candidate_id', 'selection_id', 'asin', 'field_name', 'attribute_section', 'attribute_position',
+                  'attribute_label', 'attribute_role', 'attribute_source', 'attribute_source_index',
+                  'source_text_es', 'source_text_sha256', 'translation_field_type', 'glossary_version',
+                  'protected_terms', 'source_evidence_reference', 'semantic_reuse_key', 'cache_identity_components',
+                  'category_parent_path')
+    expected_units = {u['translation_unit_id']: u for u in expected['units']}
+    if set(expected_units) != set(by_id):
+        raise ValueError('TRANSLATION_UNIT_SOURCE_BINDING_INVALID')
+    for uid, unit in by_id.items():
+        if any(unit.get(k) != expected_units[uid].get(k) for k in invariants):
+            raise ValueError('TRANSLATION_UNIT_SOURCE_BINDING_INVALID')
     return {"status": "PASS", "products": len(products), "units": len(by_id)}

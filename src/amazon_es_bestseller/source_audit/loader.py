@@ -148,8 +148,8 @@ class Snapshot:
         if sha != self.sha256:
             raise ValueError("SNAPSHOT_MANIFEST_CHANGED")
 
-    def rows(self):
-        for name in ("details_5500_raw.jsonl", "details.jsonl", "details.json", "details_5500.csv", "details.csv"):
+    def rows(self, only=None):
+        for name in ((only,) if only else ("details_5500_raw.jsonl", "details.jsonl", "details.json", "details_5500.csv", "details.csv")):
             if name not in self.files:
                 continue
             text = self.path(name).read_text(encoding="utf-8-sig")

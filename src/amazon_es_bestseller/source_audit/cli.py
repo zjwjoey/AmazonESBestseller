@@ -31,6 +31,9 @@ def main(argv=None):
             p.add_argument("--cache-copy", help="Optional independently reviewed semantic-memory copy; no legacy cache writes")
     p = sub.add_parser("report")
     p.add_argument("--audit", required=True)
+    p = sub.add_parser('reaudit-repair', help='Verify ledger and re-audit a derived repair copy against original frozen HTML')
+    p.add_argument('--repair', required=True)
+    p.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "snapshot":
@@ -56,6 +59,9 @@ def main(argv=None):
             result = repair_copy(args.audit, args.out)
         elif args.command == "prepare-translation":
             result = prepare_translation(args.audit, args.out, cache=args.cache_copy)
+        elif args.command == 'reaudit-repair':
+            from .repair import reaudit_repair
+            result = reaudit_repair(args.repair, args.out)
         else:
             verify_bundle(args.audit, kind="source_audit")
             result = read_json(Path(args.audit) / "source_audit_summary.json")
