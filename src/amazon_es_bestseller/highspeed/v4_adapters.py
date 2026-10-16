@@ -5,6 +5,7 @@ Pure offline parsing. A rendered DOM is not an HTTP receipt or capacity proof.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import datetime
 from urllib.parse import urljoin, urlsplit,parse_qs
@@ -21,6 +22,7 @@ VERSION = 'multisource_v4.3.loading_context'
 PAGINATION_VERSION = 'multisource_v4.4.owned_ranked_pagination'
 CML_DOSSIER_VERSION = 'multisource_v4.5.cml_dossier'
 CML_HERO_VERSION = 'multisource_v4.6.cml_hero'
+RANKED_EMPTY_VERSION = 'multisource_v4.7.ranked_empty'
 CML_DOSSIER_SELECTOR = '.dcl-html-grid [data-cy="asin-faceout-container"]'
 SELECTORS = {
     'DEALS_ZONE': '[data-testid="product-card"][data-asin][data-deal-id]',
@@ -196,13 +198,32 @@ def _cml_dossier_context(soup,source,page_url,allow_owned_hero=False):
         and any(_eligible(c) for c in soup.select(CML_DOSSIER_SELECTOR)))
 
 
+def _official_new_empty(soup,legacy,page_url):
+    if (legacy.get('source_type')!='NEW_RELEASES' or legacy.get('access_status')!='NORMAL'
+            or not legacy.get('source_type_verified') or not legacy.get('source_context_valid')):return None
+    grids=soup.select('#zg-right-col .p13n-desktop-grid')
+    if len(grids)!=1:return None
+    grid=grids[0]
+    try:
+        if json.loads(grid.get('data-client-recs-list','null'))!=[]:return None
+    except (ValueError,TypeError):return None
+    if (grid.select_one('#endOfList') is None or grid.select_one('#gridItemRoot,.zg-bdg-text,[data-expected-count],[data-acp-path]')
+            or any(normalize_product_url_v3(a['href'],page_url)['is_valid'] for a in grid.select('a[href]'))):return None
+    for heading in grid.find_all('h4',recursive=False):
+        raw=heading.get_text(' ',strip=True)
+        if re.fullmatch(r'lo sentimos, no hay (?:productos )?últimas novedades disponibles en esta categoría\. vuelve más tarde\.', ' '.join(raw.split()).casefold()):
+            return {'selector':'#zg-right-col .p13n-desktop-grid > h4','statement_raw':raw}
+    return None
+
+
 def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                   http_status=None, origin='OFFLINE_FIXTURE', snapshot_id=None, page_number=1,
                   acp_responses=None, parser_profile_version=None):
     version = parser_profile_version or (PAGINATION_VERSION if source['source_type'] in RANKED
         and page_url!=source['actual_source_url'] and source.get('pagination_evidence') else VERSION)
-    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION, PAGINATION_VERSION,CML_DOSSIER_VERSION,CML_HERO_VERSION}:
+    if version not in {VERSION, CAPTURE_VERSION, LEGACY_VERSION, PAGINATION_VERSION,CML_DOSSIER_VERSION,CML_HERO_VERSION,RANKED_EMPTY_VERSION}:
         raise ValueError('V4_UNKNOWN_PARSER_VERSION')
+    if version==RANKED_EMPTY_VERSION and source['source_type']!='NEW_RELEASES':raise ValueError('V4_EXACT_OFFICIAL_NEW_EMPTY_REQUIRED')
     if origin not in {'OFFLINE_FIXTURE', 'LIVE_CAPTURE', 'HISTORICAL_REPLAY'}:
         raise ValueError('UNKNOWN_ORIGIN')
     if datetime.fromisoformat(observed_at.replace('Z', '+00:00')).tzinfo is None:
@@ -262,6 +283,10 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                            rating_count_status=old.get('review_count_status'))
             rows.append(row)
         page['legacy_page'] = legacy['page']
+        empty_proof=_official_new_empty(soup,legacy['page'],page_url) if http_status==200 and not legacy['observations'] and not acp_responses else None
+        if empty_proof and (parser_profile_version is None or version==RANKED_EMPTY_VERSION):
+            version=RANKED_EMPTY_VERSION;page['parser_version']=version
+        elif version==RANKED_EMPTY_VERSION:raise ValueError('V4_EXACT_OFFICIAL_NEW_EMPTY_REQUIRED')
     else:
         subtype = source['source_subtype']
         if subtype not in SELECTORS:
@@ -299,7 +324,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                    observed_at=row.get('observed_at', observed_at), origin=origin, evidence_path=row.get('evidence_path', evidence_path),
                    evidence_sha256=row.get('evidence_sha256', sha), parser_version=version,
                    observation_id='v4obs_' + _sha(f'{run_id}|{sha}|{index}|{page_url}' +
-                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION,PAGINATION_VERSION,CML_DOSSIER_VERSION,CML_HERO_VERSION} else ''))[:32],
+                       ('|' + row.get('observed_at', observed_at) if version in {VERSION,CAPTURE_VERSION,PAGINATION_VERSION,CML_DOSSIER_VERSION,CML_HERO_VERSION,RANKED_EMPTY_VERSION} else ''))[:32],
                    source_node_id=node_id(page_url), amazon_category_path=[],
                    amazon_category_l1=None, amazon_category_l2=None, amazon_category_l3=None, amazon_category_leaf=None,
                    research_category=None, category_mapping_status='UNKNOWN', source_completeness_status='UNKNOWN',
@@ -335,5 +360,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
             page.update(status='EXPLICIT_EMPTY',source_empty_evidence={'selector':'[data-testid="discount-asin-grid"] p',
                 'statement_raw':exact,'evidence_path':evidence_path,'evidence_sha256':sha},
                 completeness_status='UNKNOWN',source_context_verified=True)
+    if version==RANKED_EMPTY_VERSION:
+        page.update(status='EXPLICIT_EMPTY',source_empty_evidence={**empty_proof,'evidence_path':evidence_path,'evidence_sha256':sha},source_context_verified=True,completeness_status='UNKNOWN')
     return {'page': page, 'observations': rows, 'pagination': [n for n in nav if n['kind'] == 'PAGINATION_LINK'],
-            'discovered_sources': nav, 'acp_pending': legacy['acp_pending'] if kind in RANKED else []}
+            'discovered_sources': nav, 'acp_pending': legacy['acp_pending'] if kind in RANKED and version!=RANKED_EMPTY_VERSION else []}
