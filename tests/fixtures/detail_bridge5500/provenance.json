@@ -1,0 +1,11 @@
+{
+  "source_html": "F:\\AmazonESBestseller\\outputs\\coche_moto_50\\html\\B0GK9PLT15.html",
+  "sha256": "1bec15aee1623a960289bef61bd253ca0574f3c7eb0cf9eca03971999238c557",
+  "metadata": {
+    "status_code": 200,
+    "final_url": "https://www.amazon.es/dp/B0GK9PLT15?th=1",
+    "access_state": "NORMAL"
+  },
+  "origin": "SAVED_REAL_AMAZON_DETAIL",
+  "not_live_test": true
+}
