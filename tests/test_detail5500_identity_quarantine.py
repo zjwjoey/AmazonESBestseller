@@ -54,3 +54,26 @@ def test_scheduler_preserves_reviewed_failure_no_request_no_success_credit(tmp_p
  b.run(session,auth,until_completed=31)
  assert len(calls)==1 and b.progress()['success']==31 and (tmp_path/'tasks/30/checkpoint.json').read_bytes()==old
  assert not (tmp_path/'receipts/30_1.json').exists() and (tmp_path/'receipts/31_1.json').exists() and not (tmp_path/'receipts/32_1.json').exists()
+
+@pytest.mark.parametrize('bad',[None,'prior_changed','prior_removed','cohort_changed','old_evidence_changed'])
+def test_later_isolation_cannot_rewrite_accepted_T2_cohort(tmp_path,monkeypatch,bad):
+ from amazon_es_bestseller.collection.detail_bridge5500 import DetailBridge5500
+ import amazon_es_bestseller.collection.identity_quarantine5500 as mod
+ tasks=[{'task_id':'a'},{'task_id':'b'}];plan={'run_id':'test','tasks':tasks};b=DetailBridge5500(tmp_path,plan)
+ hashes={}
+ for t in tasks:
+  cp=tmp_path/'tasks'/t['task_id']/'checkpoint.json';cp.parent.mkdir(parents=True);immutable_json(cp,sealed({'status':'SUCCESS'}));hashes[t['task_id']]=file_sha(cp)
+ prior_ref={'path':'original_review','sha256':'original'};new_ref={'path':'extended_review','sha256':'extended'}
+ prior={'failure1':{'item':'original','not_success':True}};q={**prior,'failure2':{'item':'new','not_success':True}}
+ if bad=='prior_changed':q['failure1']={'item':'changed'}
+ if bad=='prior_removed':q.pop('failure1')
+ selected=[tasks[0],{'task_id':'replacement'}] if bad=='cohort_changed' else tasks
+ monkeypatch.setattr(mod,'stage_tasks',lambda *a:(selected,q))
+ def reviewed(root,plan,auth):
+  if bad=='old_evidence_changed':raise ValueError('EVIDENCE_CHANGED')
+  return prior
+ monkeypatch.setattr(mod,'reviewed_identity_quarantines',reviewed);monkeypatch.setattr(b,'verify_saved_success',lambda *a:None)
+ immutable_json(tmp_path/'T2_acceptance.json',sealed({'passed':True,'plan_sha256':digest(plan),'success_count':2,'successful_task_ids':['a','b'],'reviewed_identity_quarantines_reference':prior_ref,'checkpoint_sha256':hashes}))
+ if bad:
+  with pytest.raises(ValueError):b.validate_stage('T2',2,auth={'reviewed_identity_quarantines_reference':new_ref})
+ else:b.validate_stage('T2',2,auth={'reviewed_identity_quarantines_reference':new_ref})

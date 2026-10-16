@@ -492,8 +492,16 @@ class DetailBridge5500:
         from .identity_quarantine5500 import stage_tasks
         tasks, quarantines = stage_tasks(self, name, count, auth)
         if proof.get("reviewed_identity_quarantines_reference"):
-            if (proof["reviewed_identity_quarantines_reference"] != (auth or {}).get("reviewed_identity_quarantines_reference")
-                    or proof.get("successful_task_ids") != [t["task_id"] for t in tasks]
+            prior_ref = proof["reviewed_identity_quarantines_reference"]
+            if prior_ref != (auth or {}).get("reviewed_identity_quarantines_reference"):
+                # Later isolated failures outside this already audited cohort
+                # must not rewrite its proof or replace any accepted member.
+                from .identity_quarantine5500 import reviewed_identity_quarantines
+                prior = reviewed_identity_quarantines(self.root, self.plan,
+                    {**(auth or {}), "reviewed_identity_quarantines_reference": prior_ref})
+                if not prior or any(quarantines.get(k) != v for k, v in prior.items()):
+                    raise ValueError("STAGE_IDENTITY_REVIEW_HISTORY_CHANGED")
+            if (proof.get("successful_task_ids") != [t["task_id"] for t in tasks]
                     or proof.get("success_count") != count):
                 raise ValueError("STAGE_TRUE_SUCCESS_SCOPE_MISMATCH")
         elif quarantines and name == "T2":
