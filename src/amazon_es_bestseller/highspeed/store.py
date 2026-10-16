@@ -100,6 +100,9 @@ class RunStore:
         CREATE INDEX IF NOT EXISTS request_run_day ON requests(run_id,local_day);
         CREATE TABLE IF NOT EXISTS responses(request_id TEXT PRIMARY KEY,run_id TEXT NOT NULL,data_json TEXT NOT NULL,
           FOREIGN KEY(request_id) REFERENCES requests(request_id));
+        CREATE INDEX IF NOT EXISTS response_access_failures_v1 ON responses((1))
+          WHERE json_type(data_json) IS NOT 'object' OR (json_extract(data_json,'$.origin')='LIVE_CAPTURE'
+            AND json_extract(data_json,'$.access_state') IS NOT 'NORMAL');
         CREATE TABLE IF NOT EXISTS pages(run_id TEXT NOT NULL,page_key TEXT NOT NULL,journal_path TEXT NOT NULL,
           data_json TEXT NOT NULL,PRIMARY KEY(run_id,page_key),FOREIGN KEY(run_id) REFERENCES runs(run_id));
         CREATE TABLE IF NOT EXISTS candidates(candidate_id TEXT PRIMARY KEY,url TEXT NOT NULL UNIQUE,possible_key TEXT);
@@ -216,7 +219,12 @@ class RunStore:
                         "evidence_path": str(receipt), "recovered_from_saved_receipt": True}
         # A crash after receipt publication must not lose a restriction. Only
         # real LIVE receipts are relevant; fixtures cannot restrict real access.
-        for row in self.db.execute("SELECT data_json FROM responses ORDER BY rowid DESC"):
+        # The partial SQLite index is maintained on every INSERT/UPDATE. It is
+        # not a cached NORMAL decision: NULL/missing states remain failures,
+        # handled IDs are checked below, and crash-gap journals above stay live.
+        for row in self.db.execute("SELECT data_json FROM responses INDEXED BY response_access_failures_v1 "
+                "WHERE json_type(data_json) IS NOT 'object' OR (json_extract(data_json,'$.origin')='LIVE_CAPTURE' "
+                "AND json_extract(data_json,'$.access_state') IS NOT 'NORMAL') ORDER BY rowid DESC"):
             value = json.loads(row[0])
             if value.get("request_id") in handled:
                 continue
@@ -561,12 +569,37 @@ class RunStore:
         return [{**json.loads(row["data_json"]), "page_key": row["page_key"], "journal_path": row["journal_path"]}
             for row in self.db.execute("SELECT * FROM pages WHERE run_id=?", (run_id,))]
 
+    def _observation_identity_views(self, run_id):
+        # Observations consume identity facts, not the first card's title/price.
+        # With reviews, retain the complete independent-proof/merge algorithm.
+        # Without reviews, derive exactly the same keys and representatives
+        # from the current canonical index, with no cross-call result cache.
+        if self.db.execute("SELECT 1 FROM destination_reviews WHERE run_id=? LIMIT 1",(run_id,)).fetchone():
+            return {c["candidate_id"]:c for c in self.iter_candidates(run_id)}
+        version=self.normalizer_version(run_id)
+        rows=self.db.execute("SELECT c.candidate_id,c.url,c.possible_key, "
+            "EXISTS(SELECT 1 FROM observations o WHERE o.observation_id=r.first_observation_id) has_first "
+            "FROM candidates c JOIN run_candidates r USING(candidate_id) WHERE r.run_id=?",(run_id,)).fetchall()
+        keys={r['candidate_id']:_current_review_key(r['url'],version) for r in rows}
+        representatives={}
+        for r in rows:
+            cid=r['candidate_id'];key=keys[cid]
+            representatives[key]=min(cid,representatives.get(key,cid))
+        return {r['candidate_id']:{
+            'possible_duplicate_key':r['possible_key'] if version==V3_NORMALIZER_VERSION else keys[r['candidate_id']],
+            'target_group_key':keys[r['candidate_id']],
+            'target_eligible':r['candidate_id']==representatives[keys[r['candidate_id']]],
+            'url_identity_status':'IDENTITY_UNCONFIRMED','final_product_url':None,
+            'current_normalizer_version':version,'possible_duplicate_key_version':version}
+            for r in rows if r['has_first']}
+
     def iter_observations(self, run_id):
-        views = {c["candidate_id"]:c for c in self.iter_candidates(run_id)}
-        pages={p["page_key"]:p for p in self.pages(run_id)}
+        views = self._observation_identity_views(run_id)
+        pages=None
         for row in self.db.execute("SELECT data_json,page_key FROM observations WHERE run_id=? ORDER BY rowid", (run_id,)):
             value=json.loads(row[0]); view=views.get(value.get("candidate_id"))
             if "source_evidence_eligible" not in value:
+                if pages is None:pages={p["page_key"]:p for p in self.pages(run_id)}
                 page=pages.get(row[1],{})
                 value["source_evidence_eligible"]=(page.get("access_status") == "NORMAL" and
                     page.get("source_type_verified") is True and page.get("source_context_valid") is True)
