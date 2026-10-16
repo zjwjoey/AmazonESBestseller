@@ -328,3 +328,38 @@ def test_verification_accepts_actual_readonly_modal_receipt_not_submission(tmp_p
     else:
         with pytest.raises(ValueError,match='NOT_REPLAYABLE'):
             validate_read_only_verification(root,plan,auth,a)
+
+
+@pytest.mark.parametrize('change',[None,'unapproved','missing_verification','changed_html','verification_passed','submitted'])
+def test_explicit_continuation_after_failed_readonly_verification(tmp_path,change):
+    from amazon_es_bestseller.collection.delivery_setup5500 import validate_continuation
+    from amazon_es_bestseller.multisource.storage import read_sealed,atomic_json
+    import gzip
+    root,plan,auth,a,v=verification_fixture(tmp_path)
+    def ref(p):return dict(path=str(p),sha256=file_sha(p))
+    saved=Path(__file__).parent/'fixtures/detail_bridge5500/actual_setup_readonly_modal_receipt.json'
+    r=read_sealed(saved);r.update(run_id=plan['run_id'],task_id=a['task_id'],plan_sha256=digest(plan))
+    sp=root/'receipts/delivery_setup_01.json';atomic_json(sp,sealed(r))
+    hp=root/'initial_UI.html';hp.write_bytes(gzip.decompress((saved.parent/'actual_failed_glux_UI.html.gz').read_bytes()))
+    fp=root/'delivery_setup.failure.json';atomic_json(fp,sealed(dict(error_type='DeliveryLocationError',pending_receipts=[],evidence=dict(html_sha256=file_sha(hp)))))
+    # Kept real wrong-destination document, not fabricated success data.
+    vh=root/'verification.html';vh.write_bytes(gzip.decompress((saved.parent/'actual_readonly_verification_taiwan.html.gz').read_bytes()))
+    vr=root/'receipts/delivery_setup_02.json';immutable_json(vr,sealed(dict(request_role='DELIVERY_SETUP',kind='PAGE',method='GET',state='NORMAL',status_code=200,
+        run_id=plan['run_id'],task_id=a['task_id'],plan_sha256=digest(plan),request_url=a['initial_product_URL'],final_url=a['initial_product_URL'],body_path=str(vh),body_sha256=file_sha(vh))))
+    va=root/'delivery_setup.verification_1.attempt.json';immutable_json(va,sealed(dict(mutation_allowed=False)))
+    vf=root/'delivery_setup.verification_1.result.json';immutable_json(vf,sealed(dict(passed=change=='verification_passed',no_UI_mutation_performed=True,
+        product_parse_status='SUCCESS',identity_status='EXACT_ACTIVE_PRODUCT_MATCH',receipt_path=str(vr),receipt_sha256=file_sha(vr),html_path=str(vh),html_sha256=file_sha(vh))))
+    p=dict(approved=change!='unapproved',approved_by='user',approval_id='explicit_additional_once',
+        scope='ONE_ADDITIONAL_NORMAL_UI_INITIALIZATION_AFTER_UNCONFIRMED_UI_FAILURE',run_id=plan['run_id'],plan_sha256=digest(plan),
+        task_id=a['task_id'],initial_product_URL=a['initial_product_URL'],shipping_postal_code='28001',max_total_setup_attempts=2,max_total_setup_requests=8,
+        total_request_cap_unchanged=auth['max_requests'],request_deadline_unchanged=auth['request_deadline'],final_deadline_unchanged=auth['deadline'],
+        original_amendment_reference=auth['delivery_setup_reference'],initial_attempt_reference=ref(root/'delivery_setup.attempt.json'),
+        initial_failure_reference=ref(fp),initial_setup_receipt_reference=ref(sp),initial_failed_UI_snapshot_reference=ref(hp),
+        failed_read_only_verification_reference=ref(vf),verification_attempt_reference=ref(va),verification_receipt_reference=ref(vr),verification_html_reference=ref(vh))
+    if change=='missing_verification':p.pop('failed_read_only_verification_reference')
+    pp=root/'continuation.json';immutable_json(pp,p);auth['delivery_setup_continuation_reference']=ref(pp)
+    if change=='changed_html':vh.write_text('changed',encoding='utf8')
+    if change=='submitted':immutable_json(root/'receipts/delivery_setup_03.json',sealed(dict(request_role='DELIVERY_SETUP',kind='OTHER',method='POST',state='NORMAL')))
+    if change is None:assert validate_continuation(root,plan,auth,a)==p
+    else:
+        with pytest.raises(ValueError):validate_continuation(root,plan,auth,a)

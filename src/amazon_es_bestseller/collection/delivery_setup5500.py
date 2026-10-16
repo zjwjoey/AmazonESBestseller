@@ -106,14 +106,50 @@ def validate_continuation(root, plan, auth, amendment):
     r = read_sealed(a["initial_setup_receipt_reference"]["path"])
     if (failure.get("error_type") != "DeliveryLocationError" or failure.get("pending_receipts")
             or failure.get("evidence", {}).get("html_sha256") != a["initial_failed_UI_snapshot_reference"]["sha256"]
-            or r.get("request_role") != "DELIVERY_SETUP" or r.get("method") != "GET"
-            or r.get("kind") != "PAGE" or r.get("state") != "NORMAL" or r.get("status_code") != 200
-            or r.get("request_url") != amendment["initial_product_URL"]):
+            or r.get("request_role") != "DELIVERY_SETUP" or r.get("state") != "NORMAL" or r.get("status_code") != 200
+            or not _initial_readonly_setup_get(r, plan, amendment)):
         raise ValueError("CONTINUATION_ONLY_BOUND_NORMAL_UI_FAILURE")
     rows = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
     setup = [x for x in rows if x.get("request_role") == "DELIVERY_SETUP"]
-    if (len(setup) != 1 or setup[0] != r or any(x.get("state") == "RESERVED" for x in rows)
+    if len(setup) == 2:
+        names = ("failed_read_only_verification_reference", "verification_attempt_reference",
+                 "verification_receipt_reference", "verification_html_reference")
+        if any(not isinstance(a.get(n), dict) for n in names):
+            raise ValueError("CONTINUATION_VERIFICATION_EVIDENCE_REQUIRED")
+        for n in names:
+            evidence = a[n]
+            if (not Path(evidence["path"]).resolve().is_relative_to(root.resolve())
+                    or file_sha(evidence["path"]) != evidence["sha256"]):
+                raise ValueError("CONTINUATION_VERIFICATION_EVIDENCE_CHANGED")
+        if (Path(a[names[0]]["path"]).resolve() != (root / "delivery_setup.verification_1.result.json").resolve()
+                or Path(a[names[1]]["path"]).resolve() != (root / "delivery_setup.verification_1.attempt.json").resolve()):
+            raise ValueError("CONTINUATION_VERIFICATION_BINDING_INVALID")
+        failed = read_sealed(a[names[0]]["path"])
+        attempt = read_sealed(a[names[1]]["path"])
+        verification = read_sealed(a[names[2]]["path"])
+        location = inspect_delivery_location(Path(a[names[3]]["path"]).read_text(encoding="utf8"))
+        if (failed.get("passed") is not False or failed.get("no_UI_mutation_performed") is not True
+                or attempt.get("mutation_allowed") is not False or failed.get("product_parse_status") != "SUCCESS"
+                or failed.get("identity_status") != "EXACT_ACTIVE_PRODUCT_MATCH"
+                or failed.get("receipt_path") != a[names[2]]["path"]
+                or failed.get("receipt_sha256") != a[names[2]]["sha256"]
+                or failed.get("html_path") != a[names[3]]["path"] or failed.get("html_sha256") != a[names[3]]["sha256"]
+                or verification.get("body_path") != a[names[3]]["path"] or verification.get("body_sha256") != a[names[3]]["sha256"]
+                or verification.get("state") != "NORMAL" or verification.get("status_code") != 200
+                or verification.get("run_id") != plan["run_id"] or verification.get("task_id") != amendment["task_id"]
+                or verification.get("plan_sha256") != digest(plan)
+                or verification.get("request_role") != "DELIVERY_SETUP" or verification.get("kind") != "PAGE"
+                or verification.get("method") != "GET" or verification.get("request_url") != amendment["initial_product_URL"]
+                or verification.get("final_url") != amendment["initial_product_URL"]
+                or (location.is_spain is True and location.postal_code == "28001")
+                or detect_access_status(200, Path(a[names[3]]["path"]).read_text(encoding="utf8")).value != "NORMAL"
+                or r not in setup or verification not in setup):
+            raise ValueError("CONTINUATION_ONLY_NORMAL_WRONG_DESTINATION_VERIFICATION")
+    elif len(setup) != 1 or setup[0] != r:
+        raise ValueError("CONTINUATION_UNREVIEWED_SETUP_HISTORY")
+    if (any(x.get("state") == "RESERVED" for x in rows)
             or (root / "delivery_setup.complete.json").exists()
+            or (root / "delivery_setup.continuation_2.attempt.json").exists()
             or (root / "receipts" / (amendment["task_id"]+"_2.json")).exists()):
         raise ValueError("CONTINUATION_NOT_REPLAYABLE_AFTER_SUBMISSION_OR_DETAIL_RECHECK")
     return a
@@ -123,6 +159,16 @@ def requires_setup_accounting(url, method, resource_type, main_navigation=False)
     """Never let shipping data escape accounting by using a script/beacon type."""
     return (main_navigation or resource_type in {"xhr", "fetch"} or method != "GET"
             or urlsplit(url).path.startswith(("/portal-migration/hz/glow/", "/gp/glow/", "/gp/delivery/")))
+
+
+def _initial_readonly_setup_get(original, plan, amendment):
+    if original.get("kind") == "PAGE":
+        return original.get("method") == "GET" and original.get("request_url") == amendment["initial_product_URL"]
+    return (original.get("kind") == "OTHER" and original.get("method") == "GET"
+        and original.get("run_id") == plan["run_id"] and original.get("task_id") == amendment["task_id"]
+        and original.get("plan_sha256") == digest(plan) and original.get("error") is None
+        and original.get("final_url") == original.get("request_url")
+        and allowed_shipping_request(original.get("request_url", ""), "GET", "", "28001"))
 
 
 def validate_read_only_verification(root, plan, auth, amendment):
@@ -153,22 +199,11 @@ def validate_read_only_verification(root, plan, auth, amendment):
     failure = read_sealed(v["initial_failure_reference"]["path"])
     original = read_sealed(v["initial_setup_receipt_reference"]["path"])
     rows = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
-    original_document = (original.get("kind") == "PAGE"
-        and original.get("method") == "GET"
-        and original.get("request_url") == amendment["initial_product_URL"])
     # The real failed attempt saved an ordinary read-only modal GET, not a
     # product document. Its presence does not authorize another UI operation.
-    original_modal = (original.get("kind") == "OTHER"
-        and original.get("method") == "GET"
-        and original.get("run_id") == plan["run_id"]
-        and original.get("task_id") == amendment["task_id"]
-        and original.get("plan_sha256") == digest(plan)
-        and original.get("error") is None
-        and original.get("final_url") == original.get("request_url")
-        and allowed_shipping_request(original.get("request_url", ""), "GET", "", "28001"))
     if (failure.get("error_type") != "DeliveryLocationError" or failure.get("pending_receipts")
             or original.get("state") != "NORMAL" or original.get("status_code") != 200
-            or original.get("request_role") != "DELIVERY_SETUP" or not (original_document or original_modal)
+            or original.get("request_role") != "DELIVERY_SETUP" or not _initial_readonly_setup_get(original, plan, amendment)
             or len([r for r in rows if r.get("request_role") == "DELIVERY_SETUP"]) != 1
             or any(r.get("state") == "RESERVED" for r in rows)
             or (root / "delivery_setup.verification_1.attempt.json").exists()
