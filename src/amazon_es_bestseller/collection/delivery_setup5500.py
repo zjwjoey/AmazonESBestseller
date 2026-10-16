@@ -72,6 +72,59 @@ def allowed_shipping_request(url, method, body, postcode):
     return values.get("zipCode") == [postcode] and values.get("locationType", ["LOCATION_INPUT"]) == ["LOCATION_INPUT"]
 
 
+def validate_continuation(root, plan, auth, amendment):
+    """No implicit second initialization. A new human approval must bind the
+    exact unconfirmed UI failure and keep the original eight-request ceiling.
+    Preparing this capability does not create or imply that approval.
+    """
+    root = Path(root)
+    ref = auth.get("delivery_setup_continuation_reference")
+    if not ref:
+        raise ValueError("NEW_EXPLICIT_INITIALIZATION_APPROVAL_REQUIRED")
+    if file_sha(ref["path"]) != ref["sha256"]:
+        raise ValueError("CONTINUATION_APPROVAL_SHA_MISMATCH")
+    a = json.loads(Path(ref["path"]).read_text(encoding="utf8"))
+    if (a.get("approved") is not True or a.get("approved_by") != "user" or not a.get("approval_id")
+            or a.get("scope") != "ONE_ADDITIONAL_NORMAL_UI_INITIALIZATION_AFTER_UNCONFIRMED_UI_FAILURE"
+            or a.get("run_id") != plan["run_id"] or a.get("plan_sha256") != digest(plan)
+            or a.get("task_id") != amendment["task_id"] or a.get("initial_product_URL") != amendment["initial_product_URL"]
+            or a.get("shipping_postal_code") != "28001" or a.get("max_total_setup_attempts") != 2
+            or a.get("max_total_setup_requests") != 8 or a.get("total_request_cap_unchanged") != auth["max_requests"]
+            or a.get("request_deadline_unchanged") != auth["request_deadline"]
+            or a.get("final_deadline_unchanged") != auth["deadline"]):
+        raise ValueError("NEW_EXPLICIT_INITIALIZATION_APPROVAL_REQUIRED")
+    for name in ("original_amendment_reference", "initial_attempt_reference", "initial_failure_reference",
+                 "initial_setup_receipt_reference", "initial_failed_UI_snapshot_reference"):
+        r = a[name]
+        if not Path(r["path"]).resolve().is_relative_to(root.resolve()) or file_sha(r["path"]) != r["sha256"]:
+            raise ValueError("CONTINUATION_INITIAL_EVIDENCE_CHANGED")
+    if a["original_amendment_reference"] != auth["delivery_setup_reference"]:
+        raise ValueError("CONTINUATION_ORIGINAL_APPROVAL_MISMATCH")
+    if Path(a["initial_attempt_reference"]["path"]).resolve() != (root / "delivery_setup.attempt.json").resolve():
+        raise ValueError("CONTINUATION_ATTEMPT_BINDING_INVALID")
+    failure = read_sealed(a["initial_failure_reference"]["path"])
+    r = read_sealed(a["initial_setup_receipt_reference"]["path"])
+    if (failure.get("error_type") != "DeliveryLocationError" or failure.get("pending_receipts")
+            or failure.get("evidence", {}).get("html_sha256") != a["initial_failed_UI_snapshot_reference"]["sha256"]
+            or r.get("request_role") != "DELIVERY_SETUP" or r.get("method") != "GET"
+            or r.get("kind") != "PAGE" or r.get("state") != "NORMAL" or r.get("status_code") != 200
+            or r.get("request_url") != amendment["initial_product_URL"]):
+        raise ValueError("CONTINUATION_ONLY_BOUND_NORMAL_UI_FAILURE")
+    rows = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
+    setup = [x for x in rows if x.get("request_role") == "DELIVERY_SETUP"]
+    if (len(setup) != 1 or setup[0] != r or any(x.get("state") == "RESERVED" for x in rows)
+            or (root / "delivery_setup.complete.json").exists()
+            or (root / "receipts" / (amendment["task_id"]+"_2.json")).exists()):
+        raise ValueError("CONTINUATION_NOT_REPLAYABLE_AFTER_SUBMISSION_OR_DETAIL_RECHECK")
+    return a
+
+
+def requires_setup_accounting(url, method, resource_type, main_navigation=False):
+    """Never let shipping data escape accounting by using a script/beacon type."""
+    return (main_navigation or resource_type in {"xhr", "fetch"} or method != "GET"
+            or urlsplit(url).path.startswith(("/portal-migration/hz/glow/", "/gp/glow/", "/gp/delivery/")))
+
+
 class SetupLedger:
     def __init__(self, root, plan, auth, amendment, check):
         self.root, self.plan, self.auth, self.amendment, self.check = Path(root), plan, auth, amendment, check
@@ -153,8 +206,15 @@ def perform_setup(session, bridge, auth):
     a = validate_amendment(root, plan, auth)
     if (root / "delivery_setup.complete.json").exists():
         return verify_setup(root, plan, auth)
-    immutable_json(root / "delivery_setup.attempt.json", sealed(dict(started_at=now(),
-        amendment_sha256=auth["delivery_setup_reference"]["sha256"], max_attempts=1)))
+    suffix = ""
+    if (root / "delivery_setup.attempt.json").exists():
+        validate_continuation(root, plan, auth, a)
+        suffix = ".continuation_2"
+        immutable_json(root / "delivery_setup.continuation_2.attempt.json", sealed(dict(started_at=now(),
+            continuation_sha256=auth["delivery_setup_continuation_reference"]["sha256"], total_setup_attempt=2)))
+    else:
+        immutable_json(root / "delivery_setup.attempt.json", sealed(dict(started_at=now(),
+            amendment_sha256=auth["delivery_setup_reference"]["sha256"], max_attempts=1)))
     ledger = SetupLedger(root, plan, auth, a, lambda: bridge.validate_authorization(auth))
     pending, failure = {}, []
     def boundary(route):
@@ -163,8 +223,24 @@ def perform_setup(session, bridge, auth):
             if failure or session.access_blocked:
                 return route.abort()
             is_page = req.is_navigation_request() and req.frame == session.page.main_frame
-            if is_page or req.resource_type in {"xhr", "fetch"}:
+            if requires_setup_accounting(req.url, req.method, req.resource_type, is_page):
                 if not is_page and not allowed_shipping_request(req.url, req.method, req.post_data or "", "28001"):
+                    # Retain denied UI requests without sending them. Previously
+                    # a legitimate UI mismatch was indistinguishable from no
+                    # request at all. Never save cookies or validation tokens.
+                    import hashlib
+                    data = req.post_data or ""
+                    try:
+                        fields = json.loads(data) if data.lstrip().startswith("{") else parse_qs(data)
+                        postal = fields.get("zipCode") if isinstance(fields, dict) else None
+                    except ValueError:
+                        postal = None
+                    evidence = dict(observed_at=now(), url=req.url, method=req.method,
+                        resource_type=req.resource_type, action="ABORTED_BEFORE_SEND", reason="OUTSIDE_APPROVED_UI_REQUEST_SCOPE",
+                        body_sha256=hashlib.sha256(data.encode()).hexdigest(), postal_code_values=postal)
+                    dp = root / "delivery_setup_evidence" / "denied_routes"
+                    if len(list(dp.glob("*.json"))) < 100:
+                        immutable_json(dp / (digest(evidence)+".json"), evidence)
                     return route.abort()
                 rp = ledger.reserve(req.url, req.method, "PAGE" if is_page else "OTHER", req.post_data or "")
                 pending[req] = rp
@@ -221,12 +297,12 @@ def perform_setup(session, bridge, auth):
         # A failed attempt remains consumed; this is evidence, not a retry.
         try:
             snapshot = session.page.content()
-            hp = root / "delivery_setup_evidence" / "failed_UI_snapshot.html"
+            hp = root / "delivery_setup_evidence" / ("failed_UI_snapshot"+suffix+".html")
             immutable_bytes(hp, snapshot.encode("utf8"))
             evidence = dict(html_path=str(hp), html_sha256=file_sha(hp), final_url=session.page.url)
         except Exception as capture_error:
             evidence = dict(capture_error=str(capture_error))
-        immutable_json(root / "delivery_setup.failure.json", sealed(dict(failed_at=now(),
+        immutable_json(root / ("delivery_setup"+suffix+".failure.json"), sealed(dict(failed_at=now(),
             error_type=type(exc).__name__, error=str(exc), route_errors=failure,
             pending_receipts=[str(p) for p in pending.values()], evidence=evidence)))
         raise

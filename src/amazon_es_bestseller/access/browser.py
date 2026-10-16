@@ -242,7 +242,8 @@ class BrowserSession:
                     "Amazon 配送地点弹窗未提供西班牙邮编输入框。"
                 )
             zip_input.fill(code, timeout=5000)
-            apply_button = self._visible_locator(("#GLUXZipUpdate",))
+            # Prefer the actual submit control in the saved real GLUX markup.
+            apply_button = self._visible_locator(("#GLUXZipUpdate input.a-button-input", "#GLUXZipUpdate"))
             if apply_button is None:
                 raise DeliveryLocationError("Amazon 配送地点弹窗未找到邮编确认按钮。")
             apply_button.click(timeout=5000)

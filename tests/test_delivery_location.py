@@ -146,6 +146,32 @@ def test_current_page_location_requires_actual_response_status(monkeypatch):
         session.ensure_spain_delivery("28001", navigate=False)
 
 
+def test_real_glux_markup_prefers_actual_submit_input(monkeypatch):
+    import gzip
+    from pathlib import Path
+    from bs4 import BeautifulSoup
+    fixture = Path(__file__).parent / "fixtures/detail_bridge5500/actual_failed_glux_UI.html.gz"
+    soup = BeautifulSoup(gzip.decompress(fixture.read_bytes()).decode("utf8"), "lxml")
+    assert soup.select_one("#GLUXZipUpdate input.a-button-input[type=submit]") is not None
+    chosen = []
+    class Locator(_FakeLocator):
+        def is_visible(self):
+            if self.selector == "#GLUXZipUpdate input.a-button-input":
+                return self.page.modal and not self.page.applied
+            return super().is_visible()
+        def click(self, **kwargs):
+            chosen.append(self.selector)
+            if self.selector == "#GLUXZipUpdate input.a-button-input":
+                self.page.applied = True
+            else:
+                super().click(**kwargs)
+    page = _FakePage(); page.locator = lambda selector: Locator(page, selector)
+    session = BrowserSession(); session.page = page
+    monkeypatch.setattr(session, "wait_for_product_page", lambda **kwargs: None)
+    session.ensure_spain_delivery("28001", navigate=False, current_status_code=200)
+    assert "#GLUXZipUpdate input.a-button-input" in chosen
+
+
 @pytest.mark.parametrize("status", [403, 429])
 def test_current_page_location_does_not_handle_restricted_response(monkeypatch, status):
     from amazon_es_bestseller.access.detector import AccessStopError

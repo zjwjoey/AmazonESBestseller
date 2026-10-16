@@ -41,6 +41,8 @@ def main():
         while True:
             state = sample(root, a.pid)
             atomic_json(root / "monitor_latest.json", state)
+            from .detail5500_hourly import persist_hour
+            persist_hour(root, state)
             if state["worker_status"].get("phase") == "COMPLETE" and (root / "detail_run_manifest.json").is_file():
                 break
             time.sleep(30)

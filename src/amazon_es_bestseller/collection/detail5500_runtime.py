@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from .quick5500_cli import export
 
 def audit_stage(bridge, stage, count):
     """Reopen HTML, metadata/receipt and parser result independently of writer."""
+    audit_started = time.monotonic()
     hashes, coverage, requests, records = {}, Counter(), [], []
     for t in bridge.plan["tasks"][:count]:
         path = bridge.root / "tasks" / t["task_id"] / "checkpoint.json"
@@ -67,6 +69,7 @@ def audit_stage(bridge, stage, count):
         raise ValueError("SYSTEMATIC_FIELD_COVERAGE_REVIEW_REQUIRED")
     bridge.gates_normal()
     proof = {"stage": stage, "passed": True, "completed_at": utc(), "run_id": bridge.plan["run_id"],
+        "independent_audit_elapsed_seconds": time.monotonic()-audit_started,
         "plan_sha256": digest(bridge.plan), "success_count": count, "actual_live_tasks": len(requests),
         "cache_tasks": count-len(requests), "minimum_request_interval_seconds": min(intervals, default=None),
         "field_coverage_count": dict(coverage), "field_coverage_denominator": count,

@@ -216,7 +216,7 @@ def test_adapter_live_boundary_fake_session_success_no_repeat(tmp_path, real_pag
     # This boundary test simulates the session location separately; the real
     # historical HTML is not claimed to have a verified Spain destination.
     monkeypatch.setattr("amazon_es_bestseller.collection.detail_bridge5500.inspect_delivery_location",
-                        lambda _: SimpleNamespace(is_spain=True))
+                        lambda _: SimpleNamespace(is_spain=True, text="MOCK Madrid 28001", postal_code="28001"))
     t = task()
     bridge = DetailBridge5500(tmp_path / "run", {"tasks": [t], "run_id": "test", "shared_gate_path": str(tmp_path / "shared_gate.json")})
     auth = auth_for(bridge, tmp_path)

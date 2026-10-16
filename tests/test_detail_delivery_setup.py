@@ -165,3 +165,56 @@ def test_only_first_delivery_failure_retried_and_success_not_replayed(tmp_path, 
     assert (slot / "response_metadata.attempt_2.json").exists()
     assert read_sealed(root / "receipts/first_2.json")["attempt"] == 2
     assert len(list((root / "receipts").glob("*.json"))) == 3
+
+
+def test_consumed_initialization_needs_new_explicit_approval(tmp_path):
+    from amazon_es_bestseller.collection.delivery_setup5500 import validate_continuation
+    root, plan, auth, a = fixture(tmp_path)
+    with pytest.raises(ValueError, match="NEW_EXPLICIT"):
+        validate_continuation(root, plan, auth, a)
+
+
+@pytest.mark.parametrize("change,expected", [(None,True), ("unapproved",False), ("three_attempts",False),
+                                            ("already_submitted",False), ("changed_evidence",False)])
+def test_additional_initialization_requires_bound_pre_submission_evidence(tmp_path, change, expected):
+    from amazon_es_bestseller.collection.delivery_setup5500 import validate_continuation
+    from amazon_es_bestseller.multisource.storage import atomic_json
+    root, plan, auth, amendment = fixture(tmp_path)
+    attempt = root / "delivery_setup.attempt.json"
+    immutable_json(attempt, sealed(dict(started_at="fixed", max_attempts=1)))
+    hp = root / "original_UI.html"; hp.write_text("real test UI fixture placeholder", encoding="utf8")
+    failure = root / "delivery_setup.failure.json"
+    immutable_json(failure, sealed(dict(error_type="DeliveryLocationError", pending_receipts=[],
+        evidence=dict(html_sha256=file_sha(hp)))))
+    sp = root / "receipts/delivery_setup_01.json"
+    immutable_json(sp, sealed(dict(request_role="DELIVERY_SETUP",kind="PAGE",method="GET",state="NORMAL",status_code=200,
+        request_url=amendment["initial_product_URL"])))
+    def ref(p):return dict(path=str(p),sha256=file_sha(p))
+    proposal = dict(approved=change!="unapproved",approved_by="user",approval_id="new_human_approval",
+        scope="ONE_ADDITIONAL_NORMAL_UI_INITIALIZATION_AFTER_UNCONFIRMED_UI_FAILURE",run_id=plan["run_id"],
+        plan_sha256=digest(plan),task_id=amendment["task_id"],initial_product_URL=amendment["initial_product_URL"],
+        shipping_postal_code="28001",max_total_setup_attempts=3 if change=="three_attempts" else 2,
+        max_total_setup_requests=8,total_request_cap_unchanged=auth["max_requests"],
+        request_deadline_unchanged=auth["request_deadline"],final_deadline_unchanged=auth["deadline"],
+        original_amendment_reference=auth["delivery_setup_reference"], initial_attempt_reference=ref(attempt),
+        initial_failure_reference=ref(failure),initial_setup_receipt_reference=ref(sp),initial_failed_UI_snapshot_reference=ref(hp))
+    pp=root/"continuation.json";immutable_json(pp,proposal)
+    auth["delivery_setup_continuation_reference"]=ref(pp)
+    if change=="already_submitted":
+        immutable_json(root/"receipts/delivery_setup_02.json",sealed(dict(request_role="DELIVERY_SETUP",kind="OTHER",method="POST",state="NORMAL")))
+    if change=="changed_evidence":hp.write_text("changed",encoding="utf8")
+    if expected:
+        assert validate_continuation(root,plan,auth,amendment)==proposal
+    else:
+        with pytest.raises(ValueError):validate_continuation(root,plan,auth,amendment)
+
+
+@pytest.mark.parametrize("url,method,kind,expected", [
+    ("https://www.amazon.es/portal-migration/hz/glow/address-change", "POST", "other", True),
+    ("https://www.amazon.es/portal-migration/hz/glow/address-change", "GET", "script", True),
+    ("https://www.amazon.es/gp/delivery/ajax/address-change.html", "POST", "script", True),
+    ("https://www.amazon.es/ordinary.js", "GET", "script", False),
+])
+def test_shipping_requests_cannot_escape_accounting_by_resource_type(url, method, kind, expected):
+    from amazon_es_bestseller.collection.delivery_setup5500 import requires_setup_accounting
+    assert requires_setup_accounting(url,method,kind) is expected

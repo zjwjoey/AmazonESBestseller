@@ -110,6 +110,9 @@ def parse_candidate_detail(task, html, meta):
         bridge_version=BRIDGE_VERSION, collected_at=meta.get("collected_at"), access_state="NORMAL",
         status_code=meta["status_code"], canonical_urls=canonicals,
         source_snapshot_id=task["source_snapshot_id"], source_memberships=task["source_memberships"])
+    delivery = inspect_delivery_location(html)
+    record.update(delivery_location_text=delivery.text, delivery_postal_code=delivery.postal_code,
+                  delivery_is_spain=delivery.is_spain)
     return {"status": "SUCCESS", "identity_status": record["identity_status"], "record": record}
 
 
@@ -287,8 +290,9 @@ class DetailBridge5500:
         before increasing the cumulative task limit. No successful task replay.
         """
         self.validate_authorization(auth)
-        immutable_json(self.root / ("authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference")
-                                   else "authorization.approved.json"), auth)
+        auth_name = ("authorization.delivery_location_2.approved.json" if auth.get("delivery_setup_continuation_reference") else
+                     "authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference") else "authorization.approved.json")
+        immutable_json(self.root / auth_name, auth)
         if until_completed > 30:
             self.validate_stage("T1", 30)
         if until_completed > 100:
