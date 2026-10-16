@@ -148,6 +148,25 @@ class V4T1Runner:
                             try:
                                 descriptor = transport.prepare_ajax_descriptor({**descriptor, 'source_id': sid}, referer=url)
                             except ValueError as exc:
+                                # Preserve the final live DOM and actual native
+                                # proof references before closing a failed page.
+                                # This is local evidence, never another request
+                                # or permission to replay an unobserved protocol.
+                                if not (descriptor.get('metadata') or {}).get('carousel'):
+                                    diagnostic={'kind':'V4_NATIVE_GRID_PREPARATION_FAILED','source_id':sid,
+                                        'reason':str(exc),'page_url':url,
+                                        'saved_PAGE_receipt':e._receipt_ref(root_receipt),
+                                        'exact_grid_visibility_attempts':getattr(transport,'last_prepare_grid_visibility',[]),
+                                        'native_contract_references':[
+                                            {'path':c.get('native_contract_evidence_path'),
+                                             'sha256':c.get('native_contract_evidence_sha256')}
+                                            for c in getattr(transport,'_native_acp_requests',[])],
+                                        'no_new_network_request':True,'completeness_status':'UNKNOWN'}
+                                    try:
+                                        diagnostic['final_rendered_DOM']=self.store.save_html(transport.session.page.content())
+                                    except Exception as diagnostic_error:
+                                        diagnostic['DOM_capture_error']=type(diagnostic_error).__name__
+                                    self.store.append_event(run_id,diagnostic)
                                 legacy = {'page': parsed['page'].get('legacy_page', {}), 'observations': parsed['observations']}
                                 if (not (descriptor.get('metadata') or {}).get('carousel')
                                         or not continuation_unavailable(legacy, receipt, str(exc), e._gate(plan))):

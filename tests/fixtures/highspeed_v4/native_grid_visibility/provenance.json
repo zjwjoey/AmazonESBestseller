@@ -1,0 +1,89 @@
+{
+  "reason": "ACP_NATIVE_REQUEST_CONTRACT_NOT_OBSERVED",
+  "actual_STOP_at": "2026-10-16T07:48:04.039449Z",
+  "worker_exited_after_checkpoint": true,
+  "requests": 2146,
+  "PAGE": 593,
+  "native": 1553,
+  "receipt": {
+    "request_id": "req_9866c880cf274ff0bbfb84173156d4bd",
+    "observed_at": "2026-10-16T07:47:43.344944Z",
+    "status_code": 200,
+    "access_state": "NORMAL",
+    "final_url": "https://www.amazon.es/gp/new-releases/hpc/6691131031/ref=zg_bsnr_nav_hpc_1",
+    "html_path": "F:\\AmazonESBestseller\\runtime\\global30000_batches\\global30000_d8c4546168db\\store\\html\\44\\44b9ac446205e31e6077561bbb239d035f2c323b35c5508b1a0830740719435f.html",
+    "evidence_path": "F:\\AmazonESBestseller\\runtime\\global30000_batches\\global30000_d8c4546168db\\store\\runs\\global30000_d8c4546168db\\responses\\req_9866c880cf274ff0bbfb84173156d4bd.json",
+    "evidence_sha256": "44b9ac446205e31e6077561bbb239d035f2c323b35c5508b1a0830740719435f"
+  },
+  "body_sha256": "44b9ac446205e31e6077561bbb239d035f2c323b35c5508b1a0830740719435f",
+  "source": {
+    "actual_source_url": "https://www.amazon.es/gp/new-releases/hpc/6691131031/ref=zg_bsnr_nav_hpc_1",
+    "category_path": [],
+    "enabled": true,
+    "navigation_contract": "V4_THREE_SOURCE_5001",
+    "navigation_evidence": {
+      "anchor_dom_index": 61,
+      "anchor_dom_sha256": "97ef0a4935167cb9dd5d0e531aa326b7a83d47ab73e58621c976ca68d056cdc8",
+      "approved": false,
+      "browse_node_id": "6691131031",
+      "destination_product_supply": "UNVERIFIED",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t2_15da5305d976\\store\\html\\42\\42e3794872f945f7a86ed71950e9c733c3c135c3f1def0714f7d50926e4a8f70.html",
+      "evidence_sha256": "42e3794872f945f7a86ed71950e9c733c3c135c3f1def0714f7d50926e4a8f70",
+      "label_raw": "Higiene \u00edntima",
+      "observed_at": "2026-10-15T02:39:26.450817Z",
+      "page_url": "https://www.amazon.es/gp/new-releases/hpc/ref=zg_bsnr_hpc_sm",
+      "parent_access_status": "NORMAL",
+      "parent_http_status": 200,
+      "parent_source_id": "v4_05055631398c2f23d5f0cf03",
+      "parent_source_subtype": "NEW_RELEASE_SALES_RANKING",
+      "parent_source_type": "NEW_RELEASES",
+      "parent_status": "VERIFIED_WITH_PRODUCTS",
+      "raw_href": "/gp/new-releases/hpc/6691131031/ref=zg_bsnr_nav_hpc_1",
+      "relationship": "CHILD_CATEGORY",
+      "status": "PENDING_REVIEW",
+      "url": "https://www.amazon.es/gp/new-releases/hpc/6691131031/ref=zg_bsnr_nav_hpc_1"
+    },
+    "navigation_parent": {
+      "actual_source_url": "https://www.amazon.es/gp/new-releases/hpc/ref=zg_bsnr_hpc_sm",
+      "category_path": [],
+      "enabled": true,
+      "navigation_evidence": {
+        "evidence_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_completeness_20261015T005832Z\\store\\html\\97\\9708642d51adf676e50eea6a076ca4988d673cd21c7593964dec6128ca684d9b.html",
+        "evidence_sha256": "9708642d51adf676e50eea6a076ca4988d673cd21c7593964dec6128ca684d9b",
+        "label_raw": "Ver m\u00e1s",
+        "page_url": "https://www.amazon.es/gp/new-releases",
+        "raw_href": "/gp/new-releases/hpc/ref=zg_bsnr_hpc_sm"
+      },
+      "page_urls": [
+        "https://www.amazon.es/gp/new-releases/hpc/ref=zg_bsnr_hpc_sm"
+      ],
+      "parser_profile": "V4",
+      "research_category": null,
+      "source_id": "v4_05055631398c2f23d5f0cf03",
+      "source_status": "UNVERIFIED",
+      "source_subtype": "NEW_RELEASE_SALES_RANKING",
+      "source_type": "NEW_RELEASES",
+      "url": "https://www.amazon.es/gp/new-releases/hpc/ref=zg_bsnr_hpc_sm"
+    },
+    "page_urls": [
+      "https://www.amazon.es/gp/new-releases/hpc/6691131031/ref=zg_bsnr_nav_hpc_1"
+    ],
+    "parser_profile": "V4",
+    "research_category": null,
+    "source_id": "v4_70b64444836b3196f4d2d1a5",
+    "source_status": "UNVERIFIED",
+    "source_subtype": "NEW_RELEASE_SALES_RANKING",
+    "source_type": "NEW_RELEASES",
+    "url": "https://www.amazon.es/gp/new-releases/hpc/6691131031/ref=zg_bsnr_nav_hpc_1"
+  },
+  "metadata_count": 34,
+  "server_representation_slots": 30,
+  "unobserved_metadata_tail_count": 4,
+  "not_an_explicit_empty_page": true,
+  "end_marker_not_terminal_proof": "Saved successful 50-metadata pages also contain endOfList while native continuation is required; do not use this marker to suppress missing continuation.",
+  "no_new_NETWORK_ERROR_or_restriction_evidence": true,
+  "no_endpoint_or_payload_fabricated": true,
+  "no_repeated_live_probe_or_resume": true,
+  "current_status": "PAUSED_CHECKPOINT_QA_PENDING",
+  "next_step": "Offline native batch/capture matching analysis using saved actual page and prior real request contracts; fixture red test and minimal fix only if defect demonstrated, then regression and latest CI before same-run resume."
+}

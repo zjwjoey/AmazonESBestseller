@@ -195,6 +195,7 @@ class PlaywrightTransport:
     def prepare_ajax_descriptor(self, descriptor: dict, *, referer: str) -> dict:
         """Use a captured native request, never a guessed request-body contract."""
         self.last_prepare_browser_wait_seconds = 0.0
+        self.last_prepare_grid_visibility = []
         if not self._acp_capture_installed:
             raise ValueError("ACP_NATIVE_CAPTURE_NOT_INSTALLED")
         page = getattr(self.session, "page", None)
@@ -247,21 +248,36 @@ class PlaywrightTransport:
                 break
             expected_path = metadata.get("path") or (expected_parts.path.removesuffix("nextPage") if expected else None)
             expected_recs = metadata.get("client_recs_raw")
-            page.evaluate("""(() => {
+            visibility = page.evaluate("""(() => {
                 const expectedPath = """ + json.dumps(expected_path) + """;
                 const expectedRecs = """ + json.dumps(expected_recs) + """;
+                const showGridBoundary = """ + json.dumps(attempt % 2 == 1) + """;
                 const containers = Array.from(document.querySelectorAll('[data-acp-path], [data-client-recs-list]'));
-                const grid = containers.find(el => expectedPath && el.getAttribute('data-acp-path') === expectedPath)
-                    || containers.find(el => expectedRecs && el.getAttribute('data-client-recs-list') === expectedRecs)
-                    || document.querySelector('#zg, #bestsellers, .zg-list') || document;
+                // The saved rec list identifies the ranking grid; a shared ACP
+                // path may also belong to unrelated recommendation widgets.
+                const matches = containers.filter(el => expectedRecs && el.getAttribute('data-client-recs-list') === expectedRecs);
+                if (matches.length !== 1) return false;
+                const grid = matches[0];
+                if (expectedPath) {
+                    const owner = grid.closest('[data-acp-path]');
+                    if (owner && owner.getAttribute('data-acp-path') !== expectedPath) return false;
+                }
+                // A card can end before the lazy-loading owner boundary (for
+                // example an unavailable slot). Alternate ordinary visibility
+                // at both points; never invoke website factories or fetch.
+                if (showGridBoundary) {
+                    grid.scrollIntoView({block:'end', inline:'nearest', behavior:'instant'});
+                    window.scrollBy(0, Math.max(80, Math.floor(window.innerHeight * 0.35)));
+                    return true;
+                }
                 const cards = grid.querySelectorAll('#gridItemRoot, [id^="p13n-asin-index-"], .zg-grid-general-faceout, [data-ranking-card="true"]');
                 if (cards.length) {
                     cards[cards.length - 1].scrollIntoView({block:'end', inline:'nearest', behavior:'instant'});
                     window.scrollBy(0, Math.max(80, Math.floor(window.innerHeight * 0.35)));
-                } else {
-                    window.scrollBy(0, Math.max(80, Math.floor(window.innerHeight * 0.8)));
-                }
+                } else grid.scrollIntoView({block:'end', inline:'nearest', behavior:'instant'});
+                return true;
             })()""")
+            self.last_prepare_grid_visibility.append(visibility is True)
             wait_started=time.perf_counter()
             page.wait_for_timeout(500)
             self.last_prepare_browser_wait_seconds+=time.perf_counter()-wait_started
