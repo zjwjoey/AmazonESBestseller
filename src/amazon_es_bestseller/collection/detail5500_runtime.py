@@ -17,11 +17,13 @@ from .quick_selection import file_sha
 from .quick5500_cli import export
 
 
-def audit_stage(bridge, stage, count):
+def audit_stage(bridge, stage, count, auth=None):
     """Reopen HTML, metadata/receipt and parser result independently of writer."""
     audit_started = time.monotonic()
     hashes, coverage, requests, records = {}, Counter(), [], []
-    for t in bridge.plan["tasks"][:count]:
+    from .identity_quarantine5500 import stage_tasks
+    tasks, quarantines = stage_tasks(bridge, stage, count, auth)
+    for t in tasks:
         path = bridge.root / "tasks" / t["task_id"] / "checkpoint.json"
         outcome = read_sealed(path)
         if outcome["status"] not in SUCCESS:
@@ -80,6 +82,11 @@ def audit_stage(bridge, stage, count):
         "missing_fields_not_imputed": True, "checkpoint_sha256": hashes,
         "independent_HTML_identity_and_all_parsed_fields_replayed": True,
         "source_memberships": sorted({m["source_type"] for r in records for m in r["source_memberships"]})}
+    if quarantines:
+        proof.update(reviewed_identity_quarantines_reference=auth["reviewed_identity_quarantines_reference"],
+                     successful_task_ids=[t["task_id"] for t in tasks],
+                     reviewed_identity_tasks_not_success=sorted(quarantines),
+                     frozen_queue_and_failure_evidence_preserved=True)
     immutable_json(bridge.root / (stage + "_acceptance.json"), sealed(proof))
     return proof
 
@@ -149,12 +156,12 @@ def run(root, auth_path, profile):
             session.page.route("**/*", boundary)
             for name, count in (("T1", 30), ("T2", 100), ("FINAL", len(plan["tasks"]))):
                 if (root / (name + "_acceptance.json")).exists():
-                    bridge.validate_stage(name, count)
+                    bridge.validate_stage(name, count, auth=auth)
                     continue
                 atomic_json(root / "worker_status.json", {"phase": name + "_COLLECTING", "updated_at": utc(), "code_sha": head})
                 bridge.run(session, auth, until_completed=count, authorization_filename=Path(auth_path).name)
                 atomic_json(root / "worker_status.json", {"phase": name + "_INDEPENDENT_AUDIT", "updated_at": utc()})
-                audit_stage(bridge, name, count)
+                audit_stage(bridge, name, count, auth=auth)
                 export(root)
             immutable_json(root / "detail_run_manifest.json", {"run_id": plan["run_id"], "completed_at": utc(),
                 "plan_sha256": digest(plan), "authorization_sha256": file_sha(auth_path), "code_sha": head,

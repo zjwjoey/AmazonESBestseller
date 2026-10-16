@@ -316,7 +316,8 @@ class DetailBridge5500:
             from .delivery_setup5500 import validate_amendment
             validate_amendment(self.root, self.plan, auth)
         for name in ("delivery_setup_verification_reference", "delivery_setup_continuation_reference",
-                     "delivery_setup_repair_reference", "request_budget_reservation_reference", "post_UI_first_detail_recheck_reference"):
+                     "delivery_setup_repair_reference", "request_budget_reservation_reference", "post_UI_first_detail_recheck_reference",
+                     "reviewed_identity_quarantines_reference"):
             if auth.get(name) and file_sha(auth[name]["path"]) != auth[name]["sha256"]:
                 raise ValueError("DELIVERY_CONTROL_REFERENCE_CHANGED")
         from .detail_budget5500 import uncertain_setup_page_holds
@@ -359,12 +360,19 @@ class DetailBridge5500:
             auth_name = authorization_filename
         immutable_json(self.root / auth_name, auth)
         if until_completed > 30:
-            self.validate_stage("T1", 30)
+            self.validate_stage("T1", 30, auth=auth)
         if until_completed > 100:
-            self.validate_stage("T2", 100)
+            self.validate_stage("T2", 100, auth=auth)
+        from .identity_quarantine5500 import reviewed_identity_quarantines
+        quarantines = reviewed_identity_quarantines(self.root, self.plan, auth)
         with file_lock(self.root / "collector.lock"), file_lock(Path(self.plan["shared_gate_path"]).parent / "highspeed_live.lock"):
             reservations = [read_sealed(p) for p in (self.root / "receipts").glob("*.json")]
-            for task in self.plan["tasks"][:until_completed]:
+            scope = self.plan["tasks"] if quarantines and until_completed > 30 else self.plan["tasks"][:until_completed]
+            for task in scope:
+                if task["task_id"] in quarantines:
+                    continue  # Original failed checkpoint remains immutable and does not count as success.
+                if quarantines and until_completed > 30 and sum(o["status"] in SUCCESS for o in self.outcomes.values()) >= until_completed:
+                    break
                 slot = self.root / "tasks" / task["task_id"]
                 checkpoint = slot / "checkpoint.json"
                 attempt = 1
@@ -477,11 +485,20 @@ class DetailBridge5500:
         if result["candidate_id"] != task["candidate_id"] or result["run_id"] != self.plan["run_id"]:
             raise ValueError("SUCCESS_TASK_IDENTITY_MISMATCH")
 
-    def validate_stage(self, name, count):
+    def validate_stage(self, name, count, auth=None):
         proof = read_sealed(self.root / (name + "_acceptance.json"))
         if proof.get("passed") is not True or proof.get("plan_sha256") != digest(self.plan):
             raise ValueError("PRIOR_STAGE_ACCEPTANCE_REQUIRED")
-        for task in self.plan["tasks"][:count]:
+        from .identity_quarantine5500 import stage_tasks
+        tasks, quarantines = stage_tasks(self, name, count, auth)
+        if proof.get("reviewed_identity_quarantines_reference"):
+            if (proof["reviewed_identity_quarantines_reference"] != (auth or {}).get("reviewed_identity_quarantines_reference")
+                    or proof.get("successful_task_ids") != [t["task_id"] for t in tasks]
+                    or proof.get("success_count") != count):
+                raise ValueError("STAGE_TRUE_SUCCESS_SCOPE_MISMATCH")
+        elif quarantines and name == "T2":
+            raise ValueError("STAGE_REVIEWED_FAILURE_SCOPE_REQUIRED")
+        for task in tasks:
             p = self.root / "tasks" / task["task_id"] / "checkpoint.json"
             outcome = read_sealed(p)
             if outcome["status"] not in SUCCESS:
