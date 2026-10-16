@@ -45,6 +45,45 @@ def normalize(url):
     return normalize_product_url_v3(url).get("normalized_product_url")
 
 
+def _owned_child_parent_canonical(soup, active, canonical_asins, requested, final):
+    """Prove a selected child while Amazon canonical names its explicit parent.
+
+    URL or a family member alone never proves the selected product. Require
+    matching buybox input and owned Twister current/landing/display evidence.
+    """
+    if (not requested or requested != final or active != {requested}
+            or len(canonical_asins) != 1 or requested in canonical_asins
+            or len(soup.select('link[rel="canonical"]')) != 1):
+        return None
+    owned = soup.select("#ppd #twister_feature_div")
+    if len(owned) != 1:
+        return None
+    scripts = [e.get_text() for e in owned[0].select("script")
+               if re.search(r"P\.register\(['\"]twister-js-init-dpx-data['\"]\s*,", e.get_text())]
+    buybox = {str(e.get("value") or "").strip().upper()
+              for e in soup.select("#ppd #buybox input#ASIN[name=ASIN]")}
+    if len(scripts) != 1 or buybox != {requested}:
+        return None
+    script = scripts[0]
+    def unique(key):
+        values = re.findall(r'"' + key + r'"\s*:\s*"([A-Z0-9]{10})"', script)
+        return values[0] if values and len(set(values)) == 1 else None
+    parent = unique("parentAsin")
+    explicit_parents = {str(e.get("value") or "").strip().upper()
+                        for e in soup.select("input#parentASIN, input[name=parentASIN]")}
+    from .detail_v2 import _json_after
+    display = _json_after(script, '"dimensionValuesDisplayData"')
+    if (unique("currentAsin") != requested or unique("landingAsin") != requested
+            or canonical_asins != {parent} or not isinstance(display, dict)
+            or requested not in display or not isinstance(display[requested], list)
+            or (explicit_parents and explicit_parents != {parent})):
+        return None
+    return {"rule": "OWNED_TWISTER_CURRENT_LANDING_BUYBOX_CHILD_CANONICAL_PARENT_V1",
+            "current_asin": requested, "parent_asin": parent,
+            "source": "#ppd #twister_feature_div / twister-js-init-dpx-data",
+            "buybox_input": "#ppd #buybox input#ASIN[name=ASIN]"}
+
+
 def parse_candidate_detail(task, html, meta):
     """Reuse V2 field extraction, adding strict active-product URL binding."""
     access = detect_access_status(meta.get("status_code"), html).value
@@ -63,9 +102,13 @@ def parse_candidate_detail(task, html, meta):
     requested_asin = asin_from_url(task["request_url"])
     final_asin = asin_from_url(final)
     strong = active | canonical_asins
+    parent_proof = _owned_child_parent_canonical(soup, active, canonical_asins, requested_asin, final_asin)
+    if parent_proof:
+        strong = active
     if len(strong) != 1 or (active and canonical_asins and active != canonical_asins):
-        return {"status": "IDENTITY_REVIEW", "reason": "ACTIVE_PRODUCT_ASIN_NOT_UNAMBIGUOUS",
-                "observed_active_asins": sorted(strong)}
+        if not parent_proof:
+            return {"status": "IDENTITY_REVIEW", "reason": "ACTIVE_PRODUCT_ASIN_NOT_UNAMBIGUOUS",
+                    "observed_active_asins": sorted(strong)}
     observed = next(iter(strong))
     if (requested_asin and requested_asin != observed) or (final_asin and final_asin != observed):
         return {"status": "IDENTITY_REVIEW", "reason": "ACTIVE_CHILD_ASIN_CHANGED",
@@ -93,6 +136,8 @@ def parse_candidate_detail(task, html, meta):
     variation = record.get("variation_evidence") or {}
     linked_parent = variation.get("parent_asin") if variation.get("current_asin") == observed else ""
     parent = explicit_parent or linked_parent or None
+    if parent_proof:
+        parent = parent_proof["parent_asin"]
     if parent and not re.fullmatch(r"[A-Z0-9]{10}", parent):
         parent = None
     record["parent_asin"] = parent
@@ -111,6 +156,8 @@ def parse_candidate_detail(task, html, meta):
         status_code=meta["status_code"], canonical_urls=canonicals,
         source_snapshot_id=task["source_snapshot_id"], source_memberships=task["source_memberships"])
     delivery = inspect_delivery_location(html)
+    if parent_proof:
+        record["active_child_canonical_parent_evidence"] = parent_proof
     record.update(delivery_location_text=delivery.text, delivery_postal_code=delivery.postal_code,
                   delivery_is_spain=delivery.is_spain)
     return {"status": "SUCCESS", "identity_status": record["identity_status"], "record": record}
@@ -292,7 +339,7 @@ class DetailBridge5500:
             raise ValueError("CURRENT_CODE_CI_SUCCESS_REQUIRED")
         self.gates_normal()
 
-    def run(self, session, auth, *, until_completed):
+    def run(self, session, auth, *, until_completed, authorization_filename=None):
         """Caller owns BrowserSession. One shared live lock, one frozen queue.
 
         T1/T2 boundaries are explicit; separate stage acceptance must be saved
@@ -304,6 +351,12 @@ class DetailBridge5500:
                      "authorization.delivery_location_verification_1.approved.json" if auth.get("delivery_setup_verification_reference") else
                      "authorization.delivery_location_2.approved.json" if auth.get("delivery_setup_continuation_reference") else
                      "authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference") else "authorization.approved.json")
+        if authorization_filename is not None:
+            if (Path(authorization_filename).name != authorization_filename
+                    or not authorization_filename.startswith("authorization.")
+                    or not authorization_filename.endswith(".approved.json")):
+                raise ValueError("AUTHORIZATION_REVISION_FILENAME_INVALID")
+            auth_name = authorization_filename
         immutable_json(self.root / auth_name, auth)
         if until_completed > 30:
             self.validate_stage("T1", 30)

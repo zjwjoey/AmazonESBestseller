@@ -86,6 +86,8 @@ def audit_stage(bridge, stage, count):
 
 def run(root, auth_path, profile):
     root = Path(root)
+    if Path(auth_path).resolve().parent != root.resolve():
+        raise ValueError("AUTHORIZATION_MUST_BE_PRESERVED_IN_SAME_RUN")
     plan = json.loads((root / "detail_plan_5500.json").read_text(encoding="utf8"))
     auth = json.loads(Path(auth_path).read_text(encoding="utf8"))
     bridge = DetailBridge5500(root, plan)
@@ -133,7 +135,7 @@ def run(root, auth_path, profile):
                     session.page.route("**/*", boundary)
                     atomic_json(root / "worker_status.json", {"phase": "FIRST_DETAIL2_POST_UI_ACTUAL_LOCATION_VERIFICATION", "updated_at": utc()})
                     if not (root / "delivery_setup.complete.json").exists():
-                        bridge.run(session, auth, until_completed=1)
+                        bridge.run(session, auth, until_completed=1, authorization_filename=Path(auth_path).name)
                         finalize_setup_from_first_detail(bridge, auth)
                     else:
                         from .delivery_setup5500 import verify_setup
@@ -150,7 +152,7 @@ def run(root, auth_path, profile):
                     bridge.validate_stage(name, count)
                     continue
                 atomic_json(root / "worker_status.json", {"phase": name + "_COLLECTING", "updated_at": utc(), "code_sha": head})
-                bridge.run(session, auth, until_completed=count)
+                bridge.run(session, auth, until_completed=count, authorization_filename=Path(auth_path).name)
                 atomic_json(root / "worker_status.json", {"phase": name + "_INDEPENDENT_AUDIT", "updated_at": utc()})
                 audit_stage(bridge, name, count)
                 export(root)
