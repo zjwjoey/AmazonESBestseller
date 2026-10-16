@@ -85,6 +85,8 @@ def parse_candidate_detail(task, html, meta):
     record["monthly_bought_semantics"] = "VISIBLE_LOWER_BOUND_NOT_EXACT_SALES"
     record["rating_value"] = parse_rating_es(record.get("rating_raw"))
     record["rating_count"] = parse_review_count_es(record.get("review_count_raw"))
+    record["reference_price_raw"] = record.pop("original_price_raw", "")
+    record["reference_price_semantics"] = "EXPLICIT_STRUCK_REFERENCE_NOT_HISTORICAL_ORIGINAL"
     parent_input = soup.select_one("input#parentASIN, input[name=parentASIN]")
     explicit_parent = str(parent_input.get("value") or "").strip().upper() if parent_input else ""
     variation = record.get("variation_evidence") or {}

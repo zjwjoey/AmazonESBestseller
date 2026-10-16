@@ -56,6 +56,7 @@ def prepare(args):
     immutable_json(root / "selection_report.json", report)
     now = datetime.now(timezone.utc)
     proposal = {"approved": False, "scope": "DETAIL_5500_INDEPENDENT", "run_id": args.run_id,
+        "runtime_root": str(root.resolve()),
         "plan_sha256": digest(plan), "selected_sha256": file_sha(root / "selected_5500.json"),
         "max_requests": 6050, "max_page_requests": 6050, "max_other_requests": 0,
         "max_attempts_per_task": 1, "request_start_interval_seconds": 3,
