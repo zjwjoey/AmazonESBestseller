@@ -54,6 +54,8 @@ def audit_stage(bridge, stage, count):
     # Requests of a stage can be interleaved with cache hits, but never repeated.
     if len({r["task_id"] for r in requests}) != len(requests) or intervals and min(intervals) < 3:
         raise ValueError("DUPLICATE_OR_PACING_VIOLATION")
+    if count >= 20 and any(coverage[k] == 0 for k in ("brand_raw", "current_price_raw", "attributes")):
+        raise ValueError("SYSTEMATIC_FIELD_COVERAGE_REVIEW_REQUIRED")
     bridge.gates_normal()
     proof = {"stage": stage, "passed": True, "completed_at": utc(), "run_id": bridge.plan["run_id"],
         "plan_sha256": digest(bridge.plan), "success_count": count, "actual_live_tasks": len(requests),
