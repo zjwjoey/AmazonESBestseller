@@ -51,6 +51,8 @@ def test_owner_broker_isolates_transports_and_exception_identity():
     assert values[0]=={'parent':'0','lane':0}
     assert values[2]=={'parent':'2','lane':2}
     assert set(calls)=={(0,'0'),(1,'1'),(2,'2')}
+    with pytest.raises(RuntimeError,match='WORKER_THREAD'):
+        b.proxy(0).fetch_page('x')
     b.close()
     with pytest.raises(ValueError):b.proxy(0).fetch_page('x')
 

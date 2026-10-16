@@ -35,6 +35,8 @@ class OwnerThreadBroker:
             raise ValueError('UNAPPROVED_LANE_BROWSER_OPERATION')
         if self.closed:
             raise ValueError('THREE_LANE_BROKER_CLOSED')
+        if get_ident()==self.owner:
+            raise RuntimeError('BROWSER_PROXY_REQUIRES_WORKER_THREAD')
         future = Future()
         self.queue.put((lane, method, args, kwargs, future))
         return future.result()
