@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..access.browser import BrowserSession
+from ..access.location import inspect_delivery_location
 from ..multisource.storage import atomic_json, digest, file_lock, immutable_json, read_sealed, sealed
 from .detail_bridge5500 import DetailBridge5500, SUCCESS, parse_candidate_detail, safe_url, utc
 from .quick_selection import file_sha
@@ -35,7 +36,12 @@ def audit_stage(bridge, stage, count):
                     or r["html_sha256"] != file_sha(outcome["html_path"])):
                 raise ValueError("STAGE_RECEIPT_BINDING_FAILED")
             requests.append(r)
-            meta = json.loads((path.parent / "response_metadata.json").read_text(encoding="utf8"))
+            mp = Path(outcome.get("response_metadata_path") or path.parent / "response_metadata.json")
+            if outcome.get("response_metadata_sha256") and file_sha(mp) != outcome["response_metadata_sha256"]:
+                raise ValueError("STAGE_METADATA_SHA_MISMATCH")
+            meta = json.loads(mp.read_text(encoding="utf8"))
+        if inspect_delivery_location(html).is_spain is not True:
+            raise ValueError("STAGE_SPAIN_DESTINATION_REQUIRED")
         replay = parse_candidate_detail(t, html, meta)
         if replay["status"] != "SUCCESS" or replay["record"] != outcome["record"]:
             raise ValueError("STAGE_INDEPENDENT_DETAIL_REPLAY_MISMATCH")
@@ -49,7 +55,10 @@ def audit_stage(bridge, stage, count):
             raise ValueError("ORDERED_RAW_ATTRIBUTES_REQUIRED")
         records.append(record)
         hashes[t["task_id"]] = file_sha(path)
-    times = sorted(datetime.fromisoformat(r["started_at"]) for r in requests)
+    all_paid = [read_sealed(p) for p in (bridge.root / "receipts").glob("*.json")]
+    if any(r.get("state") == "RESERVED" for r in all_paid):
+        raise ValueError("STAGE_IN_FLIGHT_REQUEST")
+    times = sorted(datetime.fromisoformat(r["started_at"]) for r in all_paid)
     intervals = [(b-a).total_seconds() for a, b in zip(times, times[1:])]
     # Requests of a stage can be interleaved with cache hits, but never repeated.
     if len({r["task_id"] for r in requests}) != len(requests) or intervals and min(intervals) < 3:
@@ -77,7 +86,8 @@ def run(root, auth_path, profile):
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if head != auth["code_sha"] or subprocess.check_output(["git", "status", "--porcelain"], text=True).strip():
         raise ValueError("APPROVED_CLEAN_CODE_REQUIRED")
-    # No bootstrap navigation, no change of profile/identity or delivery region.
+    # The original profile stays fixed; only the separately approved normal UI
+    # delivery setting is allowed before the frozen product queue resumes.
     with file_lock(root / "controller.lock"), BrowserSession(headless=True, profile_dir=profile) as session:
         session.document_responses = []
         session.access_blocked = False
@@ -106,8 +116,12 @@ def run(root, auth_path, profile):
                 if initial.url not in allowed_initial:
                     return route.abort()
             return route.continue_()
-        session.page.route("**/*", boundary)
         try:
+            if auth.get("delivery_setup_reference"):
+                from .delivery_setup5500 import perform_setup
+                atomic_json(root / "worker_status.json", {"phase": "APPROVED_DELIVERY_UI_SETUP", "updated_at": utc()})
+                perform_setup(session, bridge, auth)
+            session.page.route("**/*", boundary)
             for name, count in (("T1", 30), ("T2", 100), ("FINAL", len(plan["tasks"]))):
                 if (root / (name + "_acceptance.json")).exists():
                     bridge.validate_stage(name, count)

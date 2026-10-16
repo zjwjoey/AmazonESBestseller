@@ -259,7 +259,11 @@ class DetailBridge5500:
         at = datetime.now(timezone.utc)
         if not datetime.fromisoformat(auth["starts_at"]) <= at < datetime.fromisoformat(auth.get("request_deadline") or auth["deadline"]):
             raise ValueError("DETAIL_AUTHORIZATION_OUTSIDE_TIME")
-        if (auth["max_page_requests"] > auth["max_requests"] or auth["max_other_requests"] != 0
+        if auth.get("delivery_setup_reference"):
+            from .delivery_setup5500 import validate_amendment
+            validate_amendment(self.root, self.plan, auth)
+        if (auth["max_page_requests"] > auth["max_requests"] or
+                (auth["max_other_requests"] != 0 and not auth.get("delivery_setup_reference"))
                 or auth["request_start_interval_seconds"] < 3 or auth["max_attempts_per_task"] not in (1, 2)):
             raise ValueError("DETAIL_BUDGET_OR_PACING_INVALID")
         ref = auth["offline_acceptance_reference"]
@@ -283,7 +287,8 @@ class DetailBridge5500:
         before increasing the cumulative task limit. No successful task replay.
         """
         self.validate_authorization(auth)
-        immutable_json(self.root / "authorization.approved.json", auth)
+        immutable_json(self.root / ("authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference")
+                                   else "authorization.approved.json"), auth)
         if until_completed > 30:
             self.validate_stage("T1", 30)
         if until_completed > 100:
@@ -293,15 +298,25 @@ class DetailBridge5500:
             for task in self.plan["tasks"][:until_completed]:
                 slot = self.root / "tasks" / task["task_id"]
                 checkpoint = slot / "checkpoint.json"
+                attempt = 1
                 if checkpoint.exists():
                     # Failures require explicit retry action; never auto-success.
                     old = read_sealed(checkpoint)
                     if old["status"] in SUCCESS:
                         self.verify_saved_success(task, old)
                         continue
-                    raise ValueError("UNRESOLVED_TASK_BLOCKS_STAGE: " + task["task_id"])
+                    from .delivery_setup5500 import verify_setup
+                    a = verify_setup(self.root, self.plan, auth) if auth.get("delivery_setup_reference") else {}
+                    if (a.get("task_id") != task["task_id"] or old.get("status") != "IDENTITY_REVIEW"
+                            or old.get("reason") != "SPAIN_DELIVERY_LOCATION_NOT_VERIFIED"
+                            or old.get("receipt_path") != a["original_failed_receipt_reference"]["path"]
+                            or (self.root / "receipts" / (task["task_id"]+"_2.json")).exists()):
+                        raise ValueError("UNRESOLVED_TASK_BLOCKS_STAGE: " + task["task_id"])
+                    immutable_bytes(slot / "checkpoint.attempt_1.preserved.json", checkpoint.read_bytes())
+                    attempt = 2
                 self.validate_authorization(auth)
-                if len(reservations) >= min(auth["max_requests"], auth["max_page_requests"]):
+                if (len(reservations) >= auth["max_requests"] or
+                        sum(r.get("kind", "PAGE") == "PAGE" for r in reservations) >= auth["max_page_requests"]):
                     raise ValueError("DETAIL_CUMULATIVE_BUDGET_EXHAUSTED")
                 if any(r["state"] == "RESERVED" for r in reservations):
                     raise ValueError("AMBIGUOUS_IN_FLIGHT_REQUEST_REQUIRES_REVIEW")
@@ -312,7 +327,8 @@ class DetailBridge5500:
                 receipt = {"run_id": self.plan["run_id"], "task_id": task["task_id"], "kind": "PAGE",
                     "request_url": task["request_url"], "started_at": utc(), "state": "RESERVED",
                     "plan_sha256": digest(self.plan), "authorization_sha256": digest(auth)}
-                rp = self.root / "receipts" / (task["task_id"] + "_1.json")
+                receipt.update(request_role="DETAIL", attempt=attempt)
+                rp = self.root / "receipts" / (task["task_id"] + "_" + str(attempt) + ".json")
                 immutable_json(rp, sealed(receipt))
                 atomic_json(checkpoint, sealed({"status": "RUNNING", "task_id": task["task_id"],
                     "candidate_id": task["candidate_id"], "run_id": self.plan["run_id"], "receipt_path": str(rp)}))
@@ -352,7 +368,8 @@ class DetailBridge5500:
                 reservations.append(receipt)
                 meta = {"status_code": status, "requested_url": task["request_url"], "final_url": final,
                         "access_state": access, "collected_at": stamp, "receipt_path": str(rp)}
-                immutable_json(slot / "response_metadata.json", meta)
+                mp = slot / ("response_metadata.json" if attempt == 1 else "response_metadata.attempt_2.json")
+                immutable_json(mp, meta)
                 if access != "NORMAL":
                     gate = {"state": access, "run_id": self.plan["run_id"], "receipt_path": str(rp), "observed_at": stamp}
                     atomic_json(self.root / "access_gate.json", sealed(gate), backup=True)
@@ -362,9 +379,10 @@ class DetailBridge5500:
                     raise AccessStopError("DETAIL_ACCESS_STOP " + access)
                 result = parse_candidate_detail(task, html, meta)
                 result.update(html_path=str(hp), html_sha256=file_sha(hp), receipt_path=str(rp),
-                              receipt_sha256=file_sha(rp))
+                              receipt_sha256=file_sha(rp), response_metadata_path=str(mp),
+                              response_metadata_sha256=file_sha(mp))
                 location = inspect_delivery_location(html)
-                if location.is_spain is not True:
+                if location.is_spain is not True or (auth.get("delivery_setup_reference") and location.postal_code != "28001"):
                     result = {**result, "status": "IDENTITY_REVIEW", "record": None,
                               "reason": "SPAIN_DELIVERY_LOCATION_NOT_VERIFIED", "delivery_text": location.text}
                 self.save_result(task, result)
