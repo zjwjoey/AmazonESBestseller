@@ -178,7 +178,8 @@ class BrowserSession:
                 time.sleep(0.25)
 
     def ensure_spain_delivery(self, postal_code: str = DEFAULT_SPAIN_POSTAL_CODE,
-                              timeout_ms: int = 45000) -> DeliveryLocation:
+                              timeout_ms: int = 45000, *, navigate: bool = True,
+                              current_status_code: Optional[int] = None) -> DeliveryLocation:
         """Verify the Amazon header destination and set a Spain postal code.
 
         The check is idempotent for one session.  If the header is not already
@@ -191,12 +192,19 @@ class BrowserSession:
         if not re.fullmatch(r"\d{5}", code):
             raise DeliveryLocationError(
                 "西班牙配送邮编必须是 5 位数字，当前值为 %r" % code)
-        if self._delivery_location_checked:
+        # Bounded URL-keyed tasks can reuse their already receipted product
+        # document instead of introducing an unplanned homepage navigation.
+        # The caller still owns explicit authorization and request accounting
+        # for the ordinary UI actions. This option grants neither by itself.
+        if not navigate and current_status_code is None:
+            raise DeliveryLocationError("当前商品页配送设置必须提供真实 HTTP 状态")
+        if self._delivery_location_checked and navigate:
             return self._delivery_location or DeliveryLocation(
                 "", True, code)
 
-        status = self.goto("https://www.amazon.es/", timeout_ms=timeout_ms)
-        self.wait_for_product_page(timeout_ms=20000)
+        status = self.goto("https://www.amazon.es/", timeout_ms=timeout_ms) if navigate else current_status_code
+        if navigate:
+            self.wait_for_product_page(timeout_ms=20000)
 
         # Amazon sometimes returns a normal HTTP 202 shell and fills the
         # header asynchronously a few seconds later.  Poll only for the
@@ -216,7 +224,7 @@ class BrowserSession:
         # a 200-equivalent so challenge markers still stop the run.
         if state.value == "UNKNOWN" and status == 202 and current.text:
             state = detect_access_status(200, html)
-        require_normal_access(state, "配送地点检查（Amazon.es 首页）")
+        require_normal_access(state, "配送地点检查（Amazon.es 当前页面）")
         if current.is_spain is not True:
             location_button = self._visible_locator((
                 "#nav-global-location-popover-link",

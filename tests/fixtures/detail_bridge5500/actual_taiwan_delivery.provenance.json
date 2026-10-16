@@ -1,0 +1,10 @@
+{
+  "run_id": "quick_detail5500_20261016_v0",
+  "request_id": "detail_459a29f7f9be1beb730dbb745492_1",
+  "html_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\tasks\\detail_459a29f7f9be1beb730dbb745492\\html\\7907730031eaadc20356b222c8b64a2b0afe75bc90dcf88c5c4fbef3e06c24eb.html",
+  "sha256": "7907730031eaadc20356b222c8b64a2b0afe75bc90dcf88c5c4fbef3e06c24eb",
+  "http_status": 200,
+  "observed_delivery_header": "Enviar a Taiwán",
+  "actual_active_asin": "B0H9QQY5K6",
+  "not_live_recovery_proof": true
+}

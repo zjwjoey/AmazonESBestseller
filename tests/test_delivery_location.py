@@ -109,3 +109,48 @@ def test_browser_session_rejects_invalid_postal_code():
     session = BrowserSession()
     with pytest.raises(DeliveryLocationError, match="5 位数字"):
         session.ensure_spain_delivery("2800")
+
+
+def test_actual_detail_taiwan_header_stops_even_with_spanish_footer():
+    import gzip
+    import hashlib
+    import json
+    from pathlib import Path
+    root = Path(__file__).parent / "fixtures/detail_bridge5500"
+    body = gzip.decompress((root / "actual_taiwan_delivery.html.gz").read_bytes())
+    proof = json.loads((root / "actual_taiwan_delivery.provenance.json").read_text(encoding="utf8"))
+    assert hashlib.sha256(body).hexdigest() == proof["sha256"]
+    observed = inspect_delivery_location(body.decode("utf8"))
+    assert observed.text == "Enviar a Taiwán" and observed.is_spain is not True
+
+
+def test_location_can_use_current_receipted_product_without_home_navigation(monkeypatch):
+    import gzip
+    from pathlib import Path
+    real_body = gzip.decompress((Path(__file__).parent / "fixtures/detail_bridge5500/actual_taiwan_delivery.html.gz").read_bytes()).decode("utf8")
+    page = _FakePage()
+    original_mock_content = page.content
+    page.content = lambda: original_mock_content() if page.done else real_body
+    session = BrowserSession(); session.page = page
+    monkeypatch.setattr(session, "goto", lambda *args, **kwargs: pytest.fail("unexpected homepage navigation"))
+    monkeypatch.setattr(session, "wait_for_product_page", lambda **kwargs: None)
+    result = session.ensure_spain_delivery("28001", navigate=False, current_status_code=200)
+    assert result.is_spain is True and page.postal_code == "28001"
+    # The new destination is a mocked UI result, not a live recovery claim.
+
+
+def test_current_page_location_requires_actual_response_status(monkeypatch):
+    session = BrowserSession(); session.page = _FakePage()
+    monkeypatch.setattr(session, "goto", lambda *args, **kwargs: pytest.fail("unbudgeted navigation"))
+    with pytest.raises(DeliveryLocationError, match="HTTP"):
+        session.ensure_spain_delivery("28001", navigate=False)
+
+
+@pytest.mark.parametrize("status", [403, 429])
+def test_current_page_location_does_not_handle_restricted_response(monkeypatch, status):
+    from amazon_es_bestseller.access.detector import AccessStopError
+    session = BrowserSession(); session.page = _FakePage()
+    monkeypatch.setattr(session, "goto", lambda *args, **kwargs: pytest.fail("restricted navigation"))
+    monkeypatch.setattr(session, "_visible_locator", lambda *args, **kwargs: pytest.fail("must not click on restriction"))
+    with pytest.raises(AccessStopError):
+        session.ensure_spain_delivery("28001", navigate=False, current_status_code=status)
