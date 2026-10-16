@@ -6,6 +6,7 @@ belongs to the frozen candidate task; even equal parent ASINs never merge tasks.
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -56,7 +57,7 @@ def parse_candidate_detail(task, html, meta):
     # Recommendations/data-asin are deliberately not active-product evidence.
     active = {str(e.get("value") or "").strip().upper() for e in
               soup.select("input#ASIN, input#productAsin, input[name=ASIN]") if e.get("value")}
-    active = {a for a in active if len(a) == 10 and a.isalnum()}
+    active = {a for a in active if re.fullmatch(r"[A-Z0-9]{10}", a)}
     canonicals = [str(e.get("href") or "") for e in soup.select('link[rel="canonical"]')]
     canonical_asins = {asin_from_url(u) for u in canonicals if safe_url(u) and asin_from_url(u)}
     requested_asin = asin_from_url(task["request_url"])
@@ -92,7 +93,7 @@ def parse_candidate_detail(task, html, meta):
     variation = record.get("variation_evidence") or {}
     linked_parent = variation.get("parent_asin") if variation.get("current_asin") == observed else ""
     parent = explicit_parent or linked_parent or None
-    if parent and (len(parent) != 10 or not parent.isalnum()):
+    if parent and not re.fullmatch(r"[A-Z0-9]{10}", parent):
         parent = None
     record["parent_asin"] = parent
     record["parent_asin_evidence"] = ({"kind": "EXPLICIT_PARENT_INPUT" if explicit_parent else "CURRENT_ASIN_VARIATION_STATE",
@@ -256,7 +257,7 @@ class DetailBridge5500:
                 or not auth.get("offline_acceptance_reference")):
             raise ValueError("INDEPENDENT_DETAIL_AUTHORIZATION_REQUIRED")
         at = datetime.now(timezone.utc)
-        if not datetime.fromisoformat(auth["starts_at"]) <= at < datetime.fromisoformat(auth["deadline"]):
+        if not datetime.fromisoformat(auth["starts_at"]) <= at < datetime.fromisoformat(auth.get("request_deadline") or auth["deadline"]):
             raise ValueError("DETAIL_AUTHORIZATION_OUTSIDE_TIME")
         if (auth["max_page_requests"] > auth["max_requests"] or auth["max_other_requests"] != 0
                 or auth["request_start_interval_seconds"] < 3 or auth["max_attempts_per_task"] not in (1, 2)):

@@ -78,15 +78,20 @@ def run(root, auth_path, profile):
     # No bootstrap navigation, no change of profile/identity or delivery region.
     with file_lock(root / "controller.lock"), BrowserSession(headless=True, profile_dir=profile) as session:
         session.document_responses = []
+        session.access_blocked = False
         def observe(response):
             request = response.request
             if request.resource_type == "document" and request.frame == session.page.main_frame:
                 session.document_responses.append({"url": response.url, "status_code": response.status,
                                                    "observed_at": utc()})
+                if response.status in {403, 429}:
+                    session.access_blocked = True
         session.page.on("response", observe)
         allowed_initial = {t["request_url"] for t in plan["tasks"]}
         def boundary(route):
             req = route.request
+            if session.access_blocked:
+                return route.abort()
             # Ordinary assets only; no image download, no hidden API collection.
             if req.resource_type in {"image", "media", "font", "xhr", "fetch"}:
                 return route.abort()
