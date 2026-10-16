@@ -84,6 +84,66 @@ def _owned_child_parent_canonical(soup, active, canonical_asins, requested, fina
             "buybox_input": "#ppd #buybox input#ASIN[name=ASIN]"}
 
 
+def _owned_media_child_parent_canonical(soup, active, canonical_asins, requested, final):
+    """An empty-Twister page may declare child/parent in its owned media state.
+
+    Never override a present classical Twister payload, and never use a
+    recommendation/media ASIN without its exact main-product ownership.
+    """
+    if (not requested or requested != final or active != {requested}
+            or len(canonical_asins) != 1 or requested in canonical_asins
+            or len(soup.select('link[rel=canonical]')) != 1
+            or len(soup.select('#ppd')) != 1 or len(soup.select('#dp-container')) != 1):
+        return None
+    if any('twister-js-init-dpx-data' in e.get_text() for e in soup.select('script')):
+        return None
+    holder = soup.select('#ppd #twister_feature_div')
+    if (len(holder) != 1 or holder[0].get('data-csa-c-asin') != requested
+            or holder[0].get('data-feature-name') != 'twister'
+            or holder[0].get_text(strip=True) or holder[0].select('script,input,select,[data-asin]')):
+        return None
+    buybox = {str(e.get('value') or '').strip().upper()
+              for e in soup.select('#ppd #buybox input#ASIN[name=ASIN]')}
+    owned = soup.select('#dp #dp-container #ATFCriticalFeaturesDataContainer #mediaBlockVariations_feature_div')
+    if (buybox != {requested} or len(owned) != 1
+            or owned[0].get('data-csa-c-asin') != requested
+            or owned[0].get('data-feature-name') != 'mediaBlockVariations'):
+        return None
+    scripts = [e.get_text() for e in owned[0].select('script')
+               if re.search(r"P\.when\(['\"]jQuery['\"]\)\.register\(['\"]ImageBlockBTF['\"]\s*,", e.get_text())]
+    if len(scripts) != 1:
+        return None
+    literals = re.findall(r'''jQuery\.parseJSON\(\s*('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")\s*\)''', scripts[0])
+    if len(literals) != 1 or len(literals[0]) > 1_000_000:
+        return None
+    def no_duplicate_keys(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError('DUPLICATE_MEDIA_STATE_KEY')
+            obj[key] = value
+        return obj
+    try:
+        import ast
+        payload = ast.literal_eval(literals[0])
+        state = json.loads(payload, object_pairs_hook=no_duplicate_keys)
+    except (ValueError, SyntaxError, TypeError):
+        return None
+    parent = state.get('parentAsin') if isinstance(state, dict) else None
+    explicit = {str(e.get('value') or '').strip().upper()
+                for e in soup.select('input#parentASIN,input[name=parentASIN]')}
+    if (not isinstance(state, dict) or state.get('mediaAsin') != requested
+            or not isinstance(parent, str) or not re.fullmatch(r'[A-Z0-9]{10}', parent)
+            or parent == requested or canonical_asins != {parent}
+            or (explicit and explicit != {parent})):
+        return None
+    return {'rule':'OWNED_EMPTY_TWISTER_MEDIABLOCK_CHILD_CANONICAL_PARENT_V1',
+            'current_asin':requested,'parent_asin':parent,
+            'parent_evidence_kind':'OWNED_MEDIA_BLOCK_PARENT_STATE',
+            'source':'#dp-container #ATFCriticalFeaturesDataContainer #mediaBlockVariations_feature_div / ImageBlockBTF',
+            'buybox_input':'#ppd #buybox input#ASIN[name=ASIN]'}
+
+
 def parse_candidate_detail(task, html, meta):
     """Reuse V2 field extraction, adding strict active-product URL binding."""
     access = detect_access_status(meta.get("status_code"), html).value
@@ -103,6 +163,8 @@ def parse_candidate_detail(task, html, meta):
     final_asin = asin_from_url(final)
     strong = active | canonical_asins
     parent_proof = _owned_child_parent_canonical(soup, active, canonical_asins, requested_asin, final_asin)
+    if parent_proof is None:
+        parent_proof = _owned_media_child_parent_canonical(soup, active, canonical_asins, requested_asin, final_asin)
     if parent_proof:
         strong = active
     if len(strong) != 1 or (active and canonical_asins and active != canonical_asins):
@@ -141,7 +203,9 @@ def parse_candidate_detail(task, html, meta):
     if parent and not re.fullmatch(r"[A-Z0-9]{10}", parent):
         parent = None
     record["parent_asin"] = parent
-    record["parent_asin_evidence"] = ({"kind": "EXPLICIT_PARENT_INPUT" if explicit_parent else "CURRENT_ASIN_VARIATION_STATE",
+    parent_kind = 'EXPLICIT_PARENT_INPUT' if explicit_parent else (
+        parent_proof.get('parent_evidence_kind', 'CURRENT_ASIN_VARIATION_STATE') if parent_proof else 'CURRENT_ASIN_VARIATION_STATE')
+    record["parent_asin_evidence"] = ({"kind": parent_kind,
                                          "current_asin": observed, "parent_asin": parent} if parent else None)
     if variation.get("current_asin") != observed:
         record["variation_evidence"] = None
@@ -317,7 +381,7 @@ class DetailBridge5500:
             validate_amendment(self.root, self.plan, auth)
         for name in ("delivery_setup_verification_reference", "delivery_setup_continuation_reference",
                      "delivery_setup_repair_reference", "request_budget_reservation_reference", "post_UI_first_detail_recheck_reference",
-                     "reviewed_identity_quarantines_reference"):
+                     "reviewed_identity_quarantines_reference", "saved_HTML_media_parent_reparse_reference"):
             if auth.get(name) and file_sha(auth[name]["path"]) != auth[name]["sha256"]:
                 raise ValueError("DELIVERY_CONTROL_REFERENCE_CHANGED")
         from .detail_budget5500 import uncertain_setup_page_holds

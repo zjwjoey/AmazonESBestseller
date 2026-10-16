@@ -1,0 +1,66 @@
+{
+  "sha256": "93f732af00618a80032e02e98a60de4d94e043d447bb842bf45ca40d660d3407",
+  "task": {
+    "candidate_id": "link_630351edfc4e57c080eaba68395cea21",
+    "evidence_path": null,
+    "normalized_product_url": "https://www.amazon.es/Deslizamiento-Instalaci%C3%B3n-Herramientas-Mecedora-Cochecitos/dp/B0HG8VF2PP?psc=1",
+    "raw_product_url": "/Deslizamiento-Instalaci%C3%B3n-Herramientas-Mecedora-Cochecitos/dp/B0HG8VF2PP/ref=zg_bsnr_g_1862261031_d_sccl_39/520-2905120-4927906?psc=1",
+    "request_url": "https://www.amazon.es/Deslizamiento-Instalaci%C3%B3n-Herramientas-Mecedora-Cochecitos/dp/B0HG8VF2PP/ref=zg_bsnr_g_1862261031_d_sccl_39/520-2905120-4927906?psc=1",
+    "retry_status": "NOT_ATTEMPTED",
+    "run_id": "quick_detail5500_20261016_v0",
+    "selection_id": "sel_ae20c2c2f7e33225f44400d2fc63",
+    "selection_order": 232,
+    "source_memberships": [
+      {
+        "evidence_path": "F:\\AmazonESBestseller\\runtime\\global30000_batches\\global30000_d8c4546168db\\store\\html\\dc\\dcafd5c976e1f46d23968882edf56f2948f27d10be7a5e30815077710cf0dfce.html",
+        "evidence_sha256": "dcafd5c976e1f46d23968882edf56f2948f27d10be7a5e30815077710cf0dfce",
+        "observation_id": "v4obs_f6119d315efb6e238068de935145dea6",
+        "observed_at": "2026-10-16T03:52:54.716376Z",
+        "rank_context": "https://www.amazon.es/gp/new-releases/baby/1862261031/ref=zg_bsnr_nav_baby_1",
+        "ranking_position": 39,
+        "ranking_semantics": "NEW_RELEASE_SALES_RANKING",
+        "source_id": "v4_8ea549ac803f75e533b4b6d8",
+        "source_page_url": "https://www.amazon.es/gp/new-releases/baby/1862261031/ref=zg_bsnr_nav_baby_1",
+        "source_subtype": "NEW_RELEASE_SALES_RANKING",
+        "source_type": "NEW_RELEASES",
+        "source_url": "https://www.amazon.es/gp/new-releases/baby/1862261031/ref=zg_bsnr_nav_baby_1"
+      }
+    ],
+    "source_snapshot_id": "global30000_d8c4546168db",
+    "status": "PENDING",
+    "task_id": "detail_49718ed8f6294137b3f3e4172812",
+    "task_order": 233,
+    "task_type": "PRODUCT_DETAIL_ES_RAW"
+  },
+  "metadata": {
+    "access_state": "NORMAL",
+    "collected_at": "2026-10-16T22:18:38.360153+00:00",
+    "final_url": "https://www.amazon.es/Deslizamiento-Instalaci%C3%B3n-Herramientas-Mecedora-Cochecitos/dp/B0HG8VF2PP/ref=zg_bsnr_g_1862261031_d_sccl_39/520-2905120-4927906?psc=1",
+    "receipt_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\receipts\\detail_49718ed8f6294137b3f3e4172812_1.json",
+    "requested_url": "https://www.amazon.es/Deslizamiento-Instalaci%C3%B3n-Herramientas-Mecedora-Cochecitos/dp/B0HG8VF2PP/ref=zg_bsnr_g_1862261031_d_sccl_39/520-2905120-4927906?psc=1",
+    "status_code": 200
+  },
+  "original_checkpoint": {
+    "candidate_id": "link_630351edfc4e57c080eaba68395cea21",
+    "html_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\tasks\\detail_49718ed8f6294137b3f3e4172812\\html\\93f732af00618a80032e02e98a60de4d94e043d447bb842bf45ca40d660d3407.html",
+    "html_sha256": "93f732af00618a80032e02e98a60de4d94e043d447bb842bf45ca40d660d3407",
+    "observed_active_asins": [
+      "B0H264Q787",
+      "B0HG8VF2PP"
+    ],
+    "reason": "ACTIVE_PRODUCT_ASIN_NOT_UNAMBIGUOUS",
+    "receipt_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\receipts\\detail_49718ed8f6294137b3f3e4172812_1.json",
+    "receipt_sha256": "6f07f7fa48e931161cc385f67ff0eae03e74981cea328840399be4721553bb87",
+    "response_metadata_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\tasks\\detail_49718ed8f6294137b3f3e4172812\\response_metadata.json",
+    "response_metadata_sha256": "2a5ba210100418e55270916bfd1ce762c95a885735e71efe692f79c44d5537ab",
+    "run_id": "quick_detail5500_20261016_v0",
+    "saved_at": "2026-10-16T22:18:39.503141+00:00",
+    "selection_id": "sel_ae20c2c2f7e33225f44400d2fc63",
+    "status": "IDENTITY_REVIEW",
+    "task_id": "detail_49718ed8f6294137b3f3e4172812"
+  },
+  "requested_and_owned_child": "B0HG8VF2PP",
+  "explicit_media_parent": "B0H264Q787",
+  "actual_source_HTTP": 200,
+  "original_failure_preserved": true
+}
