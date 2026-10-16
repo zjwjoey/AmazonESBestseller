@@ -24,6 +24,26 @@ class V4ThreeSourceRunner(V4T2Runner):
         self._global_target_met=None
         self._global_metrics=None
         result=V4T1Runner.run(self,plan,**kwargs)
+        reason=result['run'].get('stop_reason') or ''
+        boundary=(reason=='GLOBAL_30000_QUALIFIED_GROUPS_REACHED' or reason=='TASK_FINAL_QA_RESERVE_REACHED'
+            or reason.startswith('V4_T3_LOADING_SCOPE_EXECUTED')
+            or any(word in reason for word in ('BUDGET','DURATION','DEADLINE','EXPIRED')))
+        if not boundary:
+            # A recoverable interruption is a checkpoint, never a passed audit.
+            # Exact failed-page/alias proofs are reviewed before resuming; the
+            # complete DOM/receipt audit remains mandatory at the task boundary.
+            pending={'diagnostic_passed':False,'review_status':'DEFERRED_UNTIL_TASK_BOUNDARY',
+                'errors':[],'stop_reason':reason}
+            rows=list(self.store.iter_observations(plan['run_id']))
+            metrics=measure_three(rows,plan['run_id'],target_policy=plan.get('target_policy'))
+            self.store.append_event(plan['run_id'],{'kind':'THREE_CHECKPOINT_FULL_REVIEW_DEFERRED',
+                'reason':reason,'no_final_QA_claimed':True})
+            self.store.update_run(plan['run_id'],quality_gate_passed=False,
+                qa={**result['quality'],'review_status':'DEFERRED_UNTIL_TASK_BOUNDARY'},
+                three_source_receipt_audit=pending,three_source_metrics=metrics,
+                three_source_acceptance='PAUSED_QA_PENDING',T3_execution_enabled=False)
+            return {**result,'run':self.store.get_run(plan['run_id']),'metrics':metrics,
+                'receipt_audit':pending,'acceptance':'PAUSED_QA_PENDING'}
         execution=execution_for_store(self.store,plan['run_id'])
         rows=list(self.store.iter_observations(plan['run_id']));pages=self.store.pages(plan['run_id'])
         audit=audit_capacity(pages,rows,plan['sources'],execution,three_source=True)
