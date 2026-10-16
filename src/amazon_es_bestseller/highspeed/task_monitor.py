@@ -136,7 +136,7 @@ def snapshot(root,plan,clock,*,now=None,window_start=None):
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('root','plan','clock','out'):p.add_argument('--'+name,required=True)
-    p.add_argument('--once',action='store_true');args=p.parse_args(argv)
+    p.add_argument('--authorization');p.add_argument('--once',action='store_true');args=p.parse_args(argv)
     plan=json.loads(Path(args.plan).read_text('utf8'));clock=read_sealed(args.clock)
     out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
     # Exactly one monitor for this run even after app/session restart.
@@ -144,6 +144,10 @@ def main(argv=None):
     with file_lock(Path(args.clock).resolve().parent/(plan['run_id']+'.monitor.lock')):
         previous=out/'latest.json';start=json.loads(previous.read_text('utf8'))['observed_at'] if previous.exists() else clock['started_at']
         while True:
+            if args.authorization:
+                from .task_clock import validate_task_clock
+                approval=json.loads(Path(args.authorization).read_text('utf8'))
+                clock=validate_task_clock(plan,approval,now=approval['reviewed_at'])
             value=snapshot(args.root,plan,clock,window_start=start)
             atomic_json(previous,value)
             with (out/'snapshots.jsonl').open('a',encoding='utf8') as f:f.write(json.dumps(value,ensure_ascii=False)+'\n')

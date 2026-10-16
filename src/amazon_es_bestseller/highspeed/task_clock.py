@@ -1,7 +1,7 @@
 """Immutable task-wide clock and evidence-based final-QA request guard."""
 from pathlib import Path
 from datetime import timedelta
-import hashlib,math
+import hashlib,math,json
 from ..multisource.storage import immutable_json,read_sealed,sealed,digest
 from .budgets import aware_time,utc_text
 
@@ -30,8 +30,33 @@ def validate_task_clock(plan,authorization,*,now=None):
     if (value['run_id']!=plan['run_id'] or value['plan_sha256']!=digest(plan)
             or value.get('total_hours')!=10 or (end-start).total_seconds()!=36000):
         raise ValueError('TASK_CLOCK_BINDING_MISMATCH')
+    extension=time_extension(plan,authorization,now=now)
+    if extension:
+        value={**value,'original_deadline':value['deadline'],'deadline':extension['deadline'],'request_deadline':extension['request_deadline'],'time_extension_reference':authorization['time_extension_reference']}
+        end=aware_time(extension['deadline'])
     if not start<=aware_time(now)<end:raise ValueError('TASK_TEN_HOUR_DEADLINE_OR_START_VIOLATION')
     return value
+
+
+def time_extension(plan,authorization,*,now=None):
+    """Explicit time-only amendment. Original plan/clock/budgets stay immutable."""
+    ref=authorization.get('time_extension_reference')
+    if not ref:return None
+    path=Path(ref['path'])
+    if hashlib.sha256(path.read_bytes()).hexdigest()!=ref['sha256']:raise ValueError('TIME_EXTENSION_SHA_MISMATCH')
+    e=json.loads(path.read_text('utf8'));current=aware_time(now)
+    if (not plan.get('target_policy') or e.get('kind')!='EXPLICIT_SAME_RUN_TIME_EXTENSION'
+            or e.get('approved') is not True or not e.get('approved_by') or not e.get('approval_id')
+            or e.get('run_id')!=plan['run_id'] or e.get('plan_sha256')!=digest(plan)
+            or e.get('store_root')!=authorization.get('store_root')
+            or e.get('original_clock_reference')!=authorization.get('task_clock_reference')
+            or e.get('preserve_cumulative_budgets') is not True or e.get('preserve_started_at') is not True):
+        raise ValueError('EXACT_EXPLICIT_TIME_EXTENSION_REQUIRED')
+    begin=aware_time(e['reviewed_at']);request_end=aware_time(e['request_deadline']);end=aware_time(e['deadline'])
+    if (not begin<request_end<end or not 0<(end-begin).total_seconds()<=43200
+            or not begin<=current<end or authorization.get('expires_at')!=e['deadline']):
+        raise ValueError('TIME_EXTENSION_DEADLINE_VIOLATION')
+    return e
 
 
 def qa_reserve_seconds(plan,raw_count):

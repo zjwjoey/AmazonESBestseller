@@ -83,9 +83,13 @@ def validate_plan(plan):
             physical_urls.add(key)
     return plan
 
-def budget_reason(plan, counters, *, now=None, started_at=None, kind="PAGE", raw_count=0):
+def budget_reason(plan, counters, *, now=None, started_at=None, kind="PAGE", raw_count=0, authorization=None):
     now = aware_time(now)
-    if started_at and (now - aware_time(started_at)).total_seconds() >= plan["max_duration_hours"] * 3600:
+    extension=None
+    if authorization and authorization.get('time_extension_reference'):
+        from .task_clock import validate_task_clock
+        extension=validate_task_clock(plan,authorization,now=now)
+    if (extension and now>=aware_time(extension['request_deadline']) or not extension and started_at and (now - aware_time(started_at)).total_seconds() >= plan["max_duration_hours"] * 3600):
         return "MAX_DURATION_REACHED"
     if counters.get("requests", 0) >= plan["max_requests_per_run"]:
         return "RUN_REQUEST_BUDGET_EXHAUSTED"

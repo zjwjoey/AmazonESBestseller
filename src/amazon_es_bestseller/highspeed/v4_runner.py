@@ -65,7 +65,7 @@ class V4T1Runner:
                     self.store.append_event(run_id,{'kind':'SOURCE_MINIMUM_ALREADY_MET_GLOBAL_COMPLETE','source_id':source['source_id']})
                     continue
                 try:
-                    reason = budget_reason(plan, self.store.budget_counters(run_id), now=e.clock(), started_at=started)
+                    reason = budget_reason(plan, self.store.budget_counters(run_id), now=e.clock(), started_at=started, authorization=authorization)
                     if reason:
                         raise ValueError(reason)
                     key = source['source_id'] if url==source['actual_source_url'] else source['source_id']+'_'+hashlib.sha256(url.encode()).hexdigest()[:12]

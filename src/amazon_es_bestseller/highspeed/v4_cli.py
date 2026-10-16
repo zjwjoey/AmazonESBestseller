@@ -47,7 +47,7 @@ def _run_live_v4(args):
             locks.enter_context(file_lock(Path(plan['shared_access_gate_path']).parent / 'highspeed_live.lock'))
             validate_v4_authorization(plan, approval, runner.engine._gate(plan), store_root=store.root)
             run = store.begin_run(plan, started_at=utc_text())
-            reason = budget_reason(plan, store.summary(plan['run_id']), started_at=run['started_at'])
+            reason = budget_reason(plan, store.summary(plan['run_id']), started_at=run['started_at'], authorization=approval)
             if reason:
                 raise ValueError(reason)
             if any(r['status'] == 'RESERVED' for r in store.requests(plan['run_id'])):

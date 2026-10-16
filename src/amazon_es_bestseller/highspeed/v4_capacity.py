@@ -17,7 +17,7 @@ def audit_capacity(pages, observations, sources, execution, *, three_source=Fals
     A valid diagnostic is distinct from sufficient measured supply for T3.
     Unknown completeness is legal; missing measurement or unsafe access is not.
     """
-    errors=[]; receipts=[]; reservations=[]
+    errors=[]; receipts=[]; reservations=[]; approvals=[]
     plan=execution['plan'];run_id=plan['run_id']
     families=FAMILIES
     if three_source:
@@ -85,7 +85,17 @@ def audit_capacity(pages, observations, sources, execution, *, three_source=Fals
     intervals=[(b-a).total_seconds() for a,b in zip(times,times[1:])]
     if elapsed<=0 or not three_source and elapsed>plan['max_duration_hours']*3600:errors.append('DURATION_OUTSIDE_PLAN')
     if three_source and times and (times[-1]-started).total_seconds()>=plan['max_duration_hours']*3600:
-        errors.append('REQUEST_AFTER_CAMPAIGN_DEADLINE')
+        from .task_clock import validate_task_clock
+        for request_time in times:
+            if (request_time-started).total_seconds()<plan['max_duration_hours']*3600:continue
+            authorized_extension=False
+            for approval in approvals:
+                if not approval.get('time_extension_reference'):continue
+                try:
+                    amended=validate_task_clock(plan,approval,now=request_time)
+                    if request_time<aware_time(amended['request_deadline']):authorized_extension=True;break
+                except (OSError,ValueError,KeyError,TypeError):continue
+            if not authorized_extension:errors.append('REQUEST_AFTER_CAMPAIGN_DEADLINE');break
     if times and (times[0]<started or times[-1]>finished):errors.append('REQUEST_TIME_OUTSIDE_EXECUTION')
     if intervals and min(intervals)<plan['request_pacing_seconds']:errors.append('PACING_VIOLATION')
     page_count=sum(q['kind']=='PAGE' for q in reservations)

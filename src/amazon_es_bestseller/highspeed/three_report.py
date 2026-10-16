@@ -188,6 +188,21 @@ def _export_three(store,run_id,output,*,progress=None):
             'QA_completed_at':utc_text(completed),'task_elapsed_seconds':(completed-aware_time(clock['started_at'])).total_seconds(),
             'QA_completed_before_deadline':within,'ten_hour_target_met':bool(accepted and within),
             'QA_state_at_deadline':'COMPLETE' if within else 'NOT_COMPLETED_BY_DEADLINE'}
+    if plan.get('target_policy'):
+        from .task_clock import validate_task_clock
+        extensions=[]
+        for reference in execution['authorization_references']:
+            path=Path(reference['path'])
+            if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['sha256']:raise ValueError('EXTENSION_REPORT_AUTH_SHA_MISMATCH')
+            approval=json.loads(path.read_text('utf8'))
+            if approval.get('time_extension_reference'):
+                amended=validate_task_clock(plan,approval,now=approval['reviewed_at'])
+                extensions.append({'reference':approval['time_extension_reference'],'deadline':amended['deadline'],'request_deadline':amended['request_deadline']})
+        if extensions:
+            latest=max(extensions,key=lambda x:aware_time(x['deadline']))
+            task_timing.update(time_extensions=extensions,extended_deadline=latest['deadline'],
+                QA_completed_before_extended_deadline=completed<=aware_time(latest['deadline']),
+                extended_quantity_and_quality_target_met=bool(accepted and completed<=aware_time(latest['deadline'])))
     manifest={'task_timing':task_timing,'schema_version':1,'contract':CONTRACT,'run_id':run_id,'campaign_id':plan['campaign_id'],
         'campaign_created_at':plan['campaign_created_at'],'task_reference':plan['task_reference'],
         'execution':execution,'accepted':accepted,'acceptance':acceptance,'metrics':metrics,

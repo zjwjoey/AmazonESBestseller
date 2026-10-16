@@ -880,7 +880,7 @@ class HighSpeedRunner:
         reverification=getattr(self,'_t1_reverification_context',None)
         if reverification and not aware_time(reverification['review']['reviewed_at'])<=aware_time(self.clock())<aware_time(reverification['review']['expires_at']):
             raise ValueError('T1_REVERIFICATION_REVIEW_EXPIRED')
-        reason = budget_reason(plan, counters, now=self.clock(), started_at=started, kind=kind)
+        reason = budget_reason(plan, counters, now=self.clock(), started_at=started, kind=kind, authorization=authorization)
         if reason:
             raise ValueError(reason)
         observed = aware_time(self.clock())
