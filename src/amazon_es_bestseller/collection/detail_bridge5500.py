@@ -404,13 +404,17 @@ class DetailBridge5500:
             raise ValueError("CURRENT_CODE_CI_SUCCESS_REQUIRED")
         self.gates_normal()
 
-    def run(self, session, auth, *, until_completed, authorization_filename=None):
+    def run(self, session, auth, *, until_completed, authorization_filename=None, local_lanes=1):
         """Caller owns BrowserSession. One shared live lock, one frozen queue.
 
         T1/T2 boundaries are explicit; separate stage acceptance must be saved
         before increasing the cumulative task limit. No successful task replay.
         """
         self.validate_authorization(auth)
+        if local_lanes not in (1, 3) or (local_lanes == 3 and (
+                auth.get('local_processing_lanes') != 3 or auth.get('network_parallelism') != 1
+                or until_completed != len(self.plan['tasks']))):
+            raise ValueError('REVIEWED_FORMAL_LOCAL_LANES_REQUIRED')
         auth_name = ("authorization.delivery_location_post_UI_recheck.approved.json" if auth.get("post_UI_first_detail_recheck_reference") else
                      "authorization.delivery_location_repair_3.approved.json" if auth.get("delivery_setup_repair_reference") else
                      "authorization.delivery_location_verification_1.approved.json" if auth.get("delivery_setup_verification_reference") else
@@ -429,10 +433,14 @@ class DetailBridge5500:
             self.validate_stage("T2", 100, auth=auth)
         from .identity_quarantine5500 import reviewed_identity_quarantines
         quarantines = reviewed_identity_quarantines(self.root, self.plan, auth)
-        with file_lock(self.root / "collector.lock"), file_lock(Path(self.plan["shared_gate_path"]).parent / "highspeed_live.lock"):
+        from contextlib import nullcontext
+        from .detail_local_lanes5500 import LocalDetailLanes
+        with file_lock(self.root / "collector.lock"), file_lock(Path(self.plan["shared_gate_path"]).parent / "highspeed_live.lock"), (LocalDetailLanes(self.save_result) if local_lanes == 3 else nullcontext()) as pipeline:
             reservations = [read_sealed(p) for p in (self.root / "receipts").glob("*.json")]
             scope = self.plan["tasks"] if quarantines and until_completed > 30 else self.plan["tasks"][:until_completed]
             for task in scope:
+                if pipeline:
+                    pipeline.check_before_request()
                 if task["task_id"] in quarantines:
                     continue  # Original failed checkpoint remains immutable and does not count as success.
                 if quarantines and until_completed > 30 and sum(o["status"] in SUCCESS for o in self.outcomes.values()) >= until_completed:
@@ -471,6 +479,8 @@ class DetailBridge5500:
                     last = max(datetime.fromisoformat(r["started_at"]).timestamp() for r in reservations)
                     time.sleep(max(0, last + auth["request_start_interval_seconds"] - time.time()))
                 self.validate_authorization(auth)
+                if pipeline:
+                    pipeline.check_before_request()
                 receipt = {"run_id": self.plan["run_id"], "task_id": task["task_id"], "kind": "PAGE",
                     "request_url": task["request_url"], "started_at": utc(), "state": "RESERVED",
                     "plan_sha256": digest(self.plan), "authorization_sha256": digest(auth)}
@@ -524,6 +534,12 @@ class DetailBridge5500:
                     atomic_json(self.plan["shared_gate_path"], sealed({**gate, "previous_gate": old}), backup=True)
                     self.save_result(task, {"status": "ACCESS_STOP", "access_state": access, "receipt_path": str(rp)})
                     raise AccessStopError("DETAIL_ACCESS_STOP " + access)
+                if pipeline:
+                    pipeline.submit(task, html, meta,
+                        dict(html_path=str(hp), html_sha256=file_sha(hp), receipt_path=str(rp),
+                             receipt_sha256=file_sha(rp), response_metadata_path=str(mp),
+                             response_metadata_sha256=file_sha(mp), local_execution_authorization_sha256=digest(auth)), bool(auth.get('delivery_setup_reference')))
+                    continue
                 result = parse_candidate_detail(task, html, meta)
                 result.update(html_path=str(hp), html_sha256=file_sha(hp), receipt_path=str(rp),
                               receipt_sha256=file_sha(rp), response_metadata_path=str(mp),

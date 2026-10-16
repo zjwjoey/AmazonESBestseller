@@ -91,7 +91,7 @@ def audit_stage(bridge, stage, count, auth=None):
     return proof
 
 
-def run(root, auth_path, profile):
+def run(root, auth_path, profile, *, visible=False, local_lanes=1):
     root = Path(root)
     if Path(auth_path).resolve().parent != root.resolve():
         raise ValueError("AUTHORIZATION_MUST_BE_PRESERVED_IN_SAME_RUN")
@@ -99,13 +99,17 @@ def run(root, auth_path, profile):
     auth = json.loads(Path(auth_path).read_text(encoding="utf8"))
     bridge = DetailBridge5500(root, plan)
     bridge.validate_authorization(auth)
+    if local_lanes not in (1, 3) or (local_lanes == 3 and (
+            auth.get('local_processing_lanes') != 3 or auth.get('network_parallelism') != 1
+            or not (root / 'T1_acceptance.json').exists() or not (root / 'T2_acceptance.json').exists())):
+        raise ValueError('REVIEWED_FORMAL_LOCAL_LANES_REQUIRED')
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if head != auth["code_sha"] or subprocess.check_output(["git", "status", "--porcelain"], text=True).strip():
         raise ValueError("APPROVED_CLEAN_CODE_REQUIRED")
     # The original profile stays fixed; only the separately approved normal UI
     # delivery setting is allowed before the frozen product queue resumes.
     with file_lock(root / "controller.lock"), BrowserSession(
-            headless=True, profile_dir=profile, block_service_workers=True) as session:
+            headless=not visible, profile_dir=profile, block_service_workers=True) as session:
         session.document_responses = []
         session.access_blocked = False
         def observe(response):
@@ -158,8 +162,11 @@ def run(root, auth_path, profile):
                 if (root / (name + "_acceptance.json")).exists():
                     bridge.validate_stage(name, count, auth=auth)
                     continue
-                atomic_json(root / "worker_status.json", {"phase": name + "_COLLECTING", "updated_at": utc(), "code_sha": head})
-                bridge.run(session, auth, until_completed=count, authorization_filename=Path(auth_path).name)
+                atomic_json(root / "worker_status.json", {"phase": name + "_COLLECTING", "updated_at": utc(), "code_sha": head,
+                    'local_processing_lanes': local_lanes if name == 'FINAL' else 1,
+                    'network_parallelism': 1, 'visible_browser': visible, 'authorization_sha256': digest(auth)})
+                bridge.run(session, auth, until_completed=count, authorization_filename=Path(auth_path).name,
+                           local_lanes=local_lanes if name == 'FINAL' else 1)
                 atomic_json(root / "worker_status.json", {"phase": name + "_INDEPENDENT_AUDIT", "updated_at": utc()})
                 audit_stage(bridge, name, count, auth=auth)
                 export(root)
@@ -178,8 +185,11 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--root", required=True); p.add_argument("--authorization", required=True)
     p.add_argument("--profile", required=True)
+    p.add_argument('--visible', action='store_true', help='Show the existing profile browser without changing access policy.')
+    p.add_argument('--local-lanes', type=int, choices=(1, 3), default=1,
+                   help='Local parsers only; all network and persistence stay with the single controller.')
     a = p.parse_args()
-    run(a.root, a.authorization, a.profile)
+    run(a.root, a.authorization, a.profile, visible=a.visible, local_lanes=a.local_lanes)
 
 
 if __name__ == "__main__":
