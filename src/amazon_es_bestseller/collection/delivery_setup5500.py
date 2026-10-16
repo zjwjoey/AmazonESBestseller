@@ -153,10 +153,22 @@ def validate_read_only_verification(root, plan, auth, amendment):
     failure = read_sealed(v["initial_failure_reference"]["path"])
     original = read_sealed(v["initial_setup_receipt_reference"]["path"])
     rows = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
+    original_document = (original.get("kind") == "PAGE"
+        and original.get("method") == "GET"
+        and original.get("request_url") == amendment["initial_product_URL"])
+    # The real failed attempt saved an ordinary read-only modal GET, not a
+    # product document. Its presence does not authorize another UI operation.
+    original_modal = (original.get("kind") == "OTHER"
+        and original.get("method") == "GET"
+        and original.get("run_id") == plan["run_id"]
+        and original.get("task_id") == amendment["task_id"]
+        and original.get("plan_sha256") == digest(plan)
+        and original.get("error") is None
+        and original.get("final_url") == original.get("request_url")
+        and allowed_shipping_request(original.get("request_url", ""), "GET", "", "28001"))
     if (failure.get("error_type") != "DeliveryLocationError" or failure.get("pending_receipts")
             or original.get("state") != "NORMAL" or original.get("status_code") != 200
-            or original.get("request_role") != "DELIVERY_SETUP" or original.get("kind") != "PAGE"
-            or original.get("request_url") != amendment["initial_product_URL"]
+            or original.get("request_role") != "DELIVERY_SETUP" or not (original_document or original_modal)
             or len([r for r in rows if r.get("request_role") == "DELIVERY_SETUP"]) != 1
             or any(r.get("state") == "RESERVED" for r in rows)
             or (root / "delivery_setup.verification_1.attempt.json").exists()

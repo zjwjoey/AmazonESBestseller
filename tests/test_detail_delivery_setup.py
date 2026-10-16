@@ -304,3 +304,27 @@ def test_verification_review_cannot_expand_into_another_setup(tmp_path,key,value
     auth["delivery_setup_verification_reference"]["sha256"]=file_sha(vp)
     with pytest.raises(ValueError,match="SCOPE_INVALID"):
         validate_read_only_verification(root,plan,auth,a)
+
+
+@pytest.mark.parametrize("change", [None,"POST","cross_site","wrong_endpoint","wrong_status"])
+def test_verification_accepts_actual_readonly_modal_receipt_not_submission(tmp_path,change):
+    from amazon_es_bestseller.collection.delivery_setup5500 import validate_read_only_verification
+    from amazon_es_bestseller.multisource.storage import read_sealed,atomic_json
+    root,plan,auth,a,v=verification_fixture(tmp_path)
+    saved=Path(__file__).parent/'fixtures/detail_bridge5500/actual_setup_readonly_modal_receipt.json'
+    r=read_sealed(saved)
+    # Exact observed read-only UI shape; test run identity is bound separately.
+    r.update(run_id=plan['run_id'],task_id=a['task_id'],plan_sha256=digest(plan))
+    if change=='POST':r['method']='POST'
+    if change=='cross_site':r['request_url']=r['request_url'].replace('www.amazon.es','evil.test')
+    if change=='wrong_endpoint':r['request_url']='https://www.amazon.es/portal-migration/hz/glow/address-change'
+    if change=='wrong_status':r['status_code']=403
+    sp=root/'receipts/delivery_setup_01.json';atomic_json(sp,sealed(r))
+    v['initial_setup_receipt_reference']=dict(path=str(sp),sha256=file_sha(sp))
+    vp=Path(auth['delivery_setup_verification_reference']['path']);atomic_json(vp,v)
+    auth['delivery_setup_verification_reference']['sha256']=file_sha(vp)
+    if change is None:
+        assert validate_read_only_verification(root,plan,auth,a)==v
+    else:
+        with pytest.raises(ValueError,match='NOT_REPLAYABLE'):
+            validate_read_only_verification(root,plan,auth,a)
