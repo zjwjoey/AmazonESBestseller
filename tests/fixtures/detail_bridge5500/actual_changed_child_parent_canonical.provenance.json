@@ -1,0 +1,67 @@
+{
+  "sha256": "d2eed01b70de16917c9deae538ceb8a529cb34ca21542a73c68d2eee0189a9d4",
+  "task": {
+    "candidate_id": "link_8cc59136a86d52f38bfd1fcf3c3165c2",
+    "evidence_path": null,
+    "normalized_product_url": "https://www.amazon.es/LAZAZAFI-Botas-Cortas-Forro-Cremallera/dp/B0H7B9JJ5B?psc=1",
+    "raw_product_url": "/LAZAZAFI-Botas-Cortas-Forro-Cremallera/dp/B0H7B9JJ5B/ref=zg_bsnr_g_5518992031_d_sccl_7/520-2905120-4927906?psc=1",
+    "request_url": "https://www.amazon.es/LAZAZAFI-Botas-Cortas-Forro-Cremallera/dp/B0H7B9JJ5B/ref=zg_bsnr_g_5518992031_d_sccl_7/520-2905120-4927906?psc=1",
+    "retry_status": "NOT_ATTEMPTED",
+    "run_id": "quick_detail5500_20261016_v0",
+    "selection_id": "sel_285efbf792b8c68cfce00d373cda",
+    "selection_order": 185,
+    "source_memberships": [
+      {
+        "evidence_path": "F:\\AmazonESBestseller\\runtime\\global30000_batches\\global30000_d8c4546168db\\store\\html\\4b\\4b19740a009f5243b82f2f594b7adeebefcd2d0819a1e932d79c8c5626700f10.html",
+        "evidence_sha256": "4b19740a009f5243b82f2f594b7adeebefcd2d0819a1e932d79c8c5626700f10",
+        "observation_id": "v4obs_757389b272b8f402e0e6d08835e95502",
+        "observed_at": "2026-10-16T07:43:42.745509Z",
+        "rank_context": "https://www.amazon.es/gp/new-releases/fashion/5518992031?ie=UTF8&pg=1",
+        "ranking_position": 7,
+        "ranking_semantics": "NEW_RELEASE_SALES_RANKING",
+        "source_id": "v4_dd18b4e1d594125962310f7e",
+        "source_page_url": "https://www.amazon.es/gp/new-releases/fashion/5518992031/ref=zg_bsnr_nav_fashion_1",
+        "source_subtype": "NEW_RELEASE_SALES_RANKING",
+        "source_type": "NEW_RELEASES",
+        "source_url": "https://www.amazon.es/gp/new-releases/fashion/5518992031/ref=zg_bsnr_nav_fashion_1"
+      }
+    ],
+    "source_snapshot_id": "global30000_d8c4546168db",
+    "status": "PENDING",
+    "task_id": "detail_a63b748e31af227e64f80e2bea57",
+    "task_order": 186,
+    "task_type": "PRODUCT_DETAIL_ES_RAW"
+  },
+  "metadata": {
+    "access_state": "NORMAL",
+    "collected_at": "2026-10-16T21:40:29.941057+00:00",
+    "final_url": "https://www.amazon.es/LAZAZAFI-Botas-Cortas-Forro-Cremallera/dp/B0H7B9JJ5B/ref=zg_bsnr_g_5518992031_d_sccl_7/520-2905120-4927906?psc=1",
+    "receipt_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\receipts\\detail_a63b748e31af227e64f80e2bea57_1.json",
+    "requested_url": "https://www.amazon.es/LAZAZAFI-Botas-Cortas-Forro-Cremallera/dp/B0H7B9JJ5B/ref=zg_bsnr_g_5518992031_d_sccl_7/520-2905120-4927906?psc=1",
+    "status_code": 200
+  },
+  "original_checkpoint": {
+    "candidate_id": "link_8cc59136a86d52f38bfd1fcf3c3165c2",
+    "html_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\tasks\\detail_a63b748e31af227e64f80e2bea57\\html\\d2eed01b70de16917c9deae538ceb8a529cb34ca21542a73c68d2eee0189a9d4.html",
+    "html_sha256": "d2eed01b70de16917c9deae538ceb8a529cb34ca21542a73c68d2eee0189a9d4",
+    "observed_active_asins": [
+      "B0H79ZHJLT",
+      "B0HBTTH7J2"
+    ],
+    "reason": "ACTIVE_PRODUCT_ASIN_NOT_UNAMBIGUOUS",
+    "receipt_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\receipts\\detail_a63b748e31af227e64f80e2bea57_1.json",
+    "receipt_sha256": "88da11cd7a8a8829c7d5a8d14c3787396166f6ee7d331f92cda6c0c5dd7402f3",
+    "response_metadata_path": "F:\\AmazonESBestseller\\runtime\\quick_selection_detail_5500_batches\\quick_detail5500_20261016_v0\\tasks\\detail_a63b748e31af227e64f80e2bea57\\response_metadata.json",
+    "response_metadata_sha256": "892e2bc74f1092abf85c2bec99af7cddef19000baa91efded99c5d0d05a0d38b",
+    "run_id": "quick_detail5500_20261016_v0",
+    "saved_at": "2026-10-16T21:40:30.740451+00:00",
+    "selection_id": "sel_285efbf792b8c68cfce00d373cda",
+    "status": "IDENTITY_REVIEW",
+    "task_id": "detail_a63b748e31af227e64f80e2bea57"
+  },
+  "requested_asin": "B0H7B9JJ5B",
+  "owned_current_asin": "B0H79ZHJLT",
+  "canonical_parent_asin": "B0HBTTH7J2",
+  "actual_source_http_status": 200,
+  "source_is_failed_identity_not_success": true
+}

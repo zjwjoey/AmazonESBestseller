@@ -1,15 +1,72 @@
 """Keep an independently reviewed changed child as a failure, never a success.
 
 This permits the next original frozen task, not a replacement or a request retry.
-Access failures and ambiguous identity cannot enter this isolation path.
+Access failures and unresolved ambiguous identity cannot enter this path.
 """
 import json
+import re
 from pathlib import Path
 
 from ..identity import asin_from_url
 from ..access.location import inspect_delivery_location
 from ..multisource.storage import digest, read_sealed
 from .quick_selection import file_sha
+
+
+def owned_changed_child_parent_evidence(task, html, meta):
+    """Prove a DIFFERENT owned selected child, solely to keep it a failure.
+
+    A legacy parser may list the child plus its explicit canonical parent as
+    two identities. This never permits accepting either as the requested ASIN.
+    """
+    from bs4 import BeautifulSoup
+    from ..access.detector import detect_access_status
+    from .detail_bridge5500 import safe_url
+    from .detail_v2 import _json_after
+    requested = asin_from_url(task['request_url'])
+    final = meta.get('final_url') or ''
+    if (not requested or not safe_url(final) or asin_from_url(final) != requested
+            or meta.get('requested_url') != task['request_url']
+            or detect_access_status(meta.get('status_code'), html).value != 'NORMAL'):
+        return None
+    soup = BeautifulSoup(html, 'lxml')
+    active = {str(e.get('value') or '').strip().upper() for e in
+              soup.select('input#ASIN,input#productAsin,input[name=ASIN]') if e.get('value')}
+    if len(active) != 1:
+        return None
+    current = next(iter(active))
+    if not re.fullmatch(r'[A-Z0-9]{10}', current) or current == requested or len(soup.select('#ppd')) != 1:
+        return None
+    owned = soup.select('#ppd #twister_feature_div')
+    canons = soup.select('link[rel=canonical]')
+    buybox = {str(e.get('value') or '').strip().upper() for e in
+              soup.select('#ppd #buybox input#ASIN[name=ASIN]')}
+    if len(owned) != 1 or len(canons) != 1 or buybox != {current}:
+        return None
+    canonical = str(canons[0].get('href') or '')
+    if not safe_url(canonical):
+        return None
+    scripts = [e.get_text() for e in owned[0].select('script')
+               if re.search(r"P\.register\(['\"]twister-js-init-dpx-data['\"]\s*,", e.get_text())]
+    if len(scripts) != 1:
+        return None
+    script = scripts[0]
+    def unique(key):
+        values = re.findall(r'"'+key+r'"\s*:\s*"([A-Z0-9]{10})"', script)
+        return values[0] if values and len(set(values)) == 1 else None
+    parent = unique('parentAsin')
+    display = _json_after(script, '"dimensionValuesDisplayData"')
+    explicit = {str(e.get('value') or '').strip().upper() for e in
+                soup.select('input#parentASIN,input[name=parentASIN]')}
+    if (unique('currentAsin') != current or unique('landingAsin') != requested
+            or not parent or parent in {current, requested} or asin_from_url(canonical) != parent
+            or not isinstance(display, dict) or not isinstance(display.get(current), list)
+            or not display[current] or (explicit and explicit != {parent})):
+        return None
+    return {'rule':'OWNED_CURRENT_CHILD_DIFFERS_REQUESTED_CANONICAL_EXPLICIT_PARENT_V1',
+            'requested_asin':requested,'current_asin':current,'parent_asin':parent,'landing_asin':requested,
+            'source':'#ppd #twister_feature_div / twister-js-init-dpx-data',
+            'buybox_input':'#ppd #buybox input#ASIN[name=ASIN]'}
 
 
 def reviewed_identity_quarantines(root, plan, auth):
@@ -43,7 +100,17 @@ def reviewed_identity_quarantines(root, plan, auth):
         replay = parse_candidate_detail(task, html, meta)
         observed = old.get("observed_active_asins") or []
         location = inspect_delivery_location(html)
-        if (old.get("status") != "IDENTITY_REVIEW" or old.get("reason") != "ACTIVE_CHILD_ASIN_CHANGED"
+        simple_change = (old.get('reason') == 'ACTIVE_CHILD_ASIN_CHANGED'
+                         and replay.get('reason') == 'ACTIVE_CHILD_ASIN_CHANGED'
+                         and len(observed) == 1 and observed[0] != asin_from_url(task['request_url']))
+        owned_change = False
+        if (old.get('reason') == 'ACTIVE_PRODUCT_ASIN_NOT_UNAMBIGUOUS'
+                and replay.get('reason') == 'ACTIVE_PRODUCT_ASIN_NOT_UNAMBIGUOUS'):
+            proof = owned_changed_child_parent_evidence(task, html, meta)
+            owned_change = bool(proof and item.get('owned_child_parent_change_evidence') == proof
+                                and len(observed) == 2
+                                and set(observed) == {proof['current_asin'], proof['parent_asin']})
+        if (old.get("status") != "IDENTITY_REVIEW" or not (simple_change or owned_change)
                 or old.get("task_id") != task["task_id"] or old.get("run_id") != plan["run_id"]
                 or receipt.get("state") != "NORMAL" or receipt.get("status_code") != 200
                 or receipt.get("request_role") != "DETAIL" or receipt.get("request_url") != task["request_url"]
@@ -55,9 +122,9 @@ def reviewed_identity_quarantines(root, plan, auth):
                 or receipt.get("html_sha256") != item["HTML_reference"]["sha256"]
                 or old.get("response_metadata_path") != item["metadata_reference"]["path"]
                 or old.get("response_metadata_sha256") != item["metadata_reference"]["sha256"]
-                or replay.get("status") != "IDENTITY_REVIEW" or replay.get("reason") != "ACTIVE_CHILD_ASIN_CHANGED"
-                or replay.get("observed_active_asins") != observed or len(observed) != 1
-                or not asin_from_url(task["request_url"]) or observed[0] == asin_from_url(task["request_url"])
+                or replay.get("status") != "IDENTITY_REVIEW"
+                or replay.get("observed_active_asins") != observed
+                or not asin_from_url(task["request_url"])
                 or location.is_spain is not True or location.postal_code != "28001"):
             raise ValueError("IDENTITY_QUARANTINE_NOT_PROVEN_ISOLATED_CHILD_CHANGE")
         out[task["task_id"]] = {"not_success": True, "item": item, "reason": old["reason"]}
