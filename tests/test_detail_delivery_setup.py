@@ -10,7 +10,7 @@ from amazon_es_bestseller.collection.quick_selection import file_sha
 
 def fixture(tmp_path):
     root = tmp_path / "run"; root.mkdir()
-    task = dict(task_id="first", candidate_id="candidate", request_url="https://www.amazon.es/dp/B000000001")
+    task = dict(task_id="first", candidate_id="candidate", selection_id="selection", request_url="https://www.amazon.es/dp/B000000001")
     plan = dict(run_id="run", tasks=[task], shared_gate_path=str(tmp_path / "gate.json"))
     immutable_json(tmp_path / "gate.json", sealed({"state": "NORMAL"}))
     immutable_json(root / "detail_plan_5500.json", plan)

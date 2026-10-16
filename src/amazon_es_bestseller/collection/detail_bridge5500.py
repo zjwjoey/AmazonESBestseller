@@ -269,7 +269,7 @@ class DetailBridge5500:
             from .delivery_setup5500 import validate_amendment
             validate_amendment(self.root, self.plan, auth)
         for name in ("delivery_setup_verification_reference", "delivery_setup_continuation_reference",
-                     "delivery_setup_repair_reference", "request_budget_reservation_reference"):
+                     "delivery_setup_repair_reference", "request_budget_reservation_reference", "post_UI_first_detail_recheck_reference"):
             if auth.get(name) and file_sha(auth[name]["path"]) != auth[name]["sha256"]:
                 raise ValueError("DELIVERY_CONTROL_REFERENCE_CHANGED")
         from .detail_budget5500 import uncertain_setup_page_holds
@@ -299,7 +299,8 @@ class DetailBridge5500:
         before increasing the cumulative task limit. No successful task replay.
         """
         self.validate_authorization(auth)
-        auth_name = ("authorization.delivery_location_repair_3.approved.json" if auth.get("delivery_setup_repair_reference") else
+        auth_name = ("authorization.delivery_location_post_UI_recheck.approved.json" if auth.get("post_UI_first_detail_recheck_reference") else
+                     "authorization.delivery_location_repair_3.approved.json" if auth.get("delivery_setup_repair_reference") else
                      "authorization.delivery_location_verification_1.approved.json" if auth.get("delivery_setup_verification_reference") else
                      "authorization.delivery_location_2.approved.json" if auth.get("delivery_setup_continuation_reference") else
                      "authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference") else "authorization.approved.json")
@@ -321,7 +322,11 @@ class DetailBridge5500:
                         self.verify_saved_success(task, old)
                         continue
                     from .delivery_setup5500 import verify_setup
-                    a = verify_setup(self.root, self.plan, auth) if auth.get("delivery_setup_reference") else {}
+                    if auth.get("post_UI_first_detail_recheck_reference") and not (self.root / "delivery_setup.complete.json").exists():
+                        from .delivery_post_UI5500 import validate_post_UI_first_detail_recheck
+                        a = validate_post_UI_first_detail_recheck(self.root, self.plan, auth)
+                    else:
+                        a = verify_setup(self.root, self.plan, auth) if auth.get("delivery_setup_reference") else {}
                     if (a.get("task_id") != task["task_id"] or old.get("status") != "IDENTITY_REVIEW"
                             or old.get("reason") != "SPAIN_DELIVERY_LOCATION_NOT_VERIFIED"
                             or old.get("receipt_path") != a["original_failed_receipt_reference"]["path"]

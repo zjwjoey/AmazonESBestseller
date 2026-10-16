@@ -428,9 +428,17 @@ class SetupLedger:
 def verify_setup(root, plan, auth):
     a = validate_amendment(root, plan, auth)
     proof = read_sealed(Path(root) / "delivery_setup.complete.json")
-    for name in ("delivery_setup_repair_reference", "request_budget_reservation_reference"):
+    for name in ("delivery_setup_repair_reference", "request_budget_reservation_reference", "post_UI_first_detail_recheck_reference"):
         if proof.get(name) and (auth.get(name) != proof[name] or file_sha(proof[name]["path"]) != proof[name]["sha256"]):
             raise ValueError("DELIVERY_SETUP_REPAIR_PROOF_BINDING_INVALID")
+    if proof.get("detail_recheck_receipt_reference"):
+        ref = proof["detail_recheck_receipt_reference"]
+        r = read_sealed(ref["path"])
+        if (file_sha(ref["path"]) != ref["sha256"] or r.get("request_role") != "DETAIL" or r.get("attempt") != 2
+                or r.get("state") != "NORMAL" or r.get("status_code") != 200
+                or r.get("run_id") != plan["run_id"] or r.get("task_id") != a["task_id"]
+                or r.get("html_sha256") != proof.get("html_sha256")):
+            raise ValueError("DELIVERY_SETUP_ACTUAL_DETAIL2_RECEIPT_INVALID")
     if (proof.get("passed") is not True or proof.get("plan_sha256") != digest(plan)
             or proof.get("amendment_sha256") != auth["delivery_setup_reference"]["sha256"]
             or proof.get("postal_code") != "28001" or file_sha(proof["html_path"]) != proof["html_sha256"]):

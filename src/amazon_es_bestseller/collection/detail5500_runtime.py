@@ -128,7 +128,18 @@ def run(root, auth_path, profile):
             if auth.get("delivery_setup_reference"):
                 from .delivery_setup5500 import perform_setup, verify_existing_setup_without_UI
                 atomic_json(root / "worker_status.json", {"phase": "APPROVED_DELIVERY_UI_SETUP", "updated_at": utc()})
-                if auth.get("delivery_setup_verification_reference"):
+                if auth.get("post_UI_first_detail_recheck_reference"):
+                    from .delivery_post_UI5500 import finalize_setup_from_first_detail
+                    session.page.route("**/*", boundary)
+                    atomic_json(root / "worker_status.json", {"phase": "FIRST_DETAIL2_POST_UI_ACTUAL_LOCATION_VERIFICATION", "updated_at": utc()})
+                    if not (root / "delivery_setup.complete.json").exists():
+                        bridge.run(session, auth, until_completed=1)
+                        finalize_setup_from_first_detail(bridge, auth)
+                    else:
+                        from .delivery_setup5500 import verify_setup
+                        verify_setup(root, plan, auth)
+                    session.page.unroute("**/*", boundary)
+                elif auth.get("delivery_setup_verification_reference"):
                     atomic_json(root / "worker_status.json", {"phase": "READ_ONLY_DELIVERY_VERIFICATION_NO_UI", "updated_at": utc()})
                     verify_existing_setup_without_UI(session, bridge, auth)
                 else:
