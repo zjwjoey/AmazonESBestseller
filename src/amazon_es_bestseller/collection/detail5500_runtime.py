@@ -68,10 +68,14 @@ def audit_stage(bridge, stage, count):
     if count >= 20 and any(coverage[k] == 0 for k in ("brand_raw", "current_price_raw", "attributes")):
         raise ValueError("SYSTEMATIC_FIELD_COVERAGE_REVIEW_REQUIRED")
     bridge.gates_normal()
+    from .detail_budget5500 import uncertain_setup_page_holds
+    held = uncertain_setup_page_holds(bridge.root, bridge.plan)
     proof = {"stage": stage, "passed": True, "completed_at": utc(), "run_id": bridge.plan["run_id"],
         "independent_audit_elapsed_seconds": time.monotonic()-audit_started,
         "plan_sha256": digest(bridge.plan), "success_count": count, "actual_live_tasks": len(requests),
         "cache_tasks": count-len(requests), "minimum_request_interval_seconds": min(intervals, default=None),
+        "request_interval_scope": "OBSERVED_RECEIPTS_ONLY", "historical_setup_document_receipts_complete": held == 0,
+        "historical_uncertain_PAGE_budget_reservation": held, "effective_request_budget_used_upper_bound": len(all_paid)+held,
         "field_coverage_count": dict(coverage), "field_coverage_denominator": count,
         "missing_fields_not_imputed": True, "checkpoint_sha256": hashes,
         "independent_HTML_identity_and_all_parsed_fields_replayed": True,

@@ -203,6 +203,8 @@ class DetailBridge5500:
                 self.outcomes[t["task_id"]] = read_sealed(p)
 
     def progress(self):
+        from .detail_budget5500 import uncertain_setup_page_holds
+        held = uncertain_setup_page_holds(self.root, self.plan)
         outcomes = list(self.outcomes.values())
         counts = Counter(r["status"] for r in outcomes)
         success = sum(counts[s] for s in SUCCESS)
@@ -212,7 +214,8 @@ class DetailBridge5500:
         payload = {"run_id": self.plan["run_id"], "updated_at": now, "total": len(self.plan["tasks"]),
             "success": success, "remaining": len(self.plan["tasks"]) - success,
             "completed_tasks": len(outcomes), "pending": pending, "statuses": dict(counts),
-            "paid_requests": len(receipts), "cache_reused": counts["REUSED_VALID_CACHE"],
+            "paid_requests": len(receipts), "conservative_budget_reservation": held,
+            "effective_request_budget_used": len(receipts)+held, "cache_reused": counts["REUSED_VALID_CACHE"],
             "latest_success_at": max((r.get("saved_at", "") for r in outcomes if r["status"] in SUCCESS), default=None)}
         atomic_json(self.root / "detail_progress.json", payload)
         return payload
@@ -265,9 +268,12 @@ class DetailBridge5500:
         if auth.get("delivery_setup_reference"):
             from .delivery_setup5500 import validate_amendment
             validate_amendment(self.root, self.plan, auth)
-        for name in ("delivery_setup_verification_reference", "delivery_setup_continuation_reference"):
+        for name in ("delivery_setup_verification_reference", "delivery_setup_continuation_reference",
+                     "delivery_setup_repair_reference", "request_budget_reservation_reference"):
             if auth.get(name) and file_sha(auth[name]["path"]) != auth[name]["sha256"]:
                 raise ValueError("DELIVERY_CONTROL_REFERENCE_CHANGED")
+        from .detail_budget5500 import uncertain_setup_page_holds
+        uncertain_setup_page_holds(self.root, self.plan, auth)
         if (auth["max_page_requests"] > auth["max_requests"] or
                 (auth["max_other_requests"] != 0 and not auth.get("delivery_setup_reference"))
                 or auth["request_start_interval_seconds"] < 3 or auth["max_attempts_per_task"] not in (1, 2)):
@@ -293,7 +299,8 @@ class DetailBridge5500:
         before increasing the cumulative task limit. No successful task replay.
         """
         self.validate_authorization(auth)
-        auth_name = ("authorization.delivery_location_verification_1.approved.json" if auth.get("delivery_setup_verification_reference") else
+        auth_name = ("authorization.delivery_location_repair_3.approved.json" if auth.get("delivery_setup_repair_reference") else
+                     "authorization.delivery_location_verification_1.approved.json" if auth.get("delivery_setup_verification_reference") else
                      "authorization.delivery_location_2.approved.json" if auth.get("delivery_setup_continuation_reference") else
                      "authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference") else "authorization.approved.json")
         immutable_json(self.root / auth_name, auth)
@@ -323,8 +330,10 @@ class DetailBridge5500:
                     immutable_bytes(slot / "checkpoint.attempt_1.preserved.json", checkpoint.read_bytes())
                     attempt = 2
                 self.validate_authorization(auth)
-                if (len(reservations) >= auth["max_requests"] or
-                        sum(r.get("kind", "PAGE") == "PAGE" for r in reservations) >= auth["max_page_requests"]):
+                from .detail_budget5500 import uncertain_setup_page_holds
+                held = uncertain_setup_page_holds(self.root, self.plan, auth)
+                if (len(reservations)+held >= auth["max_requests"] or
+                        sum(r.get("kind", "PAGE") == "PAGE" for r in reservations)+held >= auth["max_page_requests"]):
                     raise ValueError("DETAIL_CUMULATIVE_BUDGET_EXHAUSTED")
                 if any(r["state"] == "RESERVED" for r in reservations):
                     raise ValueError("AMBIGUOUS_IN_FLIGHT_REQUEST_REQUIRES_REVIEW")

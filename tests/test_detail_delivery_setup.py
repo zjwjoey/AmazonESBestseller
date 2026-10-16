@@ -69,6 +69,20 @@ def test_only_observed_normal_delivery_UI_request_scope(url, method, body, expec
     assert allowed_shipping_request(url, method, body, "28001") is expected
 
 
+@pytest.mark.parametrize('body,expected',[( '{"zipCode":"28001","locationType":"LOCATION_INPUT"}',True),
+    ('{"zipCode":"28001"}',True),('{"zipCode":"90210"}',False),
+    ('{"zipCode":28001}',False),('{"zipCode":["28001"]}',False),
+    ('{"zipCode":"28001","zipCode":"90210"}',False),
+    ('{"zipCode":"28001","locationType":"OTHER"}',False),('not json',False)])
+def test_actual_JSON_UI_post_is_validated_not_synthesized(body,expected):
+    from amazon_es_bestseller.collection.delivery_setup5500 import allowed_shipping_request
+    trace=json.loads((Path(__file__).parent/'fixtures/detail_bridge5500/actual_blocked_json_shipping_request.json').read_text(encoding='utf8'))
+    assert trace['action']=='ABORTED_BEFORE_SEND' and trace['postal_code_values']=='28001'
+    # Body examples test the decoder only: the actual full payload was not retained.
+    # Runtime always forwards the browser-emitted request unchanged, never these examples.
+    assert allowed_shipping_request(trace['url'],trace['method'],body,'28001') is expected
+
+
 def test_setup_requests_share_original_total_budget(tmp_path):
     from amazon_es_bestseller.collection.delivery_setup5500 import SetupLedger
     root, plan, auth, amendment = fixture(tmp_path)

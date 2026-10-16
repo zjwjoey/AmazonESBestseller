@@ -183,7 +183,8 @@ class BrowserSession:
 
     def ensure_spain_delivery(self, postal_code: str = DEFAULT_SPAIN_POSTAL_CODE,
                               timeout_ms: int = 45000, *, navigate: bool = True,
-                              current_status_code: Optional[int] = None) -> DeliveryLocation:
+                              current_status_code: Optional[int] = None,
+                              avoid_confirmation_navigation: bool = False) -> DeliveryLocation:
         """Verify the Amazon header destination and set a Spain postal code.
 
         The check is idempotent for one session.  If the header is not already
@@ -251,6 +252,23 @@ class BrowserSession:
             if apply_button is None:
                 raise DeliveryLocationError("Amazon 配送地点弹窗未找到邮编确认按钮。")
             apply_button.click(timeout=5000)
+
+            if avoid_confirmation_navigation:
+                # A bounded setting budget may have room for only the real UI
+                # POST. Accept only its actual updated ingress header; never
+                # manufacture a reload or treat the input value as proof.
+                deadline = time.monotonic()+5.0
+                while True:
+                    body = self._stable_page_content()
+                    require_normal_access(detect_access_status(status, body), "配送设置真实页面复核")
+                    current = inspect_delivery_location(body)
+                    if current.is_spain is True and current.postal_code == code:
+                        self._delivery_location_checked = True
+                        self._delivery_location = current
+                        return current
+                    if time.monotonic() >= deadline:
+                        raise DeliveryLocationError("UI_POST_HEADER_NOT_VERIFIED_WITHIN_ORIGINAL_REQUEST_BUDGET")
+                    time.sleep(0.2)
 
             done_button = self._visible_locator((
                 "#a-autoid-67",

@@ -21,6 +21,8 @@ def build_report(root, sample, at=None):
     live = [r for r in success_rows if r["status"] == "SUCCESS"]
     recent = [r for r in live if r.get("saved_at") and at-timedelta(hours=1) <= datetime.fromisoformat(r["saved_at"]) <= at]
     receipts = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
+    from .detail_budget5500 import uncertain_setup_page_holds
+    held = uncertain_setup_page_holds(root, plan)
     latest = max((r.get("started_at", "") for r in receipts), default=None)
     gates = {}
     for name, p in (("local", root / "access_gate.json"), ("shared", Path(plan["shared_gate_path"]))):
@@ -55,7 +57,9 @@ def build_report(root, sample, at=None):
         total_tasks=len(plan["tasks"]), tasks_with_checkpoint=len(outcomes), success_details=len(success_rows),
         live_success_details=len(live), cache_reused=counts["REUSED_VALID_CACHE"], real_new_details_last_hour=len(recent),
         remaining_tasks=pending, failures_and_identity_review={k:v for k,v in counts.items() if k not in {"SUCCESS", "REUSED_VALID_CACHE"}},
-        paid_requests=len(receipts), request_cap=auth["max_requests"], remaining_request_budget=auth["max_requests"]-len(receipts),
+        paid_requests=len(receipts), conservative_budget_reservation=held, effective_request_budget_used=len(receipts)+held,
+        request_cap=auth["max_requests"], remaining_request_budget=auth["max_requests"]-len(receipts)-held,
+        setup_budget_used_upper_bound=sum(r.get("request_role")=="DELIVERY_SETUP" for r in receipts)+held,
         request_kinds=dict(Counter(r.get("kind", "PAGE") for r in receipts)),
         latest_success_at=max((r.get("saved_at", "") for r in live), default=None), latest_request_at=latest,
         lanes=[dict(lane=1, state="SERIAL_RUNNING" if collecting else "STOPPED", success=len(live)),
@@ -83,7 +87,7 @@ def persist_hour(root, sample, at=None):
     immutable_json(target, report)
     text = ("时间：{report_time_beijing}\n运行：{run_id}\n状态：{actual_state} / {mode}\n"
         "成功详情：{success_details}/{total_tasks}；本小时真实新增：{real_new_details_last_hour}\n"
-        "累计请求：{paid_requests}/{request_cap}；剩余额度：{remaining_request_budget}\n"
+        "确认请求：{paid_requests}/{request_cap}；历史不确定PAGE预留：{conservative_budget_reservation}；有效已用额度：{effective_request_budget_used}；剩余额度：{remaining_request_budget}\n"
         "最近请求：{latest_request_at}\n最近成功：{latest_success_at}\n"
         "{hourly_summary}\n门禁：{access_gates}\n"
         "三路状态：{lanes}\n完整交付ETA：{ETA_including_full_QA}；{ETA_limitation}\n"

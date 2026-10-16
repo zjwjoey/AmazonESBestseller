@@ -1,0 +1,1 @@
+{"action":"ABORTED_BEFORE_SEND","body_sha256":"117040f50cc0c79e3c79360b7afe31d72856e8edb86e8a0e2a25f9bbc07d65ac","method":"POST","observed_at":"2026-10-16T16:13:08.889694+00:00","postal_code_values":"28001","reason":"OUTSIDE_APPROVED_UI_REQUEST_SCOPE","resource_type":"xhr","url":"https://www.amazon.es/portal-migration/hz/glow/address-change?actionSource=glow"}

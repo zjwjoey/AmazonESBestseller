@@ -68,6 +68,20 @@ def allowed_shipping_request(url, method, body, postcode):
         return suffix in {"get-rendered-address-selections", "get-address-selections.html"}
     if suffix not in {"address-change", "address-change.html"}:
         return False
+    if (body or "").lstrip().startswith("{"):
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("DUPLICATE_JSON_KEY")
+                result[key] = value
+            return result
+        try:
+            values = json.loads(body, object_pairs_hook=unique)
+        except (ValueError, TypeError):
+            return False
+        return (isinstance(values, dict) and values.get("zipCode") == postcode
+                and values.get("locationType", "LOCATION_INPUT") == "LOCATION_INPUT")
     values = parse_qs(body or "")
     return values.get("zipCode") == [postcode] and values.get("locationType", ["LOCATION_INPUT"]) == ["LOCATION_INPUT"]
 
@@ -159,6 +173,63 @@ def requires_setup_accounting(url, method, resource_type, main_navigation=False)
     """Never let shipping data escape accounting by using a script/beacon type."""
     return (main_navigation or resource_type in {"xhr", "fetch"} or method != "GET"
             or urlsplit(url).path.startswith(("/portal-migration/hz/glow/", "/gp/glow/", "/gp/delivery/")))
+
+
+def validate_local_payload_repair(root, plan, auth, amendment):
+    """One delegated counted attempt 3 after a proved local pre-send error."""
+    root = Path(root)
+    ref = auth.get("delivery_setup_repair_reference")
+    if not ref or file_sha(ref["path"]) != ref["sha256"]:
+        raise ValueError("DELEGATED_UI_REPAIR_REVIEW_REQUIRED")
+    a = json.loads(Path(ref["path"]).read_text(encoding="utf8"))
+    if (a.get("approved") is not True or a.get("approved_by") != "agent_under_explicit_user_delegation"
+            or a.get("scope") != "ONE_NORMAL_UI_REPAIR_AFTER_LOCAL_JSON_PRE_SEND_REJECTION"
+            or a.get("run_id") != plan["run_id"] or a.get("plan_sha256") != digest(plan)
+            or a.get("task_id") != amendment["task_id"] or a.get("initial_product_URL") != amendment["initial_product_URL"]
+            or a.get("maximum_total_UI_attempts") != 3 or a.get("maximum_repair_attempts") != 1
+            or a.get("max_total_setup_requests") != 8 or a.get("total_request_cap_unchanged") != auth["max_requests"]
+            or a.get("request_deadline_unchanged") != auth["request_deadline"] or a.get("final_deadline_unchanged") != auth["deadline"]
+            or a.get("only_browser_emitted_requests") is not True):
+        raise ValueError("DELEGATED_UI_REPAIR_SCOPE_INVALID")
+    for name in ("delegation_reference", "attempt_2_reference", "failure_2_reference", "failed_UI_reference",
+                 "blocked_request_reference", "last_modal_receipt_reference", "budget_reservation_reference"):
+        r = a[name]
+        if not Path(r["path"]).resolve().is_relative_to(root.resolve()) or file_sha(r["path"]) != r["sha256"]:
+            raise ValueError("DELEGATED_UI_REPAIR_EVIDENCE_CHANGED")
+    delegation = json.loads(Path(a["delegation_reference"]["path"]).read_text(encoding="utf8"))
+    attempt = read_sealed(a["attempt_2_reference"]["path"])
+    failure = read_sealed(a["failure_2_reference"]["path"])
+    denied = json.loads(Path(a["blocked_request_reference"]["path"]).read_text(encoding="utf8"))
+    denied_url = urlsplit(denied.get("url", ""))
+    last = read_sealed(a["last_modal_receipt_reference"]["path"])
+    failed_html = Path(a["failed_UI_reference"]["path"]).read_text(encoding="utf8")
+    failed_location = inspect_delivery_location(failed_html)
+    if (delegation.get("approved_by") != "user" or delegation.get("approved") is not True
+            or delegation.get("human_quote") != "直到任务提取都不要问我问题，我给你权限你觉得"
+            or attempt.get("total_setup_attempt") != 2 or failure.get("error_type") != "DeliveryLocationError"
+            or failure.get("pending_receipts") or failure.get("route_errors")
+            or failure.get("evidence", {}).get("html_sha256") != a["failed_UI_reference"]["sha256"]
+            or denied.get("action") != "ABORTED_BEFORE_SEND" or denied.get("method") != "POST"
+            or denied.get("postal_code_values") != "28001" or denied.get("resource_type") != "xhr"
+            or denied_url.scheme != "https" or denied_url.netloc != "www.amazon.es"
+            or denied_url.path not in {"/portal-migration/hz/glow/address-change", "/gp/glow/address-change.html"}
+            or detect_access_status(200, failed_html).value != "NORMAL"
+            or (failed_location.is_spain is True and failed_location.postal_code == "28001")
+            or last.get("state") != "NORMAL" or last.get("status_code") != 200
+            or not _initial_readonly_setup_get(last, plan, amendment)):
+        raise ValueError("DELEGATED_UI_REPAIR_NOT_PROVEN_LOCAL_PRE_SEND_FAILURE")
+    from .detail_budget5500 import uncertain_setup_page_holds
+    if uncertain_setup_page_holds(root, plan, auth) != 2 or auth.get("request_budget_reservation_reference") != a["budget_reservation_reference"]:
+        raise ValueError("DELEGATED_UI_REPAIR_CONSERVATIVE_ACCOUNTING_REQUIRED")
+    rows = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
+    setup = [r for r in rows if r.get("request_role") == "DELIVERY_SETUP"]
+    if (len(rows) != 4 or len(setup) != 3 or any(r.get("method") != "GET" or r.get("state") != "NORMAL" for r in setup)
+            or any(r.get("state") == "RESERVED" for r in rows)
+            or (root / "delivery_setup.repair_3.attempt.json").exists()
+            or (root / "delivery_setup.complete.json").exists()
+            or (root / "receipts" / (amendment["task_id"]+"_2.json")).exists()):
+        raise ValueError("DELEGATED_UI_REPAIR_ALREADY_CONSUMED_OR_HISTORY_CHANGED")
+    return a
 
 
 def _initial_readonly_setup_get(original, plan, amendment):
@@ -305,12 +376,14 @@ class SetupLedger:
         self.check()
         validate_amendment(self.root, self.plan, self.auth)
         rows = [read_sealed(p) for p in (self.root / "receipts").glob("*.json")]
+        from .detail_budget5500 import uncertain_setup_page_holds
+        held = uncertain_setup_page_holds(self.root, self.plan, self.auth)
         if any(r.get("state") == "RESERVED" for r in rows):
             raise ValueError("DELIVERY_SETUP_IN_FLIGHT")
-        if sum(r.get("request_role") == "DELIVERY_SETUP" for r in rows) >= 8:
+        if sum(r.get("request_role") == "DELIVERY_SETUP" for r in rows)+held >= 8:
             raise ValueError("DELIVERY_SETUP_BUDGET_EXHAUSTED")
-        if (len(rows) >= self.auth["max_requests"] or
-                sum(r.get("kind", "PAGE") == kind for r in rows) >= self.auth["max_page_requests" if kind == "PAGE" else "max_other_requests"]):
+        if (len(rows)+held >= self.auth["max_requests"] or
+                sum(r.get("kind", "PAGE") == kind for r in rows)+(held if kind == "PAGE" else 0) >= self.auth["max_page_requests" if kind == "PAGE" else "max_other_requests"]):
             raise ValueError("DELIVERY_TOTAL_BUDGET_EXHAUSTED")
         if kind == "PAGE":
             valid = method == "GET" and url == self.amendment["initial_product_URL"]
@@ -355,6 +428,9 @@ class SetupLedger:
 def verify_setup(root, plan, auth):
     a = validate_amendment(root, plan, auth)
     proof = read_sealed(Path(root) / "delivery_setup.complete.json")
+    for name in ("delivery_setup_repair_reference", "request_budget_reservation_reference"):
+        if proof.get(name) and (auth.get(name) != proof[name] or file_sha(proof[name]["path"]) != proof[name]["sha256"]):
+            raise ValueError("DELIVERY_SETUP_REPAIR_PROOF_BINDING_INVALID")
     if (proof.get("passed") is not True or proof.get("plan_sha256") != digest(plan)
             or proof.get("amendment_sha256") != auth["delivery_setup_reference"]["sha256"]
             or proof.get("postal_code") != "28001" or file_sha(proof["html_path"]) != proof["html_sha256"]):
@@ -379,7 +455,14 @@ def perform_setup(session, bridge, auth):
     if (root / "delivery_setup.complete.json").exists():
         return verify_setup(root, plan, auth)
     suffix = ""
-    if (root / "delivery_setup.attempt.json").exists():
+    repair = bool(auth.get("delivery_setup_repair_reference"))
+    if repair:
+        validate_local_payload_repair(root, plan, auth, a)
+        suffix = ".repair_3"
+        immutable_json(root / "delivery_setup.repair_3.attempt.json", sealed(dict(started_at=now(),
+            repair_reference=auth["delivery_setup_repair_reference"], total_setup_attempt=3,
+            approved_by="agent_under_explicit_user_delegation", prior_attempts_preserved=True)))
+    elif (root / "delivery_setup.attempt.json").exists():
         validate_continuation(root, plan, auth, a)
         suffix = ".continuation_2"
         immutable_json(root / "delivery_setup.continuation_2.attempt.json", sealed(dict(started_at=now(),
@@ -389,12 +472,21 @@ def perform_setup(session, bridge, auth):
             amendment_sha256=auth["delivery_setup_reference"]["sha256"], max_attempts=1)))
     ledger = SetupLedger(root, plan, auth, a, lambda: bridge.validate_authorization(auth))
     pending, failure = {}, []
+    initial_document_pending = False
+    initial_navigation_seen = False
     def boundary(route):
+        nonlocal initial_navigation_seen
         req = route.request
         try:
             if failure or session.access_blocked:
                 return route.abort()
             is_page = req.is_navigation_request() and req.frame == session.page.main_frame
+            if initial_document_pending and is_page:
+                if initial_navigation_seen or req.url != a["initial_product_URL"] or req.method != "GET":
+                    failure.append("UNEXPECTED_INITIAL_SETUP_NAVIGATION")
+                    return route.abort()
+                initial_navigation_seen = True
+                return route.continue_()
             if requires_setup_accounting(req.url, req.method, req.resource_type, is_page):
                 if not is_page and not allowed_shipping_request(req.url, req.method, req.post_data or "", "28001"):
                     # Retain denied UI requests without sending them. Previously
@@ -443,11 +535,29 @@ def perform_setup(session, bridge, auth):
     session.page.route("**/*", boundary)
     try:
         with file_lock(Path(plan["shared_gate_path"]).parent / "highspeed_live.lock"):
-            status = session.goto(a["initial_product_URL"])
+            initial_receipt = ledger.reserve(a["initial_product_URL"], "GET", "PAGE")
+            initial_document_pending = True
+            status, initial_html, initial_error = None, "", None
+            try:
+                session.document_responses.clear()
+                status = session.goto(a["initial_product_URL"])
+                initial_html = session.page.content()
+            except Exception as exc:
+                initial_error = str(exc)
+            observed = next((r for r in session.document_responses if r["status_code"] in {403,429}), None)
+            if observed:
+                status = observed["status_code"]
+            receipt = ledger.finish(initial_receipt, status, initial_html, session.page.url, initial_error)
+            initial_document_pending = False
+            if receipt["state"] != "NORMAL":
+                raise ValueError("INITIAL_SETUP_DOCUMENT_ACCESS_STOP:"+receipt["state"])
             session.page.wait_for_timeout(100)
             if failure or pending:
                 raise ValueError("DELIVERY_SETUP_TRANSPORT_FAILED:"+str(failure))
-            location = session.ensure_spain_delivery("28001", navigate=False, current_status_code=status)
+            options = dict(navigate=False, current_status_code=status)
+            if repair:
+                options["avoid_confirmation_navigation"] = True
+            location = session.ensure_spain_delivery("28001", **options)
             session.page.wait_for_timeout(200)
             html = session.page.content()
             location = inspect_delivery_location(html)
@@ -462,7 +572,10 @@ def perform_setup(session, bridge, auth):
             immutable_json(root / "delivery_setup.complete.json", sealed(dict(passed=True, completed_at=now(),
                 plan_sha256=digest(plan), amendment_sha256=auth["delivery_setup_reference"]["sha256"],
                 postal_code=location.postal_code, delivery_text=location.text, html_path=str(hp),
-                html_sha256=file_sha(hp), receipts=receipts)))
+                html_sha256=file_sha(hp), receipts=receipts,
+                actual_UI_attempts=3 if repair else (2 if suffix else 1),
+                delivery_setup_repair_reference=auth.get("delivery_setup_repair_reference"),
+                request_budget_reservation_reference=auth.get("request_budget_reservation_reference"))))
             return verify_setup(root, plan, auth)
     except Exception as exc:
         # Save the real popover/DOM even when an ordinary UI selector changes.
