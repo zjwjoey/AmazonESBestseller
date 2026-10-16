@@ -139,3 +139,19 @@ def test_three_independent_single_worker_lanes_claim_round_robin(monkeypatch):
         for i in range(9):p.check_before_request();p.submit(task(i),'',{}, {},False)
     assert len(executors)==3 and [len(e.futures) for e in executors]==[3,3,3]
     assert len(set(saved))==9 and all(e.closed for e in executors)
+
+@pytest.mark.parametrize('explicit',[False,True])
+def test_detail_cli_is_visible_by_default_and_with_explicit_option(monkeypatch,explicit):
+    import sys
+    import amazon_es_bestseller.collection.detail5500_runtime as runtime
+    calls=[]
+    monkeypatch.setattr(runtime,'run',lambda *a,**kw:calls.append(kw))
+    monkeypatch.setattr(sys,'argv',['detail5500','--root','offline','--authorization','offline','--profile','original']+(['--visible'] if explicit else []))
+    runtime.main()
+    assert calls==[{'visible':True,'local_lanes':1}]
+
+def test_task_visible_requirement_cannot_be_silently_disabled(tmp_path):
+    import amazon_es_bestseller.collection.detail5500_runtime as runtime
+    (tmp_path/'detail_plan_5500.json').write_text('{"tasks":[]}')
+    ap=tmp_path/'authorization.test.approved.json';ap.write_text('{"visible_browser_required":true}')
+    with pytest.raises(ValueError,match='REQUIRES_VISIBLE'):runtime.run(tmp_path,ap,'original',visible=False)

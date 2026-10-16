@@ -160,7 +160,8 @@ def capture_once(session, bridge, auth, task, approval_reference):
     return rp, receipt, html
 
 
-def accept_capture(bridge, task, receipt_path, approval_reference, success_baseline):
+def accept_capture(bridge, task, receipt_path, approval_reference, success_baseline, *,
+                   recovery_name='access_recovery_1'):
     """Accept one proved normal capture, preserving both original Gate histories.
 
     The caller holds the controller/collector/shared locks. Partial failure
@@ -170,6 +171,13 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
     if file_sha(ap) != approval_reference['sha256']:
         raise ValueError('RECOVERY_APPROVAL_CHANGED')
     approval = read_sealed(ap)
+    # A second explicitly approved event must never collide with the first
+    # immutable proof. This names evidence only; it grants no new attempt.
+    import re
+    if (not isinstance(recovery_name, str)
+            or not re.fullmatch(r'access_recovery_[1-9][0-9]*', recovery_name)
+            or approval.get('recovery_evidence_name', 'access_recovery_1') != recovery_name):
+        raise ValueError('RECOVERY_EVIDENCE_NAME_NOT_EXPLICITLY_BOUND')
     rp = Path(receipt_path)
     r = read_sealed(rp)
     if (rp.parent.resolve() != (bridge.root/'receipts').resolve()
@@ -213,7 +221,7 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
     # Repeat full parsing independently before changing any task/Gate state.
     if parse_candidate_detail(task, html, dict(meta)) != result:
         raise ValueError('RECOVERY_INDEPENDENT_REPLAY_MISMATCH')
-    proof = bridge.root/'access_recovery_1.accepted.json'
+    proof = bridge.root/(recovery_name+'.accepted.json')
     immutable_json(proof, sealed({'run_id':bridge.plan['run_id'],'task_id':task['task_id'],
         'approval_reference':approval_reference,'normal_receipt_path':str(rp),
         'normal_receipt_sha256':file_sha(rp),'original_failure_checkpoint_sha256':file_sha(cp),
@@ -222,7 +230,7 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
         'human_authorized_normal_verification':True,'no_verification_form_submitted_by_agent':True,
         'accepted_at':utc()}))
     immutable_bytes(cp.with_name('checkpoint.challenge.original.json'),cp.read_bytes())
-    mp = cp.with_name('response_metadata.recovery_1.json')
+    mp = cp.with_name('response_metadata.recovery_'+recovery_name.removeprefix('access_recovery_')+'.json')
     immutable_json(mp,{**meta,'receipt_path':str(rp),'recovery_evidence_path':str(proof)})
     result.update(html_path=r['html_path'],html_sha256=r['html_sha256'],receipt_path=str(rp),
         receipt_sha256=file_sha(rp),response_metadata_path=str(mp),response_metadata_sha256=file_sha(mp))

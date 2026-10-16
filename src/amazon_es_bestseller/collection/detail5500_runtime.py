@@ -91,12 +91,14 @@ def audit_stage(bridge, stage, count, auth=None):
     return proof
 
 
-def run(root, auth_path, profile, *, visible=False, local_lanes=1):
+def run(root, auth_path, profile, *, visible=True, local_lanes=1):
     root = Path(root)
     if Path(auth_path).resolve().parent != root.resolve():
         raise ValueError("AUTHORIZATION_MUST_BE_PRESERVED_IN_SAME_RUN")
     plan = json.loads((root / "detail_plan_5500.json").read_text(encoding="utf8"))
     auth = json.loads(Path(auth_path).read_text(encoding="utf8"))
+    if auth.get('visible_browser_required') and not visible:
+        raise ValueError('TASK_REQUIRES_VISIBLE_BROWSER')
     bridge = DetailBridge5500(root, plan)
     bridge.validate_authorization(auth)
     if local_lanes not in (1, 3) or (local_lanes == 3 and (
@@ -185,7 +187,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--root", required=True); p.add_argument("--authorization", required=True)
     p.add_argument("--profile", required=True)
-    p.add_argument('--visible', action='store_true', help='Show the existing profile browser without changing access policy.')
+    p.add_argument('--visible', action='store_true', default=True,
+                   help='Visible browser is the Detail5500 default; the original profile and access policy stay unchanged.')
     p.add_argument('--local-lanes', type=int, choices=(1, 3), default=1,
                    help='Local parsers only; all network and persistence stay with the single controller.')
     a = p.parse_args()
