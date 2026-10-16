@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+from . import RULE_VERSION
 from .audit import audit_snapshot
 from .contracts import csv_bytes, file_sha, jsonl, publish, read_json, separate, verify_bundle
 from .loader import Snapshot
@@ -39,6 +40,16 @@ def _audit_bundle(directory):
     return directory, manifest, sha
 
 
+def bound_snapshot(manifest, out):
+    if manifest.get("rule_version") != RULE_VERSION:
+        raise ValueError("AUDIT_RULE_VERSION_REAUDIT_REQUIRED")
+    source = Snapshot(manifest["inputs"]["snapshot_directory"])
+    if source.sha256 != manifest["inputs"]["snapshot_manifest_sha256"]:
+        raise ValueError("AUDIT_SNAPSHOT_BINDING_MISMATCH")
+    separate(source.root, out)
+    return source
+
+
 def _read_lines(path):
     import json
     return [json.loads(line) for line in Path(path).read_text(encoding="utf8").splitlines() if line.strip()]
@@ -47,6 +58,7 @@ def _read_lines(path):
 def repair_plan(audit, out):
     separate(audit, out)
     directory, manifest, sha = _audit_bundle(audit)
+    source = bound_snapshot(manifest, out)
     candidates = _read_lines(directory / "source_repair_candidates.jsonl")
     issues = _read_lines(directory / "source_audit_issues.jsonl")
     plan = {
@@ -59,6 +71,7 @@ def repair_plan(audit, out):
     }
     publish(out, {"source_repair_plan.json": plan, "source_repair_candidates.jsonl": jsonl(candidates)},
             kind="source_repair_plan", inputs={"audit_manifest_sha256": sha, **manifest["inputs"]})
+    source.verify()
     return plan
 
 
@@ -66,9 +79,7 @@ def prepare_translation(audit, out, *, cache=None):
     separate(audit, out)
     directory, manifest, sha = _audit_bundle(audit)
     # Revalidate underlying frozen evidence, not just a self-consistent report.
-    source = Snapshot(manifest["inputs"]["snapshot_directory"])
-    if source.sha256 != manifest["inputs"]["snapshot_manifest_sha256"]:
-        raise ValueError("AUDIT_SNAPSHOT_BINDING_MISMATCH")
+    source = bound_snapshot(manifest, out)
     cache_memory, cache_evidence = {}, None
     if cache:
         # Explicit optional *copied* cache only; never instantiate the historical

@@ -51,7 +51,7 @@ def make_batch(root, *, html=HTML, change=None, status="SUCCESS", count=1, expor
         tasks.append(task)
         selected.append(dict(candidate_id=cid, selection_id=sid, absolute_product_url=URL))
     immutable_json(root / "selected_5500.json", selected)
-    immutable_json(root / "detail_plan_5500.json", dict(tasks=tasks, selection_sha256=file_sha(root / "selected_5500.json")))
+    immutable_json(root / "detail_plan_5500.json", dict(run_id='source_audit_test', tasks=tasks, selection_sha256=file_sha(root / "selected_5500.json")))
     if count != 1:
         return tasks
     task = tasks[0]
@@ -450,3 +450,92 @@ def test_http_challenge_in_saved_html_is_not_retried(tmp_path):
     result = audit_snapshot(Snapshot(snap))
     assert result['products'][0]['preparation_status'] == 'SOURCE_BLOCKED'
     assert result['summary']['amazon_requests'] == 0
+
+
+@pytest.mark.parametrize('fault', ['hash', 'final_url', 'status_code'])
+def test_response_metadata_is_bound_not_merely_copied(tmp_path, fault):
+    source, snap = tmp_path / 'source', tmp_path / 'snap'
+    _, _, outcome = make_batch(source)
+    metadata = dict(requested_url=URL, final_url=URL, status_code=200, access_state='NORMAL')
+    if fault == 'final_url':
+        metadata['final_url'] = 'https://www.amazon.es/dp/B000000001'
+    if fault == 'status_code':
+        metadata['status_code'] = 403
+    path = source / 'tasks/detail_0/response_metadata.json'
+    immutable_json(path, metadata)
+    outcome.update(response_metadata_path=str(path.resolve()), response_metadata_sha256='0' * 64 if fault == 'hash' else file_sha(path))
+    (source / 'tasks/detail_0/checkpoint.json').write_bytes(canonical_bytes(sealed(outcome)))
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    result = audit_snapshot(Snapshot(snap))
+    assert not result['products'][0]['identity_passed']
+    assert any(i['issue_code'] == 'EVIDENCE_INVALID' for i in result['issues'])
+
+
+@pytest.mark.parametrize('command', ['prepare-translation', 'repair-plan', 'repair-copy'])
+def test_no_derived_output_may_be_published_inside_frozen_input(tmp_path, command):
+    _, _, snap = run_case(tmp_path)
+    audit = tmp_path / 'audit'
+    run_audit(snap, audit)
+    destination = snap / 'must_not_create'
+    assert main([command, '--audit', str(audit), '--out', str(destination)]) == 2
+    assert not destination.exists()
+
+
+def test_final_acceptance_requires_exact_checkpoint_bindings(tmp_path):
+    source, snap = tmp_path / 'source', tmp_path / 'snap'
+    make_batch(source)
+    plan = read_json(source / 'detail_plan_5500.json')
+    proof = dict(passed=True, plan_sha256=digest(plan), success_count=1, stage='FINAL',
+                 checkpoint_sha256={'detail_0': '0' * 64})
+    immutable_json(source / 'FINAL_acceptance.json', sealed(proof))
+    immutable_json(source / 'detail_run_manifest.json', dict(plan_sha256=digest(plan),
+        final_acceptance_sha256=file_sha(source / 'FINAL_acceptance.json'), progress={'success': 1}))
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    result = audit_snapshot(Snapshot(snap))
+    assert not result['summary']['producer_final_acceptance_verified']
+    assert not result['summary']['batch_integrity_passed']
+
+
+def test_jsonl_outcome_can_freeze_external_saved_evidence_without_checkpoint(tmp_path):
+    source, snap = tmp_path / 'source', tmp_path / 'snap'
+    _, _, outcome = make_batch(source)
+    external = tmp_path / 'external_saved'
+    external.mkdir()
+    hp = external / 'original.html'
+    hp.write_bytes(Path(outcome['html_path']).read_bytes())
+    rp = external / 'receipt.json'
+    rp.write_bytes(Path(outcome['receipt_path']).read_bytes())
+    outcome.update(html_path=str(hp.resolve()), receipt_path=str(rp.resolve()))
+    (source / 'tasks/detail_0/checkpoint.json').unlink()
+    (source / 'details.jsonl').write_bytes(canonical_bytes(outcome) + b'\n')
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    frozen = Snapshot(snap)
+    assert frozen.reference(str(hp.resolve())).is_file()
+    assert frozen.reference(str(rp.resolve())).is_file()
+    assert audit_snapshot(frozen)['products'][0]['identity_passed']
+
+
+def test_old_audit_rule_requires_reaudit_not_implicit_approval(tmp_path):
+    _, _, snap = run_case(tmp_path)
+    audit = tmp_path / 'audit'
+    run_audit(snap, audit)
+    path = audit / 'manifest.json'
+    manifest = read_json(path); manifest['rule_version'] = 'source-audit-v1.0'
+    path.write_bytes(canonical_bytes(manifest))
+    assert main(['prepare-translation', '--audit', str(audit), '--out', str(tmp_path / 'prep')]) == 2
+    assert not (tmp_path / 'prep').exists()
+
+
+def test_valid_small_final_acceptance_is_not_claimed_formal_5500(tmp_path):
+    source, snap = tmp_path / 'source', tmp_path / 'snap'
+    make_batch(source)
+    plan = read_json(source / 'detail_plan_5500.json')
+    proof = dict(passed=True, plan_sha256=digest(plan), run_id=plan['run_id'], stage='FINAL',
+                 success_count=1, checkpoint_sha256={'detail_0':file_sha(source / 'tasks/detail_0/checkpoint.json')})
+    immutable_json(source / 'FINAL_acceptance.json', sealed(proof))
+    immutable_json(source / 'detail_run_manifest.json', dict(plan_sha256=digest(plan), run_id=plan['run_id'],
+        final_acceptance_sha256=file_sha(source / 'FINAL_acceptance.json'), progress={'success':1}))
+    snapshot(source, snap, data_kind='SYNTHETIC_TEST')
+    result = audit_snapshot(Snapshot(snap))
+    assert result['summary']['producer_final_acceptance_verified']
+    assert not result['summary']['formal_5500_fully_audited']

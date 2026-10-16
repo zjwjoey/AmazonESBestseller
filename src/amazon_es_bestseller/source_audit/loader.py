@@ -62,6 +62,17 @@ def snapshot(source, out, *, data_kind="DETAIL5500"):
     for p in original:
         if p.suffix == ".json" and (p.name == "checkpoint.json" or p.name.startswith("response_metadata")):
             references.update(_references(read_json(p)))
+        elif p.name in {"details_5500_raw.jsonl", "details.jsonl"}:
+            with p.open(encoding="utf-8-sig") as handle:
+                for line in handle:
+                    if line.strip():
+                        references.update(_references(json.loads(line)))
+        elif p.name == "details.json":
+            references.update(_references(read_json(p)))
+        elif p.name in {"details_5500.csv", "details.csv"}:
+            with p.open(encoding="utf-8-sig", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    references.update(_references(row))
     for ref in sorted(references):
         path = Path(ref)
         path = (source / path).resolve() if not path.is_absolute() else path.resolve()

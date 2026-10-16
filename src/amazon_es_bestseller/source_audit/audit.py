@@ -111,8 +111,20 @@ def audit_product(snapshot, task, outcome):
         requested = receipt.get("request_url") or receipt.get("requested_url")
         if normalize(requested or "") != normalize(task.get("request_url") or ""):
             raise ValueError("RECEIPT_REQUEST_URL_MISMATCH")
-        if receipt.get("html_sha256") and receipt["html_sha256"] != outcome["html_sha256"]:
+        if (kind == "receipt" or receipt.get("html_sha256")) and receipt.get("html_sha256") != outcome["html_sha256"]:
             raise ValueError("RECEIPT_HTML_MISMATCH")
+        if outcome.get("response_metadata_path"):
+            mp = snapshot.reference(outcome["response_metadata_path"])
+            if file_sha(mp) != outcome.get("response_metadata_sha256"):
+                raise ValueError("RESPONSE_METADATA_SHA_MISMATCH")
+            metadata = snapshot.json(mp.relative_to(snapshot.root).as_posix())
+            if not isinstance(metadata, dict) or any(metadata.get(k) != receipt.get(k) for k in ("final_url", "status_code")):
+                raise ValueError("RESPONSE_METADATA_RECEIPT_MISMATCH")
+            if metadata.get("access_state") != "NORMAL" or (metadata.get("requested_url") or metadata.get("request_url")) != requested:
+                raise ValueError("RESPONSE_METADATA_REQUEST_OR_STATE_MISMATCH")
+            evidence.update(response_metadata_sha256=file_sha(mp), snapshot_metadata_path=mp.relative_to(snapshot.root).as_posix())
+        elif kind == "receipt" and snapshot.manifest.get("data_kind") == "DETAIL5500":
+            raise ValueError("FORMAL_RESPONSE_METADATA_REQUIRED")
         if record.get("candidate_id") != task.get("candidate_id") or record.get("selection_id") != task.get("selection_id"):
             raise ValueError("RECORD_CANDIDATE_SELECTION_MISMATCH")
         # Same-ASIN but different selected URLs remain separate candidate tasks.
@@ -161,8 +173,10 @@ def audit_product(snapshot, task, outcome):
         if record.get(field) != actual.get(field):
             target = ("attributes" if field == "ordered_detail_evidence" else
                       "category_path" if field in {"category_evidence", "detail_category_trail"} else field)
-            add(target, "HTML_RECORD_MISMATCH", "保存字段与同一HTML经现有解析器回放的结果不同。",
-                severity="P1", state="OFFLINE_REPARSE_AVAILABLE", repair=True)
+            finding = add(target, "HTML_RECORD_MISMATCH", "保存字段与同一HTML经现有解析器回放的结果不同。",
+                          severity="P1", state="OFFLINE_REPARSE_AVAILABLE", repair=True, value=record.get(field))
+            finding["source_field_name"] = field
+            finding["after"] = actual.get(field)
             proposals.append({"candidate_id": task.get("candidate_id"), "selection_id": task.get("selection_id"),
                 "asin": record.get("asin"), "field_name": field, "before": record.get(field),
                 "after": actual.get(field), "source_evidence_reference": dict(evidence),
@@ -389,7 +403,15 @@ def audit_snapshot(snapshot, *, expected_count=None):
             acceptance = read_sealed(snapshot.path("FINAL_acceptance.json"))
             final_accepted = (final.get("plan_sha256") == digest(plan)
                               and final.get("final_acceptance_sha256") == snapshot.files.get("FINAL_acceptance.json")
-                              and acceptance.get("passed") is True and acceptance.get("plan_sha256") == digest(plan))
+                              and acceptance.get("passed") is True and acceptance.get("plan_sha256") == digest(plan)
+                              and acceptance.get("stage") == "FINAL"
+                              and bool(plan.get("run_id"))
+                              and acceptance.get("run_id") == plan.get("run_id") == final.get("run_id")
+                              and acceptance.get("success_count") == len(tasks)
+                              and final.get("progress", {}).get("success") == len(tasks)
+                              and acceptance.get("checkpoint_sha256") == {
+                                  t["task_id"]: snapshot.files.get("tasks/" + t["task_id"] + "/checkpoint.json") for t in tasks}
+                              and all("tasks/" + t["task_id"] + "/checkpoint.json" in snapshot.files for t in tasks))
         except (OSError, ValueError, KeyError, TypeError):
             pass
         if not final_accepted:
@@ -424,6 +446,10 @@ def audit_snapshot(snapshot, *, expected_count=None):
                                  "导出详情与权威任务checkpoint不同。", severity="P0", state="SOURCE_CONFLICT"))
             product["preparation_status"] = "NOT_READY"
             product["field_statuses"] = {key: "SOURCE_REVIEW_REQUIRED" for key in product["field_statuses"]}
+    if final_accepted and any(p["collection_status"] not in SUCCESS or not p["identity_passed"] for p in products):
+        final_accepted = False
+        batch_issue("FINAL_REPLAY_NOT_SUCCESSFUL", "最终验收声明与逐任务有效详情回放不一致。")
+        issues.extend(global_issues[-1:])
     if global_issues:
         for product in products:
             product["preparation_status"] = "NOT_READY"

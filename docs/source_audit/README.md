@@ -144,3 +144,16 @@ main or inject this package into a running collector automatically. User-facing
 acceptance and handoff reports go under
 `F:/AmazonESBestseller/交付文件/20261016/<new-task-directory>`; machine artifacts
 stay in their run directories and are referenced or copied, never moved.
+
+## Evidence-binding hardening (rule version source-audit-v1.1)
+
+When response metadata is referenced, its byte hash, requested URL, final URL,
+status code and access state must agree with the sealed receipt. Formal
+DETAIL5500 successful live records require this metadata; historical replay
+envelopes remain explicitly non-production. Producer FINAL evidence must bind
+every planned checkpoint hash, exact success count, run ID and stage, not just
+a Boolean passed flag. JSON/JSONL/CSV fallback input freezes its external
+HTML/receipt references as well as per-task checkpoint input. Every derived
+command rejects output directories overlapping the underlying source snapshot,
+not merely the audit-report folder. Old-rule audit reports require re-audit
+before preparation or repair; frozen source copies themselves remain reusable.

@@ -7,16 +7,14 @@ from pathlib import Path
 from ..multisource.storage import digest
 from .contracts import jsonl, publish, separate, verify_bundle
 from .loader import Snapshot
-from .report import _read_lines
+from .report import _read_lines, bound_snapshot
 
 
 def repair_copy(audit, out):
     separate(audit, out)
     audit = Path(audit)
     manifest, sha = verify_bundle(audit, kind="source_audit")
-    source = Snapshot(manifest["inputs"]["snapshot_directory"])
-    if source.sha256 != manifest["inputs"]["snapshot_manifest_sha256"]:
-        raise ValueError("REPAIR_SNAPSHOT_BINDING_MISMATCH")
+    source = bound_snapshot(manifest, out)
     products = _read_lines(audit / "audited_products.jsonl")
     candidates = _read_lines(audit / "source_repair_candidates.jsonl")
     by_candidate = {p["candidate_id"]: p for p in products}
