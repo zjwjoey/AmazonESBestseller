@@ -854,8 +854,15 @@ class HighSpeedRunner:
     def _request(self, plan, authorization, transport, source, url, kind, started, last_request, *, descriptor=None, page_key=None):
         live = plan["stage"] != "T0"
         if live:
-            validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
-            authorize_request(url, source, authorization, kind=kind, descriptor=descriptor)
+            v4 = plan.get("snapshot_contract_version") == 4
+            delay = (plan["request_pacing_seconds"] - (aware_time(self.clock())-last_request).total_seconds()
+                     if v4 and last_request is not None else 0)
+            # V4 already validates at entry. With no pacing wait, perform one
+            # complete fresh byte/Gate/clock validation at the send boundary.
+            # A real wait retains both validations; legacy profiles are unchanged.
+            if not v4 or delay > 0:
+                validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
+                authorize_request(url, source, authorization, kind=kind, descriptor=descriptor)
             if last_request is not None:
                 delay = plan["request_pacing_seconds"] - (aware_time(self.clock())-last_request).total_seconds()
                 pacing_started=time.perf_counter()
@@ -866,6 +873,8 @@ class HighSpeedRunner:
                         "duration_seconds":time.perf_counter()-pacing_started,"requested_sleep_seconds":max(0,delay)})
             # Approval, gate and elapsed budget may change while pacing.
             validate_authorization(plan, authorization, self._gate(plan), now=self.clock(), store_root=self.store.root)
+            if v4:
+                authorize_request(url, source, authorization, kind=kind, descriptor=descriptor)
         if plan.get('target_policy'):
             from .task_clock import request_stop_reason
             reason=request_stop_reason(plan,authorization,self.store,now=self.clock())
