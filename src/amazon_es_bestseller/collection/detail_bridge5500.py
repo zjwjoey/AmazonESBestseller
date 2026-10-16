@@ -265,6 +265,9 @@ class DetailBridge5500:
         if auth.get("delivery_setup_reference"):
             from .delivery_setup5500 import validate_amendment
             validate_amendment(self.root, self.plan, auth)
+        for name in ("delivery_setup_verification_reference", "delivery_setup_continuation_reference"):
+            if auth.get(name) and file_sha(auth[name]["path"]) != auth[name]["sha256"]:
+                raise ValueError("DELIVERY_CONTROL_REFERENCE_CHANGED")
         if (auth["max_page_requests"] > auth["max_requests"] or
                 (auth["max_other_requests"] != 0 and not auth.get("delivery_setup_reference"))
                 or auth["request_start_interval_seconds"] < 3 or auth["max_attempts_per_task"] not in (1, 2)):
@@ -290,7 +293,8 @@ class DetailBridge5500:
         before increasing the cumulative task limit. No successful task replay.
         """
         self.validate_authorization(auth)
-        auth_name = ("authorization.delivery_location_2.approved.json" if auth.get("delivery_setup_continuation_reference") else
+        auth_name = ("authorization.delivery_location_verification_1.approved.json" if auth.get("delivery_setup_verification_reference") else
+                     "authorization.delivery_location_2.approved.json" if auth.get("delivery_setup_continuation_reference") else
                      "authorization.delivery_location_1.approved.json" if auth.get("delivery_setup_reference") else "authorization.approved.json")
         immutable_json(self.root / auth_name, auth)
         if until_completed > 30:

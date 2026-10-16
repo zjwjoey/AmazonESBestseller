@@ -125,6 +125,131 @@ def requires_setup_accounting(url, method, resource_type, main_navigation=False)
             or urlsplit(url).path.startswith(("/portal-migration/hz/glow/", "/gp/glow/", "/gp/delivery/")))
 
 
+def validate_read_only_verification(root, plan, auth, amendment):
+    """One non-mutating product document check in the original setup budget.
+    This does not authorize another initialization or another detail attempt.
+    """
+    root = Path(root)
+    ref = auth.get("delivery_setup_verification_reference")
+    if not ref or file_sha(ref["path"]) != ref["sha256"]:
+        raise ValueError("READ_ONLY_VERIFICATION_REVIEW_REQUIRED")
+    v = json.loads(Path(ref["path"]).read_text(encoding="utf8"))
+    if (v.get("scope") != "ONE_READ_ONLY_DOCUMENT_VERIFICATION_WITHIN_ORIGINAL_SETUP"
+            or v.get("reviewed") is not True or v.get("reviewer") != "agent_under_existing_user_authorization"
+            or v.get("run_id") != plan["run_id"] or v.get("plan_sha256") != digest(plan)
+            or v.get("task_id") != amendment["task_id"] or v.get("initial_product_URL") != amendment["initial_product_URL"]
+            or v.get("max_verification_pages") != 1 or v.get("mutation_allowed") is not False
+            or v.get("repeat_initialization_allowed") is not False
+            or v.get("original_max_setup_attempts_preserved") != 1 or v.get("max_total_setup_requests") != 8
+            or v.get("original_amendment_reference") != auth["delivery_setup_reference"]):
+        raise ValueError("READ_ONLY_VERIFICATION_SCOPE_INVALID")
+    for name in ("initial_attempt_reference", "initial_failure_reference", "initial_setup_receipt_reference"):
+        r = v[name]
+        if not Path(r["path"]).resolve().is_relative_to(root.resolve()) or file_sha(r["path"]) != r["sha256"]:
+            raise ValueError("READ_ONLY_VERIFICATION_INITIAL_EVIDENCE_CHANGED")
+    book = v["existing_user_delegation_reference"]
+    if file_sha(book["path"]) != book["sha256"]:
+        raise ValueError("READ_ONLY_VERIFICATION_DELEGATION_CHANGED")
+    failure = read_sealed(v["initial_failure_reference"]["path"])
+    original = read_sealed(v["initial_setup_receipt_reference"]["path"])
+    rows = [read_sealed(p) for p in (root / "receipts").glob("*.json")]
+    if (failure.get("error_type") != "DeliveryLocationError" or failure.get("pending_receipts")
+            or original.get("state") != "NORMAL" or original.get("status_code") != 200
+            or original.get("request_role") != "DELIVERY_SETUP" or original.get("kind") != "PAGE"
+            or original.get("request_url") != amendment["initial_product_URL"]
+            or len([r for r in rows if r.get("request_role") == "DELIVERY_SETUP"]) != 1
+            or any(r.get("state") == "RESERVED" for r in rows)
+            or (root / "delivery_setup.verification_1.attempt.json").exists()
+            or (root / "delivery_setup.complete.json").exists()
+            or (root / "receipts" / (amendment["task_id"]+"_2.json")).exists()):
+        raise ValueError("READ_ONLY_VERIFICATION_NOT_REPLAYABLE")
+    return v
+
+
+def verify_existing_setup_without_UI(session, bridge, auth):
+    """Reload only the original literal product URL once. Never click/fill/POST.
+    A late server-side setting may be visible on the fresh document even when
+    the old popover confirmation failed. A still-wrong destination stops here.
+    """
+    root, plan = bridge.root, bridge.plan
+    a = validate_amendment(root, plan, auth)
+    if (root / "delivery_setup.complete.json").exists():
+        return verify_setup(root, plan, auth)
+    validate_read_only_verification(root, plan, auth, a)
+    bridge.validate_authorization(auth)
+    immutable_json(root / "delivery_setup.verification_1.attempt.json", sealed(dict(started_at=now(),
+        verification_reference=auth["delivery_setup_verification_reference"], mutation_allowed=False,
+        original_initialization_attempt_preserved=True)))
+    ledger = SetupLedger(root, plan, auth, a, lambda: bridge.validate_authorization(auth))
+    document_started = False
+    unexpected_navigation = []
+    def boundary(route):
+        nonlocal document_started
+        req = route.request
+        if session.access_blocked:
+            return route.abort()
+        if req.is_navigation_request():
+            if (document_started or req.method != "GET" or req.frame != session.page.main_frame
+                    or req.url != a["initial_product_URL"]):
+                unexpected_navigation.append(req.url)
+                return route.abort()
+            document_started = True
+            return route.continue_()
+        if (requires_setup_accounting(req.url, req.method, req.resource_type)
+                or req.resource_type in {"image", "media", "font"}):
+            return route.abort()
+        return route.continue_()
+    session.page.unroute("**/*")
+    session.page.route("**/*", boundary)
+    rp = None
+    try:
+        with file_lock(Path(plan["shared_gate_path"]).parent / "highspeed_live.lock"):
+            rp = ledger.reserve(a["initial_product_URL"], "GET", "PAGE")
+            html, status, error = "", None, None
+            session.document_responses.clear()
+            try:
+                status = session.goto(a["initial_product_URL"])
+                html = session.page.content()
+                if detect_access_status(status, html).value == "NORMAL":
+                    session.wait_for_product_page()
+                    html = session.page.content()
+            except Exception as exc:
+                error = str(exc)
+            observed = next((x for x in session.document_responses if x["status_code"] in {403,429}), None)
+            if observed:
+                status = observed["status_code"]
+            if unexpected_navigation:
+                error = "UNEXPECTED_VERIFICATION_NAVIGATION"
+            receipt = ledger.finish(rp, status, html, session.page.url, error)
+            if receipt["state"] != "NORMAL":
+                raise ValueError("READ_ONLY_VERIFICATION_ACCESS_STOP:"+receipt["state"])
+            from .detail_bridge5500 import parse_candidate_detail
+            task = next(t for t in plan["tasks"] if t["task_id"] == a["task_id"])
+            replay = parse_candidate_detail(task, html, dict(status_code=status, requested_url=task["request_url"],
+                final_url=session.page.url, collected_at=receipt["finished_at"]))
+            location = inspect_delivery_location(html)
+            result = dict(observed_at=now(), receipt_path=str(rp), receipt_sha256=file_sha(rp),
+                html_path=receipt["body_path"], html_sha256=receipt["body_sha256"],
+                delivery_text=location.text, postal_code=location.postal_code, is_spain=location.is_spain,
+                identity_status=replay.get("identity_status"), product_parse_status=replay["status"],
+                passed=location.is_spain is True and location.postal_code == "28001" and replay["status"] == "SUCCESS",
+                no_UI_mutation_performed=True, counted_within_original_eight_setup_requests=True)
+            immutable_json(root / "delivery_setup.verification_1.result.json", sealed(result))
+            if not result["passed"]:
+                raise ValueError("READ_ONLY_VERIFICATION_DESTINATION_OR_IDENTITY_NOT_VERIFIED")
+            bridge.gates_normal()
+            receipts = {str(p):file_sha(p) for p in (root / "receipts").glob("delivery_setup_*.json")}
+            immutable_json(root / "delivery_setup.complete.json", sealed(dict(passed=True, completed_at=now(),
+                plan_sha256=digest(plan), amendment_sha256=auth["delivery_setup_reference"]["sha256"],
+                postal_code=location.postal_code, delivery_text=location.text,
+                html_path=result["html_path"], html_sha256=result["html_sha256"], receipts=receipts,
+                finalized_by_read_only_verification=auth["delivery_setup_verification_reference"],
+                initialization_attempt_count_preserved=1)))
+            return verify_setup(root, plan, auth)
+    finally:
+        session.page.unroute("**/*", boundary)
+
+
 class SetupLedger:
     def __init__(self, root, plan, auth, amendment, check):
         self.root, self.plan, self.auth, self.amendment, self.check = Path(root), plan, auth, amendment, check

@@ -121,9 +121,13 @@ def run(root, auth_path, profile):
             return route.continue_()
         try:
             if auth.get("delivery_setup_reference"):
-                from .delivery_setup5500 import perform_setup
+                from .delivery_setup5500 import perform_setup, verify_existing_setup_without_UI
                 atomic_json(root / "worker_status.json", {"phase": "APPROVED_DELIVERY_UI_SETUP", "updated_at": utc()})
-                perform_setup(session, bridge, auth)
+                if auth.get("delivery_setup_verification_reference"):
+                    atomic_json(root / "worker_status.json", {"phase": "READ_ONLY_DELIVERY_VERIFICATION_NO_UI", "updated_at": utc()})
+                    verify_existing_setup_without_UI(session, bridge, auth)
+                else:
+                    perform_setup(session, bridge, auth)
             session.page.route("**/*", boundary)
             for name, count in (("T1", 30), ("T2", 100), ("FINAL", len(plan["tasks"]))):
                 if (root / (name + "_acceptance.json")).exists():

@@ -218,3 +218,89 @@ def test_additional_initialization_requires_bound_pre_submission_evidence(tmp_pa
 def test_shipping_requests_cannot_escape_accounting_by_resource_type(url, method, kind, expected):
     from amazon_es_bestseller.collection.delivery_setup5500 import requires_setup_accounting
     assert requires_setup_accounting(url,method,kind) is expected
+
+
+def test_read_only_verification_cannot_initialize_again(tmp_path):
+    from amazon_es_bestseller.collection.delivery_setup5500 import validate_read_only_verification
+    root, plan, auth, a = fixture(tmp_path)
+    with pytest.raises(ValueError, match="READ_ONLY_VERIFICATION"):
+        validate_read_only_verification(root, plan, auth, a)
+
+
+def verification_fixture(tmp_path):
+    root,plan,auth,a=fixture(tmp_path)
+    attempt=root/"delivery_setup.attempt.json";immutable_json(attempt,sealed(dict(max_attempts=1)))
+    failure=root/"delivery_setup.failure.json";immutable_json(failure,sealed(dict(error_type="DeliveryLocationError",pending_receipts=[])))
+    sp=root/"receipts/delivery_setup_01.json"
+    immutable_json(sp,sealed(dict(request_role="DELIVERY_SETUP",kind="PAGE",method="GET",state="NORMAL",status_code=200,
+        request_url=a["initial_product_URL"],started_at=(datetime.now(timezone.utc)-timedelta(seconds=5)).isoformat())))
+    book=root/"user_book.txt";book.write_text("Existing setup budget includes document verification; no second initialization.",encoding="utf8")
+    def ref(p):return dict(path=str(p),sha256=file_sha(p))
+    v=dict(scope="ONE_READ_ONLY_DOCUMENT_VERIFICATION_WITHIN_ORIGINAL_SETUP",reviewed=True,
+        reviewer="agent_under_existing_user_authorization",run_id=plan["run_id"],plan_sha256=digest(plan),
+        task_id=a["task_id"],initial_product_URL=a["initial_product_URL"],max_verification_pages=1,
+        mutation_allowed=False,repeat_initialization_allowed=False,original_max_setup_attempts_preserved=1,
+        max_total_setup_requests=8,original_amendment_reference=auth["delivery_setup_reference"],
+        initial_attempt_reference=ref(attempt),initial_failure_reference=ref(failure),initial_setup_receipt_reference=ref(sp),
+        existing_user_delegation_reference=ref(book))
+    vp=root/"verification_review.json";immutable_json(vp,v)
+    auth["delivery_setup_verification_reference"]=ref(vp)
+    return root,plan,auth,a,v
+
+
+@pytest.mark.parametrize("destination,passed", [("Enviar a Madrid 28001",True),("Enviar a Taiwán",False)])
+def test_verification_only_one_GET_never_clicks_fills_or_submits(tmp_path,monkeypatch,destination,passed):
+    from types import SimpleNamespace as NS
+    from amazon_es_bestseller.collection.delivery_setup5500 import verify_existing_setup_without_UI
+    from amazon_es_bestseller.multisource.storage import read_sealed
+    root,plan,auth,a,v=verification_fixture(tmp_path)
+    before=file_sha(root/"delivery_setup.attempt.json")
+    calls=[];blocked=[]
+    class Page:
+        url=a["initial_product_URL"];main_frame=object()
+        def unroute(self,*args):pass
+        def route(self,pattern,handler):self.handler=handler
+        def content(self):return '<a id="nav-global-location-popover-link">'+destination+'</a>'
+        def locator(self,*args):pytest.fail("verification must not use any UI control")
+    page=Page()
+    def goto(url):
+        req=NS(url=url,method="GET",frame=page.main_frame,resource_type="document",is_navigation_request=lambda:True)
+        page.handler(NS(request=req,continue_=lambda:calls.append(url),abort=lambda:pytest.fail("GET should be allowed")))
+        # An unsolicited shipping POST is blocked, not sent or charged as success.
+        req=NS(url="https://www.amazon.es/portal-migration/hz/glow/address-change",method="POST",resource_type="xhr",is_navigation_request=lambda:False)
+        page.handler(NS(request=req,continue_=lambda:pytest.fail("verification must never POST"),abort=lambda:blocked.append("POST")))
+        return 200
+    session=NS(page=page,access_blocked=False,document_responses=[],goto=goto,wait_for_product_page=lambda:None,
+        ensure_spain_delivery=lambda *args,**kw:pytest.fail("must not initialize again"))
+    bridge=NS(root=root,plan=plan,validate_authorization=lambda auth:None,gates_normal=lambda:None)
+    monkeypatch.setattr("amazon_es_bestseller.collection.detail_bridge5500.parse_candidate_detail",
+        lambda *args:dict(status="SUCCESS",identity_status="EXACT_ACTIVE_PRODUCT_MATCH"))
+    if passed:
+        verify_existing_setup_without_UI(session,bridge,auth)
+        assert read_sealed(root/"delivery_setup.complete.json")["initialization_attempt_count_preserved"]==1
+    else:
+        with pytest.raises(ValueError,match="DESTINATION_OR_IDENTITY_NOT_VERIFIED"):
+            verify_existing_setup_without_UI(session,bridge,auth)
+        assert not (root/"delivery_setup.complete.json").exists()
+    assert calls==[a["initial_product_URL"]] and blocked==["POST"]
+    assert file_sha(root/"delivery_setup.attempt.json")==before
+    assert len(list((root/"receipts").glob("*.json")))==3
+    assert not (root/"receipts/first_2.json").exists()
+    if passed:
+        verify_existing_setup_without_UI(session,bridge,auth)  # Proof reuse, no page replay.
+    else:
+        with pytest.raises(ValueError,match="NOT_REPLAYABLE"):
+            verify_existing_setup_without_UI(session,bridge,auth)
+    assert len(calls)==1
+
+
+@pytest.mark.parametrize("key,value", [("mutation_allowed",True),("repeat_initialization_allowed",True),
+    ("max_verification_pages",2),("original_max_setup_attempts_preserved",2)])
+def test_verification_review_cannot_expand_into_another_setup(tmp_path,key,value):
+    from amazon_es_bestseller.collection.delivery_setup5500 import validate_read_only_verification
+    from amazon_es_bestseller.multisource.storage import atomic_json
+    root,plan,auth,a,v=verification_fixture(tmp_path)
+    v[key]=value;vp=Path(auth["delivery_setup_verification_reference"]["path"]);atomic_json(vp,v)
+    auth["delivery_setup_verification_reference"]["sha256"]=file_sha(vp)
+    with pytest.raises(ValueError,match="SCOPE_INVALID"):
+        validate_read_only_verification(root,plan,auth,a)
