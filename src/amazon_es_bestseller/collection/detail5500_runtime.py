@@ -91,7 +91,8 @@ def run(root, auth_path, profile):
         raise ValueError("APPROVED_CLEAN_CODE_REQUIRED")
     # The original profile stays fixed; only the separately approved normal UI
     # delivery setting is allowed before the frozen product queue resumes.
-    with file_lock(root / "controller.lock"), BrowserSession(headless=True, profile_dir=profile) as session:
+    with file_lock(root / "controller.lock"), BrowserSession(
+            headless=True, profile_dir=profile, block_service_workers=True) as session:
         session.document_responses = []
         session.access_blocked = False
         def observe(response):

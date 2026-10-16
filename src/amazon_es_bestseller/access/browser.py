@@ -32,9 +32,11 @@ class BrowserSession:
 
     PAGE_DELAY_SECONDS = 2.0
 
-    def __init__(self, headless: bool = True, profile_dir: Optional[str] = None):
+    def __init__(self, headless: bool = True, profile_dir: Optional[str] = None,
+                 block_service_workers: bool = False):
         self.headless = headless
         self.profile_dir = str(profile_dir) if profile_dir is not None else None
+        self.block_service_workers = block_service_workers
         self._playwright = None
         self.browser = None
         self.page = None
@@ -58,12 +60,14 @@ class BrowserSession:
             self.context = self._playwright.chromium.launch_persistent_context(
                 user_data_dir=self.profile_dir,
                 headless=self.headless,
+                **({"service_workers": "block"} if self.block_service_workers else {}),
             )
             self.browser = self.context
         else:
             self.browser = self._playwright.chromium.launch(headless=self.headless)
             self.context = self.browser
-        self.page = self.context.new_page()
+        self.page = self.context.new_page(**(
+            {"service_workers": "block"} if self.block_service_workers and not self.profile_dir else {}))
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
