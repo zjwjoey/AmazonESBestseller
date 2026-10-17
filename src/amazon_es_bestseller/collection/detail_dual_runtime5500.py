@@ -73,7 +73,8 @@ def validate_parallel_mode(root, plan, auth):
     permitted = {'code_sha','ci_run_id','ci_success_evidence','offline_acceptance_reference',
         'approved_by','approval_id','reviewed_at','network_parallelism','local_processing_lanes',
         'visible_browser_windows','visible_browser_required','target_requests_per_hour','max_uncommitted_tasks',
-        'parallel_base_authorization_reference','parallel_execution_approval_reference','family_identity_policy_reference'}
+        'parallel_base_authorization_reference','parallel_execution_approval_reference','family_identity_policy_reference',
+        'dual_stage_reference'}
     for key in set(base) | set(auth):
         if key not in permitted and auth.get(key) != base.get(key):
             raise ValueError('PARALLEL_CHANGED_INHERITED_AUTHORIZATION: ' + key)
@@ -187,6 +188,8 @@ class ParallelCollector:
 
     async def reserve_admitted(self, task, lane):
         self.check_qa_clock()
+        if getattr(self, 'stage', None) is not None:
+            self.stage.claim(task)
         await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
         validate_parallel_mode(self.root, self.plan, self.auth)
         if self.scheduler.stop.is_set():
@@ -566,21 +569,24 @@ async def run(root, authorization, profile):
     bridge.validate_stage('T1',30,auth=auth);bridge.validate_stage('T2',100,auth=auth)
     from .delivery_setup5500 import verify_setup
     verify_setup(root,plan,auth)
-    tasks=pending_tasks(bridge,auth)
+    from .detail_dual_stage5500 import load_stage, stage_result
+    stage=load_stage(root,plan,auth,pending_tasks(bridge,auth))
+    tasks=stage.tasks
     with file_lock(root/'controller.lock'),file_lock(root/'collector.lock'),file_lock(Path(plan['shared_gate_path']).parent/'highspeed_live.lock'):
         async with async_playwright() as pw:
             context=await pw.chromium.launch_persistent_context(str(profile),headless=False,service_workers='block')
             collector=ParallelCollector(bridge,auth,qa_seconds=full_qa_reserve(root,len(plan['tasks'])))
+            collector.stage=stage
             try:
                 await collector.run(context,tasks)
-                from .detail5500_runtime import audit_stage
-                audit_stage(bridge,'FINAL',len(plan['tasks']),auth)
                 from .quick5500_cli import export
                 export(root)
-                immutable_json(root/'detail_run_manifest.json',dict(run_id=plan['run_id'],completed_at=utc(),
-                    plan_sha256=digest(plan),authorization_sha256=file_sha(ap),code_sha=auth['code_sha'],
-                    final_acceptance_sha256=file_sha(root/'FINAL_acceptance.json'),progress=bridge.progress()))
-                atomic_json(root/'worker_status.json',dict(phase='COMPLETE',updated_at=utc()))
+                result=stage_result(stage,bridge.progress(),file_sha(ap))
+                result.update(completed_at=utc(),code_sha=auth['code_sha'])
+                immutable_json(root/f'dual_stage_{stage.document["cumulative_limit"]}.drained.json',result)
+                atomic_json(root/'worker_status.json',dict(phase=result['phase'],updated_at=utc(),
+                    cumulative_limit=stage.document['cumulative_limit'],network_parallelism=2,
+                    automatic_next_stage=False,not_final_acceptance=True))
             except Exception as exc:
                 from .quick5500_cli import export
                 export(root)
