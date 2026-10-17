@@ -164,7 +164,7 @@ class ParallelCollector:
         atomic_json(slot/'checkpoint.json', sealed(dict(status='RUNNING', task_id=task['task_id'],
             candidate_id=task['candidate_id'], run_id=self.plan['run_id'], receipt_path=str(rp))))
         token = dict(task=task, lane=lane, rp=rp, slot=slot, receipt=receipt,
-                     history=[], sent=False, committed=asyncio.Event())
+                     history=[], sent=False, navigation_requested=False, committed=asyncio.Event())
         self.tokens[lane] = token
         self.commit_order.append(task['task_id'])
         return token
@@ -179,15 +179,55 @@ class ParallelCollector:
             while initial.redirected_from:initial = initial.redirected_from
             token = next((self.tokens.get(i) for i, p in enumerate(self.pages)
                           if request.frame == p.main_frame), None)
-            if (not token or request.method != 'GET' or not safe_url(request.url)
+            if (not token or not token.get('navigation_requested',True) or request.method != 'GET' or not safe_url(request.url)
                     or initial.url != token['task']['request_url']):
                 return await route.abort()
             if request.redirected_from is None:
-                if token['sent']:return await route.abort()
-                token['sent'] = True
-                token['receipt']['document_started_at'] = utc()
-                token['notify_sent']()
+                if token.get('initial_request') is not None and token['initial_request'] is not request:
+                    return await route.abort()
+                if token.get('root_route_seen'):return await route.abort()
+                token['root_route_seen']=True
+            self.mark_document_start(token,request,'FIRST_OBSERVED_SCOPED_MAIN_DOCUMENT_ROUTE')
         return await route.continue_()
+
+    def mark_document_start(self, token, request, kind):
+        if token['sent']:return
+        initial=request
+        while initial.redirected_from:initial=initial.redirected_from
+        token['initial_request']=initial
+        token['sent']=True
+        token['receipt']['document_started_at']=utc()
+        token['receipt']['document_start_evidence_kind']=kind
+        token['receipt']['initial_request_route_observed']=(kind=='FIRST_OBSERVED_SCOPED_MAIN_DOCUMENT_ROUTE' and request.redirected_from is None)
+        token['receipt']['physical_wire_start_not_independently_observed']=True
+        token['notify_sent']()
+
+    async def configure_page(self, lane, page):
+        # Page guards also cover pages created through CDP newWindow. Retain
+        # the context guard as a fail-closed fallback for unexpected targets.
+        await page.route('**/*', self.route)
+        page.on('response', lambda response, i=lane:self.observe(i,response))
+        page.on('request', lambda request, i=lane:self.observe_request(i,request,'REQUEST'))
+        page.on('requestfailed', lambda request, i=lane:self.observe_request(i,request,'REQUEST_FAILED'))
+
+    def observe_request(self, lane, request, kind):
+        token=self.tokens.get(lane)
+        if not token or request.frame!=self.pages[lane].main_frame or request.resource_type!='document':return
+        token['receipt'].setdefault('document_request_events',[]).append(dict(
+            event=kind,url=request.url,observed_at=utc(),
+            is_navigation_request=request.is_navigation_request(),
+            redirected_from_url=request.redirected_from.url if request.redirected_from else None,
+            failure=getattr(request,'failure',None) if kind=='REQUEST_FAILED' else None))
+        initial=request
+        while initial.redirected_from:initial=initial.redirected_from
+        if (kind=='REQUEST' and not self.scheduler.stop.is_set()
+                and token.get('navigation_requested',True) and request.is_navigation_request()
+                and request.method=='GET' and safe_url(request.url)
+                and initial.url==token['task']['request_url']):
+            # Real browser request events are available even where Chromium
+            # does not call a route handler for a cached/redirected document.
+            # This never infers a start from a later response or manufactures HTTP.
+            self.mark_document_start(token,request,'PLAYWRIGHT_SCOPED_MAIN_DOCUMENT_REQUEST_EVENT')
 
     def observe(self, lane, response):
         request = response.request
@@ -226,6 +266,7 @@ class ParallelCollector:
         html, status, error = '', None, None
         try:
             if self.scheduler.stop.is_set():raise RuntimeError('RESERVED_BUT_NOT_SENT_GLOBAL_STOP')
+            token['navigation_requested']=True
             response = await page.goto(task['request_url'], wait_until='domcontentloaded', timeout=45000)
             status = response.status if response else None
             html = await page.content()
@@ -253,6 +294,7 @@ class ParallelCollector:
         immutable_bytes(hp, body)
         receipt = token['receipt']
         receipt.update(state=access, status_code=status, final_url=page.url, finished_at=utc(),
+            document_start_event_observed=token['sent'],
             html_path=str(hp), html_sha256=file_sha(hp), error=error, document_responses=token['history'])
         atomic_json(token['rp'], sealed(receipt), backup=True)
         meta = dict(status_code=status, requested_url=task['request_url'], final_url=page.url,
@@ -319,7 +361,7 @@ class ParallelCollector:
             self.pages.append(found)
         await control.detach()
         for lane,page in enumerate(self.pages):
-            page.on('response', lambda response, i=lane:self.observe(i,response))
+            await self.configure_page(lane,page)
             cdp=await context.new_cdp_session(page)
             window=(await cdp.send('Browser.getWindowForTarget'))['windowId']
             self.windows.append(window)
