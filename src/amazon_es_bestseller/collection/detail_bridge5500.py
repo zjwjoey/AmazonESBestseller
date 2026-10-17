@@ -481,6 +481,8 @@ class DetailBridge5500:
                 self.validate_authorization(auth)
                 if pipeline:
                     pipeline.check_before_request()
+                if hasattr(session, 'prepare_task'):
+                    session.prepare_task(task)
                 receipt = {"run_id": self.plan["run_id"], "task_id": task["task_id"], "kind": "PAGE",
                     "request_url": task["request_url"], "started_at": utc(), "state": "RESERVED",
                     "plan_sha256": digest(self.plan), "authorization_sha256": digest(auth)}
@@ -493,6 +495,7 @@ class DetailBridge5500:
                 if hasattr(session, "document_responses"):
                     session.document_responses.clear()
                 try:
+                    session.active_request_url = task['request_url']
                     status = session.goto(task["request_url"])
                     # Inspect restrictions immediately, before ordinary waits.
                     html = session.page.content()
@@ -506,6 +509,8 @@ class DetailBridge5500:
                         html = session.page.content()
                     except Exception:
                         pass
+                finally:
+                    session.active_request_url = None
                 stamp = utc()
                 body = html.encode("utf8")
                 hp = slot / "html" / (hashlib_sha(body) + ".html")
@@ -525,6 +530,8 @@ class DetailBridge5500:
                 reservations.append(receipt)
                 meta = {"status_code": status, "requested_url": task["request_url"], "final_url": final,
                         "access_state": access, "collected_at": stamp, "receipt_path": str(rp)}
+                if hasattr(session, 'visible_window_lane'):
+                    meta['visible_window_lane'] = session.visible_window_lane
                 mp = slot / ("response_metadata.json" if attempt == 1 else "response_metadata.attempt_2.json")
                 immutable_json(mp, meta)
                 if access != "NORMAL":

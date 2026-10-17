@@ -91,7 +91,7 @@ def audit_stage(bridge, stage, count, auth=None):
     return proof
 
 
-def run(root, auth_path, profile, *, visible=True, local_lanes=1):
+def run(root, auth_path, profile, *, visible=True, local_lanes=1, visible_windows=1):
     root = Path(root)
     if Path(auth_path).resolve().parent != root.resolve():
         raise ValueError("AUTHORIZATION_MUST_BE_PRESERVED_IN_SAME_RUN")
@@ -99,6 +99,8 @@ def run(root, auth_path, profile, *, visible=True, local_lanes=1):
     auth = json.loads(Path(auth_path).read_text(encoding="utf8"))
     if auth.get('visible_browser_required') and not visible:
         raise ValueError('TASK_REQUIRES_VISIBLE_BROWSER')
+    from .detail_visible_windows5500 import validate_windows, open_windows, dispatch_navigation_allowed
+    validate_windows(visible_windows, visible, local_lanes, auth)
     bridge = DetailBridge5500(root, plan)
     bridge.validate_authorization(auth)
     if local_lanes not in (1, 3) or (local_lanes == 3 and (
@@ -116,11 +118,12 @@ def run(root, auth_path, profile, *, visible=True, local_lanes=1):
         session.access_blocked = False
         def observe(response):
             request = response.request
-            if request.resource_type == "document" and request.frame == session.page.main_frame:
-                session.document_responses.append({"url": response.url, "status_code": response.status,
-                                                   "observed_at": utc()})
+            if request.resource_type == "document":
                 if response.status in {403, 429}:
                     session.access_blocked = True
+                if request.frame == session.page.main_frame or response.status in {403, 429}:
+                    session.document_responses.append({"url": response.url, "status_code": response.status,
+                                                       "observed_at": utc()})
         session.page.on("response", observe)
         allowed_initial = {t["request_url"] for t in plan["tasks"]}
         def boundary(route):
@@ -131,6 +134,8 @@ def run(root, auth_path, profile, *, visible=True, local_lanes=1):
             if req.resource_type in {"image", "media", "font", "xhr", "fetch"}:
                 return route.abort()
             if req.is_navigation_request():
+                if visible_windows == 3 and not dispatch_navigation_allowed(session, req):
+                    return route.abort()
                 if req.frame != session.page.main_frame or not safe_url(req.url):
                     return route.abort()
                 initial = req
@@ -160,13 +165,21 @@ def run(root, auth_path, profile, *, visible=True, local_lanes=1):
                 else:
                     perform_setup(session, bridge, auth)
             session.page.route("**/*", boundary)
+            if visible_windows == 3:
+                def configure_page(page):
+                    page.on('response', observe)
+                    page.route('**/*', boundary)
+                open_windows(session, configure_page)
             for name, count in (("T1", 30), ("T2", 100), ("FINAL", len(plan["tasks"]))):
                 if (root / (name + "_acceptance.json")).exists():
                     bridge.validate_stage(name, count, auth=auth)
                     continue
                 atomic_json(root / "worker_status.json", {"phase": name + "_COLLECTING", "updated_at": utc(), "code_sha": head,
                     'local_processing_lanes': local_lanes if name == 'FINAL' else 1,
-                    'network_parallelism': 1, 'visible_browser': visible, 'authorization_sha256': digest(auth)})
+                    'network_parallelism': 1, 'visible_browser': visible,
+                    'visible_browser_windows': visible_windows,
+                    'visible_window_ids': getattr(session, 'visible_window_ids', []),
+                    'authorization_sha256': digest(auth)})
                 bridge.run(session, auth, until_completed=count, authorization_filename=Path(auth_path).name,
                            local_lanes=local_lanes if name == 'FINAL' else 1)
                 atomic_json(root / "worker_status.json", {"phase": name + "_INDEPENDENT_AUDIT", "updated_at": utc()})
@@ -191,8 +204,13 @@ def main():
                    help='Visible browser is the Detail5500 default; the original profile and access policy stay unchanged.')
     p.add_argument('--local-lanes', type=int, choices=(1, 3), default=1,
                    help='Local parsers only; all network and persistence stay with the single controller.')
+    p.add_argument('--visible-windows', type=int, choices=(1, 3), default=1,
+                   help='Distinct visible windows sharing the original context and serial network owner.')
     a = p.parse_args()
-    run(a.root, a.authorization, a.profile, visible=a.visible, local_lanes=a.local_lanes)
+    options = {'visible': a.visible, 'local_lanes': a.local_lanes}
+    if a.visible_windows != 1:
+        options['visible_windows'] = a.visible_windows
+    run(a.root, a.authorization, a.profile, **options)
 
 
 if __name__ == "__main__":
