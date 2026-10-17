@@ -30,10 +30,10 @@ def mode(tmp_path):
         explicit_user_instruction='Develop two truly concurrent lanes targeting 1000 requests/hour; preserve all other controls',
         scope='TWO_IN_FLIGHT_DETAIL_1000_TARGET_SAME_FROZEN_RUN',run_id='test',runtime_root=str(tmp_path.resolve()),
         plan_sha256=digest(plan),base_authorization_sha256=file_sha(bp),code_sha='new-code',
-        network_parallelism=2,target_requests_per_hour=1000,target_start_interval_seconds=3.6,request_start_interval_seconds=3,no_successful_task_replay=True,
+        network_parallelism=2,target_requests_per_hour=1000,target_start_interval_seconds=3.6,max_uncommitted_tasks=3,request_start_interval_seconds=3,no_successful_task_replay=True,
         browser_profile=str(tmp_path/'original-profile'))
     ap=tmp_path/'amendment.json';immutable_json(ap,a)
-    auth={**base,'code_sha':'new-code','network_parallelism':2,'local_processing_lanes':2,'target_requests_per_hour':1000,
+    auth={**base,'code_sha':'new-code','network_parallelism':2,'local_processing_lanes':2,'target_requests_per_hour':1000,'max_uncommitted_tasks':3,
         'visible_browser_windows':2,'visible_browser_required':True,
         'parallel_base_authorization_reference':ref(bp),'parallel_execution_approval_reference':ref(ap)}
     return plan,auth,a,ap
@@ -108,7 +108,9 @@ def test_real_fixture_two_capture_overlap_fifo_all_evidence_drained(tmp_path,mon
         async def sleep(s):clock[0]+=s;await asyncio.sleep(0)
         monkeypatch.setattr(mod,'asyncio',NS(Event=asyncio.Event,sleep=sleep,
             to_thread=asyncio.to_thread,wrap_future=asyncio.wrap_future,
-            wait_for=asyncio.wait_for,TimeoutError=asyncio.TimeoutError))
+            wait_for=asyncio.wait_for,TimeoutError=asyncio.TimeoutError,
+            Semaphore=asyncio.Semaphore,create_task=asyncio.create_task,wait=asyncio.wait,
+            FIRST_COMPLETED=asyncio.FIRST_COMPLETED,gather=asyncio.gather))
         monkeypatch.setattr(mod.time,'time',lambda:clock[0])
         monkeypatch.setattr(mod,'utc',lambda:datetime.fromtimestamp(clock[0],timezone.utc).isoformat())
         c=mod.ParallelCollector(bridge,auth);c.executors=[Ready() for _ in range(2)]

@@ -27,8 +27,11 @@ these are separately retained and do not become invented successful transactions
 Effective start interval is `max(original authorized interval, 3600/1000)`;
 normally 3.6 seconds, globally, not per lane. A delayed task never earns burst
 credit. Reservation and actual browser start acknowledgement are serialized;
-response/render/parse waits do not hold the dispatch lock. At most two captures
-are active or waiting for FIFO commit. Full HTML and the original three-second
+response/render/parse waits do not hold the dispatch lock. At most two browser captures are active. Captured HTML, metadata and receipts
+are durably saved before releasing a browser lane. Two parser processes drain
+a bounded FIFO pipeline: at most three total uncommitted tasks (including both
+captures), retaining the original three-task evidence envelope. Parser or
+persistence failure stops new claims and drains all reserved evidence. Full HTML and the original three-second
 render buffer are preserved. No artificial delay is added to make HTTP overlap.
 
 The isolated dispatcher performs unchanged reservation validation *inside* the
@@ -51,7 +54,8 @@ SHA, current clean code and successful current full CI. Its separate mode sideca
 must use scope `TWO_IN_FLIGHT_DETAIL_1000_TARGET_SAME_FROZEN_RUN`, explicit user
 instruction, `network_parallelism=2`, target 1000, target interval 3.6, original
 profile, and no successful replay. Authorization requires local lanes 2, visible
-windows 2, visibility true and target 1000. The base pacing field is not rewritten.
+windows 2, visibility true, target 1000 and `max_uncommitted_tasks=3`
+in both the authorization and its mode sidecar. The base pacing field is not rewritten.
 
 Original cumulative caps, setup/manual holds, start time, request/final deadlines,
 attempt limits, approved recovery references, quarantine chain and T1/T2 cohort
@@ -97,3 +101,16 @@ requests and successful details separately, and measures a continuous 30-minute
 window with native network overlap, complete evidence and unchanged old-success
 SHA. Never replay successful tasks to benchmark, force a network overlap, or stop
 healthy collection just to install this development module.
+
+## Native root and bounded local pipeline
+
+A reserved, exact main-document CDP request event may acknowledge dispatch when
+Playwright exposes only the redirected terminal request. Real request ID, frame,
+URL, method and native timestamps are bound before acknowledging once. Responses
+never manufacture starts; reloads after goto completion remain blocked. This is
+browser document evidence, not proof of physical upstream HTTP overlap.
+
+The bounded local parse backlog frees browser slots after raw evidence is saved.
+It preserves the render buffer, full parser, authorization checks and FIFO commit.
+A parser backlog cannot increase the two-network-lane cap or global 3.6-second
+minimum start gap. A short offline benchmark is not a production 1000/hour claim.

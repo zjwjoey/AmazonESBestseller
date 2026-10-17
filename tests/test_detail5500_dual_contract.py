@@ -14,6 +14,7 @@ from test_detail5500_hourly import setup
     ('network_parallelism', 3), ('local_processing_lanes', 3),
     ('visible_browser_windows', 3), ('target_requests_per_hour', 1001),
     ('target_requests_per_hour', None), ('manual_PAGE_budget_hold_references', []),
+    ('max_uncommitted_tasks', 4),
 ])
 def test_dual_cannot_change_target_lanes_or_inherited_manual_holds(tmp_path, key, value):
     plan, auth, _, _ = mode(tmp_path)
@@ -33,6 +34,7 @@ def test_dual_cannot_change_target_lanes_or_inherited_manual_holds(tmp_path, key
     ('scope', 'THREE_IN_FLIGHT_DETAIL_SAME_FROZEN_RUN'),
     ('target_requests_per_hour', 1200), ('target_start_interval_seconds', 3),
     ('network_parallelism', 3),
+    ('max_uncommitted_tasks', 4),
 ])
 def test_wrong_amendment_cannot_activate_dual(tmp_path, key, value):
     import json

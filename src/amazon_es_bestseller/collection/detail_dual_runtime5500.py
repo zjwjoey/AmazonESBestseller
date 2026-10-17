@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -56,6 +57,8 @@ def validate_parallel_mode(root, plan, auth):
             or auth.get('visible_browser_required') is not True
             or amendment.get('target_requests_per_hour') != 1000
             or auth.get('target_requests_per_hour') != 1000
+            or amendment.get('max_uncommitted_tasks') != 3
+            or auth.get('max_uncommitted_tasks') != 3
             or amendment.get('target_start_interval_seconds') != TARGET_START_INTERVAL_SECONDS):
         raise ValueError('EXPLICIT_CURRENT_PARALLEL_AMENDMENT_REQUIRED')
     invariants = ('run_id', 'scope', 'runtime_root', 'plan_sha256', 'starts_at',
@@ -68,7 +71,7 @@ def validate_parallel_mode(root, plan, auth):
             raise ValueError('PARALLEL_CHANGED_ORIGINAL_CONTROL: ' + key)
     permitted = {'code_sha','ci_run_id','ci_success_evidence','offline_acceptance_reference',
         'approved_by','approval_id','reviewed_at','network_parallelism','local_processing_lanes',
-        'visible_browser_windows','visible_browser_required','target_requests_per_hour',
+        'visible_browser_windows','visible_browser_required','target_requests_per_hour','max_uncommitted_tasks',
         'parallel_base_authorization_reference','parallel_execution_approval_reference','family_identity_policy_reference'}
     for key in set(base) | set(auth):
         if key not in permitted and auth.get(key) != base.get(key):
@@ -116,11 +119,16 @@ class ParallelCollector:
         from .detail_family_identity5500 import read_policy
         self.family_policy = read_policy(self.root,self.plan,auth)
         self.scheduler = TwoRequestScheduler(self.reserve, self.capture,
-            interval=max(TARGET_START_INTERVAL_SECONDS, auth['request_start_interval_seconds']))
+            interval=max(TARGET_START_INTERVAL_SECONDS, auth['request_start_interval_seconds']),
+            drain=self.drain_parsers)
         self.browser_network = NetworkTimingRecorder()
         self.pages, self.windows, self.tokens = [], [], {}
         self.executors = []
         self.commit_order, self.results = [], {}
+        self.all_tokens = {}
+        self.parse_jobs = set()
+        self.admission = asyncio.Semaphore(3)
+        self.peak_uncommitted = 0
         self.receipts = []
         self.restriction = None
         self.persistence_failure = None
@@ -146,6 +154,26 @@ class ParallelCollector:
             raise ValueError('DETAIL_AUTHORIZATION_OUTSIDE_TIME')
 
     async def reserve(self, task, lane):
+        # Two browser lanes plus at most one already-persisted local backlog.
+        # A global stop interrupts admission even if persistence has failed.
+        acquire = asyncio.create_task(self.admission.acquire())
+        stopped = asyncio.create_task(self.scheduler.stop.wait())
+        try:
+            await asyncio.wait([acquire, stopped], return_when=asyncio.FIRST_COMPLETED)
+            if self.scheduler.stop.is_set():
+                if acquire.done() and not acquire.cancelled(): self.admission.release()
+                else: acquire.cancel()
+                raise RuntimeError('GLOBAL_STOP_BEFORE_ADMISSION')
+            await acquire
+        finally:
+            stopped.cancel()
+        try:
+            return await self.reserve_admitted(task, lane)
+        except BaseException:
+            self.admission.release()
+            raise
+
+    async def reserve_admitted(self, task, lane):
         self.check_qa_clock()
         await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
         validate_parallel_mode(self.root, self.plan, self.auth)
@@ -162,10 +190,13 @@ class ParallelCollector:
         if any(r['state'] == 'RESERVED' and str(p) not in owned
                for p, r in ((p, read_sealed(p)) for p in (self.root/'receipts').glob('*.json'))):
             raise ValueError('FOREIGN_OR_ABANDONED_RESERVATION')
+        # Run both full validations inside the existing receipt pacing window.
+        # The scheduler separately enforces 3.6 seconds between real starts;
+        # boundary Gates and clocks are still re-read immediately before goto.
+        await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
         if rows:
             last = max(datetime.fromisoformat(r['started_at']).timestamp() for r in rows)
             await asyncio.sleep(max(0, last+self.auth['request_start_interval_seconds']-time.time()))
-        await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
         if self.scheduler.stop.is_set():raise RuntimeError('GLOBAL_STOP_AFTER_PACING')
         self.check_qa_clock()
         slot = self.root/'tasks'/task['task_id']
@@ -182,6 +213,9 @@ class ParallelCollector:
         token = dict(task=task, lane=lane, rp=rp, slot=slot, receipt=receipt,
                      history=[], sent=False, navigation_requested=False, committed=asyncio.Event())
         self.tokens[lane] = token
+        self.all_tokens[task['task_id']] = token
+        self.peak_uncommitted = max(self.peak_uncommitted, len(self.all_tokens))
+        if len(self.all_tokens) > 3: raise RuntimeError('LOCAL_BACKLOG_BOUND_EXCEEDED')
         self.commit_order.append(task['task_id'])
         return token
 
@@ -195,7 +229,7 @@ class ParallelCollector:
             while initial.redirected_from:initial = initial.redirected_from
             token = next((self.tokens.get(i) for i, p in enumerate(self.pages)
                           if request.frame == p.main_frame), None)
-            if (not token or not token.get('navigation_requested',True) or request.method != 'GET' or not safe_url(request.url)
+            if (not token or not token.get('navigation_requested',True) or token.get('navigation_completed') or request.method != 'GET' or not safe_url(request.url)
                     or initial.url != token['task']['request_url']):
                 return await route.abort()
             if request.redirected_from is None:
@@ -207,15 +241,49 @@ class ParallelCollector:
         return await route.continue_()
 
     def mark_document_start(self, token, request, kind):
-        if token['sent']:return
         initial=request
         while initial.redirected_from:initial=initial.redirected_from
+        if token['sent']:
+            # Native CDP may precede Playwright's route/request event. Bind the
+            # actual original Request object without acknowledging a second start.
+            if token.get('native_document_request_id') and token.get('initial_request') is None:
+                token['initial_request']=initial
+            return
         token['initial_request']=initial
         token['sent']=True
         token['receipt']['document_started_at']=utc()
         token['receipt']['document_start_evidence_kind']=kind
         token['receipt']['initial_request_route_observed']=(kind=='FIRST_OBSERVED_SCOPED_MAIN_DOCUMENT_ROUTE' and request.redirected_from is None)
         token['receipt']['physical_wire_start_not_independently_observed']=True
+        token['notify_sent']()
+
+    def observe_native_request(self, lane, main_frame, event):
+        """A real, reserved root CDP request event, never a response-derived start."""
+        token=self.tokens.get(lane);request=event.get('request',{})
+        if (not token or self.scheduler.stop.is_set() or not token.get('navigation_requested')
+                or token.get('navigation_completed') or event.get('type')!='Document'
+                or event.get('frameId')!=main_frame or request.get('method')!='GET'
+                or event.get('redirectResponse') or request.get('url')!=token['task']['request_url']
+                or not safe_url(request.get('url','')) or not event.get('requestId')
+                or token['receipt'].get('state')!='RESERVED'
+                or token['receipt'].get('task_id')!=token['task']['task_id']):
+            return
+        for key in ('timestamp','wallTime'):
+            value=event.get(key)
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or value<=0:return
+        prior=token.get('native_document_request_id')
+        if prior:
+            if prior!=event['requestId']:
+                self.scheduler.fail(ValueError('UNAPPROVED_SECOND_NATIVE_ROOT_DOCUMENT'))
+            return
+        token['native_document_request_id']=event['requestId']
+        token['receipt']['native_document_start']=dict(requestId=event['requestId'],frameId=main_frame,
+            url=request['url'],method='GET',timestamp=event['timestamp'],wallTime=event['wallTime'])
+        if token['sent']:return
+        token['sent']=True
+        token['receipt'].update(document_started_at=utc(),
+            document_start_evidence_kind='BROWSER_CDP_SCOPED_MAIN_DOCUMENT_REQUEST_EVENT',
+            initial_request_route_observed=False,physical_wire_start_not_independently_observed=True)
         token['notify_sent']()
 
     async def configure_page(self, lane, page):
@@ -285,6 +353,7 @@ class ParallelCollector:
             self.check_dispatch_boundary()
             token['navigation_requested']=True
             response = await page.goto(task['request_url'], wait_until='domcontentloaded', timeout=45000)
+            token['navigation_completed']=True
             status = response.status if response else None
             html = await page.content()
             access = detect_access_status(status, html).value
@@ -336,7 +405,18 @@ class ParallelCollector:
                     if old.get('state') == 'NORMAL' or old.get('state') == 'UNKNOWN' and access != 'UNKNOWN':
                         atomic_json(gp, sealed({**self.restriction, 'previous_gate':old}), backup=True)
             result = dict(status='ACCESS_STOP', access_state=access)
+            self.results[task['task_id']] = (task, {**result, **evidence})
+            self.commit_ready()
         else:
+            # Release only the browser lane after raw/receipt/meta are durable.
+            # Parsing still owns a bounded admission slot until FIFO commit.
+            job = asyncio.create_task(self.parse_and_commit(token, html, meta, evidence))
+            self.parse_jobs.add(job)
+            job.add_done_callback(self.parse_jobs.discard)
+
+    async def parse_and_commit(self, token, html, meta, evidence):
+        task, lane = token['task'], token['lane']
+        try:
             try:
                 result = await asyncio.wrap_future(self.executors[lane].submit(
                     parse_captured_detail, task, html, meta, bool(self.auth.get('delivery_setup_reference')), self.family_policy))
@@ -344,23 +424,32 @@ class ParallelCollector:
                 result = dict(status='PARSE_FAILED', reason='LOCAL_PARSER_EXCEPTION', error=repr(exc))
             if result['status'] != 'SUCCESS':
                 self.scheduler.fail(ValueError('DETAIL_SYSTEMATIC_SAFETY_REVIEW_REQUIRED: '+result['status']))
-        self.results[task['task_id']] = (task, {**result, **evidence})
-        self.commit_ready()
-        # A fast lane cannot accumulate an unbounded backlog behind a slow
-        # earlier capture: at most two captured/uncommitted tasks exist.
-        while not token['committed'].is_set():
-            if self.persistence_failure:
-                raise RuntimeError('PERSISTENCE_FAILED_REQUIRES_OFFLINE_REVIEW') from self.persistence_failure
-            try:await asyncio.wait_for(token['committed'].wait(),timeout=.5)
-            except asyncio.TimeoutError:pass
+            self.results[task['task_id']] = (task, {**result, **evidence})
+            self.commit_ready()
+        except Exception as exc:
+            self.persistence_failure = exc
+            self.scheduler.fail(exc)
+
+    async def drain_parsers(self):
+        while self.parse_jobs:
+            jobs = tuple(self.parse_jobs)
+            await asyncio.gather(*jobs)
+            # gather of already-completed tasks may return without yielding to
+            # their call_soon discard callbacks. Do not spin waiting for them.
+            self.parse_jobs.difference_update(jobs)
+        if self.persistence_failure:
+            raise RuntimeError('PERSISTENCE_FAILED_REQUIRES_OFFLINE_REVIEW') from self.persistence_failure
+        if self.commit_order:
+            raise RuntimeError('CAPTURE_EVIDENCE_NOT_FULLY_COMMITTED')
 
     def commit_ready(self):
         while self.commit_order and self.commit_order[0] in self.results:
             task_id = self.commit_order.pop(0)
             task, result = self.results.pop(task_id)
             self.bridge.save_result(task, result)
-            token=next(t for t in self.tokens.values() if t['task']['task_id']==task_id)
+            token=self.all_tokens.pop(task_id)
             token['committed'].set()
+            self.admission.release()
 
     async def open_windows(self, context):
         first = await context.new_page()
@@ -384,6 +473,8 @@ class ParallelCollector:
         for lane,page in enumerate(self.pages):
             await self.configure_page(lane,page)
             cdp=await context.new_cdp_session(page)
+            frame=(await cdp.send('Page.getFrameTree'))['frameTree']['frame']['id']
+            cdp.on('Network.requestWillBeSent',lambda event,i=lane,f=frame:self.observe_native_request(i,f,event))
             window=(await cdp.send('Browser.getWindowForTarget'))['windowId']
             self.windows.append(window)
             await cdp.send('Browser.setWindowBounds', {'windowId':window,'bounds':{'windowState':'normal'}})
@@ -404,6 +495,7 @@ class ParallelCollector:
             authorization_sha256=digest(self.auth),
             full_QA_reserve_seconds=self.qa_seconds,
             execution_mode='DUAL_1000_TARGET', target_requests_per_hour=1000,
+            max_uncommitted_tasks=3,
             effective_dispatch_interval_seconds=self.scheduler.interval,
             original_global_start_interval_seconds=self.auth['request_start_interval_seconds']))
         try:

@@ -16,11 +16,12 @@ TARGET_START_INTERVAL_SECONDS = 3600 / TARGET_REQUESTS_PER_HOUR
 
 
 class TwoRequestScheduler(ThreeRequestScheduler):
-    def __init__(self, reserve, capture, *, interval=TARGET_START_INTERVAL_SECONDS, **kwargs):
+    def __init__(self, reserve, capture, *, interval=TARGET_START_INTERVAL_SECONDS, drain=None, **kwargs):
         if (isinstance(interval, bool) or not isinstance(interval, (int, float))
                 or not math.isfinite(interval) or interval < TARGET_START_INTERVAL_SECONDS):
             raise ValueError('DUAL_1000_NON_BURSTING_PACING_REQUIRED')
         super().__init__(reserve, capture, interval=interval, **kwargs)
+        self.drain = drain
 
     async def _lane(self, lane, queue):
         while not self.stop.is_set():
@@ -72,7 +73,11 @@ class TwoRequestScheduler(ThreeRequestScheduler):
         queue = asyncio.Queue()
         for task in tasks:
             queue.put_nowait(task)
-        await asyncio.gather(*(self._lane(lane, queue) for lane in range(2)))
+        try:
+            await asyncio.gather(*(self._lane(lane, queue) for lane in range(2)))
+        finally:
+            if self.drain is not None:
+                await self.drain()
         if self.active:
             raise RuntimeError('CAPTURE_NOT_DRAINED')
         if self.failure:
