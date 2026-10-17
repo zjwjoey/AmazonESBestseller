@@ -35,8 +35,9 @@ def build_report(root, sample, at=None):
     local_three = collecting and status.get('local_processing_lanes') == 3 and status.get('network_parallelism') == 1
     parallel_three = collecting and status.get('local_processing_lanes') == 3 and status.get('network_parallelism') == 3
     parallel_two = collecting and status.get('local_processing_lanes') == 2 and status.get('network_parallelism') == 2
-    parallel_local = local_three or parallel_three or parallel_two
-    mode = ('TWO_ASYNC_CAPTURE_LANES_1000_TARGET' if parallel_two else 'THREE_ASYNC_CAPTURE_LANES' if parallel_three else
+    parallel_five = collecting and status.get('local_processing_lanes') == 5 and status.get('network_parallelism') == 5
+    parallel_local = local_three or parallel_three or parallel_two or parallel_five
+    mode = ('FIVE_ASYNC_CAPTURE_LANES_GROUPED_3_PLUS_2' if parallel_five else 'TWO_ASYNC_CAPTURE_LANES_1000_TARGET' if parallel_two else 'THREE_ASYNC_CAPTURE_LANES' if parallel_three else
             'THREE_LOCAL_PARSERS_SERIAL_NETWORK' if local_three else 'SERIAL') if collecting else 'STOPPED_OR_NOT_COLLECTING'
     parser_counts = Counter(r.get('local_parser_pid') for r in live if r.get('local_parser_pid') and
                             r.get('local_execution_authorization_sha256') == status.get('authorization_sha256'))
@@ -45,7 +46,7 @@ def build_report(root, sample, at=None):
              [dict(lane=1, state='SERIAL_RUNNING' if collecting else 'STOPPED', success=len(live)),
               dict(lane=2, state='NOT_ENABLED', success=0), dict(lane=3, state='NOT_ENABLED', success=0)])
     if parallel_local:
-        lanes.extend(dict(lane=i+1, state='NO_COMPLETION_OBSERVED_YET', success=0) for i in range(len(lanes),2 if parallel_two else 3))
+        lanes.extend(dict(lane=i+1, state='NO_COMPLETION_OBSERVED_YET', success=0) for i in range(len(lanes),5 if parallel_five else 2 if parallel_two else 3))
     # Callback arrival clocks are retained as diagnostics, never as HTTP proof.
     events=[]
     for r in receipts:

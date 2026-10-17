@@ -17,6 +17,7 @@ TARGET_START_INTERVAL_SECONDS = 3600 / TARGET_REQUESTS_PER_HOUR
 
 
 class TwoRequestScheduler(ThreeRequestScheduler):
+    lane_count = 2
     def __init__(self, reserve, capture, *, interval=TARGET_START_INTERVAL_SECONDS, drain=None, **kwargs):
         if (isinstance(interval, bool) or not isinstance(interval, (int, float))
                 or not math.isfinite(interval) or interval < TARGET_START_INTERVAL_SECONDS):
@@ -87,7 +88,7 @@ class TwoRequestScheduler(ThreeRequestScheduler):
         for task in tasks:
             queue.put_nowait(task)
         try:
-            await asyncio.gather(*(self._lane(lane, queue) for lane in range(2)))
+            await asyncio.gather(*(self._lane(lane, queue) for lane in range(self.lane_count)))
         finally:
             if self.drain is not None:
                 await self.drain()

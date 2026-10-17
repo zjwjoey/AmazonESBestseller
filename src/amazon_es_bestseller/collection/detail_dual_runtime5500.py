@@ -35,6 +35,11 @@ def checked_reference(ref):
 
 
 def validate_parallel_mode(root, plan, auth):
+    return _validate_mode(root, plan, auth, lanes=2, backlog=3,
+                          scope='TWO_IN_FLIGHT_DETAIL_1000_TARGET_SAME_FROZEN_RUN')
+
+
+def _validate_mode(root, plan, auth, *, lanes, backlog, scope, groups=None):
     """Only concurrency changes. Pacing, identity, scope and cumulative caps do not."""
     base_ref = auth['parallel_base_authorization_reference']
     for reference in (base_ref, auth['parallel_execution_approval_reference']):
@@ -44,24 +49,27 @@ def validate_parallel_mode(root, plan, auth):
     amendment = checked_reference(auth['parallel_execution_approval_reference'])
     if (amendment.get('approved') is not True or not amendment.get('approved_by')
             or not amendment.get('explicit_user_instruction')
-            or amendment.get('scope') != 'TWO_IN_FLIGHT_DETAIL_1000_TARGET_SAME_FROZEN_RUN'
+            or amendment.get('scope') != scope
             or amendment.get('run_id') != plan['run_id']
             or amendment.get('runtime_root') != str(Path(root).resolve())
             or amendment.get('plan_sha256') != digest(plan)
             or amendment.get('base_authorization_sha256') != base_ref['sha256']
             or amendment.get('code_sha') != auth.get('code_sha')
             or not amendment.get('browser_profile')
-            or amendment.get('network_parallelism') != 2
-            or auth.get('network_parallelism') != 2
-            or auth.get('local_processing_lanes') != 2
-            or auth.get('visible_browser_windows') != 2
+            or amendment.get('network_parallelism') != lanes
+            or auth.get('network_parallelism') != lanes
+            or auth.get('local_processing_lanes') != lanes
+            or auth.get('visible_browser_windows') != lanes
             or auth.get('visible_browser_required') is not True
             or amendment.get('target_requests_per_hour') != 1000
             or auth.get('target_requests_per_hour') != 1000
-            or amendment.get('max_uncommitted_tasks') != 3
-            or auth.get('max_uncommitted_tasks') != 3
+            or amendment.get('max_uncommitted_tasks') != backlog
+            or auth.get('max_uncommitted_tasks') != backlog
             or amendment.get('target_start_interval_seconds') != TARGET_START_INTERVAL_SECONDS):
         raise ValueError('EXPLICIT_CURRENT_PARALLEL_AMENDMENT_REQUIRED')
+    if groups is not None and (auth.get('processing_groups') != groups
+                              or amendment.get('processing_groups') != groups):
+        raise ValueError('EXPLICIT_THREE_PLUS_TWO_GROUPS_REQUIRED')
     invariants = ('run_id', 'scope', 'runtime_root', 'plan_sha256', 'starts_at',
         'deadline', 'request_deadline', 'max_requests', 'max_page_requests',
         'max_other_requests', 'max_attempts_per_task', 'request_start_interval_seconds',
@@ -74,6 +82,7 @@ def validate_parallel_mode(root, plan, auth):
         'approved_by','approval_id','reviewed_at','network_parallelism','local_processing_lanes',
         'visible_browser_windows','visible_browser_required','target_requests_per_hour','max_uncommitted_tasks',
         'parallel_base_authorization_reference','parallel_execution_approval_reference','family_identity_policy_reference'}
+    if groups is not None: permitted.add('processing_groups')
     for key in set(base) | set(auth):
         if key not in permitted and auth.get(key) != base.get(key):
             raise ValueError('PARALLEL_CHANGED_INHERITED_AUTHORIZATION: ' + key)
@@ -123,12 +132,19 @@ def parser_worker_ready():
 
 class ParallelCollector:
     """One asyncio owner writes receipts/checkpoints; two independent pages await I/O."""
+    lane_count = 2
+    max_uncommitted = 3
+    execution_mode = 'DUAL_1000_TARGET'
+    scheduler_type = TwoRequestScheduler
+
+    def validate_mode(self):
+        return validate_parallel_mode(self.root, self.plan, self.auth)
     def __init__(self, bridge, auth, *, qa_seconds=3600):
         self.bridge, self.auth = bridge, auth
         self.root, self.plan = bridge.root, bridge.plan
         from .detail_family_identity5500 import read_policy
         self.family_policy = read_policy(self.root,self.plan,auth)
-        self.scheduler = TwoRequestScheduler(self.reserve, self.capture,
+        self.scheduler = self.scheduler_type(self.reserve, self.capture,
             interval=max(TARGET_START_INTERVAL_SECONDS, auth['request_start_interval_seconds']),
             drain=self.drain_parsers)
         self.browser_network = NetworkTimingRecorder()
@@ -137,7 +153,7 @@ class ParallelCollector:
         self.commit_order, self.results = [], {}
         self.all_tokens = {}
         self.parse_jobs = set()
-        self.admission = asyncio.Semaphore(3)
+        self.admission = asyncio.Semaphore(self.max_uncommitted)
         self.peak_uncommitted = 0
         self.receipts = []
         self.restriction = None
@@ -188,7 +204,7 @@ class ParallelCollector:
     async def reserve_admitted(self, task, lane):
         self.check_qa_clock()
         await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
-        validate_parallel_mode(self.root, self.plan, self.auth)
+        self.validate_mode()
         if self.scheduler.stop.is_set():
             raise RuntimeError('GLOBAL_STOP_BEFORE_RESERVATION')
         rows = [read_sealed(p) for p in (self.root/'receipts').glob('*.json')]
@@ -218,7 +234,9 @@ class ParallelCollector:
             request_url=task['request_url'], started_at=utc(), state='RESERVED',
             plan_sha256=digest(self.plan), authorization_sha256=digest(self.auth),
             request_role='DETAIL', attempt=1, parallel_lane=lane,
-            execution_mode='DUAL_1000_TARGET', target_requests_per_hour=1000)
+            execution_mode=self.execution_mode, target_requests_per_hour=1000)
+        if self.lane_count == 5:
+            receipt['processing_group'] = 'three' if lane < 3 else 'two'
         immutable_json(rp, sealed(receipt))
         atomic_json(slot/'checkpoint.json', sealed(dict(status='RUNNING', task_id=task['task_id'],
             candidate_id=task['candidate_id'], run_id=self.plan['run_id'], receipt_path=str(rp))))
@@ -227,7 +245,7 @@ class ParallelCollector:
         self.tokens[lane] = token
         self.all_tokens[task['task_id']] = token
         self.peak_uncommitted = max(self.peak_uncommitted, len(self.all_tokens))
-        if len(self.all_tokens) > 3: raise RuntimeError('LOCAL_BACKLOG_BOUND_EXCEEDED')
+        if len(self.all_tokens) > self.max_uncommitted: raise RuntimeError('LOCAL_BACKLOG_BOUND_EXCEEDED')
         self.commit_order.append(task['task_id'])
         return token
 
@@ -392,7 +410,9 @@ class ParallelCollector:
         atomic_json(token['rp'], sealed(receipt), backup=True)
         meta = dict(status_code=status, requested_url=task['request_url'], final_url=page.url,
             access_state=access, collected_at=receipt['finished_at'], receipt_path=str(token['rp']),
-            visible_window_lane=lane, network_parallelism=2)
+            visible_window_lane=lane, network_parallelism=self.lane_count)
+        if self.lane_count == 5:
+            meta['processing_group'] = 'three' if lane < 3 else 'two'
         mp = token['slot']/'response_metadata.json'; immutable_json(mp, meta)
         evidence = dict(html_path=str(hp), html_sha256=file_sha(hp), receipt_path=str(token['rp']),
             receipt_sha256=file_sha(token['rp']), response_metadata_path=str(mp),
@@ -487,7 +507,7 @@ class ParallelCollector:
         first = await context.new_page()
         self.pages.append(first)
         control = await context.new_cdp_session(first)
-        for _ in range(1):
+        for _ in range(self.lane_count - 1):
             target = (await control.send('Target.createTarget', {'url':'about:blank','newWindow':True}))['targetId']
             found = None
             for _ in range(100):
@@ -513,13 +533,13 @@ class ParallelCollector:
             await cdp.send('Browser.setWindowBounds', {'windowId':window,
                 'bounds':{'left':lane*600,'top':0,'width':600,'height':900}})
             await self.browser_network.attach(cdp, lane, lambda i=lane:self.tokens.get(i))
-        if len(set(self.windows))!=2:raise RuntimeError('TWO_DISTINCT_WINDOWS_REQUIRED')
+        if len(set(self.windows))!=self.lane_count:raise RuntimeError('DISTINCT_WINDOWS_REQUIRED')
 
     async def warm_parsers(self):
         pids = await asyncio.gather(*(asyncio.wrap_future(pool.submit(parser_worker_ready))
                                      for pool in self.executors))
-        if len(pids) != 2 or len(set(pids)) != 2:
-            raise RuntimeError('TWO_INDEPENDENT_READY_PARSERS_REQUIRED')
+        if len(pids) != self.lane_count or len(set(pids)) != self.lane_count:
+            raise RuntimeError('INDEPENDENT_READY_PARSERS_REQUIRED')
         self.ready_parser_pids = pids
 
     async def run(self, context, tasks):
@@ -527,14 +547,15 @@ class ParallelCollector:
             raise ValueError('AMBIGUOUS_IN_FLIGHT_REQUEST_REQUIRES_REVIEW')
         await context.route('**/*', self.route)
         await self.open_windows(context)
-        self.executors=[ProcessPoolExecutor(max_workers=1,mp_context=get_context('spawn')) for _ in range(2)]
+        self.executors=[ProcessPoolExecutor(max_workers=1,mp_context=get_context('spawn')) for _ in range(self.lane_count)]
         atomic_json(self.root/'worker_status.json', dict(phase='FINAL_COLLECTING', updated_at=utc(),
-            code_sha=self.auth['code_sha'], visible_browser=True, visible_browser_windows=2,
-            visible_window_ids=self.windows, network_parallelism=2, local_processing_lanes=2,
+            code_sha=self.auth['code_sha'], visible_browser=True, visible_browser_windows=self.lane_count,
+            visible_window_ids=self.windows, network_parallelism=self.lane_count, local_processing_lanes=self.lane_count,
+            processing_groups=self.auth.get('processing_groups'),
             authorization_sha256=digest(self.auth),
             full_QA_reserve_seconds=self.qa_seconds,
-            execution_mode='DUAL_1000_TARGET', target_requests_per_hour=1000,
-            max_uncommitted_tasks=3,
+            execution_mode=self.execution_mode, target_requests_per_hour=1000,
+            max_uncommitted_tasks=self.max_uncommitted,
             effective_dispatch_interval_seconds=self.scheduler.interval,
             original_global_start_interval_seconds=self.auth['request_start_interval_seconds']))
         try:
@@ -549,7 +570,7 @@ class ParallelCollector:
             if self.commit_order:raise RuntimeError('CAPTURE_EVIDENCE_NOT_FULLY_COMMITTED')
 
 
-async def run(root, authorization, profile):
+async def run(root, authorization, profile, *, collector_type=ParallelCollector, mode_validator=validate_parallel_mode):
     from playwright.async_api import async_playwright
     root=Path(root);ap=Path(authorization)
     if ap.resolve().parent!=root.resolve():raise ValueError('AUTHORIZATION_MUST_BE_IN_RUN')
@@ -557,7 +578,7 @@ async def run(root, authorization, profile):
     auth=json.loads(ap.read_text(encoding='utf8'))
     bridge=DetailBridge5500(root,plan)
     bridge.validate_authorization(auth)
-    amendment=validate_parallel_mode(root,plan,auth)
+    amendment=mode_validator(root,plan,auth)
     if Path(profile).resolve()!=Path(amendment['browser_profile']).resolve():
         raise ValueError('ORIGINAL_APPROVED_BROWSER_PROFILE_REQUIRED')
     if (subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()!=auth['code_sha']
@@ -570,7 +591,7 @@ async def run(root, authorization, profile):
     with file_lock(root/'controller.lock'),file_lock(root/'collector.lock'),file_lock(Path(plan['shared_gate_path']).parent/'highspeed_live.lock'):
         async with async_playwright() as pw:
             context=await pw.chromium.launch_persistent_context(str(profile),headless=False,service_workers='block')
-            collector=ParallelCollector(bridge,auth,qa_seconds=full_qa_reserve(root,len(plan['tasks'])))
+            collector=collector_type(bridge,auth,qa_seconds=full_qa_reserve(root,len(plan['tasks'])))
             try:
                 await collector.run(context,tasks)
                 from .detail5500_runtime import audit_stage
@@ -585,13 +606,13 @@ async def run(root, authorization, profile):
                 from .quick5500_cli import export
                 export(root)
                 atomic_json(root/'worker_status.json',dict(phase='PAUSED',updated_at=utc(),
-                    error=type(exc).__name__+': '+str(exc),network_parallelism=2,visible_browser=True))
+                    error=type(exc).__name__+': '+str(exc),network_parallelism=collector.lane_count,visible_browser=True))
                 if collector.scheduler.access_failure:
                     marker=root/'manual_assistance.close.requested'
                     original=marker.read_bytes() if marker.exists() else None
                     atomic_json(root/'worker_status.json',dict(phase='WAITING_MANUAL_ASSISTANCE',
                         updated_at=utc(),new_network_requests_blocked=True,automatic_resume=False,
-                        human_network_handoff_requires_review=True,network_parallelism=2,visible_browser=True))
+                        human_network_handoff_requires_review=True,network_parallelism=collector.lane_count,visible_browser=True))
                     while (any(not p.is_closed() for p in collector.pages)
                             and datetime.now(timezone.utc)<datetime.fromisoformat(auth['deadline'])):
                         if marker.exists() and marker.read_bytes()!=original:break
