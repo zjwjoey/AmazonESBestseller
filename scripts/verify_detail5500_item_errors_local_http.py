@@ -39,13 +39,17 @@ async def smoke(base,port):
  auth=auth_for(bridge,base);auth['deadline']=(datetime.now(timezone.utc)+timedelta(hours=3)).isoformat()
  from amazon_es_bestseller.multisource.storage import digest
  from amazon_es_bestseller.collection.quick_selection import file_sha
- auth['code_sha']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=W,text=True).strip()
+ # Retain auth_for's explicit local-test CI/offline fixture binding. The result
+ # separately records the actual clean Git commit exercised by this script.
+ auth['max_requests']=auth['max_page_requests']=len(tasks)
  policy=bridge.root/'item_error_policy.approved.json'
  immutable_json(policy,dict(approved=True,approved_by='agent_under_explicit_user_delegation',explicit_user_instruction='Local verification of log errors and continue',scope='CONTINUE_RECORDED_ITEM_DATA_ERRORS_NO_RETRY',run_id='test',runtime_root=str(bridge.root.resolve()),plan_sha256=digest(bridge.plan),code_sha=auth['code_sha'],allowed_statuses=['IDENTITY_REVIEW','PARSE_FAILED'],no_successful_task_replay=True,preserve_failed_status=True,stop_on_access_restriction=True,stop_on_persistence_failure=True))
  auth['item_error_continuation_reference']=dict(path=str(policy),sha256=file_sha(policy))
  immutable_json(bridge.root/'access_gate.json',sealed({'state':'NORMAL'}))
  # Test-only allowance has no CLI flag and no production authorization.
  mod.safe_url=lambda u:u.startswith(f'http://127.0.0.1:{port}/')
+ from amazon_es_bestseller.collection import detail_bridge5500 as local_bridge
+ local_bridge.safe_url=mod.safe_url
  mod.validate_parallel_mode=lambda *a:None
  # Ordinary item failures must not require an artificial parser delay.
  five.validate_parallel_mode=lambda *a:None
