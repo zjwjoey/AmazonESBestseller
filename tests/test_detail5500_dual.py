@@ -53,7 +53,7 @@ def test_hour_target_is_not_a_catch_up_burst():
         s = TwoRequestScheduler(reserve, capture, clock=lambda: now[0], sleep=sleep)
         await s.run(list('abcd'))
         assert all(b-a >= 3.6-1e-9 for a,b in zip(starts, starts[1:]))
-        assert starts[-1] >= 107.2
+        assert starts[-1] >= 107.2-1e-9
     asyncio.run(scenario())
 
 
@@ -106,4 +106,41 @@ def test_thousand_dispatches_have_no_short_gaps_virtual_clock():
         assert starts[-1] == pytest.approx(999 * 3.6)
         assert all(b-a >= 3.6-1e-9 for a,b in zip(starts, starts[1:]))
         assert s.peak_active <= 2
+    asyncio.run(scenario())
+
+
+def test_reservation_validation_is_inside_the_pacing_window_not_added_after_it():
+    async def scenario():
+        now = [0.0]; starts = []
+        async def sleep(seconds):
+            now[0] += seconds
+            await asyncio.sleep(0)
+        async def reserve(task, lane):
+            now[0] += 1.5  # unchanged authorization/budget validation cost
+            return task
+        async def capture(task, sent): starts.append(now[0]); sent()
+        s = TwoRequestScheduler(reserve, capture, clock=lambda: now[0], sleep=sleep)
+        await s.run(range(10))
+        assert starts == pytest.approx([1.5 + i*3.6 for i in range(10)])
+    asyncio.run(scenario())
+
+
+def test_stop_after_reservation_before_start_preserves_unsent_token():
+    async def scenario():
+        now = [0.0]; reserved = []; saved = []; sent_tasks = []
+        async def sleep(seconds):
+            now[0] += seconds
+            s.fail(RuntimeError('CHALLENGE'), access=True)
+            await asyncio.sleep(0)
+        async def reserve(task, lane): reserved.append(task); return task
+        async def capture(task, sent):
+            if not s.stop.is_set():
+                sent_tasks.append(task); sent()
+            saved.append(task)
+        s = TwoRequestScheduler(reserve, capture, clock=lambda: now[0], sleep=sleep)
+        with pytest.raises(RuntimeError, match='CHALLENGE'):
+            await s.run(list('abcd'))
+        assert sent_tasks == ['a']
+        assert set(reserved) == set(saved) == {'a', 'b'}
+        assert s.active == 0 and s.access_failure
     asyncio.run(scenario())

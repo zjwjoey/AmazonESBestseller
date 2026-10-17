@@ -135,6 +135,16 @@ class ParallelCollector:
     def signal_access(self, reason):
         self.scheduler.fail(AccessStopError('DETAIL_ACCESS_STOP ' + reason), access=True)
 
+    def check_dispatch_boundary(self):
+        # A reservation can wait for pacing. Re-read both live Gates and clocks
+        # immediately before goto; do not rely on the earlier authorization check.
+        self.bridge.gates_normal()
+        self.check_qa_clock()
+        at = datetime.now(timezone.utc)
+        if not datetime.fromisoformat(self.auth['starts_at']) <= at < datetime.fromisoformat(
+                self.auth.get('request_deadline') or self.auth['deadline']):
+            raise ValueError('DETAIL_AUTHORIZATION_OUTSIDE_TIME')
+
     async def reserve(self, task, lane):
         self.check_qa_clock()
         await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
@@ -272,6 +282,7 @@ class ParallelCollector:
         html, status, error = '', None, None
         try:
             if self.scheduler.stop.is_set():raise RuntimeError('RESERVED_BUT_NOT_SENT_GLOBAL_STOP')
+            self.check_dispatch_boundary()
             token['navigation_requested']=True
             response = await page.goto(task['request_url'], wait_until='domcontentloaded', timeout=45000)
             status = response.status if response else None
@@ -320,7 +331,10 @@ class ParallelCollector:
                     receipt_path=str(token['rp']), observed_at=utc())
                 for gp in (self.root/'access_gate.json', Path(self.plan['shared_gate_path'])):
                     old = read_sealed(gp)
-                    atomic_json(gp, sealed({**self.restriction, 'previous_gate':old}), backup=True)
+                    # Preserve a pre-existing specific restriction if this token
+                    # was blocked before navigation and has no observed HTTP.
+                    if old.get('state') == 'NORMAL' or old.get('state') == 'UNKNOWN' and access != 'UNKNOWN':
+                        atomic_json(gp, sealed({**self.restriction, 'previous_gate':old}), backup=True)
             result = dict(status='ACCESS_STOP', access_state=access)
         else:
             try:

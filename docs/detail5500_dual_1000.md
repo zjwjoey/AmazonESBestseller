@@ -31,6 +31,14 @@ response/render/parse waits do not hold the dispatch lock. At most two captures
 are active or waiting for FIFO commit. Full HTML and the original three-second
 render buffer are preserved. No artificial delay is added to make HTTP overlap.
 
+The isolated dispatcher performs unchanged reservation validation *inside* the
+pacing window, then waits only the remainder before actual dispatch. It never
+subtracts validation from the minimum start gap. Both live Gates, request clock
+and full-QA clock are checked again at the goto boundary. A stop during the wait
+retains the unsent reserved token and its conservative accounting; it never drops
+the receipt or starts its request. A new UNKNOWN without HTTP cannot overwrite a
+pre-existing specific restriction.
+
 Two lanes can sustain 1,000/hour only if their average lane occupancy is at most
 7.2 seconds. Slower transport, full-field parsing, rendering, authorization and
 disk I/O lower actual throughput. A virtual-clock 1,000-dispatch test proves

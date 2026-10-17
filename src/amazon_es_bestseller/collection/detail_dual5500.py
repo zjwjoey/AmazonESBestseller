@@ -22,6 +22,48 @@ class TwoRequestScheduler(ThreeRequestScheduler):
             raise ValueError('DUAL_1000_NON_BURSTING_PACING_REQUIRED')
         super().__init__(reserve, capture, interval=interval, **kwargs)
 
+    async def _lane(self, lane, queue):
+        while not self.stop.is_set():
+            try:
+                task = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                async with self.lock:
+                    if self.stop.is_set():
+                        return
+                    # Preserve every original validation and durable reservation,
+                    # but perform it during the global pacing window. Sleeping
+                    # before validation would add its entire duration to each gap.
+                    token = await self.reserve(task, lane)
+                    if self.last_start is not None and not self.stop.is_set():
+                        await self.sleep(max(0, self.last_start+self.interval-self.clock()))
+                    # Even if a stop arrives during validation/pacing, capture
+                    # owns the already-reserved token and must persist it unsent.
+                    # Runtime capture/route guards refuse navigation after stop.
+                    event = asyncio.Event()
+                    def sent():
+                        if event.is_set():
+                            raise ValueError('DUPLICATE_INITIAL_DOCUMENT_START')
+                        self.last_start = self.clock()
+                        event.set()
+                    self.claimed.append(task)
+                    self.active += 1
+                    self.peak_active = max(self.peak_active, self.active)
+                    capture = asyncio.create_task(self._capture(token, sent))
+                    started = asyncio.create_task(event.wait())
+                    try:
+                        done, _ = await asyncio.wait([started, capture], timeout=60,
+                                                     return_when=asyncio.FIRST_COMPLETED)
+                        if not done or capture in done and not event.is_set():
+                            self.fail(RuntimeError('INITIAL_DOCUMENT_START_NOT_OBSERVED'))
+                    finally:
+                        started.cancel()
+                await capture
+            except Exception as exc:
+                self.fail(exc)
+                return
+
     async def run(self, tasks):
         tasks = list(tasks)
         identities = [t['task_id'] if isinstance(t, dict) else t for t in tasks]

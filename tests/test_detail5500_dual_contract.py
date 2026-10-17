@@ -60,3 +60,23 @@ def test_hourly_does_not_label_two_lanes_as_three_or_target_as_actual(tmp_path):
     assert report['configured_network_parallelism'] == 2
     assert report['observed_document_HTTP_peak_inflight'] is None
     assert report['real_new_details_last_hour'] == 0
+
+
+def test_both_gates_and_request_deadline_are_rechecked_at_actual_dispatch(tmp_path):
+    from datetime import timedelta
+    from amazon_es_bestseller.collection.detail_bridge5500 import DetailBridge5500
+    from amazon_es_bestseller.multisource.storage import sealed, atomic_json
+    from amazon_es_bestseller.access.detector import AccessStopError
+    from test_quick_selection_5500 import auth_for
+    bridge = DetailBridge5500(tmp_path/'run', dict(run_id='test', tasks=[], shared_gate_path=str(tmp_path/'shared_gate.json')))
+    auth = auth_for(bridge, tmp_path)
+    auth['deadline'] = (datetime.now(timezone.utc)+timedelta(hours=3)).isoformat()
+    immutable_json(bridge.root/'access_gate.json', sealed(dict(state='NORMAL')))
+    c = dual.ParallelCollector(bridge, auth)
+    c.check_dispatch_boundary()
+    for gp in [bridge.root/'access_gate.json', tmp_path/'shared_gate.json']:
+        atomic_json(gp, sealed(dict(state='CHALLENGE')))
+        with pytest.raises(AccessStopError): c.check_dispatch_boundary()
+        atomic_json(gp, sealed(dict(state='NORMAL')))
+    auth['request_deadline'] = (datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat()
+    with pytest.raises(ValueError, match='OUTSIDE_TIME'): c.check_dispatch_boundary()
