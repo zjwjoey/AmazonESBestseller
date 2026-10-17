@@ -30,15 +30,31 @@ def build_report(root, sample, at=None):
     status = sample.get("worker_status", {})
     collecting = status.get("phase", "").endswith("COLLECTING") and bool(sample.get("process"))
     local_three = collecting and status.get('local_processing_lanes') == 3 and status.get('network_parallelism') == 1
-    mode = ('THREE_LOCAL_PARSERS_SERIAL_NETWORK' if local_three else 'SERIAL') if collecting else 'STOPPED_OR_NOT_COLLECTING'
+    parallel_three = collecting and status.get('local_processing_lanes') == 3 and status.get('network_parallelism') == 3
+    mode = ('THREE_ASYNC_CAPTURE_LANES' if parallel_three else
+            'THREE_LOCAL_PARSERS_SERIAL_NETWORK' if local_three else 'SERIAL') if collecting else 'STOPPED_OR_NOT_COLLECTING'
     parser_counts = Counter(r.get('local_parser_pid') for r in live if r.get('local_parser_pid') and
                             r.get('local_execution_authorization_sha256') == status.get('authorization_sha256'))
     lanes = ([dict(lane=i+1, state='LOCAL_PARSER_COMPLETIONS_OBSERVED', parser_pid=pid, success=n)
-              for i, (pid, n) in enumerate(sorted(parser_counts.items()))] if local_three else
+              for i, (pid, n) in enumerate(sorted(parser_counts.items()))] if local_three or parallel_three else
              [dict(lane=1, state='SERIAL_RUNNING' if collecting else 'STOPPED', success=len(live)),
               dict(lane=2, state='NOT_ENABLED', success=0), dict(lane=3, state='NOT_ENABLED', success=0)])
-    if local_three:
+    if local_three or parallel_three:
         lanes.extend(dict(lane=i+1, state='NO_COMPLETION_OBSERVED_YET', success=0) for i in range(len(lanes),3))
+    # Actual document dispatch-to-first-response overlap, separate from configured
+    # concurrency and from capture/render/parse time. Missing HTTP evidence never
+    # counts as an observed in-flight response interval.
+    events=[]
+    for r in receipts:
+        if (status.get('authorization_sha256') and r.get('authorization_sha256')==status['authorization_sha256']
+                and r.get('document_started_at') and r.get('document_response_at')):
+            start=datetime.fromisoformat(r['document_started_at'])
+            end=datetime.fromisoformat(r['document_response_at'])
+            if end>=start:
+                events.extend([(start,1),(end,-1)])
+    active=peak=0
+    for _,change in sorted(events):
+        active+=change;peak=max(peak,active)
     pending = len(plan["tasks"])-len(success_rows)
     speed = len(recent)  # Complete wall-clock hour, including pauses; no invented active speed.
     collect_seconds = pending/speed*3600 if speed else None
@@ -72,6 +88,9 @@ def build_report(root, sample, at=None):
         request_kinds=dict(Counter(r.get("kind", "PAGE") for r in receipts)),
         latest_success_at=max((r.get("saved_at", "") for r in live), default=None), latest_request_at=latest,
         lanes=lanes,
+        configured_network_parallelism=status.get('network_parallelism',1),
+        observed_document_HTTP_peak_inflight=peak if events else None,
+        HTTP_overlap_scope='CURRENT_AUTHORIZATION_DISPATCH_TO_FIRST_DOCUMENT_RESPONSE_ONLY',
         access_gates=gates, latest_error_or_STOP=reason, process_evidence=sample.get("process"),
         average_live_success_per_wall_clock_hour=speed, remaining_collection_seconds=collect_seconds,
         full_QA_seconds=qa_seconds, ETA_including_full_QA=eta, QA_measurement_reference=qa_reference,

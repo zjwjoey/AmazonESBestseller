@@ -34,3 +34,19 @@ def test_hourly_growth_counts_only_actual_success_not_reparse_or_cache(tmp_path)
     assert r["success_details"] == 2 and r["cache_reused"] == 1
     assert r["real_new_details_last_hour"] == 1 and r["mode"] == "SERIAL"
     assert r["remaining_request_budget"] == 6050
+
+
+def test_true_parallel_mode_reports_observed_HTTP_overlap_separately(tmp_path):
+    setup(tmp_path)
+    for i in range(3):
+        immutable_json(tmp_path/f'receipts/{i}.json',sealed(dict(state='NORMAL',started_at=f'2026-10-16T14:00:0{i*3}+00:00',
+            document_started_at=f'2026-10-16T14:00:0{i*3}+00:00',
+            document_response_at=f'2026-10-16T14:00:{8+i*3:02d}+00:00',authorization_sha256='current')))
+    sample=dict(process={'CommandLine':'test'},worker_status=dict(phase='FINAL_COLLECTING',
+        local_processing_lanes=3,network_parallelism=3,authorization_sha256='current'))
+    report=build_report(tmp_path,sample,datetime(2026,10,16,14,30,tzinfo=timezone.utc))
+    assert report['mode']=='THREE_ASYNC_CAPTURE_LANES' and report['observed_document_HTTP_peak_inflight']==3
+    assert report['configured_network_parallelism']==3
+    sample['worker_status']['authorization_sha256']='not_observed'
+    report=build_report(tmp_path,sample)
+    assert report['configured_network_parallelism']==3 and report['observed_document_HTTP_peak_inflight'] is None

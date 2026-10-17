@@ -315,6 +315,7 @@ class ParallelCollector:
         atomic_json(self.root/'worker_status.json', dict(phase='FINAL_COLLECTING', updated_at=utc(),
             code_sha=self.auth['code_sha'], visible_browser=True, visible_browser_windows=3,
             visible_window_ids=self.windows, network_parallelism=3, local_processing_lanes=3,
+            authorization_sha256=digest(self.auth),
             original_global_start_interval_seconds=self.auth['request_start_interval_seconds']))
         try:
             await self.scheduler.run(tasks)
