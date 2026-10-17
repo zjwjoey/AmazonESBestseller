@@ -103,10 +103,149 @@ def bound_failure_state(approval, original_path, task):
         location = inspect_delivery_location(html)
         # This is only a precondition for one new observation. It never changes
         # the original null HTTP status or UNKNOWN receipt into a success.
+        # An explicitly bound four-task cohort may contain incomplete original
+        # DOMs without a delivery widget. It never treats missing location as
+        # verified: each NEW capture must still prove Spain/28001 in full.
+        incomplete_cohort_dom = (approval.get('timeout_cohort_reference') is not None
+                                 and location.is_spain is None and not location.postal_code
+                                 and not location.text)
         if (detect_access_status(None, html).value != 'UNKNOWN'
-                or location.is_spain is not True or location.postal_code != '28001'):
+                or (not incomplete_cohort_dom
+                    and (location.is_spain is not True or location.postal_code != '28001'))):
             raise ValueError('RECOVERY_ORIGINAL_TIMEOUT_RESTRICTION_OR_LOCATION')
     return expected
+
+
+
+def _timeout_cohort(bridge, approval, task):
+    reference = approval.get('timeout_cohort_reference')
+    if reference is None:
+        return None
+    p = Path(reference['path'])
+    if file_sha(p) != reference['sha256']:
+        raise ValueError('RECOVERY_COHORT_CHANGED')
+    cohort = read_sealed(p)
+    entries = cohort.get('entries', [])
+    if (cohort.get('approved') is not True
+            or cohort.get('scope') != 'FOUR_EXACT_TIMEOUT_RECHECKS_ALL_NORMAL_BEFORE_QUEUE'
+            or cohort.get('run_id') != bridge.plan['run_id']
+            or cohort.get('runtime_root') != str(bridge.root.resolve())
+            or cohort.get('plan_sha256') != digest(bridge.plan)
+            or cohort.get('code_sha') != approval.get('code_sha')
+            or cohort.get('max_total_rechecks') != 4
+            or cohort.get('max_attempts_per_task') != 1
+            or not cohort.get('user_quotes') or len(entries) != 4
+            or len({e['task_id'] for e in entries}) != 4
+            or len({e['request_url'] for e in entries}) != 4
+            or approval.get('original_failure_kind') != TIMEOUT_RECHECK_KIND
+            or approval.get('gate_sha256') != cohort.get('gate_sha256')):
+        raise ValueError('RECOVERY_EXACT_FOUR_TIMEOUT_COHORT_REQUIRED')
+    for entry in entries:
+        if not any(t['task_id'] == entry['task_id'] and t['request_url'] == entry['request_url']
+                   for t in bridge.plan['tasks']):
+            raise ValueError('RECOVERY_COHORT_NOT_FROZEN_TASKS')
+    matches = [e for e in entries if e['task_id'] == task['task_id']
+               and e['request_url'] == task['request_url']]
+    if len(matches) != 1:
+        raise ValueError('RECOVERY_TASK_OUTSIDE_COHORT')
+    e = matches[0]
+    if approval.get('original_failure_receipt_reference') != e['original_failure_receipt_reference']:
+        raise ValueError('RECOVERY_COHORT_ORIGINAL_RECEIPT_MISMATCH')
+    cp = bridge.root/'tasks'/task['task_id']/'checkpoint.json'
+    if str(cp) != e['original_checkpoint_reference']['path'] or file_sha(cp) != e['original_checkpoint_reference']['sha256']:
+        raise ValueError('RECOVERY_COHORT_ORIGINAL_CHECKPOINT_CHANGED')
+    if cohort.get('gate_original_receipt') not in [e['original_failure_receipt_reference']['path'] for e in entries]:
+        raise ValueError('RECOVERY_COHORT_GATE_NOT_BOUND_TO_FAILURE')
+    return cohort
+
+
+def _recovery_gate_evidence(bridge, approval, task, original, expected):
+    cohort = _timeout_cohort(bridge, approval, task)
+    receipt = cohort['gate_original_receipt'] if cohort else str(original)
+    previous = {}
+    for p in (bridge.root/'access_gate.json', Path(bridge.plan['shared_gate_path'])):
+        g = read_sealed(p)
+        if (file_sha(p) != approval.get('gate_sha256', {}).get(str(p))
+                or g.get('state') != expected or g.get('receipt_path') != receipt):
+            raise ValueError('RECOVERY_GATE_CHANGED_OR_UNRELATED')
+        previous[p] = g
+    return previous
+
+
+def finalize_timeout_cohort(bridge, cohort_reference, approval_references, success_baseline):
+    """No admission until every exact once-only capture has durable acceptance."""
+    p = Path(cohort_reference['path'])
+    if file_sha(p) != cohort_reference['sha256']:
+        raise ValueError('RECOVERY_COHORT_CHANGED')
+    cohort = read_sealed(p)
+    if len(approval_references) != 4 or not success_baseline:
+        raise ValueError('RECOVERY_FOUR_ACCEPTANCES_REQUIRED')
+    proofs = []
+    seen = set()
+    for ar in approval_references:
+        ap = Path(ar['path'])
+        if file_sha(ap) != ar['sha256']:
+            raise ValueError('RECOVERY_APPROVAL_CHANGED')
+        a = read_sealed(ap)
+        if a.get('timeout_cohort_reference') != cohort_reference or not _explicit_recovery_authority(a):
+            raise ValueError('RECOVERY_COHORT_APPROVAL_MISMATCH')
+        t = next((t for t in bridge.plan['tasks'] if t['task_id'] == a.get('task_id')), None)
+        if t is None or t['task_id'] in seen or t['task_id'] in success_baseline:
+            raise ValueError('RECOVERY_DUPLICATE_OR_PRIOR_SUCCESS')
+        seen.add(t['task_id'])
+        cp = bridge.root/'tasks'/t['task_id']/'checkpoint.json'
+        historical = cp.with_name('checkpoint.network_unknown.original.json')
+        # Validate the entire cohort binding against the preserved original CP.
+        e = next((e for e in cohort.get('entries', []) if e['task_id'] == t['task_id']), None)
+        if not e or not historical.is_file() or file_sha(historical) != e['original_checkpoint_reference']['sha256']:
+            raise ValueError('RECOVERY_COHORT_ORIGINAL_NOT_PRESERVED')
+        # _timeout_cohort ordinarily requires the current CP still failed;
+        # its acceptance proof records that original hash before save_result.
+        proof_path = bridge.root/(a['recovery_evidence_name']+'.accepted.json')
+        proof = read_sealed(proof_path)
+        if (proof.get('approval_reference') != ar
+                or proof.get('original_failure_checkpoint_sha256') != file_sha(historical)
+                or proof.get('task_id') != t['task_id'] or proof.get('run_id') != bridge.plan['run_id']):
+            raise ValueError('RECOVERY_COHORT_PROOF_MISMATCH')
+        rp = Path(proof['normal_receipt_path'])
+        if file_sha(rp) != proof['normal_receipt_sha256']:
+            raise ValueError('RECOVERY_COHORT_RECEIPT_CHANGED')
+        r = read_sealed(rp)
+        current = read_sealed(cp)
+        if current.get('status') != 'SUCCESS' or current.get('receipt_path') != str(rp) or current.get('receipt_sha256') != file_sha(rp):
+            raise ValueError('RECOVERY_COHORT_SUCCESS_NOT_DURABLE')
+        if file_sha(r['html_path']) != r['html_sha256'] or current.get('html_sha256') != r['html_sha256']:
+            raise ValueError('RECOVERY_COHORT_HTML_CHANGED')
+        validate_capture(t, r, Path(r['html_path']).read_text(encoding='utf8'))
+        mp = Path(current['response_metadata_path'])
+        if file_sha(mp) != current['response_metadata_sha256']:
+            raise ValueError('RECOVERY_COHORT_METADATA_CHANGED')
+        proofs.append(dict(path=str(proof_path),sha256=file_sha(proof_path)))
+    if seen != {e['task_id'] for e in cohort.get('entries', [])}:
+        raise ValueError('RECOVERY_COHORT_INCOMPLETE')
+    for tid, evidence in success_baseline.items():
+        cp = bridge.root/'tasks'/tid/'checkpoint.json'
+        c = read_sealed(cp)
+        if file_sha(cp) != evidence['checkpoint_sha256'] or file_sha(c['html_path']) != evidence['html_sha256']:
+            raise ValueError('RECOVERY_PRIOR_SUCCESS_CHANGED')
+    previous = {}
+    for gp in (bridge.root/'access_gate.json', Path(bridge.plan['shared_gate_path'])):
+        g = read_sealed(gp)
+        if (file_sha(gp) != cohort.get('gate_sha256', {}).get(str(gp))
+                or g.get('state') != 'UNKNOWN' or g.get('receipt_path') != cohort.get('gate_original_receipt')):
+            raise ValueError('RECOVERY_GATE_CHANGED_OR_UNRELATED')
+        previous[gp] = g
+    if any(read_sealed(rp).get('state') == 'RESERVED' for rp in (bridge.root/'receipts').glob('*.json')):
+        raise ValueError('RECOVERY_INFLIGHT_REQUEST')
+    final = bridge.root/'access_recovery_four_timeout_cohort.accepted.json'
+    immutable_json(final, sealed(dict(run_id=bridge.plan['run_id'],cohort_reference=cohort_reference,
+        accepted_recovery_references=proofs,prior_success_count=len(success_baseline),
+        all_four_actual_normal=True,human_handled=False,accepted_at=utc(),not_final_acceptance=True)))
+    for gp, prior in previous.items():
+        atomic_json(gp,sealed(dict(state='NORMAL',run_id=bridge.plan['run_id'],previous_gate=prior,
+            recovery_evidence_path=str(final),recovery_evidence_sha256=file_sha(final),
+            human_handled=False,human_authorized_normal_verification=True,observed_at=utc())),backup=True)
+    return read_sealed(final)
 
 
 def capture_once(session, bridge, auth, task, approval_reference):
@@ -146,15 +285,11 @@ def capture_once(session, bridge, auth, task, approval_reference):
     if not any(t == task for t in bridge.plan['tasks']):
         raise ValueError('RECOVERY_NOT_FROZEN_TASK')
     old_cp = read_sealed(bridge.root / 'tasks' / task['task_id'] / 'checkpoint.json')
+    if old_cp.get('status') != 'ACCESS_STOP' or not old_cp.get('receipt_path'):
+        raise ValueError('RECOVERY_NOT_ORIGINAL_CHALLENGE_TASK')
     original = Path(old_cp['receipt_path'])
     expected_failure = bound_failure_state(approval, original, task)
-    if old_cp.get('status') != 'ACCESS_STOP':
-        raise ValueError('RECOVERY_NOT_ORIGINAL_CHALLENGE_TASK')
-    for path in (bridge.root / 'access_gate.json', Path(bridge.plan['shared_gate_path'])):
-        g = read_sealed(path)
-        if (file_sha(path) != approval.get('gate_sha256', {}).get(str(path))
-                or g.get('state') != expected_failure or g.get('receipt_path') != str(original)):
-            raise ValueError('RECOVERY_GATE_CHANGED_OR_UNRELATED')
+    _recovery_gate_evidence(bridge, approval, task, original, expected_failure)
     receipts = [read_sealed(p) for p in (bridge.root / 'receipts').glob('*.json')]
     held = uncertain_setup_page_holds(bridge.root, bridge.plan, auth)
     if (any(r.get('state') == 'RESERVED' for r in receipts)
@@ -267,14 +402,7 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
     if old.get('status') != 'ACCESS_STOP' or old.get('receipt_path') != r.get('original_challenge_receipt'):
         raise ValueError('RECOVERY_ORIGINAL_FAILURE_CHANGED')
     expected_failure = bound_failure_state(approval, Path(old['receipt_path']), task)
-    gates = [bridge.root/'access_gate.json', Path(bridge.plan['shared_gate_path'])]
-    previous = {}
-    for p in gates:
-        g = read_sealed(p)
-        if (file_sha(p) != approval['gate_sha256'].get(str(p)) or g.get('state') != expected_failure
-                or g.get('receipt_path') != old['receipt_path']):
-            raise ValueError('RECOVERY_GATE_CHANGED_OR_UNRELATED')
-        previous[p] = g
+    previous = _recovery_gate_evidence(bridge, approval, task, Path(old['receipt_path']), expected_failure)
     if not success_baseline or task['task_id'] in success_baseline:
         raise ValueError('RECOVERY_SUCCESS_BASELINE_REQUIRED')
     for tid, evidence in success_baseline.items():
@@ -307,7 +435,7 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
     result.update(html_path=r['html_path'],html_sha256=r['html_sha256'],receipt_path=str(rp),
         receipt_sha256=file_sha(rp),response_metadata_path=str(mp),response_metadata_sha256=file_sha(mp))
     bridge.save_result(task,result)
-    for p, prior in previous.items():
+    for p, prior in ([] if approval.get('timeout_cohort_reference') else previous.items()):
         atomic_json(p,sealed({'state':'NORMAL','run_id':bridge.plan['run_id'],'previous_gate':prior,
             'recovery_evidence_path':str(proof),'recovery_evidence_sha256':file_sha(proof),
             'human_handled':False,'human_authorized_normal_verification':True,'observed_at':utc()}),backup=True)
