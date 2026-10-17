@@ -40,9 +40,39 @@ def validate_capture(task, receipt, html):
     return result, meta
 
 
+TIMEOUT_RECHECK_KIND = 'USER_AUTHORIZED_DOMCONTENTLOADED_TIMEOUT_RECHECK_V1'
+TIMEOUT_RECHECK_AUTHORITY = 'EXPLICIT_USER_PAGE_CHECK_AND_CONDITIONAL_CONTINUATION'
+
+
+def _explicit_recovery_authority(approval):
+    return (approval.get('authority') == 'EXPLICIT_USER_MANUAL_HANDLING_AND_CONTINUATION'
+            or (approval.get('authority') == TIMEOUT_RECHECK_AUTHORITY
+                and approval.get('original_failure_kind') == TIMEOUT_RECHECK_KIND
+                and approval.get('user_authorized_exact_page_recheck') is True
+                and approval.get('max_attempts') == 1))
+
+
 def review_failure_state(approval, original, task):
     """A reported restored ERR_FAILED is not a blanket UNKNOWN exception."""
     expected = approval.get('expected_failure_state', 'CHALLENGE')
+    if approval.get('original_failure_kind') == TIMEOUT_RECHECK_KIND:
+        responses = original.get('document_responses') or []
+        if (expected != 'UNKNOWN' or original.get('state') != 'UNKNOWN'
+                or approval.get('authority') != TIMEOUT_RECHECK_AUTHORITY
+                or not _explicit_recovery_authority(approval) or not approval.get('user_quotes')
+                or original.get('status_code') is not None
+                or original.get('task_id') != task['task_id']
+                or original.get('run_id') != task['run_id']
+                or original.get('request_url') != task['request_url']
+                or original.get('final_url') != task['request_url']
+                or original.get('document_start_event_observed') is not True
+                or not responses or any(r.get('status_code') != 200
+                    or r.get('url') != task['request_url'] for r in responses)
+                or not str(original.get('error') or '').startswith(
+                    'TimeoutError: Page.goto: Timeout 45000ms exceeded.')
+                or 'waiting until "domcontentloaded"' not in str(original.get('error'))):
+            raise ValueError('RECOVERY_ORIGINAL_TIMEOUT_NOT_EXPLICITLY_SUPPORTED')
+        return expected
     if expected == 'CHALLENGE' and original.get('state') == 'CHALLENGE':
         return expected
     if (expected != 'UNKNOWN' or original.get('state') != 'UNKNOWN'
@@ -60,10 +90,22 @@ def review_failure_state(approval, original, task):
 
 
 def bound_failure_state(approval, original_path, task):
-    expected = review_failure_state(approval, read_sealed(original_path), task)
+    original = read_sealed(original_path)
+    expected = review_failure_state(approval, original, task)
     if expected == 'UNKNOWN' and approval.get('original_failure_receipt_reference') != {
             'path':str(original_path), 'sha256':file_sha(original_path)}:
         raise ValueError('RECOVERY_ORIGINAL_NETWORK_RECEIPT_BINDING_REQUIRED')
+    if approval.get('original_failure_kind') == TIMEOUT_RECHECK_KIND:
+        hp = Path(original.get('html_path') or '')
+        if not hp.is_file() or file_sha(hp) != original.get('html_sha256'):
+            raise ValueError('RECOVERY_ORIGINAL_TIMEOUT_HTML_CHANGED')
+        html = hp.read_text(encoding='utf8')
+        location = inspect_delivery_location(html)
+        # This is only a precondition for one new observation. It never changes
+        # the original null HTTP status or UNKNOWN receipt into a success.
+        if (detect_access_status(None, html).value != 'UNKNOWN'
+                or location.is_spain is not True or location.postal_code != '28001'):
+            raise ValueError('RECOVERY_ORIGINAL_TIMEOUT_RESTRICTION_OR_LOCATION')
     return expected
 
 
@@ -95,7 +137,7 @@ def capture_once(session, bridge, auth, task, approval_reference):
             or approval.get('max_attempts') != 1
             or approval.get('plan_sha256') != digest(bridge.plan)
             or approval.get('code_sha') != auth.get('code_sha')
-            or approval.get('authority') != 'EXPLICIT_USER_MANUAL_HANDLING_AND_CONTINUATION'
+            or not _explicit_recovery_authority(approval)
             or not approval.get('user_quotes') or approval.get('runtime_root') != str(bridge.root.resolve())):
         raise ValueError('EXPLICIT_BOUND_RECOVERY_APPROVAL_REQUIRED')
     now = datetime.now(timezone.utc)
@@ -211,7 +253,7 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
     if (rp.parent.resolve() != (bridge.root/'receipts').resolve()
             or r.get('recovery_approval_reference') != approval_reference
             or approval.get('approved') is not True
-            or approval.get('authority') != 'EXPLICIT_USER_MANUAL_HANDLING_AND_CONTINUATION'
+            or not _explicit_recovery_authority(approval)
             or approval.get('runtime_root') != str(bridge.root.resolve())
             or approval.get('task_id') != task['task_id']
             or approval.get('run_id') != bridge.plan['run_id']
