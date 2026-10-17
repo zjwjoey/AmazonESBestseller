@@ -136,9 +136,16 @@ class ParallelCollector:
     max_uncommitted = 3
     execution_mode = 'DUAL_1000_TARGET'
     scheduler_type = TwoRequestScheduler
+    preserve_browser_on_fatal_error = False
 
     def validate_mode(self):
         return validate_parallel_mode(self.root, self.plan, self.auth)
+
+    def should_stop_for_result(self, result, meta):
+        return result['status'] != 'SUCCESS'
+
+    async def after_durable_result(self, task, result):
+        pass
     def __init__(self, bridge, auth, *, qa_seconds=3600):
         self.bridge, self.auth = bridge, auth
         self.root, self.plan = bridge.root, bridge.plan
@@ -461,7 +468,7 @@ class ParallelCollector:
                     parse_captured_detail, task, html, meta, bool(self.auth.get('delivery_setup_reference')), self.family_policy))
             except Exception as exc:
                 result = dict(status='PARSE_FAILED', reason='LOCAL_PARSER_EXCEPTION', error=repr(exc))
-            if result['status'] != 'SUCCESS':
+            if self.should_stop_for_result(result, meta):
                 self.scheduler.fail(ValueError('DETAIL_SYSTEMATIC_SAFETY_REVIEW_REQUIRED: '+result['status']))
             self.results[task['task_id']] = (task, {**result, **evidence})
             await self.commit_ready()
@@ -492,6 +499,7 @@ class ParallelCollector:
                 task, result = self.results[task_id]
                 try:
                     await asyncio.to_thread(self.bridge.save_result, task, result)
+                    await self.after_durable_result(task, result)
                 except Exception as exc:
                     self.persistence_failure = exc
                     self.scheduler.fail(exc)
@@ -570,7 +578,7 @@ class ParallelCollector:
             if self.commit_order:raise RuntimeError('CAPTURE_EVIDENCE_NOT_FULLY_COMMITTED')
 
 
-async def run(root, authorization, profile, *, collector_type=ParallelCollector, mode_validator=validate_parallel_mode):
+async def run(root, authorization, profile, *, collector_type=ParallelCollector, mode_validator=validate_parallel_mode, task_selector=None):
     from playwright.async_api import async_playwright
     root=Path(root);ap=Path(authorization)
     if ap.resolve().parent!=root.resolve():raise ValueError('AUTHORIZATION_MUST_BE_IN_RUN')
@@ -587,7 +595,7 @@ async def run(root, authorization, profile, *, collector_type=ParallelCollector,
     bridge.validate_stage('T1',30,auth=auth);bridge.validate_stage('T2',100,auth=auth)
     from .delivery_setup5500 import verify_setup
     verify_setup(root,plan,auth)
-    tasks=pending_tasks(bridge,auth)
+    tasks=(task_selector or pending_tasks)(bridge,auth)
     with file_lock(root/'controller.lock'),file_lock(root/'collector.lock'),file_lock(Path(plan['shared_gate_path']).parent/'highspeed_live.lock'):
         async with async_playwright() as pw:
             context=await pw.chromium.launch_persistent_context(str(profile),headless=False,service_workers='block')
@@ -607,11 +615,12 @@ async def run(root, authorization, profile, *, collector_type=ParallelCollector,
                 export(root)
                 atomic_json(root/'worker_status.json',dict(phase='PAUSED',updated_at=utc(),
                     error=type(exc).__name__+': '+str(exc),network_parallelism=collector.lane_count,visible_browser=True))
-                if collector.scheduler.access_failure:
+                if collector.scheduler.access_failure or collector.preserve_browser_on_fatal_error:
                     marker=root/'manual_assistance.close.requested'
                     original=marker.read_bytes() if marker.exists() else None
-                    atomic_json(root/'worker_status.json',dict(phase='WAITING_MANUAL_ASSISTANCE',
+                    atomic_json(root/'worker_status.json',dict(phase=('WAITING_MANUAL_ASSISTANCE' if collector.scheduler.access_failure else 'PAUSED_ERROR_PRESERVED'),
                         updated_at=utc(),new_network_requests_blocked=True,automatic_resume=False,
+                        error=type(exc).__name__+': '+str(exc),
                         human_network_handoff_requires_review=True,network_parallelism=collector.lane_count,visible_browser=True))
                     while (any(not p.is_closed() for p in collector.pages)
                             and datetime.now(timezone.utc)<datetime.fromisoformat(auth['deadline'])):
