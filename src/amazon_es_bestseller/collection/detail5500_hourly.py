@@ -34,16 +34,18 @@ def build_report(root, sample, at=None):
     collecting = status.get("phase", "").endswith("COLLECTING") and bool(sample.get("process"))
     local_three = collecting and status.get('local_processing_lanes') == 3 and status.get('network_parallelism') == 1
     parallel_three = collecting and status.get('local_processing_lanes') == 3 and status.get('network_parallelism') == 3
-    mode = ('THREE_ASYNC_CAPTURE_LANES' if parallel_three else
+    parallel_two = collecting and status.get('local_processing_lanes') == 2 and status.get('network_parallelism') == 2
+    parallel_local = local_three or parallel_three or parallel_two
+    mode = ('TWO_ASYNC_CAPTURE_LANES_1000_TARGET' if parallel_two else 'THREE_ASYNC_CAPTURE_LANES' if parallel_three else
             'THREE_LOCAL_PARSERS_SERIAL_NETWORK' if local_three else 'SERIAL') if collecting else 'STOPPED_OR_NOT_COLLECTING'
     parser_counts = Counter(r.get('local_parser_pid') for r in live if r.get('local_parser_pid') and
                             r.get('local_execution_authorization_sha256') == status.get('authorization_sha256'))
     lanes = ([dict(lane=i+1, state='LOCAL_PARSER_COMPLETIONS_OBSERVED', parser_pid=pid, success=n)
-              for i, (pid, n) in enumerate(sorted(parser_counts.items()))] if local_three or parallel_three else
+              for i, (pid, n) in enumerate(sorted(parser_counts.items()))] if parallel_local else
              [dict(lane=1, state='SERIAL_RUNNING' if collecting else 'STOPPED', success=len(live)),
               dict(lane=2, state='NOT_ENABLED', success=0), dict(lane=3, state='NOT_ENABLED', success=0)])
-    if local_three or parallel_three:
-        lanes.extend(dict(lane=i+1, state='NO_COMPLETION_OBSERVED_YET', success=0) for i in range(len(lanes),3))
+    if parallel_local:
+        lanes.extend(dict(lane=i+1, state='NO_COMPLETION_OBSERVED_YET', success=0) for i in range(len(lanes),2 if parallel_two else 3))
     # Callback arrival clocks are retained as diagnostics, never as HTTP proof.
     events=[]
     for r in receipts:
@@ -107,6 +109,8 @@ def build_report(root, sample, at=None):
         latest_success_at=max((r.get("saved_at", "") for r in live), default=None), latest_request_at=latest,
         lanes=lanes,
         configured_network_parallelism=status.get('network_parallelism',1),
+        target_requests_per_hour=status.get('target_requests_per_hour'),
+        effective_dispatch_interval_seconds=status.get('effective_dispatch_interval_seconds'),
         python_callback_document_event_peak=peak if events else None,
         observed_document_HTTP_peak_inflight=network['request_to_first_byte_peak'] if coverage else None,
         observed_document_HTTP_body_peak_inflight=network['request_to_body_end_peak']
@@ -139,7 +143,7 @@ def persist_hour(root, sample, at=None):
         "确认请求：{paid_requests}/{request_cap}；历史不确定PAGE预留：{conservative_budget_reservation}；有效已用额度：{effective_request_budget_used}；剩余额度：{remaining_request_budget}\n"
         "最近请求：{latest_request_at}\n最近成功：{latest_success_at}\n"
         "{hourly_summary}\n门禁：{access_gates}\n"
-        "三路状态：{lanes}\n完整交付ETA：{ETA_including_full_QA}；{ETA_limitation}\n"
+        "处理通道状态：{lanes}\n完整交付ETA：{ETA_including_full_QA}；{ETA_limitation}\n"
         "本文件是本地报告，主动消息送达需另行验证。\n").format(**report)
     immutable_bytes(target.with_suffix(".txt"), text.encode("utf8"))
     return target
