@@ -44,9 +44,7 @@ def build_report(root, sample, at=None):
               dict(lane=2, state='NOT_ENABLED', success=0), dict(lane=3, state='NOT_ENABLED', success=0)])
     if local_three or parallel_three:
         lanes.extend(dict(lane=i+1, state='NO_COMPLETION_OBSERVED_YET', success=0) for i in range(len(lanes),3))
-    # Actual document dispatch-to-first-response overlap, separate from configured
-    # concurrency and from capture/render/parse time. Missing HTTP evidence never
-    # counts as an observed in-flight response interval.
+    # Callback arrival clocks are retained as diagnostics, never as HTTP proof.
     events=[]
     for r in receipts:
         if (status.get('authorization_sha256') and r.get('authorization_sha256')==status['authorization_sha256']
@@ -58,6 +56,22 @@ def build_report(root, sample, at=None):
     active=peak=0
     for _,change in sorted(events):
         active+=change;peak=max(peak,active)
+    from .browser_network_timing5500 import network_overlap
+    current_completed = [r for r in receipts if status.get('authorization_sha256')
+                         and r.get('authorization_sha256') == status['authorization_sha256']
+                         and r.get('state') == 'NORMAL']
+    snapshots = [r['browser_network_timing'] for r in current_completed
+                 if r.get('browser_network_timing', {}).get('requests')]
+    missing_browser_timing = len(current_completed)-len(snapshots)
+    try:
+        network = network_overlap(snapshots)
+    except ValueError as exc:
+        network = dict(coverage_complete=False, body_coverage_complete=False,
+                       request_to_first_byte_peak=None, request_to_body_end_peak=None,
+                       evidence_error=str(exc))
+    network.pop('intervals', None)  # Full original intervals remain in receipts.
+    network['completed_receipts_without_browser_timing'] = missing_browser_timing
+    coverage = network['coverage_complete'] and missing_browser_timing == 0
     pending = len(plan["tasks"])-len(success_rows)
     speed = len(recent)  # Complete wall-clock hour, including pauses; no invented active speed.
     collect_seconds = pending/speed*3600 if speed else None
@@ -93,8 +107,12 @@ def build_report(root, sample, at=None):
         latest_success_at=max((r.get("saved_at", "") for r in live), default=None), latest_request_at=latest,
         lanes=lanes,
         configured_network_parallelism=status.get('network_parallelism',1),
-        observed_document_HTTP_peak_inflight=peak if events else None,
-        HTTP_overlap_scope='CURRENT_AUTHORIZATION_DISPATCH_TO_FIRST_DOCUMENT_RESPONSE_ONLY',
+        python_callback_document_event_peak=peak if events else None,
+        observed_document_HTTP_peak_inflight=network['request_to_first_byte_peak'] if coverage else None,
+        observed_document_HTTP_body_peak_inflight=network['request_to_body_end_peak']
+            if coverage and network['body_coverage_complete'] else None,
+        browser_network_timing_evidence=network,
+        HTTP_overlap_scope='CURRENT_AUTHORIZATION_BROWSER_CDP_SEND_TO_FIRST_BYTE_ONLY',
         access_gates=gates, latest_error_or_STOP=reason, process_evidence=sample.get("process"),
         average_live_success_per_wall_clock_hour=speed, remaining_collection_seconds=collect_seconds,
         full_QA_seconds=qa_seconds, ETA_including_full_QA=eta, QA_measurement_reference=qa_reference,

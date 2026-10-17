@@ -45,8 +45,27 @@ def test_true_parallel_mode_reports_observed_HTTP_overlap_separately(tmp_path):
     sample=dict(process={'CommandLine':'test'},worker_status=dict(phase='FINAL_COLLECTING',
         local_processing_lanes=3,network_parallelism=3,authorization_sha256='current'))
     report=build_report(tmp_path,sample,datetime(2026,10,16,14,30,tzinfo=timezone.utc))
-    assert report['mode']=='THREE_ASYNC_CAPTURE_LANES' and report['observed_document_HTTP_peak_inflight']==3
+    assert report['mode']=='THREE_ASYNC_CAPTURE_LANES' and report['observed_document_HTTP_peak_inflight'] is None
+    assert report['python_callback_document_event_peak']==3
     assert report['configured_network_parallelism']==3
     sample['worker_status']['authorization_sha256']='not_observed'
     report=build_report(tmp_path,sample)
     assert report['configured_network_parallelism']==3 and report['observed_document_HTTP_peak_inflight'] is None
+
+
+def test_hourly_only_claims_HTTP_peak_from_complete_browser_timing(tmp_path):
+    setup(tmp_path)
+    from test_detail5500_browser_network_timing import example
+    timing=example()
+    immutable_json(tmp_path/'receipts/browser.json',sealed(dict(state='NORMAL',
+        started_at='2026-10-16T14:00:00+00:00',authorization_sha256='current',browser_network_timing=timing)))
+    sample=dict(process={'CommandLine':'test'},worker_status=dict(phase='FINAL_COLLECTING',
+        network_parallelism=3,authorization_sha256='current'))
+    report=build_report(tmp_path,sample)
+    assert report['observed_document_HTTP_peak_inflight']==1
+    assert report['observed_document_HTTP_body_peak_inflight']==1
+    immutable_json(tmp_path/'receipts/unknown.json',sealed(dict(state='NORMAL',
+        started_at='2026-10-16T14:00:05+00:00',authorization_sha256='current')))
+    report=build_report(tmp_path,sample)
+    assert report['observed_document_HTTP_peak_inflight'] is None
+    assert report['browser_network_timing_evidence']['completed_receipts_without_browser_timing']==1

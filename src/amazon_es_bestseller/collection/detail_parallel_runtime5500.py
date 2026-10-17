@@ -23,6 +23,7 @@ from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_
 from .detail_local_lanes5500 import parse_captured_detail
 from .detail_parallel5500 import ThreeRequestScheduler
 from .quick_selection import file_sha
+from .browser_network_timing5500 import NetworkTimingRecorder
 
 
 def checked_reference(ref):
@@ -113,6 +114,7 @@ class ParallelCollector:
         self.family_policy = read_policy(self.root,self.plan,auth)
         self.scheduler = ThreeRequestScheduler(self.reserve, self.capture,
             interval=auth['request_start_interval_seconds'])
+        self.browser_network = NetworkTimingRecorder()
         self.pages, self.windows, self.tokens = [], [], {}
         self.executors = []
         self.commit_order, self.results = [], {}
@@ -295,6 +297,7 @@ class ParallelCollector:
         receipt = token['receipt']
         receipt.update(state=access, status_code=status, final_url=page.url, finished_at=utc(),
             document_start_event_observed=token['sent'],
+            browser_network_timing=self.browser_network.snapshot(token),
             html_path=str(hp), html_sha256=file_sha(hp), error=error, document_responses=token['history'])
         atomic_json(token['rp'], sealed(receipt), backup=True)
         meta = dict(status_code=status, requested_url=task['request_url'], final_url=page.url,
@@ -368,7 +371,7 @@ class ParallelCollector:
             await cdp.send('Browser.setWindowBounds', {'windowId':window,'bounds':{'windowState':'normal'}})
             await cdp.send('Browser.setWindowBounds', {'windowId':window,
                 'bounds':{'left':lane*600,'top':0,'width':600,'height':900}})
-            await cdp.detach()
+            await self.browser_network.attach(cdp, lane, lambda i=lane:self.tokens.get(i))
         if len(set(self.windows))!=3:raise RuntimeError('THREE_DISTINCT_WINDOWS_REQUIRED')
 
     async def run(self, context, tasks):
@@ -388,6 +391,7 @@ class ParallelCollector:
         finally:
             self.commit_ready()
             for pool in self.executors:pool.shutdown(wait=True)
+            await self.browser_network.close()
             if self.commit_order:raise RuntimeError('CAPTURE_EVIDENCE_NOT_FULLY_COMMITTED')
 
 
