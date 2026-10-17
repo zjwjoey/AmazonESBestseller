@@ -144,3 +144,34 @@ def test_stop_after_reservation_before_start_preserves_unsent_token():
         assert set(reserved) == set(saved) == {'a', 'b'}
         assert s.active == 0 and s.access_failure
     asyncio.run(scenario())
+
+
+def test_early_timer_wakeup_does_not_start_before_global_deadline():
+    async def scenario():
+        now=[0.0];starts=[]
+        async def sleep(seconds):
+            now[0]+=seconds*.75  # Windows timers may wake before the requested delay
+            await asyncio.sleep(0)
+        async def reserve(task,lane):return task
+        async def capture(task,sent):starts.append(now[0]);sent()
+        s=TwoRequestScheduler(reserve,capture,clock=lambda:now[0],sleep=sleep)
+        await s.run(range(5))
+        assert all(b-a>=3.6-1e-12 for a,b in zip(starts,starts[1:]))
+    asyncio.run(scenario())
+
+
+def test_default_precision_wait_rechecks_deadline_during_cooperative_yields():
+    async def scenario():
+        now=[0.0];starts=[];yield_count=[0]
+        async def reserve(task,lane):return task
+        async def capture(task,sent):starts.append(now[0]);sent()
+        s=TwoRequestScheduler(reserve,capture)
+        async def sleep(seconds):
+            if seconds==0:yield_count[0]+=1;now[0]+=.001
+            else:now[0]+=seconds*.99
+            await asyncio.sleep(0)
+        s.clock=lambda:now[0];s.sleep=sleep
+        await s.run(range(4))
+        assert yield_count[0]>0
+        assert all(b-a>=3.6-1e-12 for a,b in zip(starts,starts[1:]))
+    asyncio.run(scenario())

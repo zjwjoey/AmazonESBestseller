@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import time
 
 from .detail_parallel5500 import ThreeRequestScheduler
 
@@ -20,6 +21,10 @@ class TwoRequestScheduler(ThreeRequestScheduler):
         if (isinstance(interval, bool) or not isinstance(interval, (int, float))
                 or not math.isfinite(interval) or interval < TARGET_START_INTERVAL_SECONDS):
             raise ValueError('DUAL_1000_NON_BURSTING_PACING_REQUIRED')
+        # Python 3.12 Windows monotonic uses 15.6ms GetTickCount64; QPC is
+        # monotonic but high resolution. Keep injected clocks for offline tests.
+        self.precise_default_timer = "clock" not in kwargs and "sleep" not in kwargs
+        kwargs.setdefault("clock", time.perf_counter)
         super().__init__(reserve, capture, interval=interval, **kwargs)
         self.drain = drain
 
@@ -37,8 +42,16 @@ class TwoRequestScheduler(ThreeRequestScheduler):
                     # but perform it during the global pacing window. Sleeping
                     # before validation would add its entire duration to each gap.
                     token = await self.reserve(task, lane)
-                    if self.last_start is not None and not self.stop.is_set():
-                        await self.sleep(max(0, self.last_start+self.interval-self.clock()))
+                    if self.last_start is not None:
+                        deadline = self.last_start + self.interval
+                        # Event-loop timers may wake early. Only the monotonic
+                        # clock can permit the next start; no timer credit/burst.
+                        while not self.stop.is_set() and self.clock() < deadline:
+                            remaining = deadline-self.clock()
+                            # Coarse Windows asyncio timers can oversleep by one
+                            # tick. Yield cooperatively over the final 25ms;
+                            # still require the real QPC deadline, never start early.
+                            await self.sleep((0 if remaining<=.03 else remaining-.025) if self.precise_default_timer else remaining)
                     # Even if a stop arrives during validation/pacing, capture
                     # owns the already-reserved token and must persist it unsent.
                     # Runtime capture/route guards refuse navigation after stop.

@@ -106,7 +106,7 @@ def test_real_fixture_two_capture_overlap_fifo_all_evidence_drained(tmp_path,mon
     async def scenario():
         clock=[datetime.now(timezone.utc).timestamp()]
         async def sleep(s):clock[0]+=s;await asyncio.sleep(0)
-        monkeypatch.setattr(mod,'asyncio',NS(Event=asyncio.Event,sleep=sleep,
+        monkeypatch.setattr(mod,'asyncio',NS(Event=asyncio.Event,Lock=asyncio.Lock,sleep=sleep,
             to_thread=asyncio.to_thread,wrap_future=asyncio.wrap_future,
             wait_for=asyncio.wait_for,TimeoutError=asyncio.TimeoutError,
             Semaphore=asyncio.Semaphore,create_task=asyncio.create_task,wait=asyncio.wait,
@@ -114,7 +114,7 @@ def test_real_fixture_two_capture_overlap_fifo_all_evidence_drained(tmp_path,mon
         monkeypatch.setattr(mod.time,'time',lambda:clock[0])
         monkeypatch.setattr(mod,'utc',lambda:datetime.fromtimestamp(clock[0],timezone.utc).isoformat())
         c=mod.ParallelCollector(bridge,auth);c.executors=[Ready() for _ in range(2)]
-        c.scheduler.clock=lambda:clock[0];c.scheduler.sleep=sleep
+        c.scheduler.precise_default_timer=False;c.render_clock=lambda:clock[0];c.scheduler.clock=lambda:clock[0];c.scheduler.sleep=sleep
         active=[];released=asyncio.Event();commits=[]
         original=bridge.save_result
         def save(task,result):commits.append(task['task_id']);original(task,result)

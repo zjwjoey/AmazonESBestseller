@@ -29,14 +29,14 @@ async def pipeline(tmp_path, monkeypatch, failure=None):
     monkeypatch.setattr(mod, 'validate_parallel_mode', lambda *a:None)
     clock = [now.timestamp()]
     async def sleep(seconds): clock[0] += seconds; await asyncio.sleep(0)
-    monkeypatch.setattr(mod, 'asyncio', NS(Event=asyncio.Event, Semaphore=asyncio.Semaphore,
+    monkeypatch.setattr(mod, 'asyncio', NS(Event=asyncio.Event, Semaphore=asyncio.Semaphore, Lock=asyncio.Lock,
         create_task=asyncio.create_task, wait=asyncio.wait, FIRST_COMPLETED=asyncio.FIRST_COMPLETED,
         sleep=sleep, to_thread=asyncio.to_thread, wrap_future=asyncio.wrap_future,
         wait_for=asyncio.wait_for, TimeoutError=asyncio.TimeoutError, gather=asyncio.gather))
     monkeypatch.setattr(mod.time, 'time', lambda:clock[0])
     monkeypatch.setattr(mod, 'utc', lambda:datetime.fromtimestamp(clock[0],timezone.utc).isoformat())
     c = mod.ParallelCollector(bridge, auth)
-    c.scheduler.clock=lambda:clock[0]; c.scheduler.sleep=sleep
+    c.scheduler.precise_default_timer=False;c.render_clock=lambda:clock[0];c.scheduler.clock=lambda:clock[0]; c.scheduler.sleep=sleep
     def complete():
         for task, future in pending:
             if not future.done():
@@ -105,7 +105,7 @@ def test_both_full_validations_finish_inside_receipt_pacing_window(tmp_path, mon
         monkeypatch.setattr(mod,'uncertain_setup_page_holds',lambda *a:0)
         c=mod.ParallelCollector(bridge,auth);c.check_qa_clock=lambda:None
         async def sleep(seconds):clock[0]+=seconds;await asyncio.sleep(0)
-        monkeypatch.setattr(mod,'asyncio',NS(Event=asyncio.Event,Semaphore=asyncio.Semaphore,
+        monkeypatch.setattr(mod,'asyncio',NS(Event=asyncio.Event,Semaphore=asyncio.Semaphore,Lock=asyncio.Lock,
             sleep=sleep,to_thread=asyncio.to_thread))
         monkeypatch.setattr(mod.time,'time',lambda:clock[0])
         monkeypatch.setattr(mod,'utc',lambda:datetime.fromtimestamp(clock[0],timezone.utc).isoformat())
@@ -113,4 +113,76 @@ def test_both_full_validations_finish_inside_receipt_pacing_window(tmp_path, mon
         assert len(calls)==2  # no validation removed or cached
         assert clock[0]-now.timestamp()==pytest.approx(3.0)
         assert token['receipt']['state']=='RESERVED' and not token['sent']
+    asyncio.run(scenario())
+
+
+def test_durable_FIFO_writer_does_not_block_browser_event_loop(tmp_path):
+    import inspect, threading
+    async def scenario():
+        progressed=threading.Event(); observations=[]
+        def save(task,result):observations.append(progressed.wait(.5))
+        c=mod.ParallelCollector(NS(root=tmp_path,plan={},save_result=save),{'request_start_interval_seconds':3})
+        task={'task_id':'one'}
+        c.commit_order=['one'];c.results={'one':(task,{'status':'SUCCESS'})}
+        c.all_tokens={'one':{'committed':asyncio.Event()}}
+        async def browser_event():await asyncio.sleep(.01);progressed.set()
+        event=asyncio.create_task(browser_event())
+        result=c.commit_ready()
+        if inspect.isawaitable(result):await result
+        await event
+        assert observations==[True]  # browser callback ran while durable save was waiting
+        assert not c.commit_order and not c.results and not c.all_tokens
+    asyncio.run(scenario())
+
+
+def test_warmup_requires_two_distinct_ready_parser_processes(tmp_path):
+    class Pool:
+        def __init__(self,pid):self.pid=pid
+        def submit(self,fn):
+            assert fn is mod.parser_worker_ready
+            f=Future();f.set_result(self.pid);return f
+    async def scenario():
+        c=mod.ParallelCollector(NS(root=tmp_path,plan={}),{'request_start_interval_seconds':3})
+        c.executors=[Pool(11),Pool(22)]
+        await c.warm_parsers()
+        assert c.ready_parser_pids==[11,22]
+        c.executors=[Pool(11),Pool(11)]
+        with pytest.raises(RuntimeError,match='INDEPENDENT_READY'):
+            await c.warm_parsers()
+        assert not c.all_tokens and not c.commit_order  # warmup reserves no task
+    asyncio.run(scenario())
+
+
+def test_concurrent_commit_callers_have_one_FIFO_writer(tmp_path):
+    import threading,time
+    saved=[];active=[0];peak=[0];lock=threading.Lock()
+    def save(task,result):
+        with lock:active[0]+=1;peak[0]=max(peak[0],active[0])
+        time.sleep(.01);saved.append(task['task_id'])
+        with lock:active[0]-=1
+    async def scenario():
+        c=mod.ParallelCollector(NS(root=tmp_path,plan={},save_result=save),{'request_start_interval_seconds':3})
+        c.commit_order=['a','b']
+        for task_id in c.commit_order:
+            c.results[task_id]=({'task_id':task_id},{'status':'SUCCESS'})
+            c.all_tokens[task_id]={'committed':asyncio.Event()}
+        await asyncio.gather(c.commit_ready(),c.commit_ready())
+        assert saved==['a','b'] and peak==[1]
+        assert not c.all_tokens and not c.results and not c.commit_order
+    asyncio.run(scenario())
+
+
+def test_render_buffer_keeps_six_samples_and_three_seconds_without_adding_IPC_delays(tmp_path,monkeypatch):
+    async def scenario():
+        now=[0.0];samples=[]
+        async def sleep(seconds):now[0]+=seconds;await asyncio.sleep(0)
+        monkeypatch.setattr(mod,'asyncio',NS(Event=asyncio.Event,Semaphore=asyncio.Semaphore,
+            Lock=asyncio.Lock,sleep=sleep))
+        c=mod.ParallelCollector(NS(root=tmp_path,plan={}),{'request_start_interval_seconds':3})
+        c.render_clock=lambda:now[0]
+        class Page:
+            async def content(self):samples.append(now[0]);now[0]+=.2;return '<div id="ppd">offline</div>'
+        await c.render_product_buffer(Page(),200,'<div id="ppd">offline</div>')
+        assert len(samples)==6 and samples[-1]>=3
+        assert now[0]==pytest.approx(3.2)
     asyncio.run(scenario())

@@ -114,3 +114,41 @@ The bounded local parse backlog frees browser slots after raw evidence is saved.
 It preserves the render buffer, full parser, authorization checks and FIFO commit.
 A parser backlog cannot increase the two-network-lane cap or global 3.6-second
 minimum start gap. A short offline benchmark is not a production 1000/hour claim.
+
+## Sustained-throughput iteration
+
+Parser processes spawn/import before the first document dispatch. A single FIFO
+writer within the collector process performs durable saves off the browser event
+loop; admission is released only after the complete save succeeds. Persistence
+failure blocks further commits and new claims, keeps the pending evidence and
+still closes parser/network resources. It does not add another collector.
+
+On Python 3.12 Windows, GetTickCount64-backed monotonic timestamps have 15.6ms
+resolution. The isolated scheduler uses high-resolution monotonic QPC and rechecks
+the absolute deadline after an early timer wakeup. The minimum remains 3.6 seconds;
+no catch-up burst is permitted. Six HTML reads and all access checks remain, with
+the final sample at least three seconds after the render buffer began. Absolute
+sample deadlines avoid adding six IPC durations to the full render wait.
+
+The isolated access detector has an equivalent full-document negative prefilter.
+Every original regex alternative implies one of its case-folded literal fragments;
+any possible hit runs the unchanged original full regex. The regex pattern and
+flags are fingerprint-bound: a changed pattern falls back to the original scan.
+Fragments avoid Unicode dotted/dotless-I assumptions, and Unicode/deep-document
+regressions compare directly against the original detector. Status handling uses
+the original function; shared production detector and full field parser are
+unchanged. No document prefix/truncation or positive prefilter acceptance is used.
+
+`scripts/benchmark_detail5500_dual_sustained.py` uses 36 distinct saved successes,
+real full authorization checks and real parser processes, but simulated transport
+and scratch evidence only. It reports the complete sample and last 24/12 dispatch
+windows, plus source and input hashes. It is not a production rate guarantee or
+a deployment approval. A short-sample extrapolation cannot prove sustained 1000/h.
+
+The final 30ms before a dispatch deadline uses cooperative event-loop yields with
+QPC checks, avoiding a coarse Windows timer overshoot without dispatching early.
+Injected virtual clocks retain their deterministic sleeps. This does not permit
+catch-up credit. Always distinguish request-count-in-a-window from extrapolated
+rate and final successful records/hour; startup and final drain are separately
+reported. The full-document prefilter's Spanish fragment uses a rare middle span
+of the challenge sentence, not generic product-page words such as comprar.

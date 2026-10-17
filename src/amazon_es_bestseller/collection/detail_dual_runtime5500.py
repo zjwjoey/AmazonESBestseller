@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 from multiprocessing import get_context
 from pathlib import Path
 
-from ..access.detector import AccessStopError, detect_access_status
+from ..access.detector import AccessStopError
+from .detail_dual_access5500 import detect_access_status
 from ..multisource.storage import (atomic_json, digest, file_lock, immutable_bytes,
                                   immutable_json, read_sealed, sealed)
 from .detail_bridge5500 import DetailBridge5500, SUCCESS, hashlib_sha, safe_url, utc
@@ -111,6 +112,15 @@ def full_qa_reserve(root, total):
     return max(3600,elapsed/100*total*1.2+900)
 
 
+def parser_worker_ready():
+    # Spawn/import before the first real browser dispatch, never during a
+    # pacing deadline. This function has no task, browser, budget or network.
+    import os
+    from .detail_bridge5500 import parse_candidate_detail
+    from ..access.location import inspect_delivery_location
+    return os.getpid()
+
+
 class ParallelCollector:
     """One asyncio owner writes receipts/checkpoints; two independent pages await I/O."""
     def __init__(self, bridge, auth, *, qa_seconds=3600):
@@ -132,6 +142,8 @@ class ParallelCollector:
         self.receipts = []
         self.restriction = None
         self.persistence_failure = None
+        self.commit_lock = asyncio.Lock()
+        self.render_clock = time.perf_counter
         if qa_seconds<3600:raise ValueError('FULL_QA_RESERVE_CANNOT_BE_LOWERED')
         self.qa_seconds=qa_seconds
 
@@ -339,7 +351,7 @@ class ParallelCollector:
                     self.results[token['task']['task_id']]=(token['task'],dict(
                         status='CAPTURE_FAILED',reason='PARALLEL_CAPTURE_EXCEPTION',
                         receipt_path=str(token['rp']),error=repr(exc)))
-                    self.commit_ready()
+                    await self.commit_ready()
                 except Exception as persistence_error:
                     self.persistence_failure=persistence_error
             raise
@@ -361,13 +373,7 @@ class ParallelCollector:
             else:
                 # Same full three-second rendering buffer as the serial runtime;
                 # other lanes may await independent responses during this time.
-                for _ in range(6):
-                    await asyncio.sleep(.5)
-                    html = await page.content()
-                    access = detect_access_status(status, html).value
-                    if access != 'NORMAL':
-                        self.signal_access(access)
-                        break
+                html = await self.render_product_buffer(page, status, html)
         except Exception as exc:
             error = type(exc).__name__+': '+str(exc)
             try:html = await page.content()
@@ -406,13 +412,26 @@ class ParallelCollector:
                         atomic_json(gp, sealed({**self.restriction, 'previous_gate':old}), backup=True)
             result = dict(status='ACCESS_STOP', access_state=access)
             self.results[task['task_id']] = (task, {**result, **evidence})
-            self.commit_ready()
+            await self.commit_ready()
         else:
             # Release only the browser lane after raw/receipt/meta are durable.
             # Parsing still owns a bounded admission slot until FIFO commit.
             job = asyncio.create_task(self.parse_and_commit(token, html, meta, evidence))
             self.parse_jobs.add(job)
             job.add_done_callback(self.parse_jobs.discard)
+
+    async def render_product_buffer(self, page, status, html):
+        begin = self.render_clock()
+        for sample in range(1, 7):
+            target = begin + sample * .5
+            while self.render_clock() < target:
+                await asyncio.sleep(target-self.render_clock())
+            html = await page.content()
+            access = detect_access_status(status, html).value
+            if access != 'NORMAL':
+                self.signal_access(access)
+                break
+        return html
 
     async def parse_and_commit(self, token, html, meta, evidence):
         task, lane = token['task'], token['lane']
@@ -425,7 +444,7 @@ class ParallelCollector:
             if result['status'] != 'SUCCESS':
                 self.scheduler.fail(ValueError('DETAIL_SYSTEMATIC_SAFETY_REVIEW_REQUIRED: '+result['status']))
             self.results[task['task_id']] = (task, {**result, **evidence})
-            self.commit_ready()
+            await self.commit_ready()
         except Exception as exc:
             self.persistence_failure = exc
             self.scheduler.fail(exc)
@@ -442,14 +461,27 @@ class ParallelCollector:
         if self.commit_order:
             raise RuntimeError('CAPTURE_EVIDENCE_NOT_FULLY_COMMITTED')
 
-    def commit_ready(self):
-        while self.commit_order and self.commit_order[0] in self.results:
-            task_id = self.commit_order.pop(0)
-            task, result = self.results.pop(task_id)
-            self.bridge.save_result(task, result)
-            token=self.all_tokens.pop(task_id)
-            token['committed'].set()
-            self.admission.release()
+    async def commit_ready(self):
+        # One durable FIFO writer in this collector's own process. Slow disk
+        # writes must not block CDP/browser callbacks or dispatch pacing.
+        async with self.commit_lock:
+            if self.persistence_failure:
+                raise RuntimeError('PERSISTENCE_FAILED_REQUIRES_OFFLINE_REVIEW') from self.persistence_failure
+            while self.commit_order and self.commit_order[0] in self.results:
+                task_id = self.commit_order[0]
+                task, result = self.results[task_id]
+                try:
+                    await asyncio.to_thread(self.bridge.save_result, task, result)
+                except Exception as exc:
+                    self.persistence_failure = exc
+                    self.scheduler.fail(exc)
+                    raise
+                # Release admission only after the complete durable save returns.
+                self.commit_order.pop(0)
+                self.results.pop(task_id)
+                token=self.all_tokens.pop(task_id)
+                token['committed'].set()
+                self.admission.release()
 
     async def open_windows(self, context):
         first = await context.new_page()
@@ -483,6 +515,13 @@ class ParallelCollector:
             await self.browser_network.attach(cdp, lane, lambda i=lane:self.tokens.get(i))
         if len(set(self.windows))!=2:raise RuntimeError('TWO_DISTINCT_WINDOWS_REQUIRED')
 
+    async def warm_parsers(self):
+        pids = await asyncio.gather(*(asyncio.wrap_future(pool.submit(parser_worker_ready))
+                                     for pool in self.executors))
+        if len(pids) != 2 or len(set(pids)) != 2:
+            raise RuntimeError('TWO_INDEPENDENT_READY_PARSERS_REQUIRED')
+        self.ready_parser_pids = pids
+
     async def run(self, context, tasks):
         if any(read_sealed(p)['state']=='RESERVED' for p in (self.root/'receipts').glob('*.json')):
             raise ValueError('AMBIGUOUS_IN_FLIGHT_REQUEST_REQUIRES_REVIEW')
@@ -499,11 +538,14 @@ class ParallelCollector:
             effective_dispatch_interval_seconds=self.scheduler.interval,
             original_global_start_interval_seconds=self.auth['request_start_interval_seconds']))
         try:
+            await self.warm_parsers()
             await self.scheduler.run(tasks)
         finally:
-            self.commit_ready()
-            for pool in self.executors:pool.shutdown(wait=True)
-            await self.browser_network.close()
+            try:
+                await self.commit_ready()
+            finally:
+                for pool in self.executors:pool.shutdown(wait=True)
+                await self.browser_network.close()
             if self.commit_order:raise RuntimeError('CAPTURE_EVIDENCE_NOT_FULLY_COMMITTED')
 
 
