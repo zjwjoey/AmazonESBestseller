@@ -72,7 +72,15 @@ def audit_stage(bridge, stage, count, auth=None):
             meta = json.loads(mp.read_text(encoding="utf8"))
         if inspect_delivery_location(html).is_spain is not True:
             raise ValueError("STAGE_SPAIN_DESTINATION_REQUIRED")
-        replay = parse_candidate_detail(t, html, meta)
+        family_ref=outcome.get('record',{}).get('family_identity_policy_reference')
+        if family_ref:
+            from .detail_family_identity5500 import read_policy,parse_family_detail
+            policy=read_policy(bridge.root,bridge.plan,auth)
+            if not policy or policy['approval_reference']!=family_ref:
+                raise ValueError('FINAL_FAMILY_POLICY_BINDING_REQUIRED')
+            replay=parse_family_detail(t,html,meta,policy)
+        else:
+            replay = parse_candidate_detail(t, html, meta)
         if replay["status"] != "SUCCESS" or replay["record"] != outcome["record"]:
             raise ValueError("STAGE_INDEPENDENT_DETAIL_REPLAY_MISMATCH")
         record = replay["record"]
@@ -101,7 +109,10 @@ def audit_stage(bridge, stage, count, auth=None):
     proof = {"stage": stage, "passed": True, "completed_at": utc(), "run_id": bridge.plan["run_id"],
         "independent_audit_elapsed_seconds": time.monotonic()-audit_started,
         "plan_sha256": digest(bridge.plan), "success_count": count, "actual_live_tasks": len(requests),
-        "cache_tasks": count-len(requests), "minimum_request_interval_seconds": min(intervals, default=None),
+        "cache_tasks": count-len(requests),
+        "unique_resolved_asins": len({r["asin"] for r in records}),
+        "family_resolved_details": sum(bool(r.get("family_identity_policy_reference")) for r in records),
+        "candidate_coverage_is_not_unique_SKU_count": True, "minimum_request_interval_seconds": min(intervals, default=None),
         "request_interval_scope": "OBSERVED_RECEIPTS_ONLY", "historical_setup_document_receipts_complete": held == 0,
         "historical_uncertain_PAGE_budget_reservation": held, "effective_request_budget_used_upper_bound": len(all_paid)+held,
         "field_coverage_count": dict(coverage), "field_coverage_denominator": count,

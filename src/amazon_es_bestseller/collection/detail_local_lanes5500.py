@@ -7,10 +7,14 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
 
 
-def parse_captured_detail(task, html, meta, require_postal):
+def parse_captured_detail(task, html, meta, require_postal, family_policy=None):
     from .detail_bridge5500 import parse_candidate_detail
     from ..access.location import inspect_delivery_location
-    result = parse_candidate_detail(task, html, meta)
+    if family_policy is not None:
+        from .detail_family_identity5500 import parse_family_detail
+        result = parse_family_detail(task, html, meta, family_policy)
+    else:
+        result = parse_candidate_detail(task, html, meta)
     location = inspect_delivery_location(html)
     if location.is_spain is not True or (require_postal and location.postal_code != '28001'):
         result = {**result, 'status': 'IDENTITY_REVIEW', 'record': None,

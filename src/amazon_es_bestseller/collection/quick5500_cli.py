@@ -100,6 +100,17 @@ def export(root):
     from ..multisource.storage import _atomic_bytes
     _atomic_bytes(root / "details_5500_raw.jsonl", b"".join(
         (json.dumps(r, ensure_ascii=False, allow_nan=False) + "\n").encode("utf8") for r in rows))
+    # Candidate evidence stays complete; product identity is deduplicated by
+    # actual ASIN, including multiple requested variants resolving to one child.
+    by_asin = {}
+    for record in rows:
+        key=record["asin"]
+        if key not in by_asin:
+            by_asin[key]={"asin":key,"record":record,"candidate_ids":[],"requested_urls":[]}
+        by_asin[key]["candidate_ids"].append(record["candidate_id"])
+        by_asin[key]["requested_urls"].append(record["requested_url"])
+    _atomic_bytes(root / "details_5500_unique_products.jsonl", b"".join(
+        (json.dumps(r,ensure_ascii=True,allow_nan=False)+"\n").encode("utf8") for r in by_asin.values()))
     import tempfile
     with tempfile.TemporaryDirectory(dir=root) as temporary:
         temporary = Path(temporary)

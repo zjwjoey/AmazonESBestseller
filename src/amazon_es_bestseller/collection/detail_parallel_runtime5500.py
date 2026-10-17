@@ -65,7 +65,7 @@ def validate_parallel_mode(root, plan, auth):
     permitted = {'code_sha','ci_run_id','ci_success_evidence','offline_acceptance_reference',
         'approved_by','approval_id','reviewed_at','network_parallelism','local_processing_lanes',
         'visible_browser_windows','visible_browser_required',
-        'parallel_base_authorization_reference','parallel_execution_approval_reference'}
+        'parallel_base_authorization_reference','parallel_execution_approval_reference','family_identity_policy_reference'}
     for key in set(base) | set(auth):
         if key not in permitted and auth.get(key) != base.get(key):
             raise ValueError('PARALLEL_CHANGED_INHERITED_AUTHORIZATION: ' + key)
@@ -73,6 +73,8 @@ def validate_parallel_mode(root, plan, auth):
             or amendment.get('request_start_interval_seconds') != auth['request_start_interval_seconds']
             or amendment.get('no_successful_task_replay') is not True):
         raise ValueError('ORIGINAL_PACING_AND_CHECKPOINTS_REQUIRED')
+    from .detail_family_identity5500 import read_policy
+    read_policy(root,plan,auth)
     return amendment
 
 
@@ -107,6 +109,8 @@ class ParallelCollector:
     def __init__(self, bridge, auth, *, qa_seconds=3600):
         self.bridge, self.auth = bridge, auth
         self.root, self.plan = bridge.root, bridge.plan
+        from .detail_family_identity5500 import read_policy
+        self.family_policy = read_policy(self.root,self.plan,auth)
         self.scheduler = ThreeRequestScheduler(self.reserve, self.capture,
             interval=auth['request_start_interval_seconds'])
         self.pages, self.windows, self.tokens = [], [], {}
@@ -272,7 +276,7 @@ class ParallelCollector:
         else:
             try:
                 result = await asyncio.wrap_future(self.executors[lane].submit(
-                    parse_captured_detail, task, html, meta, bool(self.auth.get('delivery_setup_reference'))))
+                    parse_captured_detail, task, html, meta, bool(self.auth.get('delivery_setup_reference')), self.family_policy))
             except Exception as exc:
                 result = dict(status='PARSE_FAILED', reason='LOCAL_PARSER_EXCEPTION', error=repr(exc))
             if result['status'] != 'SUCCESS':

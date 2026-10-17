@@ -177,6 +177,10 @@ def parse_candidate_detail(task, html, meta):
                 "observed_active_asins": [observed]}
     if not requested_asin and normalize(final) != task["normalized_product_url"]:
         return {"status": "IDENTITY_REVIEW", "reason": "OPAQUE_URL_REDIRECT_UNVERIFIED"}
+    return _extract_verified_detail(task, html, meta, soup, observed, canonicals, parent_proof, final)
+
+
+def _extract_verified_detail(task, html, meta, soup, observed, canonicals, parent_proof, final):
     classification, state, record = _classify_saved_page(html, observed, meta, parser_version="v2")
     if classification != "VALID_PRODUCT_PAGE" or state.value != "NORMAL" or not record:
         return {"status": "PARSE_FAILED", "reason": classification}
@@ -327,6 +331,8 @@ class DetailBridge5500:
             "completed_tasks": len(outcomes), "pending": pending, "statuses": dict(counts),
             "paid_requests": len(receipts), "conservative_budget_reservation": held,
             "effective_request_budget_used": len(receipts)+held, "cache_reused": counts["REUSED_VALID_CACHE"],
+            "family_resolved_details": sum(bool((r.get("record") or {}).get("family_identity_policy_reference")) for r in outcomes),
+            "unique_resolved_asins": len({r["record"]["asin"] for r in outcomes if r["status"] in SUCCESS and (r.get("record") or {}).get("asin")}),
             "latest_success_at": max((r.get("saved_at", "") for r in outcomes if r["status"] in SUCCESS), default=None)}
         atomic_json(self.root / "detail_progress.json", payload)
         return payload
@@ -402,6 +408,8 @@ class DetailBridge5500:
         status = json.loads(Path(ci["path"]).read_text(encoding="utf8"))
         if status.get("headSha") != auth["code_sha"] or status.get("conclusion") != "success":
             raise ValueError("CURRENT_CODE_CI_SUCCESS_REQUIRED")
+        from .detail_family_identity5500 import read_policy
+        read_policy(self.root, self.plan, auth)
         self.gates_normal()
 
     def run(self, session, auth, *, until_completed, authorization_filename=None, local_lanes=1):
