@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 from .quick_selection import file_sha
-from ..multisource.storage import digest
+from ..multisource.storage import digest, read_sealed
 
 
 def reference(root, ref):
@@ -13,10 +13,11 @@ def reference(root, ref):
 
 
 class Stage:
-    def __init__(self, document):
+    def __init__(self, document, remaining=None, completed=()):
         self.document = document
-        self.tasks = document['cohort']
-        self.claimed = set()
+        self.tasks = document['cohort'] if remaining is None else remaining
+        self.claimed = set(completed)
+        self.prior_transactions = len(self.claimed)
         self.by_id = {task['task_id']: task for task in self.tasks}
 
     def claim(self, task):
@@ -25,6 +26,55 @@ class Stage:
                 or len(self.claimed) >= self.document['transaction_limit']):
             raise ValueError('DUAL_STAGE_COHORT_OR_TRANSACTION_LIMIT')
         self.claimed.add(task_id)
+
+
+def resumed_cohort(root, plan, auth, doc, pending):
+    proof=reference(root,auth['dual_stage_resume_reference'])
+    previous=reference(root,proof['previous_authorization_reference'])
+    if (proof.get('approved') is not True
+            or proof.get('approved_by')!='agent_under_explicit_user_delegation'
+            or proof.get('run_id')!=plan['run_id']
+            or proof.get('runtime_root')!=str(Path(root).resolve())
+            or proof.get('plan_sha256')!=digest(plan)
+            or proof.get('code_sha')!=auth['code_sha']
+            or proof.get('original_stage_reference')!=auth['dual_stage_reference']
+            or previous.get('dual_stage_reference')!=auth['dual_stage_reference']
+            or proof.get('independently_reviewed_saved_results') is not True
+            or proof.get('no_successful_task_replay') is not True):
+        raise ValueError('DUAL_STAGE_BOUND_RESUME_REVIEW_REQUIRED')
+    by_id={t['task_id']:t for t in doc['cohort']}
+    plan_tasks={t['task_id']:t for t in plan['tasks']}
+    if any(plan_tasks.get(k)!=t for k,t in by_id.items()):
+        raise ValueError('DUAL_STAGE_ORIGINAL_COHORT_CHANGED')
+    done=set()
+    for entry in proof['completed_transactions']:
+        tid=entry['task_id'];ref=entry['checkpoint_reference']
+        cp=Path(root)/'tasks'/tid/'checkpoint.json'
+        if (tid not in by_id or tid in done or Path(ref['path']).resolve()!=cp.resolve()
+                or file_sha(cp)!=ref['sha256']):
+            raise ValueError('DUAL_STAGE_PRIOR_CHECKPOINT_CHANGED')
+        c=read_sealed(cp)
+        if c.get('task_id')!=tid or c.get('status') not in ('SUCCESS','IDENTITY_REVIEW'):
+            raise ValueError('DUAL_STAGE_PRIOR_UNRESOLVED_OR_RUNNING')
+        for pathkey,hashkey in (('html_path','html_sha256'),('receipt_path','receipt_sha256'),
+                                ('response_metadata_path','response_metadata_sha256')):
+            if file_sha(c[pathkey])!=c[hashkey]:
+                raise ValueError('DUAL_STAGE_PRIOR_EVIDENCE_CHANGED')
+        receipt=read_sealed(c['receipt_path'])
+        if (receipt.get('task_id')!=tid or receipt.get('request_url')!=by_id[tid]['request_url']
+                or receipt.get('state')!='NORMAL' or receipt.get('status_code')!=200):
+            raise ValueError('DUAL_STAGE_ACCESS_FAILURE_NOT_RESUMABLE')
+        # The runtime's preceding pending_tasks() call independently verifies
+        # every SUCCESS and the strict reviewed_identity_quarantines chain.
+        done.add(tid)
+    if not done:raise ValueError('DUAL_STAGE_EMPTY_RESUME_REVIEW')
+    for tid in by_id:
+        if ((Path(root)/'tasks'/tid/'checkpoint.json').exists()) != (tid in done):
+            raise ValueError('DUAL_STAGE_UNREVIEWED_PRIOR_CHECKPOINT')
+    remaining=[t for t in doc['cohort'] if t['task_id'] not in done]
+    if remaining!=pending[:len(remaining)]:
+        raise ValueError('DUAL_STAGE_RESUME_MUST_NOT_EXPAND_OR_SKIP_PENDING')
+    return Stage(doc,remaining,done)
 
 
 def load_stage(root, plan, auth, pending):
@@ -38,11 +88,13 @@ def load_stage(root, plan, auth, pending):
         if (doc.get('approved') is not True or doc.get('run_id') != plan['run_id']
                 or doc.get('runtime_root') != str(Path(root).resolve())
                 or doc.get('plan_sha256') != digest(plan)
-                or doc.get('code_sha') != auth['code_sha']
+                or (doc.get('code_sha') != auth['code_sha'] and not auth.get('dual_stage_resume_reference'))
                 or doc.get('previous_cumulative_limit') != previous
                 or doc.get('transaction_limit') != limit
                 or doc.get('no_successful_task_replay') is not True
-                or len(pending) < limit or doc.get('cohort') != pending[:limit]
+                or len(doc.get('cohort',[]))!=limit
+                or (not auth.get('dual_stage_resume_reference') and
+                    (len(pending) < limit or doc.get('cohort') != pending[:limit]))
                 or len({t['task_id'] for t in doc['cohort']}) != limit):
             raise ValueError('DUAL_STAGE_EXACT_FROZEN_PENDING_COHORT_REQUIRED')
         if previous:
@@ -56,8 +108,10 @@ def load_stage(root, plan, auth, pending):
                 raise ValueError('DUAL_STAGE_PREVIOUS_INDEPENDENT_ACCEPTANCE_REQUIRED')
         marker = Path(root)/f'dual_stage_{cumulative}.drained.json'
         if marker.exists(): raise ValueError('DUAL_STAGE_ALREADY_EXECUTED_NO_REPLAY')
+        if auth.get('dual_stage_resume_reference'):
+            return resumed_cohort(root,plan,auth,doc,pending)
         return Stage(doc)
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, OSError) as exc:
         raise ValueError('EXPLICIT_BOUNDED_DUAL_STAGE_REQUIRED') from exc
 
 
@@ -67,5 +121,6 @@ def stage_result(stage, progress, authorization_sha256):
         plan_sha256=stage.document['plan_sha256'], cumulative_limit=stage.document['cumulative_limit'],
         transaction_limit=stage.document['transaction_limit'],
         attempted_transactions=len(stage.claimed), task_ids=sorted(stage.claimed),
-        cohort_sha256=digest(stage.tasks), authorization_sha256=authorization_sha256,
+        prior_transactions=stage.prior_transactions,
+        cohort_sha256=digest(stage.document['cohort']), authorization_sha256=authorization_sha256,
         progress=progress, automatic_next_stage=False)

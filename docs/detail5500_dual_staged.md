@@ -20,6 +20,16 @@ an immutable SHA-bound prior independent acceptance for this run and plan.
 Failures stop admission and preserve evidence. They do not expand the cohort or
 turn the transaction cap into a success quota. Stage restart is not automatic.
 
+A reviewed data-only identity stop may resume only through a new SHA-bound
+`dual_stage_resume_reference`. This binds the unchanged original cohort and
+previous authorization, the current tested code, and every completed original
+checkpoint plus its unchanged HTML/receipt/metadata. Only NORMAL 200 success or
+strictly quarantined identity failures can be skipped; access stops, unknowns,
+running or unreviewed work cannot use this path. The preceding runtime validates
+the full quarantine chain and saved successes independently. Previously consumed
+transactions, including failures, remain counted against the original cap.
+Only the original unrequested remainder is scheduled, never a replacement cohort.
+
 Keep the current three-lane collector running during development and CI. A
 single-owner safe drained boundary, original profile, success SHA baseline and
 cumulative budget are required for handoff. Never run both collectors against

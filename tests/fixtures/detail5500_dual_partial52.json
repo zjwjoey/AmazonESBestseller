@@ -1,0 +1,15 @@
+{
+  "source_run": "quick_detail5500_20261016_v0",
+  "original_cohort_sha256": "bb6c5e9d58386ce515d0f59b58d380155dd0b0989bdc88bcd4555b87ef6ac334",
+  "partial_review_sha256": "aa1fae1fad58e4f92e51ed0a6e326901bf31887c45c279511aa5d9894e9f1918",
+  "original_transaction_cap": 100,
+  "consumed": 52,
+  "successes": 51,
+  "reviewed_identity_failures": 1,
+  "remaining_original_tasks": 48,
+  "failed_task": "detail_fb97d5f7411b0878ad22b2ece1c6",
+  "failure_reason": "ACTIVE_CHILD_ASIN_CHANGED",
+  "failure_checkpoint_sha256": "3ffc138ef31e4faf10bcad0a511e171264f880ee1741532bff51c60c58565a6a",
+  "failure_kept_as_failure": true,
+  "no_new_GET_for_saved_tasks": true
+}

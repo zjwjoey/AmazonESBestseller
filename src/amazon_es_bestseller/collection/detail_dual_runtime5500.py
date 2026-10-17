@@ -74,7 +74,7 @@ def validate_parallel_mode(root, plan, auth):
         'approved_by','approval_id','reviewed_at','network_parallelism','local_processing_lanes',
         'visible_browser_windows','visible_browser_required','target_requests_per_hour','max_uncommitted_tasks',
         'parallel_base_authorization_reference','parallel_execution_approval_reference','family_identity_policy_reference',
-        'dual_stage_reference'}
+        'dual_stage_reference','dual_stage_resume_reference'}
     for key in set(base) | set(auth):
         if key not in permitted and auth.get(key) != base.get(key):
             raise ValueError('PARALLEL_CHANGED_INHERITED_AUTHORIZATION: ' + key)
