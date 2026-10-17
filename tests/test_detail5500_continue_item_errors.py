@@ -136,3 +136,24 @@ def test_actual_five_pipeline_keeps_collecting_after_one_item_failure(tmp_path,m
         monkeypatch.setattr(b,'verify_saved_success',lambda *a:None)
         assert errors.pending_tasks(b,auth)==[]
     asyncio.run(scenario())
+
+
+def test_fatal_disk_error_keeps_process_and_pages_even_if_export_and_status_writes_fail(tmp_path,monkeypatch,capsys):
+    from datetime import datetime,timezone,timedelta
+    from amazon_es_bestseller.collection import detail_dual_runtime5500 as dual
+    from amazon_es_bestseller.collection import quick5500_cli
+    _,b,auth,_=fixture(tmp_path)
+    auth['deadline']=(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()
+    c=five.FiveCollector(b,auth);human_closed=[False];waited=[]
+    c.pages=[NS(is_closed=lambda:human_closed[0])]
+    def fail(*a,**kw):raise OSError('disk full')
+    async def sleep(seconds):
+        assert c.scheduler.stop.is_set()
+        waited.append(seconds);human_closed[0]=True
+    monkeypatch.setattr(quick5500_cli,'export',fail)
+    monkeypatch.setattr(dual,'atomic_json',fail)
+    monkeypatch.setattr(five.asyncio,'sleep',sleep)
+    asyncio.run(c.hold_failed_state(OSError('original persistence failure')))
+    assert waited==[1] and c.scheduler.stop.is_set()
+    diagnostic=capsys.readouterr().err
+    assert 'original persistence failure' in diagnostic and 'SECONDARY_STATUS_WRITE_ERROR' in diagnostic

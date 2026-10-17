@@ -611,6 +611,9 @@ async def run(root, authorization, profile, *, collector_type=ParallelCollector,
                     final_acceptance_sha256=file_sha(root/'FINAL_acceptance.json'),progress=bridge.progress()))
                 atomic_json(root/'worker_status.json',dict(phase='COMPLETE',updated_at=utc()))
             except Exception as exc:
+                if collector.preserve_browser_on_fatal_error:
+                    await collector.hold_failed_state(exc)
+                    raise
                 from .quick5500_cli import export
                 export(root)
                 atomic_json(root/'worker_status.json',dict(phase='PAUSED',updated_at=utc(),
