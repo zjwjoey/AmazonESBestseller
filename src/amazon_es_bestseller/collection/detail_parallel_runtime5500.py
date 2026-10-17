@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -181,7 +182,7 @@ class ParallelCollector:
             while initial.redirected_from:initial = initial.redirected_from
             token = next((self.tokens.get(i) for i, p in enumerate(self.pages)
                           if request.frame == p.main_frame), None)
-            if (not token or not token.get('navigation_requested',True) or request.method != 'GET' or not safe_url(request.url)
+            if (not token or not token.get('navigation_requested',True) or token.get('navigation_completed') or request.method != 'GET' or not safe_url(request.url)
                     or initial.url != token['task']['request_url']):
                 return await route.abort()
             if request.redirected_from is None:
@@ -193,15 +194,49 @@ class ParallelCollector:
         return await route.continue_()
 
     def mark_document_start(self, token, request, kind):
-        if token['sent']:return
         initial=request
         while initial.redirected_from:initial=initial.redirected_from
+        if token['sent']:
+            # Native CDP may precede Playwright's route/request event. Bind the
+            # actual original Request object without acknowledging a second start.
+            if token.get('native_document_request_id') and token.get('initial_request') is None:
+                token['initial_request']=initial
+            return
         token['initial_request']=initial
         token['sent']=True
         token['receipt']['document_started_at']=utc()
         token['receipt']['document_start_evidence_kind']=kind
         token['receipt']['initial_request_route_observed']=(kind=='FIRST_OBSERVED_SCOPED_MAIN_DOCUMENT_ROUTE' and request.redirected_from is None)
         token['receipt']['physical_wire_start_not_independently_observed']=True
+        token['notify_sent']()
+
+    def observe_native_request(self, lane, main_frame, event):
+        """A real, reserved root CDP request event, never a response-derived start."""
+        token=self.tokens.get(lane);request=event.get('request',{})
+        if (not token or self.scheduler.stop.is_set() or not token.get('navigation_requested')
+                or token.get('navigation_completed') or event.get('type')!='Document'
+                or event.get('frameId')!=main_frame or request.get('method')!='GET'
+                or event.get('redirectResponse') or request.get('url')!=token['task']['request_url']
+                or not safe_url(request.get('url','')) or not event.get('requestId')
+                or token['receipt'].get('state')!='RESERVED'
+                or token['receipt'].get('task_id')!=token['task']['task_id']):
+            return
+        for key in ('timestamp','wallTime'):
+            value=event.get(key)
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or value<=0:return
+        prior=token.get('native_document_request_id')
+        if prior:
+            if prior!=event['requestId']:
+                self.scheduler.fail(ValueError('UNAPPROVED_SECOND_NATIVE_ROOT_DOCUMENT'))
+            return
+        token['native_document_request_id']=event['requestId']
+        token['receipt']['native_document_start']=dict(requestId=event['requestId'],frameId=main_frame,
+            url=request['url'],method='GET',timestamp=event['timestamp'],wallTime=event['wallTime'])
+        if token['sent']:return
+        token['sent']=True
+        token['receipt'].update(document_started_at=utc(),
+            document_start_evidence_kind='BROWSER_CDP_SCOPED_MAIN_DOCUMENT_REQUEST_EVENT',
+            initial_request_route_observed=False,physical_wire_start_not_independently_observed=True)
         token['notify_sent']()
 
     async def configure_page(self, lane, page):
@@ -270,6 +305,7 @@ class ParallelCollector:
             if self.scheduler.stop.is_set():raise RuntimeError('RESERVED_BUT_NOT_SENT_GLOBAL_STOP')
             token['navigation_requested']=True
             response = await page.goto(task['request_url'], wait_until='domcontentloaded', timeout=45000)
+            token['navigation_completed']=True
             status = response.status if response else None
             html = await page.content()
             access = detect_access_status(status, html).value
@@ -366,6 +402,8 @@ class ParallelCollector:
         for lane,page in enumerate(self.pages):
             await self.configure_page(lane,page)
             cdp=await context.new_cdp_session(page)
+            frame=(await cdp.send('Page.getFrameTree'))['frameTree']['frame']['id']
+            cdp.on('Network.requestWillBeSent',lambda event,i=lane,f=frame:self.observe_native_request(i,f,event))
             window=(await cdp.send('Browser.getWindowForTarget'))['windowId']
             self.windows.append(window)
             await cdp.send('Browser.setWindowBounds', {'windowId':window,'bounds':{'windowState':'normal'}})
