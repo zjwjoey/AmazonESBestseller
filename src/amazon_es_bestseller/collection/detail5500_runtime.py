@@ -6,15 +6,41 @@ import json
 import subprocess
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..access.browser import BrowserSession
+from ..access.detector import AccessStopError
 from ..access.location import inspect_delivery_location
 from ..multisource.storage import atomic_json, digest, file_lock, immutable_json, read_sealed, sealed
 from .detail_bridge5500 import DetailBridge5500, SUCCESS, parse_candidate_detail, safe_url, utc
 from .quick_selection import file_sha
 from .quick5500_cli import export
+
+
+def wait_for_manual_assistance(session, root, deadline, failure):
+    """Retain the visible restriction page, without any automatic network work.
+
+    The route guard aborts new requests while the owner pumps browser events.
+    A separately reviewed human-network handoff is needed to replace that
+    guard. Seeing a normal DOM alone never clears the Gate or resumes tasks.
+    """
+    root = Path(root)
+    session.access_blocked = True
+    marker = root / 'manual_assistance.close.requested'
+    previous_marker = marker.read_bytes() if marker.exists() else None
+    atomic_json(root / 'worker_status.json', {**failure, 'phase': 'WAITING_MANUAL_ASSISTANCE',
+        'updated_at': utc(), 'collection_paused': True, 'visible_browser': True,
+        'automatic_resume': False, 'new_network_requests_blocked': True,
+        'human_network_handoff_requires_review': True})
+    while True:
+        if session.page.is_closed():
+            return 'WINDOW_CLOSED_BY_USER'
+        if datetime.now(timezone.utc) >= deadline:
+            return 'FINAL_DEADLINE_REACHED'
+        if marker.exists() and marker.read_bytes() != previous_marker:
+            return 'EXPLICIT_HANDOFF_CLOSE_REQUESTED'
+        session.page.wait_for_timeout(1000)
 
 
 def audit_stage(bridge, stage, count, auth=None):
@@ -190,9 +216,19 @@ def run(root, auth_path, profile, *, visible=True, local_lanes=1, visible_window
                 "final_acceptance_sha256": file_sha(root / "FINAL_acceptance.json"), "progress": bridge.progress()})
             atomic_json(root / "worker_status.json", {"phase": "COMPLETE", "updated_at": utc()})
         except Exception as exc:
-            atomic_json(root / "worker_status.json", {"phase": "STOPPED_REVIEW_REQUIRED", "updated_at": utc(),
-                "exception_type": type(exc).__name__, "reason": str(exc), "progress": bridge.progress()})
-            export(root)
+            failure = {"phase": "STOPPED_REVIEW_REQUIRED", "updated_at": utc(),
+                "exception_type": type(exc).__name__, "reason": str(exc), "progress": bridge.progress()}
+            atomic_json(root / "worker_status.json", failure)
+            if isinstance(exc, AccessStopError):
+                session.access_blocked = True
+            try:
+                export(root)
+            finally:
+                if visible and isinstance(exc, AccessStopError):
+                    outcome = wait_for_manual_assistance(session, root,
+                        datetime.fromisoformat(auth['deadline']), failure)
+                    atomic_json(root / 'worker_status.json', {**failure,
+                        'updated_at': utc(), 'manual_wait_ended': outcome, 'automatic_resume': False})
             raise
 
 
