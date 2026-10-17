@@ -14,6 +14,12 @@ ORIGINAL_LOCAL_PARSER=mod.parse_captured_detail
 def delayed_local_fixture_parser(*args):
  time.sleep(20) # Test-only: let both fast HTTP captures precede the intentional non-product parser failure.
  return ORIGINAL_LOCAL_PARSER(*args)
+
+def injected_item_parser_exception(*args):
+ # Deliberate test-only failure in the real independent parser processes.
+ # Localhost is not an Amazon destination; do not relax destination validation
+ # in the production parser just to turn these fixture pages into products.
+ raise ValueError('LOCAL_TEST_INJECTED_ITEM_PARSER_FAILURE')
 R=Path(r'F:\AmazonESBestseller\runtime\quick_selection_detail_5500_20261016')
 PREFIX=sys.argv[1] if len(sys.argv)>1 else 'true_parallel_local_http'
 assert Path(PREFIX).name==PREFIX
@@ -48,10 +54,9 @@ async def smoke(base,port):
  immutable_json(bridge.root/'access_gate.json',sealed({'state':'NORMAL'}))
  # Test-only allowance has no CLI flag and no production authorization.
  mod.safe_url=lambda u:u.startswith(f'http://127.0.0.1:{port}/')
- from amazon_es_bestseller.collection import detail_bridge5500 as local_bridge
- local_bridge.safe_url=mod.safe_url
  mod.validate_parallel_mode=lambda *a:None
  # Ordinary item failures must not require an artificial parser delay.
+ mod.parse_captured_detail=injected_item_parser_exception
  five.validate_parallel_mode=lambda *a:None
  c=five.FiveCollector(bridge,auth)
  async with async_playwright() as pw:
@@ -78,7 +83,7 @@ async def smoke(base,port):
    assert measured['request_to_first_byte_peak']==measured['request_to_body_end_peak']==peak,measured
    result=dict(at=datetime.now(timezone.utc).isoformat(),passed=True,production_requests=0,
     browser_origin_measurement=measured,exactly_eight_local_document_requests=True,all_eight_item_errors_logged=True,collector_did_not_stop_on_item_errors=True,raw_browser_network_snapshots=[r["browser_network_timing"] for r in rows],
-    offline_invalid_fixture_parser_delay_seconds=0,
+    offline_invalid_fixture_parser_delay_seconds=0,explicit_local_test_parser_exception_injection=True,
     production_profile_used=False,production_checkpoint_writes=0,server_peak_real_HTTP_inflight=peak,
     first_five_HTTP_started_before_first_response=starts[4]<min(responses),global_start_intervals=[b-a for a,b in zip(starts,starts[1:])],
     distinct_visible_window_ids=c.windows,independent_parser_pids=c.ready_parser_pids,processing_groups=[3,2],receipt_processing_groups=[r["processing_group"] for r in rows],events=events,both_raw_receipts_preserved=True,
