@@ -19,7 +19,7 @@ from ..access.detector import AccessStopError, detect_access_status
 from ..multisource.storage import (atomic_json, digest, file_lock, immutable_bytes,
                                   immutable_json, read_sealed, sealed)
 from .detail_bridge5500 import DetailBridge5500, SUCCESS, hashlib_sha, safe_url, utc
-from .detail_budget5500 import uncertain_setup_page_holds
+from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_page_holds
 from .detail_local_lanes5500 import parse_captured_detail
 from .detail_parallel5500 import ThreeRequestScheduler
 from .quick_selection import file_sha

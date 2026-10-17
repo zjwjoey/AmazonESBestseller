@@ -14,7 +14,7 @@ from ..access.detector import AccessStopError, detect_access_status
 from ..access.location import inspect_delivery_location
 from ..multisource.storage import atomic_json, digest, immutable_bytes, immutable_json, read_sealed, sealed
 from .detail_bridge5500 import parse_candidate_detail, utc
-from .detail_budget5500 import uncertain_setup_page_holds
+from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_page_holds
 from .quick_selection import file_sha
 
 
@@ -38,6 +38,33 @@ def validate_capture(task, receipt, html):
     if result['status'] != 'SUCCESS':
         raise ValueError('RECOVERY_EXACT_PRODUCT_IDENTITY_REQUIRED')
     return result, meta
+
+
+def review_failure_state(approval, original, task):
+    """A reported restored ERR_FAILED is not a blanket UNKNOWN exception."""
+    expected = approval.get('expected_failure_state', 'CHALLENGE')
+    if expected == 'CHALLENGE' and original.get('state') == 'CHALLENGE':
+        return expected
+    if (expected != 'UNKNOWN' or original.get('state') != 'UNKNOWN'
+            or approval.get('original_failure_kind') != 'USER_REPORTED_RESTORED_NET_ERR_FAILED_NO_HTTP_V1'
+            or approval.get('user_reported_page_restored') is not True
+            or not approval.get('user_quotes')
+            or original.get('status_code') is not None
+            or original.get('document_responses') != []
+            or original.get('final_url') != 'chrome-error://chromewebdata/'
+            or original.get('task_id') != task['task_id'] or original.get('run_id') != task['run_id']
+            or original.get('request_url') != task['request_url']
+            or not str(original.get('error') or '').startswith('Error: Page.goto: net::ERR_FAILED at '+task['request_url']+'\n')):
+        raise ValueError('RECOVERY_ORIGINAL_FAILURE_NOT_EXPLICITLY_SUPPORTED')
+    return expected
+
+
+def bound_failure_state(approval, original_path, task):
+    expected = review_failure_state(approval, read_sealed(original_path), task)
+    if expected == 'UNKNOWN' and approval.get('original_failure_receipt_reference') != {
+            'path':str(original_path), 'sha256':file_sha(original_path)}:
+        raise ValueError('RECOVERY_ORIGINAL_NETWORK_RECEIPT_BINDING_REQUIRED')
+    return expected
 
 
 def capture_once(session, bridge, auth, task, approval_reference):
@@ -78,12 +105,13 @@ def capture_once(session, bridge, auth, task, approval_reference):
         raise ValueError('RECOVERY_NOT_FROZEN_TASK')
     old_cp = read_sealed(bridge.root / 'tasks' / task['task_id'] / 'checkpoint.json')
     original = Path(old_cp['receipt_path'])
-    if old_cp.get('status') != 'ACCESS_STOP' or read_sealed(original).get('state') != 'CHALLENGE':
+    expected_failure = bound_failure_state(approval, original, task)
+    if old_cp.get('status') != 'ACCESS_STOP':
         raise ValueError('RECOVERY_NOT_ORIGINAL_CHALLENGE_TASK')
     for path in (bridge.root / 'access_gate.json', Path(bridge.plan['shared_gate_path'])):
         g = read_sealed(path)
         if (file_sha(path) != approval.get('gate_sha256', {}).get(str(path))
-                or g.get('state') != 'CHALLENGE' or g.get('receipt_path') != str(original)):
+                or g.get('state') != expected_failure or g.get('receipt_path') != str(original)):
             raise ValueError('RECOVERY_GATE_CHANGED_OR_UNRELATED')
     receipts = [read_sealed(p) for p in (bridge.root / 'receipts').glob('*.json')]
     held = uncertain_setup_page_holds(bridge.root, bridge.plan, auth)
@@ -196,11 +224,12 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
     old = read_sealed(cp)
     if old.get('status') != 'ACCESS_STOP' or old.get('receipt_path') != r.get('original_challenge_receipt'):
         raise ValueError('RECOVERY_ORIGINAL_FAILURE_CHANGED')
+    expected_failure = bound_failure_state(approval, Path(old['receipt_path']), task)
     gates = [bridge.root/'access_gate.json', Path(bridge.plan['shared_gate_path'])]
     previous = {}
     for p in gates:
         g = read_sealed(p)
-        if (file_sha(p) != approval['gate_sha256'].get(str(p)) or g.get('state') != 'CHALLENGE'
+        if (file_sha(p) != approval['gate_sha256'].get(str(p)) or g.get('state') != expected_failure
                 or g.get('receipt_path') != old['receipt_path']):
             raise ValueError('RECOVERY_GATE_CHANGED_OR_UNRELATED')
         previous[p] = g
@@ -229,7 +258,8 @@ def accept_capture(bridge, task, receipt_path, approval_reference, success_basel
         'prior_success_count':len(success_baseline),'human_handled':False,
         'human_authorized_normal_verification':True,'no_verification_form_submitted_by_agent':True,
         'accepted_at':utc()}))
-    immutable_bytes(cp.with_name('checkpoint.challenge.original.json'),cp.read_bytes())
+    history_name = 'checkpoint.challenge.original.json' if expected_failure=='CHALLENGE' else 'checkpoint.network_unknown.original.json'
+    immutable_bytes(cp.with_name(history_name),cp.read_bytes())
     mp = cp.with_name('response_metadata.recovery_'+recovery_name.removeprefix('access_recovery_')+'.json')
     immutable_json(mp,{**meta,'receipt_path':str(rp),'recovery_evidence_path':str(proof)})
     result.update(html_path=r['html_path'],html_sha256=r['html_sha256'],receipt_path=str(rp),

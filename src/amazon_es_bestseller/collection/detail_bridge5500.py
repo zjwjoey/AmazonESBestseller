@@ -318,7 +318,7 @@ class DetailBridge5500:
                 self.outcomes[t["task_id"]] = read_sealed(p)
 
     def progress(self):
-        from .detail_budget5500 import uncertain_setup_page_holds
+        from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_page_holds
         held = uncertain_setup_page_holds(self.root, self.plan)
         outcomes = list(self.outcomes.values())
         counts = Counter(r["status"] for r in outcomes)
@@ -390,7 +390,7 @@ class DetailBridge5500:
                      "reviewed_identity_quarantines_reference", "saved_HTML_media_parent_reparse_reference"):
             if auth.get(name) and file_sha(auth[name]["path"]) != auth[name]["sha256"]:
                 raise ValueError("DELIVERY_CONTROL_REFERENCE_CHANGED")
-        from .detail_budget5500 import uncertain_setup_page_holds
+        from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_page_holds
         uncertain_setup_page_holds(self.root, self.plan, auth)
         if (auth["max_page_requests"] > auth["max_requests"] or
                 (auth["max_other_requests"] != 0 and not auth.get("delivery_setup_reference"))
@@ -476,7 +476,7 @@ class DetailBridge5500:
                     immutable_bytes(slot / "checkpoint.attempt_1.preserved.json", checkpoint.read_bytes())
                     attempt = 2
                 self.validate_authorization(auth)
-                from .detail_budget5500 import uncertain_setup_page_holds
+                from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_page_holds
                 held = uncertain_setup_page_holds(self.root, self.plan, auth)
                 if (len(reservations)+held >= auth["max_requests"] or
                         sum(r.get("kind", "PAGE") == "PAGE" for r in reservations)+held >= auth["max_page_requests"]):

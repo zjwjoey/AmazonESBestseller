@@ -104,7 +104,7 @@ def audit_stage(bridge, stage, count, auth=None):
     if count >= 20 and any(coverage[k] == 0 for k in ("brand_raw", "current_price_raw", "attributes")):
         raise ValueError("SYSTEMATIC_FIELD_COVERAGE_REVIEW_REQUIRED")
     bridge.gates_normal()
-    from .detail_budget5500 import uncertain_setup_page_holds
+    from .detail_budget5500 import total_conservative_page_holds as uncertain_setup_page_holds
     held = uncertain_setup_page_holds(bridge.root, bridge.plan)
     proof = {"stage": stage, "passed": True, "completed_at": utc(), "run_id": bridge.plan["run_id"],
         "independent_audit_elapsed_seconds": time.monotonic()-audit_started,
