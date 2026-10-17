@@ -3,7 +3,7 @@ import copy
 import gzip
 import json
 from concurrent.futures import Future
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -100,6 +100,7 @@ def test_real_fixture_three_capture_overlap_fifo_all_evidence_drained(tmp_path,m
         t=copy.deepcopy(provenance['task']);t.update(task_id=str(i),candidate_id=str(i));tasks.append(t)
     bridge=DetailBridge5500(tmp_path/'run',dict(run_id='test',tasks=tasks,shared_gate_path=str(tmp_path/'shared_gate.json')))
     auth=auth_for(bridge,tmp_path)
+    auth['deadline']=(datetime.now(timezone.utc)+timedelta(hours=3)).isoformat()
     immutable_json(bridge.root/'access_gate.json',sealed({'state':'NORMAL'}))
     monkeypatch.setattr(mod,'validate_parallel_mode',lambda *a:None)
     async def scenario():
@@ -178,3 +179,23 @@ def test_routes_block_unsolicited_window_navigation_and_submission(tmp_path):
         await c.route(NS(request=req,abort=abort,continue_=forbidden))
         assert len(aborted)==2
     asyncio.run(scenario())
+
+
+def test_full_QA_uses_real_T2_measurement_and_stops_before_reservation(tmp_path):
+    immutable_json(tmp_path/'T2_acceptance.json',sealed(dict(passed=True,success_count=100,
+        independent_audit_elapsed_seconds=253.203)))
+    qa=mod.full_qa_reserve(tmp_path,5500)
+    assert qa==pytest.approx(17611.398)
+    bridge=NS(root=tmp_path,plan={})
+    collector=mod.ParallelCollector(bridge,dict(request_start_interval_seconds=3,
+        deadline=(datetime.now(timezone.utc)+timedelta(hours=4)).isoformat()),qa_seconds=qa)
+    with pytest.raises(ValueError,match='FULL_QA_RESERVE_REACHED'):
+        asyncio.run(collector.reserve({'task_id':'must_not_be_reserved'},0))
+    assert not list((tmp_path/'receipts').glob('*'))
+
+
+def test_QA_measurement_missing_or_lowered_reserve_rejects(tmp_path):
+    immutable_json(tmp_path/'T2_acceptance.json',sealed(dict(passed=False,success_count=100)))
+    with pytest.raises(ValueError,match='MEASUREMENT'):mod.full_qa_reserve(tmp_path,5500)
+    with pytest.raises(ValueError,match='CANNOT_BE_LOWERED'):
+        mod.ParallelCollector(NS(root=tmp_path,plan={}),{'request_start_interval_seconds':3},qa_seconds=3599)

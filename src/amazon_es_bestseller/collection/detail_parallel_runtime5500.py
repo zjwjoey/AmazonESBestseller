@@ -92,9 +92,19 @@ def pending_tasks(bridge, auth):
     return pending
 
 
+def full_qa_reserve(root, total):
+    proof=read_sealed(Path(root)/'T2_acceptance.json')
+    if proof.get('passed') is not True or proof.get('success_count')!=100:
+        raise ValueError('REAL_T2_AUDIT_MEASUREMENT_REQUIRED')
+    elapsed=proof.get('independent_audit_elapsed_seconds')
+    if not isinstance(elapsed,(int,float)) or elapsed<=0:
+        raise ValueError('REAL_T2_AUDIT_MEASUREMENT_REQUIRED')
+    return max(3600,elapsed/100*total*1.2+900)
+
+
 class ParallelCollector:
     """One asyncio owner writes receipts/checkpoints; three independent pages await I/O."""
-    def __init__(self, bridge, auth):
+    def __init__(self, bridge, auth, *, qa_seconds=3600):
         self.bridge, self.auth = bridge, auth
         self.root, self.plan = bridge.root, bridge.plan
         self.scheduler = ThreeRequestScheduler(self.reserve, self.capture,
@@ -105,11 +115,19 @@ class ParallelCollector:
         self.receipts = []
         self.restriction = None
         self.persistence_failure = None
+        if qa_seconds<3600:raise ValueError('FULL_QA_RESERVE_CANNOT_BE_LOWERED')
+        self.qa_seconds=qa_seconds
+
+    def check_qa_clock(self):
+        remaining=(datetime.fromisoformat(self.auth['deadline'])-datetime.now(timezone.utc)).total_seconds()
+        if remaining<=self.qa_seconds+60:
+            raise ValueError('FULL_QA_RESERVE_REACHED_STOP_NEW_REQUESTS')
 
     def signal_access(self, reason):
         self.scheduler.fail(AccessStopError('DETAIL_ACCESS_STOP ' + reason), access=True)
 
     async def reserve(self, task, lane):
+        self.check_qa_clock()
         await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
         validate_parallel_mode(self.root, self.plan, self.auth)
         if self.scheduler.stop.is_set():
@@ -130,6 +148,7 @@ class ParallelCollector:
             await asyncio.sleep(max(0, last+self.auth['request_start_interval_seconds']-time.time()))
         await asyncio.to_thread(self.bridge.validate_authorization, self.auth)
         if self.scheduler.stop.is_set():raise RuntimeError('GLOBAL_STOP_AFTER_PACING')
+        self.check_qa_clock()
         slot = self.root/'tasks'/task['task_id']
         if (slot/'checkpoint.json').exists():raise ValueError('TASK_ALREADY_HAS_CHECKPOINT')
         rp = self.root/'receipts'/(task['task_id']+'_1.json')
@@ -316,6 +335,7 @@ class ParallelCollector:
             code_sha=self.auth['code_sha'], visible_browser=True, visible_browser_windows=3,
             visible_window_ids=self.windows, network_parallelism=3, local_processing_lanes=3,
             authorization_sha256=digest(self.auth),
+            full_QA_reserve_seconds=self.qa_seconds,
             original_global_start_interval_seconds=self.auth['request_start_interval_seconds']))
         try:
             await self.scheduler.run(tasks)
@@ -346,7 +366,7 @@ async def run(root, authorization, profile):
     with file_lock(root/'controller.lock'),file_lock(root/'collector.lock'),file_lock(Path(plan['shared_gate_path']).parent/'highspeed_live.lock'):
         async with async_playwright() as pw:
             context=await pw.chromium.launch_persistent_context(str(profile),headless=False,service_workers='block')
-            collector=ParallelCollector(bridge,auth)
+            collector=ParallelCollector(bridge,auth,qa_seconds=full_qa_reserve(root,len(plan['tasks'])))
             try:
                 await collector.run(context,tasks)
                 from .detail5500_runtime import audit_stage
