@@ -143,6 +143,10 @@ class _FileLock:
     def __exit__(self, *_):
         try: self.path.unlink()
         except FileNotFoundError: pass
+        # Windows can deny unlink while another contender briefly has the
+        # lock metadata open for reading. Leave that owner record in place;
+        # the next entrant will reclaim it after verifying the PID is stale.
+        except PermissionError: pass
 
 
 class BudgetLedger:

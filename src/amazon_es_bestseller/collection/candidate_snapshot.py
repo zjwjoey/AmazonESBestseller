@@ -357,4 +357,35 @@ def build_candidate_snapshot(pages: Sequence[Mapping[str, Any]], output_root: st
             "candidates": parsed["candidates"]}
 
 
-__all__ = ["parse_saved_candidate_pages", "build_candidate_snapshot"]
+def load_candidate_snapshot(snapshot_dir: str | Path) -> dict[str, Any]:
+    """Load a persisted candidate artifact only after verifying every file hash."""
+    root = Path(snapshot_dir).resolve()
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    candidate_name = str(manifest.get("candidate_file") or "")
+    candidate_path = (root / candidate_name).resolve()
+    if root not in candidate_path.parents or not candidate_path.is_file():
+        raise ValueError("CANDIDATE_FILE_INVALID")
+    candidate_body = candidate_path.read_bytes()
+    if _sha256(candidate_body) != str(manifest.get("candidate_file_sha256") or "").lower():
+        raise ValueError("CANDIDATE_FILE_SHA256_MISMATCH")
+    candidates = json.loads(candidate_body.decode("utf-8"))
+    if not isinstance(candidates, list):
+        raise ValueError("CANDIDATE_FILE_SCHEMA_INVALID")
+    html_by_name = {}
+    for item in manifest.get("files") or []:
+        if not isinstance(item, Mapping):
+            continue
+        name = str(item.get("name") or "")
+        path = (root / name).resolve()
+        if root not in path.parents or not path.is_file():
+            raise ValueError("CANDIDATE_EVIDENCE_FILE_INVALID:%s" % name)
+        body = path.read_bytes()
+        if _sha256(body) != str(item.get("sha256") or "").lower():
+            raise ValueError("CANDIDATE_EVIDENCE_SHA256_MISMATCH:%s" % name)
+        html_by_name[Path(name).name] = body
+    return {**manifest, "artifact_root": str(root),
+            "candidates": candidates, "html_by_name": html_by_name}
+
+
+__all__ = ["parse_saved_candidate_pages", "build_candidate_snapshot", "load_candidate_snapshot"]

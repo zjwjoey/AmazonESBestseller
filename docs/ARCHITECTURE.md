@@ -73,16 +73,30 @@ The offline `candidate-snapshot` command replays checksummed saved ranking HTML
 and the reviewed Customer Favorites page subtype. It records URL-based
 candidate groups and source observations without confirming ASIN identity or
 source completeness. The artifact is not accepted directly by `detail-plan`.
-After the existing Ranking Identity authority gate produces confirmed ASIN
-records, optional candidate group/observation IDs pass through the ASIN-keyed
-detail plan and its per-run outcome manifest as provenance only.
+`candidate-identity-verify` reloads the persisted, hash-checked artifact and
+checks a selected candidate against its card/link ASIN pair and a saved detail
+HTML page through the shared identity resolver. It emits a
+`CANDIDATE_IDENTITY_SELECTION`, which is deliberately neither authoritative nor
+complete; `detail-plan` accepts it only when every selected row has verified
+identity evidence, candidate and observation IDs, and a still-matching detail
+HTML hash. The ASIN remains the detail task key. `detail-run` rechecks the hash,
+stores the parsed evidence in `DetailState`, and carries candidate IDs and
+evidence references into its outcome manifest.
+
+The offline `source-evidence-audit` command grades real detail-run outcomes,
+checkpoints, `DetailState`, and hash-bound saved HTML. It separates actual
+request/response evidence, hash-verified saved evidence, and insufficient
+evidence. When rankings are supplied, it also runs the selected checks from the
+mainline Quality Gate. This adapter does not synthesize network receipts or
+claim a formal Source Audit PASS. The legacy Source Audit repair and translation
+preparation workflow remains experimental until its sealed receipt contract is
+proven against the mainline artifacts.
 
 PR #11 added the saved-evidence candidate snapshot; PR #12 added provenance
-through the formal detail path. The mainline still lacks a verified candidate
-selection/identity adapter, a Source Audit evidence adapter for standard
-detail-run artifacts, and a single offline orchestration entry through export.
-The V2 state remains `PARTIALLY_CONSOLIDATED`; the exact acceptance status is in
-`docs/consolidation/V2_END_TO_END_TEST_REPORT.md`.
+through the formal detail path. Offline integration coverage now exercises the
+persisted candidate snapshot, identity selection, detail plan and run, evidence
+audit, fake-provider Translation V2, translation QA and the frozen Excel
+contract. See the closure report for acceptance limits and CI status.
 
 ---
 

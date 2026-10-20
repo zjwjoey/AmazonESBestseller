@@ -302,6 +302,22 @@ The formal detail flow remains `detail-plan` → `detail-run`, keyed by confirme
 ASIN. When an authoritative ranking record carries candidate group and
 observation IDs, the detail plan and per-run manifest retain them as provenance;
 they do not alter canonical product identity or detail state. Multi-lane
-Detail5500 and V4 live runners remain experimental. Source Audit and a complete
-single-command offline business loop are still pending; see
-`docs/consolidation/V2_BLOCKERS.md`.
+Detail5500 and V4 live runners remain experimental. For individually confirmed
+candidates from saved evidence, use `candidate-identity-verify`; it emits a
+verified selection without claiming that the entire ranking snapshot is
+authoritative or complete:
+
+```powershell
+amazon-es candidate-identity-verify --snapshot-dir outputs/candidate_snapshots/<snapshot-id> `
+  --detail-html-dir outputs/details/html --candidate-id <candidate-id> `
+  --out-dir outputs/candidate_selections/<selection-id>
+amazon-es --offline detail-plan --snapshot outputs/candidate_selections/<selection-id> `
+  --out-dir outputs/detail_plans/<plan-id>
+```
+
+`source-evidence-audit --run-dir <detail-run> --rankings <rankings.json> --out <report.json>`
+grades actual request evidence, hash-verified saved HTML and insufficient
+evidence, then runs the selected checks from the mainline Quality Gate. It does
+not manufacture Source Audit receipts or a formal Source Audit PASS. The legacy
+receipt/repair workflow and multi-lane runners remain experimental. Offline
+cross-module acceptance is documented in `docs/consolidation/V2_CLOSURE_REPORT.md`.
