@@ -422,6 +422,10 @@ must report partial results separately from failures.
   card, budget admission and `--yes`. `--offline` must block Qwen translation.
 - Translation input, shards and release candidates are separate hash-bound
   artifacts. Do not write translated values back to collection Master data.
+- Production Translation and Pre-Clean must share the canonical
+  `PRODUCTION_FIELD_ALIASES` contract; raw Spanish source values take priority
+  according to that ordered contract. Parsed star ratings outside `0..5` are
+  invalid/missing, not clamped to a valid value.
 - Do not copy Detail5500/highspeed/multisource execution stacks into the formal
   path without independent compatibility and safety evidence. Source Audit
   adapters must consume immutable copies or saved evidence, not active run state.

@@ -22,16 +22,16 @@ PRODUCTION_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "specification_es": ("specification_es", "spec_v2", "核心规格（西语）"),
     "product_details": (
-        "product_details", "product_details_es", "attributes",
         "detail_attributes_raw", "完整商品详情（西语原文）",
+        "product_details", "product_details_es", "attributes",
     ),
     "feature_bullets": (
-        "feature_bullets", "feature_bullets_es", "feature_bullets_raw",
-        "features_es", "商品卖点（西语原文）",
+        "feature_bullets_raw", "商品卖点（西语原文）",
+        "feature_bullets", "feature_bullets_es", "features_es",
     ),
     "product_description": (
-        "product_description", "product_description_es", "description_es",
         "product_description_raw", "商品描述（西语原文）",
+        "product_description", "product_description_es", "description_es",
     ),
 }
 

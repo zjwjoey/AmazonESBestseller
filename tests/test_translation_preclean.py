@@ -1,6 +1,12 @@
 import json
 
 from amazon_es_bestseller.translation.preclean import audit_records, clean_text, numeric_profile, write_reports, language_label
+from amazon_es_bestseller.translation.preclean import FIELD_ALIASES
+from amazon_es_bestseller.translation.production_contract import PRODUCTION_FIELD_ALIASES
+
+
+def test_preclean_uses_canonical_production_field_alias_contract():
+    assert FIELD_ALIASES == PRODUCTION_FIELD_ALIASES
 
 
 def test_preclean_preserves_raw_and_removes_only_deterministic_noise(tmp_path):

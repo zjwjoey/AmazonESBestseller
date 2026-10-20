@@ -10,7 +10,7 @@ from amazon_es_bestseller.translation.production import (
     compute_release_status, merge_translation_shards,
 )
 from amazon_es_bestseller.translation.production_contract import (
-    CANONICAL_FIELD_TARGETS, matches_category_filter, normalize_asin_filter,
+    CANONICAL_FIELD_TARGETS, canonical_record, matches_category_filter, normalize_asin_filter,
 )
 from amazon_es_bestseller.translation.service import DEFAULT_FIELD_MAP, source_hash
 from amazon_es_bestseller.translation.cache import TranslationCache
@@ -99,6 +99,21 @@ def test_synthetic_5000_input_is_stable_and_offline():
 
 def test_production_field_contract_matches_translation_service():
     assert {field: DEFAULT_FIELD_MAP[field] for field in CANONICAL_FIELD_TARGETS} == CANONICAL_FIELD_TARGETS
+
+
+def test_explicit_raw_translation_columns_win_over_derived_aliases():
+    record = canonical_record({
+        "asin": "b000000001",
+        "detail_attributes_raw": "Voltaje: 9 V",
+        "product_details": "derived details",
+        "feature_bullets_raw": ["Original bullet"],
+        "feature_bullets": ["Derived bullet"],
+        "product_description_raw": "Original Spanish description",
+        "product_description": "Derived description",
+    })
+    assert record["product_details"] == "Voltaje: 9 V"
+    assert record["feature_bullets"] == ["Original bullet"]
+    assert record["product_description"] == "Original Spanish description"
 
 
 def test_offline_flag_blocks_qwen_translation_before_provider_setup(tmp_path):
