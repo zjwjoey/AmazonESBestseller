@@ -2,12 +2,12 @@
 
 初始基线：`origin/main` / `9d669b3`。本表覆盖本次 `git ls-remote --heads origin` 返回的全部远端分支头；文件差异列以当时分支当前 tree 与初始基线 tree 的直接比较为准。功能归类依据分支名、HEAD 摘要、提交图、唯一 tree diff、调用关系和测试。PR #6 合入后当前 `origin/main` 为 `6cc36a1`；下方“复核决定”基于更新后的主线。
 
-远端分支头数量：47（含 `main`）。
+盘点时远端分支头数量：47（含 `main`）。随后创建并推送的整合交付分支 `refactor/main-consolidation-v1` 是额外 head，不属于原始 47 个候选分支。
 
 | 远端分支 | HEAD | HEAD 摘要 | 相对基线变更路径数 | 主要路径 | 初步归类 | 初步处置 |
 |---|---|---|---:|---|---|---|
 | `chore/v2-canary-readiness` | `8c302c5` | fix: accept documented Amazon bestseller URLs | 23 | canary.py, cli.py, configs, docs, quality, tests | 翻译生产闭环 | 候选整合；按数据契约、缓存和生产门分层验证 |
-| `codex/5000-translation-v2-integration` | `4698957` | test(translation): lock production namespace isolation | 115 | .gitattributes, THIRD_PARTY_NOTICES.md, categories, cli.py, collection, configs, docs, identity.py | 翻译生产闭环 | production adapter 由该 V2 家族候选对账后择取并经 PR #6 合入；字段别名统一与 request-level provider 状态通过 887 项完整离线测试，PR #8 待 CI；提示词和其它改动暂留参考 |
+| `codex/5000-translation-v2-integration` | `4698957` | test(translation): lock production namespace isolation | 115 | .gitattributes, THIRD_PARTY_NOTICES.md, categories, cli.py, collection, configs, docs, identity.py | 翻译生产闭环 | production adapter 由该 V2 家族候选对账后择取并经 PR #6 合入；字段别名统一/raw-first 与 request-level provider 状态经 PR #8、887 项离线测试及 3.11/3.12 CI 合入；提示词和其它改动暂留参考 |
 | `codex/detail5500-browser-network-timing` | `03cc764` | Preserve passive browser network timing and separate callback metrics | 441 | .gitattributes, .github, README.md, access, cli.py, collection, configs, docs | Detail5500 实验/修复 | 实验保留；逐项审查安全、身份与恢复补丁；执行器不启用 |
 | `codex/detail5500-cdp-start-fix` | `b04b077` | Acknowledge real reserved CDP root starts across missing Playwright redirect events | 444 | .gitattributes, .github, README.md, access, cli.py, collection, configs, docs | Detail5500 实验/修复 | 实验保留；逐项审查安全、身份与恢复补丁；执行器不启用 |
 | `codex/detail5500-dual-1000` | `8530dba` | Optimize isolated dual sustained dispatch with equivalent access scan and FIFO IO | 455 | .gitattributes, .github, README.md, access, cli.py, collection, configs, docs | Detail5500 实验/修复 | 实验保留；逐项审查安全、身份与恢复补丁；执行器不启用 |
@@ -66,6 +66,7 @@
 | **实验保留** | `codex/highspeed-*`、`codex/multisource-*`、V4 lane/runner 分支 | V4 快照核心复用 main；高速采集与 native carousel runner 仍是独立实验，不进入正式入口 |
 | **BLOCKED** | `feature/source-audit-translation-prep-v1` | source audit imports `detail_bridge5500` 和 `multisource.storage`，消费 sealed candidate/task snapshot；主线 detail checkpoint/saved HTML 无该合同。需要只读 adapter 与离线 fixture 验收，未验证前不复制 package |
 | **归档参考** | `codex/field-closure-audit`、`feat/1000-sku-validation`、`feat/4500-product-master`、`feature/amazon-crawler-v2-reference-integration`、`feature/ranking-identity-snapshot-v1`、`feature/ranking-snapshot-detail-planner-v1`、`feature/stable-collector-quality-gate`、`fix/1000-scale-blockers`、`fix/challenge-recovery-status-consistency`、`fix/final-4500-cooldown-consistency`、`fix/monitoring-canary-hardening-v1`、`fix/post-merge-integration-hardening-v1` | 当前远端 branch tip 均为当前 `origin/main` 的祖先，且 triple-dot tree diff 为 0；代码已在主线，保留历史作为参考，不重复合并。此类别不删除远端 Git 分支 |
+| **归档参考** | `feat/pipeline-production-hardening` | 唯一净差异是 standalone quota test；主线 `collection.quota` 已有同类 ASIN 全局去重和 shortfall CLI 回归。分支测试还依赖旧 200-SKU config，不再作为独立主线模块 |
 | **归档参考** | `feature/amazon-es-reconnaissance` | 43 个 branch-only path 位于独立嵌套 `AmazonESBestseller/` 子项目，不属于正式仓库 package；不合并进当前 package |
 | **保留参考，不整包移入** | `feature/amazon-es-production-v1-complete`、`feature/translation-production-closure-v1`、`feature/translation-v2-qwen-mt` | 大型分支有 46–239 个净差异路径，包含不同 scheduler/runtime/checkpoint 与 translation provider 变化；已逐项提取可复用 production adapter，余下内容缺少与现有主线合同相同的独立验收，不整包合并 |
 | **归档参考** | `chore/v2-canary-readiness` | 独有代码主要是额外 canary CLI/config 与文档；不属于本次主线模块整理，也不执行真实 canary |
