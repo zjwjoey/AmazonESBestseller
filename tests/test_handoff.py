@@ -57,7 +57,8 @@ def test_candidate_observation_key_keeps_cross_source_memberships_separate():
     adapted = adapt_ranking_candidates([first, second])
 
     assert len(adapted) == 2
-    assert adapted[0]["candidate_id"] != adapted[1]["candidate_id"]
+    assert adapted[0]["candidate_id"] == adapted[1]["candidate_id"]
+    assert adapted[0]["candidate_observation_id"] != adapted[1]["candidate_observation_id"]
     assert [row["candidate_source_page_url"] for row in adapted] == [
         first["ranking_source_url"], second["ranking_source_url"]
     ]
@@ -79,4 +80,5 @@ def test_candidate_observation_key_is_repeatable_for_same_snapshot_slot():
     second = CandidateObservation.from_ranking_record(dict(record))
 
     assert first.candidate_id == second.candidate_id
+    assert first.observation_id == second.observation_id
     assert first.candidate_id.startswith("candidate_")

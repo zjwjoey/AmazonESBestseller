@@ -10,15 +10,19 @@ does not create another product identity system.
 ## Candidate observation handoff
 
 `handoff.CandidateObservation.from_ranking_record` adapts one immutable ranking
-row. Its `candidate_id` is a deterministic hash of the snapshot, source page,
-page number, source slot/rank and raw product URL. It is an observation key;
-it is not an ASIN and does not assert that the link is an independently
-buyable SKU. The complete source ranking row is retained in `source_record`
-and is copied into `to_dict()` before explicit `candidate_*` fields are added.
+row. Its `candidate_id` groups an exact normalized product URL when the
+mainline row already carries one. A separate `candidate_observation_id`
+identifies the snapshot/source/page/slot/rank/raw URL appearance. If normalized
+URL evidence is missing, the candidate ID falls back to that source-bound
+observation key so uncertain links are not collapsed. A candidate ID is not an
+ASIN and does not assert that the link is an independently buyable SKU. The
+complete source ranking row is retained in `source_record` and copied into
+`to_dict()` before explicit `candidate_*` fields are added.
 
 | Handoff field | Mainline source | Meaning |
 |---|---|---|
-| `candidate_id` | snapshot/source/page/slot/raw URL | Stable key for one source-bound observation |
+| `candidate_id` | exact normalized product URL, otherwise observation locator | URL-group key; never a confirmed product identity |
+| `candidate_observation_id` | snapshot/source/page/slot/rank/raw URL | Stable key for one source-bound appearance |
 | `candidate_original_product_url` | `ranking_product_url_raw` | Original link evidence |
 | `candidate_normalized_product_url` | `ranking_product_url_normalized` | Existing normalized URL, if present |
 | `candidate_source_type` | `ranking_source_type` | Ranking source/list kind |

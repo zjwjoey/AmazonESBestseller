@@ -20,12 +20,9 @@ def _first(record: Mapping[str, Any], *keys: str) -> Any:
     return None
 
 
-def _candidate_id(record: Mapping[str, Any], raw_url: Any) -> str:
-    """Build an observation key from its snapshot/source/slot, never its ASIN."""
-    supplied = str(record.get("candidate_id") or "").strip()
-    if supplied:
-        return supplied
-    locator = {
+def _observation_locator(record: Mapping[str, Any], raw_url: Any) -> dict[str, Any]:
+    """Build the provenance key for one source-bound appearance."""
+    return {
         "snapshot_id": str(record.get("snapshot_id") or ""),
         "source_url": str(_first(record, "ranking_source_url", "source_url") or ""),
         "page_number": _first(record, "ranking_page_number", "page_number"),
@@ -33,9 +30,23 @@ def _candidate_id(record: Mapping[str, Any], raw_url: Any) -> str:
         "rank": _first(record, "ranking_rank", "bestseller_rank", "rank"),
         "raw_product_url": str(raw_url or ""),
     }
-    payload = json.dumps(locator, ensure_ascii=False, sort_keys=True,
+
+
+def _digest_id(prefix: str, value: Mapping[str, Any]) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True,
                          separators=(",", ":")).encode("utf-8")
-    return "candidate_" + hashlib.sha256(payload).hexdigest()[:24]
+    return prefix + hashlib.sha256(payload).hexdigest()[:24]
+
+
+def _candidate_id(record: Mapping[str, Any], raw_url: Any,
+                  normalized_url: Any) -> str:
+    """Build a URL-group key when normalized evidence exists; never use ASIN."""
+    supplied = str(record.get("candidate_id") or "").strip()
+    if supplied:
+        return supplied
+    if normalized_url:
+        return _digest_id("candidate_", {"normalized_product_url": str(normalized_url)})
+    return _digest_id("candidate_", _observation_locator(record, raw_url))
 
 
 @dataclass(frozen=True)
@@ -43,6 +54,7 @@ class CandidateObservation:
     """One source-bound candidate observation, not a product/SKU record."""
 
     candidate_id: str
+    observation_id: str
     original_product_url: str
     normalized_product_url: str
     source_type: str
@@ -65,8 +77,11 @@ class CandidateObservation:
                          "ranking_url_raw")
         normalized_url = _first(record, "ranking_product_url_normalized",
                                 "product_url_normalized")
+        locator = _observation_locator(record, raw_url)
         return cls(
-            candidate_id=_candidate_id(record, raw_url),
+            candidate_id=_candidate_id(record, raw_url, normalized_url),
+            observation_id=str(record.get("observation_id") or
+                               _digest_id("ranking_observation_", locator)),
             original_product_url=str(raw_url or ""),
             normalized_product_url=str(normalized_url or ""),
             source_type=str(_first(record, "ranking_source_type", "source_type") or ""),
@@ -87,6 +102,7 @@ class CandidateObservation:
         return {
             **dict(self.source_record),
             "candidate_id": self.candidate_id,
+            "candidate_observation_id": self.observation_id,
             "candidate_identity_status": "UNCONFIRMED",
             "candidate_original_product_url": self.original_product_url,
             "candidate_normalized_product_url": self.normalized_product_url,
