@@ -1,0 +1,32 @@
+{
+  "snapshot_id": "offline-v4-core-sources",
+  "observed_at": "2026-10-20T10:00:00Z",
+  "target_candidates": 30000,
+  "pages": [
+    {
+      "source_type": "BEST_SELLERS",
+      "source_url": "https://www.amazon.es/gp/bestsellers",
+      "page_url": "https://www.amazon.es/gp/bestsellers",
+      "page_number": 1,
+      "html_path": "F01_best_root_complete.html",
+      "sha256": "36dc2f15593861a0fe59888975943f3989347cc48b4c6b5b22b3668259ffa1c9"
+    },
+    {
+      "source_type": "NEW_RELEASES",
+      "source_url": "https://www.amazon.es/gp/new-releases",
+      "page_url": "https://www.amazon.es/gp/new-releases",
+      "page_number": 1,
+      "html_path": "F02_new_root_complete.html",
+      "sha256": "005356e5f2980b56e4f11c74a5f9ede6d3ed65af7d5d83a7b0b6ed1c8b844ca1"
+    },
+    {
+      "source_type": "CUSTOMER_FAVORITES",
+      "source_subtype": "CUSTOMERS_MOST_LOVED_CURATED_ZONE",
+      "source_url": "https://www.amazon.es/gp/browse.html?node=205103589031&ref_=nav_em_nav_CML_0_2_24_1",
+      "page_url": "https://www.amazon.es/gp/browse.html?node=205103589031&ref_=nav_em_nav_CML_0_2_24_1",
+      "page_number": 1,
+      "html_path": "F07_favorites_global_complete.html",
+      "sha256": "0f6acd4a7915559b4dce465566d75650660310ead4bf96e41a7f7da0e5b568bc"
+    }
+  ]
+}

@@ -61,6 +61,7 @@ class CandidateObservation:
     original_product_url: str
     normalized_product_url: str
     source_type: str
+    source_root_url: str
     source_page_url: str
     snapshot_id: str
     observed_at: str
@@ -76,10 +77,10 @@ class CandidateObservation:
         """Adapt one mainline ranking row without discarding unknown evidence."""
         if not isinstance(record, Mapping):
             raise TypeError("ranking record must be a mapping")
-        raw_url = _first(record, "ranking_product_url_raw", "product_url_raw",
-                         "ranking_url_raw")
+        raw_url = _first(record, "ranking_product_url_raw", "raw_product_url",
+                         "product_url_raw", "ranking_url_raw")
         normalized_url = _first(record, "ranking_product_url_normalized",
-                                "product_url_normalized")
+                                "normalized_product_url", "product_url_normalized")
         locator = _observation_locator(record, raw_url)
         return cls(
             candidate_id=_candidate_id(record, raw_url, normalized_url),
@@ -88,15 +89,21 @@ class CandidateObservation:
             original_product_url=str(raw_url or ""),
             normalized_product_url=str(normalized_url or ""),
             source_type=str(_first(record, "ranking_source_type", "source_type") or ""),
-            source_page_url=str(_first(record, "ranking_source_url", "source_url") or ""),
+            source_root_url=str(_first(record, "ranking_source_url", "source_url") or ""),
+            source_page_url=str(_first(record, "ranking_page_url", "source_page_url",
+                                       "ranking_source_url", "source_url") or ""),
             snapshot_id=str(record.get("snapshot_id") or ""),
             observed_at=str(_first(record, "observed_at", "collected_at") or ""),
-            ranking_position=_first(record, "ranking_rank", "bestseller_rank", "rank"),
+            ranking_position=_first(record, "ranking_rank", "bestseller_rank",
+                                    "ranking_position", "rank"),
             ranking_position_raw=_first(record, "ranking_rank_raw",
-                                         "bestseller_rank_raw", "rank_raw"),
-            asin_observed=str(_first(record, "ranking_asin", "asin") or "").strip().upper(),
-            identity_status=str(record.get("ranking_link_identity_status") or "UNCONFIRMED"),
-            evidence_file=str(_first(record, "evidence_file", "html_file", "source_html") or ""),
+                                         "bestseller_rank_raw", "ranking_position_raw", "rank_raw"),
+            asin_observed=str(_first(record, "ranking_asin", "asin", "observed_asin",
+                                     "asin_observed") or "").strip().upper(),
+            identity_status=str(_first(record, "ranking_link_identity_status",
+                                        "identity_status") or "UNCONFIRMED"),
+            evidence_file=str(_first(record, "evidence_file", "html_file", "source_html",
+                                     "evidence_path") or ""),
             source_record=dict(record),
         )
 
@@ -110,6 +117,7 @@ class CandidateObservation:
             "candidate_original_product_url": self.original_product_url,
             "candidate_normalized_product_url": self.normalized_product_url,
             "candidate_source_type": self.source_type,
+            "candidate_source_root_url": self.source_root_url,
             "candidate_source_page_url": self.source_page_url,
             "candidate_snapshot_id": self.snapshot_id,
             "candidate_observed_at": self.observed_at,
