@@ -51,7 +51,7 @@
 - 单条 Qwen content-safety/data-inspection 请求失败作为 request-level 状态处理，不禁用健康 provider；使用离线 fake provider 测试。
 - `rating` 限制在合法 `0..5` 范围，保留 `5.05` 回归用例；独立 PR #7：<https://github.com/zjwjoey/AmazonESBestseller/pull/7> 已通过 Python 3.11/3.12 CI 并 squash 合入 main (`dd24b9b50181eadfa7bcd22ab9a269469f6bc4de`)。
 - 未整合 provider-pool admission 并发修改，等待专门边界测试；未整合 Qwen prompt/domain/terms 变化，当前仅有 mock transport 证据，暂保留候选。
-- 定向测试已通过；当前整合树完整离线套件 886 passed、6 skipped。字段合同/provider 修正待独立 PR；rating guard 已合入 main。
+- 定向测试已通过；当前整合树完整离线套件 887 passed、6 skipped。字段合同/provider 修正 PR #8：<https://github.com/zjwjoey/AmazonESBestseller/pull/8> 待 CI；rating guard 已合入 main。
 
 ### 阶段 3：Source Audit 与统一命令边界
 

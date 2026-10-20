@@ -7,7 +7,7 @@
 | 远端分支 | HEAD | HEAD 摘要 | 相对基线变更路径数 | 主要路径 | 初步归类 | 初步处置 |
 |---|---|---|---:|---|---|---|
 | `chore/v2-canary-readiness` | `8c302c5` | fix: accept documented Amazon bestseller URLs | 23 | canary.py, cli.py, configs, docs, quality, tests | 翻译生产闭环 | 候选整合；按数据契约、缓存和生产门分层验证 |
-| `codex/5000-translation-v2-integration` | `4698957` | test(translation): lock production namespace isolation | 115 | .gitattributes, THIRD_PARTY_NOTICES.md, categories, cli.py, collection, configs, docs, identity.py | 翻译生产闭环 | production adapter 由该 V2 家族候选对账后择取并经 PR #6 合入；字段别名统一与 request-level provider 状态已在整合树测试、待独立 PR；提示词和其它改动暂留参考 |
+| `codex/5000-translation-v2-integration` | `4698957` | test(translation): lock production namespace isolation | 115 | .gitattributes, THIRD_PARTY_NOTICES.md, categories, cli.py, collection, configs, docs, identity.py | 翻译生产闭环 | production adapter 由该 V2 家族候选对账后择取并经 PR #6 合入；字段别名统一与 request-level provider 状态通过 887 项完整离线测试，PR #8 待 CI；提示词和其它改动暂留参考 |
 | `codex/detail5500-browser-network-timing` | `03cc764` | Preserve passive browser network timing and separate callback metrics | 441 | .gitattributes, .github, README.md, access, cli.py, collection, configs, docs | Detail5500 实验/修复 | 实验保留；逐项审查安全、身份与恢复补丁；执行器不启用 |
 | `codex/detail5500-cdp-start-fix` | `b04b077` | Acknowledge real reserved CDP root starts across missing Playwright redirect events | 444 | .gitattributes, .github, README.md, access, cli.py, collection, configs, docs | Detail5500 实验/修复 | 实验保留；逐项审查安全、身份与恢复补丁；执行器不启用 |
 | `codex/detail5500-dual-1000` | `8530dba` | Optimize isolated dual sustained dispatch with equivalent access scan and FIFO IO | 455 | .gitattributes, .github, README.md, access, cli.py, collection, configs, docs | Detail5500 实验/修复 | 实验保留；逐项审查安全、身份与恢复补丁；执行器不启用 |
