@@ -1,6 +1,7 @@
 # Main Consolidation V2 — Offline Integration Acceptance
 
-Date: 2026-10-20  
+Date: 2026-10-20
+
 Formal baseline: `origin/main` after PR #12, `2f2a73c704acccd40c431270bcd2aec037eb9537`.
 
 ## Executed checks

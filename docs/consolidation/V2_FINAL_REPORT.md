@@ -1,7 +1,9 @@
 # Main Consolidation V2 — Interim Final Report
 
-Date: 2026-10-20  
-Status: **PARTIALLY_CONSOLIDATED**  
+Date: 2026-10-20
+
+Status: **PARTIALLY_CONSOLIDATED**
+
 Current main at report time: `2f2a73c704acccd40c431270bcd2aec037eb9537`.
 
 ## Merged work
