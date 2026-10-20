@@ -1,6 +1,6 @@
 # AmazonESBestseller — Architecture
 
-Last updated: 2026-08-27
+Last updated: 2026-10-20
 
 This document describes the intended architecture of the `AmazonESBestseller` project based on the current working implementation and verified outputs.
 
@@ -66,6 +66,23 @@ without importing the experimental Detail5500 storage stack. See
 `docs/consolidation/MODULE_INVENTORY.md` and
 `docs/consolidation/INTEGRATION_PLAN.md` for the reviewed branch and module
 dispositions.
+
+## Main Consolidation V2 candidate and detail handoffs
+
+The offline `candidate-snapshot` command replays checksummed saved ranking HTML
+and the reviewed Customer Favorites page subtype. It records URL-based
+candidate groups and source observations without confirming ASIN identity or
+source completeness. The artifact is not accepted directly by `detail-plan`.
+After the existing Ranking Identity authority gate produces confirmed ASIN
+records, optional candidate group/observation IDs pass through the ASIN-keyed
+detail plan and its per-run outcome manifest as provenance only.
+
+PR #11 added the saved-evidence candidate snapshot; PR #12 added provenance
+through the formal detail path. The mainline still lacks a verified candidate
+selection/identity adapter, a Source Audit evidence adapter for standard
+detail-run artifacts, and a single offline orchestration entry through export.
+The V2 state remains `PARTIALLY_CONSOLIDATED`; the exact acceptance status is in
+`docs/consolidation/V2_END_TO_END_TEST_REPORT.md`.
 
 ---
 

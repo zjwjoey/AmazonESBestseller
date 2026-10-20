@@ -284,3 +284,24 @@ run directory. Its default provider is deterministic `fake`; Qwen translation
 requires explicit configuration and verified pricing evidence. See
 `docs/ARCHITECTURE.md` for the module handoff and `docs/consolidation/INTEGRATION_PLAN.md`
 for current integration and acceptance status.
+
+### Main Consolidation V2 candidate snapshots
+
+`candidate-snapshot` is an offline-only replay command for SHA-256-verified
+Amazon.es ranking and Customer Favorites HTML. It writes append-only candidate
+groups and per-source observations under the requested output directory. The
+snapshot remains `UNVERIFIED`; observed ASINs are hints, and candidate URLs do
+not establish buyable product identity or authorize `detail-plan`.
+
+```powershell
+amazon-es --offline candidate-snapshot --manifest saved-pages.json `
+  --out-dir outputs/candidate-evidence
+```
+
+The formal detail flow remains `detail-plan` → `detail-run`, keyed by confirmed
+ASIN. When an authoritative ranking record carries candidate group and
+observation IDs, the detail plan and per-run manifest retain them as provenance;
+they do not alter canonical product identity or detail state. Multi-lane
+Detail5500 and V4 live runners remain experimental. Source Audit and a complete
+single-command offline business loop are still pending; see
+`docs/consolidation/V2_BLOCKERS.md`.

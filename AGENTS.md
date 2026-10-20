@@ -431,3 +431,19 @@ must report partial results separately from failures.
   adapters must consume immutable copies or saved evidence, not active run state.
 - Consolidation documentation must distinguish implemented, integrated,
   offline-tested, merged-to-main and production-accepted status.
+
+## 31. Candidate snapshot and detail handoff (2026-10-20)
+
+- `candidate-snapshot` is an offline saved-HTML replay command. Require source
+  URL family checks and SHA-256 verification; keep the source page evidence and
+  each source observation.
+- A candidate group ID is a normalized-link grouping key, not an ASIN or a
+  confirmed buyable SKU. Preserve candidate observation IDs independently.
+- Candidate ASIN observations remain hints until the existing Ranking Identity
+  authority gate confirms product identity. Do not pass an unverified candidate
+  snapshot directly to `detail-plan`.
+- Detail plans remain ASIN-keyed. Candidate IDs carried from authoritative
+  ranking rows are provenance only and must not change identity, deduplication,
+  or canonical product state.
+- Candidate snapshots must not claim source completeness or `READY` status
+  unless a separate evidence review proves the relevant authority gates.
