@@ -1,0 +1,1 @@
+These offline regression fixtures are copied from saved Amazon.es ranking/detail evidence. Session identifiers and the associated session hash were redacted; product evidence and parser-relevant markup were retained.

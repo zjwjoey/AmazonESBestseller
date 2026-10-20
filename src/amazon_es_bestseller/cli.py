@@ -324,7 +324,12 @@ def _load_snapshot_input(path: str) -> dict:
     if manifest_path.exists():
         manifest = _load_json(str(manifest_path))
         if isinstance(manifest, dict):
-            if manifest.get("parser_version") == "ranking_identity_v1":
+            if manifest.get("snapshot_kind") == "CANDIDATE_IDENTITY_SELECTION":
+                result["snapshot_kind"] = manifest.get("snapshot_kind")
+                result["snapshot_status"] = manifest.get("snapshot_status")
+                result["identity_complete"] = False
+                result["authoritative"] = False
+            elif manifest.get("parser_version") == "ranking_identity_v1":
                 result["snapshot_kind"] = "RANKING_IDENTITY"
                 result["snapshot_status"] = manifest.get("status")
                 result["identity_complete"] = bool(manifest.get("identity_complete"))
@@ -418,6 +423,26 @@ def cmd_candidate_snapshot(args, parser: argparse.ArgumentParser) -> None:
     print("candidate snapshot %s：%s（%d 个链接候选，%d 条来源观察；生产就绪=%s）" %
           (manifest["snapshot_status"], result["path"], manifest["candidate_count"],
            manifest["observation_count"], manifest["ready_for_detail_plan"]))
+
+
+def cmd_candidate_identity_verify(args) -> None:
+    """Verify selected candidate IDs against saved ranking and detail HTML."""
+    from .collection.candidate_snapshot import load_candidate_snapshot
+    from .monitoring.candidate_detail_handoff import verify_candidate_selection
+    snapshot = load_candidate_snapshot(args.snapshot_dir)
+    selection = verify_candidate_selection(
+        snapshot, args.detail_html_dir, candidate_ids=args.candidate_id or None)
+    output = Path(args.out_dir)
+    output.mkdir(parents=True, exist_ok=False)
+    _save_json(selection["records"], str(output / "rankings.json"))
+    _save_json(selection["rejected"], str(output / "rejected.json"))
+    manifest = {key: value for key, value in selection.items()
+                if key not in {"records", "rejected"}}
+    manifest.update({"selection_file": "rankings.json", "rejected_file": "rejected.json"})
+    _save_json(manifest, str(output / "manifest.json"))
+    print("候选身份核验：%d 个候选进入详情计划资格；未核验 %d；AUTHORITATIVE=%s，IDENTITY_COMPLETE=%s" % (
+        selection["verified_candidate_count"], len(selection["rejected"]),
+        selection["authoritative"], selection["identity_complete"]))
 
 
 def _identity_extraction(args) -> dict:
@@ -1444,6 +1469,33 @@ def cmd_quality_audit(args) -> None:
         raise SystemExit(2)
 
 
+def cmd_source_evidence_audit(args) -> None:
+    """Grade saved detail-run evidence without manufacturing Source Audit receipts."""
+    from .quality.source_evidence import audit_detail_run_evidence
+    report = audit_detail_run_evidence(args.run_dir)
+    rankings_path = args.rankings or str(Path(args.run_dir) / "rankings.json")
+    details_path = args.details or str(Path(args.run_dir) / "details.json")
+    if rankings_path and Path(rankings_path).is_file():
+        from .quality.audit import run_quality_audit
+        rankings = _load_quality_records(rankings_path, "rankings", required=True)
+        details = _load_quality_records(details_path, "details") if Path(details_path).is_file() else []
+        report["quality_gate"] = run_quality_audit(
+            rankings, details, run_dir=args.run_dir,
+            ranking_html_dirs=args.ranking_html or None,
+            detail_html_dirs=args.detail_html or None,
+            checks=args.check or None,
+            network_mode="OFFLINE_SOURCE_EVIDENCE_AUDIT",
+        )
+        report["quality_gate_status"] = report["quality_gate"]["final_quality_status"]
+    else:
+        report["quality_gate_status"] = "NOT_RUN_MISSING_RANKINGS"
+    _save_json(report, args.out)
+    counts = report["evidence_counts"]
+    print("只读来源证据审计：%d 条；请求证据 %d / 已核验保存证据 %d / 不足 %d；未生成正式 Source Audit PASS" % (
+        report["record_count"], counts["REQUEST_EVIDENCE"],
+        counts["VERIFIED_SAVED_EVIDENCE"], counts["INSUFFICIENT"]))
+
+
 def _latest_run_dir(root: str) -> str:
     runs = sorted(Path(root).glob("runs/*"), reverse=True)
     return str(runs[0]) if runs else ""
@@ -1608,6 +1660,13 @@ def build_parser() -> argparse.ArgumentParser:
     cs.add_argument("--target-candidates", type=int, default=None,
                     help="研究目标统计值；只报告差额，不代表已采集数量")
     cs.set_defaults(func=lambda a, p=cs: cmd_candidate_snapshot(a, p))
+
+    civ = sub.add_parser("candidate-identity-verify", help="离线：用保存详情 HTML 逐候选核验身份")
+    civ.add_argument("--snapshot-dir", required=True, help="candidate-snapshot 产物目录")
+    civ.add_argument("--detail-html-dir", required=True, help="ASIN.html 保存详情目录")
+    civ.add_argument("--candidate-id", action="append", default=[], help="候选 ID，可重复；缺省核验全部")
+    civ.add_argument("--out-dir", required=True, help="全新详情计划选择目录")
+    civ.set_defaults(func=cmd_candidate_identity_verify)
 
     rie = sub.add_parser("ranking-identity-extract", help="离线：从保存榜单证据提取 ASIN 与商品链接")
     rie.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")
@@ -1899,6 +1958,17 @@ def build_parser() -> argparse.ArgumentParser:
     qa.add_argument("--allow-non-ready", action="store_true",
                     help="允许 REVIEW/BLOCK 状态以退出码0结束（仅诊断）")
     qa.set_defaults(func=cmd_quality_audit)
+
+    sea = sub.add_parser("source-evidence-audit", help="离线：按真实 detail-run 文件分级来源证据")
+    sea.add_argument("--run-dir", required=True, help="detail-run 输出目录，只读")
+    sea.add_argument("--rankings", default="", help="正式榜单 JSON；默认读取 run-dir/rankings.json")
+    sea.add_argument("--details", default="", help="正式详情 JSON；默认读取 run-dir/details.json")
+    sea.add_argument("--ranking-html", nargs="*", default=[])
+    sea.add_argument("--detail-html", nargs="*", default=[])
+    from .quality.audit import DEFAULT_CHECKS as _SOURCE_AUDIT_CHECKS
+    sea.add_argument("--check", action="append", choices=_SOURCE_AUDIT_CHECKS, default=[])
+    sea.add_argument("--out", required=True, help="审计 JSON 输出路径")
+    sea.set_defaults(func=cmd_source_evidence_audit)
 
     sr = sub.add_parser("stable-research", help="V1稳定采集 + 离线 Quality Gate")
     sr.add_argument("--offline", action="store_true", default=argparse.SUPPRESS,

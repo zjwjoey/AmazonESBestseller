@@ -210,6 +210,38 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
             raise ValueError(
                 "详情 planner 拒绝非完整 Ranking Identity Snapshot：%s"
                 % (snapshot_status or "UNKNOWN"))
+    elif snapshot_kind == "CANDIDATE_IDENTITY_SELECTION":
+        if snapshot_status != "VERIFIED_SELECTION":
+            raise ValueError("详情 planner 拒绝未验证的候选选择")
+        selection_rows = _rows(ranking_snapshot)
+        if not selection_rows:
+            raise ValueError("详情 planner 拒绝空候选选择")
+        for candidate in selection_rows:
+            proof = candidate.get("identity_evidence") or []
+            proof_asins = {str(item.get("asin") or "").upper() for item in proof
+                           if isinstance(item, Mapping)}
+            evidence_path = Path(str(candidate.get("detail_evidence_path") or ""))
+            expected_hash = str(candidate.get("detail_evidence_sha256") or "").lower()
+            candidate_evidence_path = Path(str(candidate.get("candidate_evidence_file_path") or ""))
+            candidate_expected_hash = str(candidate.get("candidate_evidence_sha256") or "").lower()
+            try:
+                actual_hash = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+            except OSError:
+                actual_hash = ""
+            try:
+                candidate_actual_hash = hashlib.sha256(candidate_evidence_path.read_bytes()).hexdigest()
+            except OSError:
+                candidate_actual_hash = ""
+            asin = normalize_asin(candidate.get("asin") or candidate.get("ranking_asin"))
+            if (not asin or candidate.get("candidate_identity_status") != "IDENTITY_MATCH"
+                    or candidate.get("identity_status") != "IDENTITY_MATCH"
+                    or candidate.get("ranking_link_identity_status") != "MATCH"
+                    or not candidate.get("candidate_id")
+                    or not candidate.get("candidate_observation_id")
+                    or asin not in proof_asins or actual_hash != expected_hash
+                    or candidate_actual_hash != candidate_expected_hash
+                    or not isinstance(candidate.get("detail_record"), Mapping)):
+                raise ValueError("详情 planner 拒绝身份或原始证据未核验的候选")
     elif snapshot_status not in {"AUTHORITATIVE", "IDENTITY_COMPLETE"}:
         raise ValueError("详情 planner 只能使用 AUTHORITATIVE ranking snapshot")
     ranking_rows = _rows(ranking_snapshot)
@@ -257,7 +289,7 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
     items = []
     for asin in sorted(chosen, key=lambda key: (chosen[key].get("_context_key", (10**9, 10**9, "")), key)):
         row = chosen[asin]
-        legacy_cache = dict(cache_by_asin.get(asin) or {})
+        legacy_cache = dict(cache_by_asin.get(asin) or row.get("detail_record") or {})
         state_cache = dict(state_by_asin.get(asin) or {})
         prior_checkpoint = checkpoint_by_asin.get(asin, {})
         checkpoint_record = (prior_checkpoint.get("record")
@@ -354,6 +386,13 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
                 for context in contexts[asin]
                 if context.get("candidate_observation_id")
             }),
+            "detail_evidence_path": row.get("detail_evidence_path") or "",
+            "detail_evidence_sha256": row.get("detail_evidence_sha256") or "",
+            "detail_record": dict(row.get("detail_record") or {})
+                if isinstance(row.get("detail_record"), Mapping) else {},
+            "candidate_evidence_path": row.get("candidate_evidence_path") or "",
+            "candidate_evidence_file_path": row.get("candidate_evidence_file_path") or "",
+            "candidate_evidence_sha256": row.get("candidate_evidence_sha256") or "",
             "ranking_rank": row.get("ranking_rank", row.get("bestseller_rank")),
             "research_category": row.get("research_category"),
             "ranking_product_url_raw": row.get("ranking_product_url_raw") or "",

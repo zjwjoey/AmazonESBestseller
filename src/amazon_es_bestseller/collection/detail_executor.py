@@ -8,6 +8,7 @@ state and is never the source of truth for an incremental run.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import uuid
@@ -90,6 +91,30 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                 state.update(legacy)
         except (OSError, ValueError):
             pass
+
+    # A verified candidate selection may carry a parser result bound to saved
+    # HTML. Revalidate that file at execution time, then merge the parsed fact
+    # into the normal DetailState without issuing a request.
+    verified_handoffs = []
+    for row in records:
+        detail_record = row.get("detail_record")
+        evidence_path = Path(str(row.get("detail_evidence_path") or ""))
+        expected_hash = str(row.get("detail_evidence_sha256") or "").lower()
+        if not isinstance(detail_record, Mapping) or not expected_hash:
+            continue
+        asin = _asin(row)
+        try:
+            actual_hash = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        except OSError:
+            actual_hash = ""
+        if (actual_hash != expected_hash
+                or str(detail_record.get("asin") or "").upper() != asin
+                or str(detail_record.get("identity_status") or "").upper() != "MATCH"
+                or str(detail_record.get("resolved_asin") or "").upper() != asin):
+            raise ValueError("DETAIL_HANDOFF_EVIDENCE_CHANGED_OR_IDENTITY_INVALID:%s" % asin)
+        verified_handoffs.append(dict(detail_record))
+    if verified_handoffs:
+        state.update(verified_handoffs)
 
     skipped: list[dict] = []
     pending: list[dict] = []
@@ -195,6 +220,11 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         _asin(row): {
             "candidate_ids": list(row.get("candidate_ids") or []),
             "candidate_observation_ids": list(row.get("candidate_observation_ids") or []),
+            "saved_html_path": row.get("detail_evidence_path") or "",
+            "html_sha256": row.get("detail_evidence_sha256") or "",
+            "candidate_evidence_path": row.get("candidate_evidence_path") or "",
+            "candidate_evidence_file_path": row.get("candidate_evidence_file_path") or "",
+            "candidate_evidence_sha256": row.get("candidate_evidence_sha256") or "",
         }
         for row in records
     }
