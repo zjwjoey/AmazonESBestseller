@@ -1,6 +1,6 @@
 # Main Consolidation V2 — Module Integration Status
 
-Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f8ccdd492e6c68`. PR #10 merged as `bb26de10a892748e1534d02231fc9918ee230e92`; PR #11 merged as `f5f30c05ccf42925b7984eaa8656143e68b854d4`.
+Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f8ccdd492e6c68`. PR #10 merged as `bb26de10a892748e1534d02231fc9918ee230e92`; PR #11 merged as `f5f30c05ccf42925b7984eaa8656143e68b854d4`; PR #12 merged as `2f2a73c704acccd40c431270bcd2aec037eb9537`.
 
 ## Completed in V2
 
@@ -22,12 +22,12 @@ Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f
 - Snapshot and each source remain `UNVERIFIED`; `ready_for_detail_plan=false`. An observed product page or a nonempty parse is not treated as a complete source.
 - Targeted V2 tests passed (45 tests). Full offline pytest reached 100% locally. GitHub Offline CI passed for Python 3.11 and 3.12 in both triggered workflows. PR #11 merged to main as `f5f30c0`.
 
-### PR-C — candidate provenance through the formal detail path (in progress)
+### PR-C — candidate provenance through the formal detail path (merged)
 
 - Source contract: PR-A `CandidateObservation` / PR-B multi-source candidate groups, carried only when an authoritative ranking record has already been identity-confirmed.
 - The existing `detail-plan` still keys and deduplicates work by confirmed ASIN. It now preserves associated candidate group IDs and candidate observation IDs as provenance arrays.
 - `detail-run` writes those IDs only to per-run outcome manifests. They do not become product identity, do not merge ASINs, and are not written into canonical product detail state.
-- Offline planner/executor contract tests pass (30 tests across detail planner, executor and CLI planner suites). PR and GitHub CI are pending.
+- Offline planner/executor contract tests passed (30 tests across detail planner, executor and CLI planner suites). GitHub Offline CI passed for Python 3.11 and 3.12 in both triggered workflows. PR #12 merged to main as `2f2a73c`.
 
 ## Reused mainline modules
 
@@ -42,6 +42,9 @@ Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f
 - Map the candidate freeze to an authoritative identity snapshot through an explicit, evidence-backed selection/identity step; candidate ASIN hints alone remain insufficient.
 - Build the read-only Source Audit Evidence Adapter over mainline detail-run/state/saved HTML; audit remains blocked until its sidecar accepts only verified evidence.
 - Extract only the compatible orchestration/commands facade and build the complete fixture/mock offline flow.
-- Run the full offline regression, update README/AGENTS/architecture docs and report each status separately.
+- Run a full cross-module offline business-loop test after those adapters exist.
+- Current main supports the separate commands and existing `stable-research`/Field Closure workflows, but has no one command that safely orchestrates candidate selection through translated export.
+
+Current V2 disposition: `PARTIALLY_CONSOLIDATED`. See `V2_BLOCKERS.md` and `V2_END_TO_END_TEST_REPORT.md`.
 
 The V4 performance, browser dispatch, highspeed and multi-lane implementations remain experimental. No production collection, translation provider call, or production data operation was performed.
