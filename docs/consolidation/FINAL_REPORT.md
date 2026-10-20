@@ -4,8 +4,8 @@
 
 - 整合工作树：`C:\Users\Administrator\.codex\worktrees\main-consolidation-v1\AmazonESBestseller`
 - 整合分支：`refactor/main-consolidation-v1`
-- 初始整合基线 `origin/main`：`9d669b3c7a01ccd0090acbc320d19b471a0b02a1`；本次 PR 合并后当前 `origin/main`：`6cc36a1179d21d8bbd9461085232903939a59095`。
-- 生产目录的本地 `main` 仍为 `2f6292e486fb6865ac55db9d2c5da11107c7fdcd`；只读复核显示它比当前 `origin/main` 落后 39 个提交（初始基线下的历史记录为 38，PR 合并推进 main 后增为39）。生产目录未被切换、覆盖或更新。
+- 初始整合基线 `origin/main`：`9d669b3c7a01ccd0090acbc320d19b471a0b02a1`；PR #6/#7 合入后当前 `origin/main`：`dd24b9b50181eadfa7bcd22ab9a269469f6bc4de`。
+- 生产目录的本地 `main` 仍为 `2f6292e486fb6865ac55db9d2c5da11107c7fdcd`；上次只读复核时比当时 `origin/main` 落后 39 个提交，PR #7 又使远端前进一个提交，当前应落后 40 个。生产目录未被切换、覆盖或更新。
 - 生产目录 `F:\AmazonESBestseller` 未在本轮写入；未运行采集、真实翻译 API、数据库/任务状态清理或磁盘操作。
 - 分支盘点覆盖 47 个远端 heads（含 `main`）；提交和路径差异只用于定位，不代替代码、依赖及测试核查。
 
