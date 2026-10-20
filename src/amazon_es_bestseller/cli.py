@@ -383,6 +383,43 @@ def cmd_ranking_snapshot(args, parser: argparse.ArgumentParser) -> None:
             "生产模式拒绝以 0 退出，请检查 manifest/page_statuses。")
 
 
+def cmd_candidate_snapshot(args, parser: argparse.ArgumentParser) -> None:
+    """Freeze candidates from checksummed saved HTML; this command is offline-only."""
+    if not args.offline:
+        parser.error("candidate-snapshot 必须使用 --offline；只处理已保存 HTML")
+    manifest_path = Path(args.manifest).resolve()
+    if not manifest_path.is_file():
+        parser.error("找不到候选来源 manifest: %s" % manifest_path)
+    try:
+        source = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        parser.error("候选来源 manifest 无效: %s" % exc)
+    if not isinstance(source, dict) or not isinstance(source.get("pages"), list):
+        parser.error("候选来源 manifest 必须包含 pages 数组")
+    pages = []
+    for row in source["pages"]:
+        if not isinstance(row, dict):
+            parser.error("候选来源 manifest 中的 page 必须是 object")
+        page = dict(row)
+        path = Path(str(page.get("html_path") or ""))
+        if not path.is_absolute():
+            path = manifest_path.parent / path
+        page["html_path"] = str(path.resolve())
+        pages.append(page)
+    from .collection.candidate_snapshot import build_candidate_snapshot
+    result = build_candidate_snapshot(
+        pages, args.out_dir,
+        snapshot_id=args.snapshot_id or str(source.get("snapshot_id") or ""),
+        observed_at=args.observed_at or str(source.get("observed_at") or ""),
+        target_candidates=(args.target_candidates if args.target_candidates is not None
+                           else source.get("target_candidates")),
+    )
+    manifest = result["manifest"]
+    print("candidate snapshot %s：%s（%d 个链接候选，%d 条来源观察；生产就绪=%s）" %
+          (manifest["snapshot_status"], result["path"], manifest["candidate_count"],
+           manifest["observation_count"], manifest["ready_for_detail_plan"]))
+
+
 def _identity_extraction(args) -> dict:
     from .monitoring.ranking_identity.extract import extract_identity_from_evidence
     return extract_identity_from_evidence(args.evidence_dir,
@@ -1561,6 +1598,16 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--allow-incomplete-debug", action="store_true",
                     help="允许保存 INCOMPLETE 快照并以 0 退出，仅供人工调试")
     rs.set_defaults(func=lambda a, p=rs: cmd_ranking_snapshot(a, p))
+
+    cs = sub.add_parser("candidate-snapshot", help="离线：从已保存 HTML 构建多来源候选快照")
+    cs.add_argument("--manifest", required=True,
+                    help="含 snapshot_id、observed_at、pages 和各页 SHA-256 的 JSON")
+    cs.add_argument("--out-dir", required=True, help="候选快照 artifact 根目录")
+    cs.add_argument("--snapshot-id", default="", help="覆盖 manifest 中的 snapshot_id")
+    cs.add_argument("--observed-at", default="", help="覆盖 manifest 中的 UTC 时间")
+    cs.add_argument("--target-candidates", type=int, default=None,
+                    help="研究目标统计值；只报告差额，不代表已采集数量")
+    cs.set_defaults(func=lambda a, p=cs: cmd_candidate_snapshot(a, p))
 
     rie = sub.add_parser("ranking-identity-extract", help="离线：从保存榜单证据提取 ASIN 与商品链接")
     rie.add_argument("--evidence-dir", required=True, help="saved HTML/JSON evidence 目录")

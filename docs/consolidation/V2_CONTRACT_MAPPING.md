@@ -39,6 +39,23 @@ The detail stage continues to use `identity.resolve_identity` and the formal
 resolved and parent ASINs, variation evidence, checkpoint state and saved HTML
 remain detail evidence. Parent ASIN alone never authorizes child-SKU merging.
 
+The offline `candidate-snapshot` entry accepts checksummed saved HTML and
+reuses `monitoring.ranking_identity.adapters` for ranked sources plus the
+extracted V4 Customer Favorites DOM adapter. It emits an append-only
+`candidate_snapshots/<snapshot_id>/` artifact with the original HTML, grouped
+candidate records, every source observation, and a manifest. The artifact is
+not a second task database: it does not create request state, checkpoints, or
+an authoritative pointer. Source completeness remains `UNVERIFIED` until a
+separate evidence review establishes it, and the artifact cannot be passed to
+`detail-plan` as READY.
+
+Rank positions carry source semantics. Only `BEST_SELLERS` populates
+`bestseller_rank`; `NEW_RELEASES`, `MOVERS_SHAKERS`, `MOST_WISHED_FOR`, and
+`MOST_GIFTED` retain their own list position and semantics. Customer Favorites
+records do not acquire a synthetic ranking position. Candidate link
+normalization keeps unknown query/path/variant bytes and does not confirm a
+buyable SKU.
+
 ## Downstream contracts reused
 
 - Source audit consumes explicit detail/source evidence, identity status,
