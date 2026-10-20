@@ -82,3 +82,14 @@ def test_candidate_observation_key_is_repeatable_for_same_snapshot_slot():
     assert first.candidate_id == second.candidate_id
     assert first.observation_id == second.observation_id
     assert first.candidate_id.startswith("candidate_")
+
+
+def test_candidate_id_is_never_an_asin_even_if_legacy_input_reuses_that_value():
+    candidate = CandidateObservation.from_ranking_record({
+        "candidate_id": "B078C6QR1C",
+        "asin": "B078C6QR1C",
+        "ranking_product_url_normalized": "https://www.amazon.es/dp/B078C6QR1C",
+    })
+
+    assert candidate.candidate_id.startswith("candidate_")
+    assert candidate.candidate_id != candidate.asin_observed

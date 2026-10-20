@@ -11,6 +11,8 @@ import hashlib
 import json
 from typing import Any, Mapping
 
+from .models import is_valid_asin
+
 
 def _first(record: Mapping[str, Any], *keys: str) -> Any:
     for key in keys:
@@ -42,7 +44,8 @@ def _candidate_id(record: Mapping[str, Any], raw_url: Any,
                   normalized_url: Any) -> str:
     """Build a URL-group key when normalized evidence exists; never use ASIN."""
     supplied = str(record.get("candidate_id") or "").strip()
-    if supplied:
+    observed_asin = str(_first(record, "ranking_asin", "asin") or "").strip().upper()
+    if supplied and supplied.upper() != observed_asin and not is_valid_asin(supplied):
         return supplied
     if normalized_url:
         return _digest_id("candidate_", {"normalized_product_url": str(normalized_url)})
