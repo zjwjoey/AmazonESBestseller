@@ -2,7 +2,7 @@
 
 ## Acceptance status
 
-Status: `READY_FOR_PR_CI` (local offline acceptance passed; remote CI and merge are pending).
+Status: `OFFLINE_CONSOLIDATION_MERGED`.
 
 This closure uses `origin/main` at `a65d60dece81c28c6e6c8f97e59c3154219dd6d2` and was developed in the independent `main-consolidation-v2` worktree. No production database, task state, checkpoint, saved HTML, translation cache, or historical output under `F:\AmazonESBestseller` was modified. No Amazon collection or real translation API was run.
 
@@ -30,13 +30,13 @@ The produced workbook retains the three-sheet contract, the Chinese 26-column he
 
 The V4/highspeed live runners and Detail5500 single/dual/three/five-lane executors remain experimental. This closure does not start a live collection, Qwen translation, large-scale performance effort, or production release. Existing reports of slow snapshot parsing, network-stop recovery, and large-batch Source Audit runtime remain follow-up optimization work.
 
-The full local offline pytest suite passed after the Windows lock cleanup compatibility fix. The cross-process budget test had previously failed intermittently because Windows can temporarily deny unlink while another process reads the lock metadata; cleanup now leaves the stale owner record for the existing PID-based recovery path. PR CI and merge status will be added after remote checks complete.
+The full local offline pytest suite passed after the Windows lock cleanup compatibility fix. The cross-process budget test had previously failed intermittently because Windows can temporarily deny unlink while another process reads the lock metadata; cleanup now leaves the stale owner record for the existing PID-based recovery path. PR #14 merged to `main` as `78bf4e38b281104fd7cc65e0963f04fc2eb9924e`. All four GitHub Offline CI jobs passed: tests on Python 3.11 and 3.12 in both workflows.
 
 | State | Result |
 |---|---|
 | Developed | Candidate identity selection, evidence adapter/CLI, detail provenance persistence, offline E2E test |
 | Code-integrated locally | Yes, on the dedicated consolidation worktree |
 | Offline tests | Full suite passed; targeted integration/adapter tests passed |
-| Merged to `main` | Pending PR review and GitHub CI |
+| Merged to `main` | Yes, PR #14 (`78bf4e38`) |
 | Real production acceptance | Not run by design |
 | Known P0 blocker | None identified in the tested offline closure |
