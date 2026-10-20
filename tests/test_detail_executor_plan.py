@@ -39,6 +39,25 @@ def test_executor_only_passes_network_actions_and_records_checkpoint(tmp_path):
     assert json.loads((tmp_path / "detail_execution_manifest.json").read_text())["requested_count"] == 1
 
 
+def test_detail_run_manifest_keeps_candidate_provenance_separate_from_product_state(tmp_path):
+    plan = {"snapshot_id": "snapshot_candidates", "records": [{
+        "snapshot_id": "snapshot_candidates", "ranking_asin": "B000000001",
+        "candidate_ids": ["candidate_url_group_1"],
+        "candidate_observation_ids": ["observation_1"],
+        "detail_action": "REUSE_VALID_CACHE",
+    }]}
+
+    execute_detail_plan(plan, None, str(tmp_path), offline=True, collector=lambda *_a, **_k: [])
+
+    manifest = json.loads((tmp_path / "detail_execution_manifest.json").read_text())
+    outcome = manifest["records"][0]
+    assert outcome["ranking_asin"] == "B000000001"
+    assert outcome["candidate_ids"] == ["candidate_url_group_1"]
+    assert outcome["candidate_observation_ids"] == ["observation_1"]
+    detail_state = json.loads((tmp_path / "details.json").read_text())
+    assert detail_state == []
+
+
 def test_executor_forwards_detail_parser_version_and_records_it(tmp_path):
     calls = []
 

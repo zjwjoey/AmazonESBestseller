@@ -191,11 +191,19 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     detail_by_asin = {str(row.get("asin") or "").upper(): row for row in details
                       if isinstance(row, Mapping)}
     outcomes = []
+    candidate_provenance = {
+        _asin(row): {
+            "candidate_ids": list(row.get("candidate_ids") or []),
+            "candidate_observation_ids": list(row.get("candidate_observation_ids") or []),
+        }
+        for row in records
+    }
     for row in pending:
         asin = _asin(row)
         checkpoint = read_checkpoint(checkpoint_dir, asin) or {}
         status = checkpoint.get("status") or ("SUCCESS" if asin in detail_by_asin else "PENDING")
         outcomes.append({"snapshot_id": row.get("snapshot_id"), "ranking_asin": asin,
+                         **candidate_provenance.get(asin, {}),
                          "action": row.get("detail_action"), "status": status,
                          "requested_url": row.get("preferred_request_url") or "",
                          "requested_asin": row.get("requested_asin") or asin,
@@ -204,7 +212,10 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                          "identity_status": checkpoint.get("identity_status") or "",
                          "access_state": checkpoint.get("access_state") or "",
                          "error": checkpoint.get("error") or ""})
-    outcomes.extend(skipped)
+    for outcome in skipped:
+        enriched = dict(outcome)
+        enriched.update(candidate_provenance.get(_asin(outcome), {}))
+        outcomes.append(enriched)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "_" + uuid.uuid4().hex[:8]
     run_root = root / "detail_runs" / run_id
     manifest = {"run_id": run_id, "snapshot_id": str(plan.get("snapshot_id") or ""),
