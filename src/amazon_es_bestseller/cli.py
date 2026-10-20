@@ -92,8 +92,17 @@ def _load_translation_products(path: Optional[str]) -> list:
             raise SystemExit("Translation V2 CSV 缺少 ASIN 列: %s" % path)
         records = []
         for row in reader:
-            record = {target: (row.get(source) or "").strip()
-                      for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items()}
+            # Keep every source/export column so the production translation
+            # adapter can bind the full Spanish Master row by hash. Canonical
+            # aliases are additive; they never replace raw business values.
+            record = dict(row)
+            record["asin"] = (row.get("ASIN") or row.get("asin") or "").strip().upper()
+            for source, target in TRANSLATION_RESEARCH_CSV_FIELDS.items():
+                if source == "ASIN":
+                    continue
+                value = (row.get(source) or "").strip()
+                if target not in record or record[target] in (None, ""):
+                    record[target] = value
             records.append(record)
     return records
 
@@ -1131,6 +1140,18 @@ def cmd_translate(args) -> None:
     print("translate V2 完成：%s → %s；QA → %s；运行摘要 → %s" % (result["summary"], args.out, qa_out, summary_out))
 
 
+def cmd_translation_production(args) -> None:
+    """Dispatch a staged, hash-bound Translation V2 production run."""
+    from .commands.translation_production import run_translation_production
+
+    run_translation_production(
+        args, load_products=_load_translation_products, load_json=_load_json,
+        save_json=_save_json, load_evidence_json=_load_evidence_json,
+        default_details=DEFAULT_DETAILS, default_rankings=DEFAULT_RANKINGS,
+        load_images=_load_images_by_asin, load_category_planning=_load_category_planning,
+    )
+
+
 # ---------- dictionary-only（全离线） ----------
 
 def cmd_dictionary_only(args) -> None:
@@ -1736,6 +1757,45 @@ def build_parser() -> argparse.ArgumentParser:
                      help="按配置启用双 Provider 并行池（真实调用仍需 YES）")
     tv2.add_argument("--yes", action="store_true", help="跳过真实 API 调用前的 YES 确认")
     tv2.set_defaults(func=cmd_translate)
+
+    production_translation = sub.add_parser(
+        "translation-production",
+        help="按阶段生成 hash-bound Translation V2 生产候选与晋级状态",
+    )
+    production_translation.add_argument(
+        "--stage", required=True,
+        choices=("build-input", "preclean", "plan", "translate", "promote", "export"),
+    )
+    production_translation.add_argument("--master", default="")
+    production_translation.add_argument("--run-dir", default="")
+    production_translation.add_argument("--run-id", default="production-run")
+    production_translation.add_argument("--source-run-id", default="")
+    production_translation.add_argument("--source-schema-version", default="master-v1")
+    production_translation.add_argument(
+        "--config", default="configs/translation_v2_production.example.json",
+    )
+    production_translation.add_argument("--model", default="")
+    production_translation.add_argument("--rate", type=float, default=None)
+    production_translation.add_argument("--limit", type=int, default=None)
+    production_translation.add_argument("--offset", type=int, default=0)
+    production_translation.add_argument("--asin-list", default="")
+    production_translation.add_argument("--category", default="")
+    production_translation.add_argument("--yes", action="store_true")
+    production_translation.add_argument("--dry-run", action="store_true")
+    production_translation.add_argument("--out", default="")
+    production_translation.add_argument("--details", default="")
+    production_translation.add_argument("--rankings", default="")
+    production_translation.add_argument("--html-dir", nargs="+", default=[])
+    production_translation.add_argument("--collection-run-dir", default="")
+    production_translation.add_argument("--prev-workbook", default="")
+    production_translation.add_argument("--images-dir", default="")
+    production_translation.add_argument("--category-planning", default="")
+    production_translation.add_argument("--force", action="store_true")
+    production_translation.add_argument("--debug-export", action="store_true")
+    production_translation.add_argument(
+        "--profile", choices=("research", "business", "task"), default="research",
+    )
+    production_translation.set_defaults(func=cmd_translation_production)
 
     pc = sub.add_parser("preclean", help="全离线：Translation V2 Pre-Clean 清洗与全量审计")
     pc.add_argument("--products", required=True,

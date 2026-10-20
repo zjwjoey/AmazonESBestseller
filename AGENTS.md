@@ -411,3 +411,19 @@ shortfall persists the run so the next resume can activate unused reserve URLs.
 When reparsing multiple saved-HTML directories, deduplicate by ASIN and preserve
 the first valid record in the supplied directory order. CLI translation summaries
 must report partial results separately from failures.
+
+## 30. Main Consolidation V1 module boundaries
+
+- Keep `detail-plan` → `detail-run` as the formal detail collection entry and
+  preserve its Access Gate, saved evidence and checkpoint contracts.
+- Keep the staged `translation-production` adapter under the existing
+  `amazon-es` CLI. Its default provider is offline `fake`; a Qwen run requires
+  explicit provider selection, available credentials, a valid verified price
+  card, budget admission and `--yes`. `--offline` must block Qwen translation.
+- Translation input, shards and release candidates are separate hash-bound
+  artifacts. Do not write translated values back to collection Master data.
+- Do not copy Detail5500/highspeed/multisource execution stacks into the formal
+  path without independent compatibility and safety evidence. Source Audit
+  adapters must consume immutable copies or saved evidence, not active run state.
+- Consolidation documentation must distinguish implemented, integrated,
+  offline-tested, merged-to-main and production-accepted status.

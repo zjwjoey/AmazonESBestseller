@@ -1,0 +1,35 @@
+{
+  "provider_mode": "fake",
+  "model": "qwen-mt-flash",
+  "prompt_version": "amazon-es-retail-v2",
+  "schema_version": "translation-v2.25",
+  "source_language": "es",
+  "target_language": "zh-CN",
+  "fields": [
+    "title_es_raw",
+    "brand",
+    "category_l1",
+    "category_l2",
+    "category_l3",
+    "leaf_category",
+    "selected_variation_raw",
+    "specification_es",
+    "product_details",
+    "feature_bullets",
+    "product_description"
+  ],
+  "budget_cny": "5.00",
+  "budget_safety_buffer_cny": "0.10",
+  "budget_max_input_tokens": 12000,
+  "budget_max_output_tokens": 2048,
+  "budget_prompt_overhead_tokens": 1024,
+  "pricing_verification": {
+    "provider": "qwen-mt",
+    "model": "qwen-mt-flash",
+    "currency": "CNY",
+    "input_per_million_cny": "0",
+    "output_per_million_cny": "0",
+    "verified_at": "",
+    "source": ""
+  }
+}

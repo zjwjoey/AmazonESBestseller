@@ -47,6 +47,26 @@ The architecture must prioritize:
 * offline reprocessing;
 * future scalability.
 
+## Main Consolidation V1 handoffs
+
+The current formal collection entry remains `detail-plan` → `detail-run` →
+`collection/detail_executor.py`, with the existing Access Gate and checkpoint
+state. Processing enters through the same `amazon-es` CLI: normalization and
+raw product rows feed `translation-production build-input`, then `preclean`,
+offline `plan`, explicitly configured `translate`, `promote`, and the existing
+QA/Field Closure-gated exporter. Production translation artifacts are
+ASIN/source-hash/schema bound and stay in the selected run directory; no stage
+rewrites collection Master records.
+
+The V4 ranking and identity snapshots already present in the main baseline are
+reused. Highspeed/V4 runners and Detail5500 multi-lane executors remain
+experimental. Source Audit is not yet connected to the main detail checkpoint
+contract; its sidecar adapter is blocked until it can consume saved evidence
+without importing the experimental Detail5500 storage stack. See
+`docs/consolidation/MODULE_INVENTORY.md` and
+`docs/consolidation/INTEGRATION_PLAN.md` for the reviewed branch and module
+dispositions.
+
 ---
 
 # 2. Core architectural principle

@@ -273,3 +273,14 @@ QA: 宁缺毋错
 导出前会执行字段闭环审计；翻译缓存按 ASIN、schema 和西语源哈希复用，详情 schema
 升级优先离线重解析保存 HTML。150 家居 + 50 DIY 是全局唯一配额，缺口会以
 `QUOTA_UNIQUE_SHORTFALL` 明确失败。
+
+## Main Consolidation V1
+
+The consolidation inventory and module boundaries are tracked in
+`docs/consolidation/`. The formal detail path remains `detail-plan` →
+`detail-run`; the Translation V2 staged adapter is exposed as
+`translation-production` and writes hash-bound candidates under its explicit
+run directory. Its default provider is deterministic `fake`; Qwen translation
+requires explicit configuration and verified pricing evidence. See
+`docs/ARCHITECTURE.md` for the module handoff and `docs/consolidation/INTEGRATION_PLAN.md`
+for current integration and acceptance status.
