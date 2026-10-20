@@ -4,7 +4,8 @@
 
 - 整合工作树：`C:\Users\Administrator\.codex\worktrees\main-consolidation-v1\AmazonESBestseller`
 - 整合分支：`refactor/main-consolidation-v1`
-- 本地 HEAD 与 `origin/main`：`9d669b3c7a01ccd0090acbc320d19b471a0b02a1`
+- 初始整合基线 `origin/main`：`9d669b3c7a01ccd0090acbc320d19b471a0b02a1`；本次 PR 合并后当前 `origin/main`：`6cc36a1179d21d8bbd9461085232903939a59095`。
+- 生产目录的本地 `main` 仍为 `2f6292e486fb6865ac55db9d2c5da11107c7fdcd`；只读复核显示它比当前 `origin/main` 落后 39 个提交（初始基线下的历史记录为 38，PR 合并推进 main 后增为39）。生产目录未被切换、覆盖或更新。
 - 生产目录 `F:\AmazonESBestseller` 未在本轮写入；未运行采集、真实翻译 API、数据库/任务状态清理或磁盘操作。
 - 分支盘点覆盖 47 个远端 heads（含 `main`）；提交和路径差异只用于定位，不代替代码、依赖及测试核查。
 
@@ -13,7 +14,7 @@
 | 功能 | 已开发 | 当前树已整合 | 离线测试 | 已合并 main | 生产运行验收 |
 |---|---:|---:|---:|---:|---:|
 | V4 ranking/identity snapshots | 不适用 | 是，已在正式基线 | 是，22 项定向测试 | 是，基线已有 | 未执行本任务生产验收 |
-| Translation V2 production adapter / budget | 是 | 是，当前整合分支 | 是，完整套件 883 passed、6 skipped | 否，待 PR/CI | 否，未调用真实 provider |
+| Translation V2 production adapter / budget | 是 | 是 | 是，完整套件 883 passed、6 skipped；GitHub Python 3.11/3.12 CI 通过 | 是，PR #6 squash commit `6cc36a1` | 否，未调用真实 provider |
 | Source Audit / translation preparation | 是，来源分支具备 | 否；与主线 saved-HTML/checkpoint 合同兼容性 BLOCKED | 来源分支测试通过；主线 adapter 未测试 | 否 | 否 |
 | Detail5500 / highspeed 多执行器 | 是，来源分支具备 | 否；实验保留 | 不作为本次主线验收 | 否 | 否 |
 | Normalization / quality / export | 是 | 复用现有 main 实现 | 包含在完整离线回归中 | 是，基线已有 | 本任务未执行生产导出 |
@@ -24,7 +25,7 @@
 
 完整离线测试：`python -m pytest` → **883 passed, 6 skipped**。测试未调用 Amazon 或翻译网络 API。`git diff --check` 通过。
 
-已提交 `811fbf7`，PR #6：<https://github.com/zjwjoey/AmazonESBestseller/pull/6>。GitHub CI 正在运行；合并 main 和生产验收均未发生。不得把本表中的状态提升为已合并或生产通过。
+实现提交 `811fbf7` 和状态文档提交 `2ed3878` 已通过 PR #6：<https://github.com/zjwjoey/AmazonESBestseller/pull/6> 合并到 `main`，squash commit 为 `6cc36a1179d21d8bbd9461085232903939a59095`。GitHub Python 3.11/3.12 CI 均通过。未调用真实 provider，因此生产验收仍未发生。
 
 ## 阻塞与后续
 

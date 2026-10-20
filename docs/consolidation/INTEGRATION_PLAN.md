@@ -40,9 +40,9 @@
 - [x] 新增默认 `fake` 的 production config example；Qwen 配置缺少有效价格卡时 fail closed。
 - [x] 跑 production adapter/budget 定向测试和现有 translation 回归；最后完整离线套件 **883 passed, 6 skipped**。
 - [x] 明确 `--offline` 阻断 Qwen translate stage；摘要与 shard 保存实际 provider/execution mode。
-- [x] 已提交独立 PR #6：<https://github.com/zjwjoey/AmazonESBestseller/pull/6>；GitHub CI 正在运行，待通过且无 P0 后再按仓库流程合并。
+- [x] 独立 PR #6：<https://github.com/zjwjoey/AmazonESBestseller/pull/6>；Python 3.11/3.12 CI 通过，无 P0 阻塞，已 squash 合入 `main` (`6cc36a1179d21d8bbd9461085232903939a59095`)。
 
-状态：整合分支已开发、提交并创建 PR，完整离线测试通过；GitHub CI 待完成；尚未合入 main、尚未进行真实生产验收。
+状态：已开发、已提交、完整离线测试通过、PR/CI 已通过并合入 main；尚未进行真实生产验收。
 
 ### 阶段 3：Source Audit 与统一命令边界
 
