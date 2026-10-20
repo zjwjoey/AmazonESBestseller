@@ -1,6 +1,6 @@
 # Main Consolidation V2 — Module Integration Status
 
-Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f8ccdd492e6c68`. PR #10 then merged as `bb26de10a892748e1534d02231fc9918ee230e92`.
+Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f8ccdd492e6c68`. PR #10 merged as `bb26de10a892748e1534d02231fc9918ee230e92`; PR #11 merged as `f5f30c05ccf42925b7984eaa8656143e68b854d4`.
 
 ## Completed in V2
 
@@ -11,7 +11,7 @@ Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f
 - Existing `identity.resolve_identity`, detail checkpoint, audit, Translation V2 and export contracts remain the owners of their existing facts.
 - PR #10 is merged. Python 3.11 and 3.12 CI passed. Targeted Python 3.12 checks passed.
 
-### PR-B — saved-evidence multi-source candidate snapshot (in progress)
+### PR-B — saved-evidence multi-source candidate snapshot (merged)
 
 - Source branches reviewed: `codex/v4-global-30000`, `codex/v4-serial-read-optimization`, `codex/v4-three-source-5001`, and `codex/highspeed-multisource-v4`.
 - Extracted only the conservative V4 product-link normalizer and Customer Favorites DOM adapter. The highspeed runner, multi-source scheduler, authorization system and isolated storage backend are not imported.
@@ -20,7 +20,14 @@ Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f
 - Candidate groups use exact normalized product-link evidence. Each source-page appearance remains a separate observation. Product identity stays `UNCONFIRMED`; Parent ASIN is not used to merge candidates.
 - Best Sellers rank and other list positions keep distinct semantics. The offline fixture run produced 36 Best Sellers, 36 New Releases and 163 Customer Favorites observations (235 total); this is fixture coverage, not a 30,000-item collection.
 - Snapshot and each source remain `UNVERIFIED`; `ready_for_detail_plan=false`. An observed product page or a nonempty parse is not treated as a complete source.
-- Targeted V2 tests currently pass; PR and GitHub CI are pending.
+- Targeted V2 tests passed (45 tests). Full offline pytest reached 100% locally. GitHub Offline CI passed for Python 3.11 and 3.12 in both triggered workflows. PR #11 merged to main as `f5f30c0`.
+
+### PR-C — candidate provenance through the formal detail path (in progress)
+
+- Source contract: PR-A `CandidateObservation` / PR-B multi-source candidate groups, carried only when an authoritative ranking record has already been identity-confirmed.
+- The existing `detail-plan` still keys and deduplicates work by confirmed ASIN. It now preserves associated candidate group IDs and candidate observation IDs as provenance arrays.
+- `detail-run` writes those IDs only to per-run outcome manifests. They do not become product identity, do not merge ASINs, and are not written into canonical product detail state.
+- Offline planner/executor contract tests pass (30 tests across detail planner, executor and CLI planner suites). PR and GitHub CI are pending.
 
 ## Reused mainline modules
 
@@ -32,7 +39,7 @@ Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f
 
 ## Remaining V2 work
 
-- Accept an explicitly reviewed candidate freeze in the existing detail-plan path without treating candidate ASIN hints as confirmed identity.
+- Map the candidate freeze to an authoritative identity snapshot through an explicit, evidence-backed selection/identity step; candidate ASIN hints alone remain insufficient.
 - Build the read-only Source Audit Evidence Adapter over mainline detail-run/state/saved HTML; audit remains blocked until its sidecar accepts only verified evidence.
 - Extract only the compatible orchestration/commands facade and build the complete fixture/mock offline flow.
 - Run the full offline regression, update README/AGENTS/architecture docs and report each status separately.

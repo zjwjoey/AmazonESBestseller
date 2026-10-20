@@ -35,6 +35,20 @@ def test_planner_is_offline_and_new_asin_is_fetch_new(monkeypatch):
     assert plan["records"][0]["detail_action"] == DetailAction.FETCH_NEW.value
 
 
+def test_candidate_provenance_survives_asin_dedup_without_becoming_identity():
+    rows = [
+        _ranking(candidate_id="candidate_url_group_1",
+                 candidate_observation_id="observation_1"),
+        _ranking(candidate_id="candidate_url_group_2",
+                 candidate_observation_id="observation_2", rank=2),
+    ]
+    item = build_detail_plan(_snapshot(rows))["records"][0]
+    assert item["ranking_asin"] == "B078C6QR1C"
+    assert item["asin"] == "B078C6QR1C"
+    assert item["candidate_ids"] == ["candidate_url_group_1", "candidate_url_group_2"]
+    assert item["candidate_observation_ids"] == ["observation_1", "observation_2"]
+
+
 def test_valid_cache_is_reused_when_rank_and_tracking_url_change():
     row = _ranking(rank=12, ranking_product_url_raw="/dp/B078C6QR1C/ref=new")
     plan = build_detail_plan(_snapshot([row]), detail_cache=[_valid()])

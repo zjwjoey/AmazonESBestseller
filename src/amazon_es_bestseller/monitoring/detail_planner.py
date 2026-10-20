@@ -343,6 +343,17 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
             "snapshot_id": row.get("snapshot_id") or snapshot_id,
             "ranking_asin": asin,
             "asin": asin,
+            # Candidate IDs are source provenance only. The confirmed ranking
+            # ASIN remains the detail task identity and is never replaced by
+            # a URL-group identifier.
+            "candidate_ids": sorted({str(context.get("candidate_id"))
+                                      for context in contexts[asin]
+                                      if context.get("candidate_id")}),
+            "candidate_observation_ids": sorted({
+                str(context.get("candidate_observation_id"))
+                for context in contexts[asin]
+                if context.get("candidate_observation_id")
+            }),
             "ranking_rank": row.get("ranking_rank", row.get("bestseller_rank")),
             "research_category": row.get("research_category"),
             "ranking_product_url_raw": row.get("ranking_product_url_raw") or "",
