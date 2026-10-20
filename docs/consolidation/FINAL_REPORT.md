@@ -24,7 +24,7 @@
 
 完整离线测试：`python -m pytest` → **883 passed, 6 skipped**。测试未调用 Amazon 或翻译网络 API。`git diff --check` 通过。
 
-当前整合分支还没有提交或 PR；GitHub CI、合并 main 和生产验收均未发生。不得把本表中的状态提升为已合并或生产通过。
+已提交 `811fbf7`，PR #6：<https://github.com/zjwjoey/AmazonESBestseller/pull/6>。GitHub CI 正在运行；合并 main 和生产验收均未发生。不得把本表中的状态提升为已合并或生产通过。
 
 ## 阻塞与后续
 

@@ -40,9 +40,9 @@
 - [x] 新增默认 `fake` 的 production config example；Qwen 配置缺少有效价格卡时 fail closed。
 - [x] 跑 production adapter/budget 定向测试和现有 translation 回归；最后完整离线套件 **883 passed, 6 skipped**。
 - [x] 明确 `--offline` 阻断 Qwen translate stage；摘要与 shard 保存实际 provider/execution mode。
-- [ ] 提交独立 PR；CI 通过且无 P0 后按仓库流程合并。
+- [x] 已提交独立 PR #6：<https://github.com/zjwjoey/AmazonESBestseller/pull/6>；GitHub CI 正在运行，待通过且无 P0 后再按仓库流程合并。
 
-状态：整合分支已开发并通过完整离线测试；尚未提交、尚未发 PR、尚未合入 main、尚未进行真实生产验收。
+状态：整合分支已开发、提交并创建 PR，完整离线测试通过；GitHub CI 待完成；尚未合入 main、尚未进行真实生产验收。
 
 ### 阶段 3：Source Audit 与统一命令边界
 
