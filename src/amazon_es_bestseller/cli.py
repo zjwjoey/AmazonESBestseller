@@ -925,11 +925,15 @@ def cmd_task_collect(args, parser: argparse.ArgumentParser) -> None:
         plan["challenge_wait_seconds"] = args.challenge_wait_seconds
     if args.manual_assist:
         plan["manual_assist"] = True
+    if getattr(args, "access_stop_scope", None):
+        plan["scheduler"] = {**(plan.get("scheduler") or {}),
+                             "access_stop_scope": args.access_stop_scope}
     try:
         report = run_task(plan, args.out_dir, mode=args.mode,
                           headful=args.headful, profile_dir=args.profile_dir,
                           plan_path=plan_path,
-                          project_root=Path(__file__).resolve().parents[2])
+                          project_root=Path(__file__).resolve().parents[2],
+                          resume_access_stopped=getattr(args, "resume_access_stopped", False))
     except ValueError as exc:
         parser.error(str(exc))
     _safe_print("task-collect %s：%s；最终唯一 ASIN %d；报告 %s" %
@@ -1770,6 +1774,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="兼容参数；挑战页现在立即停止，不会自动等待恢复")
     tc.add_argument("--manual-assist", action="store_true",
                     help="兼容参数；挑战页停止后需人工处理并重新启动")
+    tc.add_argument("--access-stop-scope", choices=("worker", "all"), default=None,
+                    help="worker=仅停受限浏览器（默认）；all=停止所有浏览器")
+    tc.add_argument("--resume-access-stopped", action="store_true",
+                    help="人工处理访问限制后，明确允许恢复此前停止的任务")
     tc.set_defaults(func=lambda a, p=tc: cmd_task_collect(a, p))
 
     s = sub.add_parser("select-quota", help="离线：按审核类目配置选择 150/50 唯一 ASIN")

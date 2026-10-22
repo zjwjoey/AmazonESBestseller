@@ -197,3 +197,43 @@ def test_challenge_after_apply_blocks_even_with_spain_header(monkeypatch):
     with pytest.raises(AccessStopError, match="CHALLENGE"):
         session.ensure_spain_delivery()
     assert session._delivery_location_checked is False
+
+
+def test_previously_verified_session_repairs_changed_destination(monkeypatch):
+    page = _FakePage()
+    page.done = True
+    session = _gate_session(monkeypatch, page)
+    session.ensure_spain_delivery()
+    page.done = False  # The same browser now shows a foreign destination.
+
+    assert session.ensure_spain_delivery().is_spain is True
+    assert page.postal_code == "28001"
+    assert page.applied is True
+
+
+def test_previously_verified_session_cannot_hide_current_challenge(monkeypatch):
+    page = _FakePage()
+    page.done = True
+    session = _gate_session(monkeypatch, page)
+    session.ensure_spain_delivery()
+    page.content = lambda: '<div>Robot Check</div>'
+    session.goto = lambda *a, **kw: pytest.fail("must stop before another navigation")
+
+    with pytest.raises(AccessStopError, match="CHALLENGE"):
+        session.ensure_spain_delivery()
+    assert session._delivery_location_checked is False
+
+
+@pytest.mark.parametrize("status", [403, 429, 503])
+def test_previously_verified_session_preserves_http_access_gate(monkeypatch, status):
+    from types import SimpleNamespace
+
+    page = _FakePage()
+    page.done = True
+    session = _gate_session(monkeypatch, page)
+    session.ensure_spain_delivery()
+    session.last_document_response = SimpleNamespace(status=status)
+    session.goto = lambda *a, **kw: pytest.fail("must not retry a restricted response")
+    with pytest.raises(AccessStopError):
+        session.ensure_spain_delivery()
+    assert session._delivery_location_checked is False

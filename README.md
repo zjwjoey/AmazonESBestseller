@@ -198,11 +198,24 @@ python -m amazon_es_bestseller.cli collect `
 使用马德里 `28001`；设置后会再次核验顶部目的地，无法确认时停止采集。可按
 任务所在城市覆盖邮编，例如 `collect --postal-code 08001 ...`。该检查只使用
 页面公开控件，不读取或导出 Cookie，也不绕过验证码或其他访问限制。
+同一浏览器再次进入采集批次时，会重新读取当前页面的配送目的地；若地址已改变，
+会重新设置并核验，不会仅凭上一次成功结果放行。已确认是西班牙的地址保持不变。
 
-若详情或榜单页遇到 Amazon 挑战页，程序默认等待 180 秒并分段检查页面是否
-自行恢复；恢复成功才继续，仍为挑战页则停止。需要人工接管时必须显式使用
-`--headful --manual-assist`，程序会在等待后暂停并让操作者自行处理页面，
-不会自动识别、输入或绕过验证码。
+若详情或榜单页遇到 Amazon 挑战页，程序默认立即停止受限浏览器的采集并保存证据。
+显式使用 `--headful --manual-assist` 时，可保留页面等待人工处理，程序不会自动
+识别、输入或绕过验证码。
+
+审核过的 `task-collect` 并行任务默认采用 `scheduler.access_stop_scope="worker"`：
+一个浏览器受限时，只停用它所在的工作槽，其他正常浏览器按原计划及冷却间隔继续。
+不会补开浏览器替代受限工作槽，也不会把它尚未完成的详情转交其他浏览器重试。
+需要全体停止时，计划可使用 `access_stop_scope="all"`，或显式传入
+`--access-stop-scope all`。该设置不会增加任务原有的并发数。
+
+受限浏览器已完成的详情、原始 HTML、checkpoint 和待处理 ASIN 会被保存。
+只要存在受限工作槽，本次任务就不会被报告为完整交付；其他工作槽继续时状态为
+`RUNNING_WITH_ACCESS_STOP`，全部结束后为 `ACCESS_STOP`。人工处理后需显式传入
+`--resume-access-stopped` 才能重新尝试受限任务。历史缓存中的验证码页仍按原规则
+阻止续跑，本轮没有自动清理或放行这类缓存。
 
 详情完成后可用 `download-images --products products.json --out-dir images
 --report image_download.json` 按 ASIN 串行补齐原图缓存。

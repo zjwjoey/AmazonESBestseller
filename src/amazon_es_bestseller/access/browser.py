@@ -205,8 +205,22 @@ class BrowserSession:
             raise DeliveryLocationError(
                 "西班牙配送邮编必须是 5 位数字，当前值为 %r" % code)
         if self._delivery_location_checked:
-            return self._delivery_location or DeliveryLocation(
-                "", True, code)
+            # A previously verified browser may later show another destination.
+            # Inspect the current page before trusting the cached result, and
+            # never navigate away from a newly displayed access challenge.
+            self._delivery_location_checked = False
+            self._delivery_location = None
+            html = self._stable_page_content()
+            current = inspect_delivery_location(html)
+            status = getattr(self.last_document_response, "status", None)
+            state = detect_access_status(200 if status is None else status, html)
+            if status == 202 and current.text and state is AccessState.UNKNOWN:
+                state = detect_access_status(200, html)
+            require_normal_access(state, "配送地点复查（当前页面）")
+            if current.is_spain is True:
+                self._delivery_location_checked = True
+                self._delivery_location = current
+                return current
 
         status = self.goto("https://www.amazon.es/", timeout_ms=timeout_ms)
         self.wait_for_product_page(timeout_ms=20000)

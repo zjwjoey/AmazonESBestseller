@@ -447,3 +447,22 @@ must report partial results separately from failures.
   or canonical product state.
 - Candidate snapshots must not claim source completeness or `READY` status
   unless a separate evidence review proves the relevant authority gates.
+
+## 32. User-reviewed browser access-stop scope (2026-10-22)
+
+- For already approved parallel `task-collect` tasks, the latest user instruction
+  replaces the all-worker stop requirement in sections 27/28 with a per-worker
+  stop by default (`scheduler.access_stop_scope="worker"`). An explicit `all`
+  setting retains the shared stop. This does not authorize new parallel tasks
+  or raise concurrency, quotas, request rates or source budgets.
+- Stop the restricted browser, reserve its outstanding ASIN claims, preserve
+  evidence/checkpoints, and disable its slot for the remainder of the run.
+  Other normal browsers may continue their original planned work. Never replace
+  a restricted browser or transfer its blocked work to another browser.
+- A stopped run requires explicit human handling and `--resume-access-stopped`
+  before restart. Partial progress must not pass the final completion gate.
+- Delivery checks use the normal postal-code UI to correct non-Spain/unknown
+  destinations and verify Spain before continuing. Repeated checks must inspect
+  the current page instead of blindly trusting a prior successful session check.
+- Keep the access detector and historical challenge-cache stop unchanged.
+  No proxy/profile/account/cookie/IP rotation or challenge bypass is authorized.
