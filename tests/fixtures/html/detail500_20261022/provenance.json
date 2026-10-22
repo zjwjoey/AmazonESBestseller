@@ -1,0 +1,16 @@
+[
+  {
+    "asin": "B07QHCNQ7M",
+    "source_file": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\quarantine\\B07QHCNQ7M\\B07QHCNQ7M.html",
+    "source_sha256": "5ae93492647b9bb2612cfe57e48f8149341a18e13cfaab9dbe698b99b836cea6",
+    "fixture_sha256": "efae7e6fd0eeda6ad87d8185e6bcaca37f310052bad6474e0854674414bcd294",
+    "reduction": "Original identity and detail DOM blocks; original variation JSON values only; no status or expected-result fields injected."
+  },
+  {
+    "asin": "B0B8NPVTC4",
+    "source_file": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B0B8NPVTC4.html",
+    "source_sha256": "28e3bc5310e1351bf8a61cb1828249bd9ce54e6b522603f5dce220f849a8f570",
+    "fixture_sha256": "ed084ceb46568411e296dca80348a3e9808d33064336f464a1fdddd306562a07",
+    "reduction": "Original identity and detail DOM blocks; original variation JSON values only; no status or expected-result fields injected."
+  }
+]

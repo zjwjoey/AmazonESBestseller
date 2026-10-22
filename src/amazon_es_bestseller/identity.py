@@ -35,6 +35,12 @@ def asin_from_url(value: object) -> str:
     return normalize_asin(match.group(1)) if match else ""
 
 
+def _asin_or_url(value: object) -> str:
+    normalized = normalize_asin(value)
+    # normalize_asin only formats strings; a non-empty URL is not an ASIN.
+    return normalized if is_valid_asin(normalized) else asin_from_url(value)
+
+
 def _asins(values: Iterable[object] | object | None) -> set[str]:
     if values is None:
         return set()
@@ -56,8 +62,8 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
     """
     ranking = normalize_asin(ranking_asin)
     requested = normalize_asin(requested_asin)
-    final = normalize_asin(final_url_asin) or asin_from_url(final_url_asin)
-    canonical = normalize_asin(canonical_asin) or asin_from_url(canonical_asin)
+    final = _asin_or_url(final_url_asin)
+    canonical = _asin_or_url(canonical_asin)
     requested_from_url = asin_from_url(requested_url)
     parsed = normalize_asin(parsed_detail_asin)
     parent = normalize_asin(parent_asin)
