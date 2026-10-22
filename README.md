@@ -321,3 +321,31 @@ evidence, then runs the selected checks from the mainline Quality Gate. It does
 not manufacture Source Audit receipts or a formal Source Audit PASS. The legacy
 receipt/repair workflow and multi-lane runners remain experimental. Offline
 cross-module acceptance is documented in `docs/consolidation/V2_CLOSURE_REPORT.md`.
+## 隔离多榜单快照 V1.1
+
+新模块保留生产 ASIN、翻译和 Excel 契约，支持五榜单适配、证据注册、内部商品身份审核、不可变快照、恢复、预算、日期比较和报告。四个新增榜单已通过离线夹具测试，实际官网来源及 75 组合仍待验证；P0、30,000 实时采集和真实14天观察均未自动启动。
+
+以下 PowerShell 入口已在独立 worktree 核验；脚本打印实际导入位置，避免使用本机旧 editable 安装。新的空目录或已标记目录可以重复恢复运行。
+
+```powershell
+$snapshotWorktree = (Get-Location).Path  # 当前代码检出目录
+$snapshotPython = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe'
+Set-Location -LiteralPath $snapshotWorktree
+$snapshotStore = Join-Path $snapshotWorktree 'outputs\multisource_user_check'
+& '.\scripts\Invoke-Multisource.ps1' -Python $snapshotPython sources --root $snapshotStore
+& '.\scripts\Invoke-Multisource.ps1' -Python $snapshotPython replay --root $snapshotStore --plan '.\configs\multisource\offline_five_lists.json'
+& '.\scripts\Invoke-Multisource.ps1' -Python $snapshotPython qa --root $snapshotStore --run-id offline_five_lists
+```
+
+完整的指定榜单／类目、历史 HTML、暂停恢复、日期／期间比较、报告、人工身份审核和 Windows 外部调度命令见 [多榜单模块说明](docs/MULTISOURCE_SNAPSHOT_V1_1.md)；实时运行前必须完成 [P0 审核计划](docs/MULTISOURCE_P0_PLAN_V1_1.md) 的独立授权。
+
+### 当前三榜单 PAGE 快照与审查
+
+当前快照任务使用独立、显式授权的串行 PAGE 流程，复用保存页面和断点，保留
+访问门禁、类目冷却及累计预算。任务参数由已审核计划决定，CLI 帮助和默认测试
+均不启动采集。当前 20,000 候选／喜爱榜至少 3,000 的任务说明见
+[快照任务契约](docs/SNAPSHOT_MAIN_PRIORITY.md)。
+
+快照的全量离线审查和数量验收使用自己的合约，参见
+[快照审查状态](docs/SNAPSHOT_REVIEW_STATUS.md)。`PASSED` 仅表示候选快照审查通过，
+不代表正式 ASIN 身份或生产验收通过；不会自动部署、迁移数据或启动采集。

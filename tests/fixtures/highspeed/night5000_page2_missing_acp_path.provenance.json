@@ -1,0 +1,7 @@
+{
+  "source_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\fd\\fdbc0b204c28b390dc8080eceb81d14269828c1b9c74020b36c010671102fb1b.html",
+  "source_sha256": "fdbc0b204c28b390dc8080eceb81d14269828c1b9c74020b36c010671102fb1b",
+  "fixture_sha256": "23ca351656de4836127ee19166e4813b7921e9842e6ba97b3078a943af517c09",
+  "source_page_url": "https://www.amazon.es/gp/bestsellers/kitchen/2822691031?ie=UTF8&pg=2",
+  "transform": "Original first H1 and actual complete list-grid data-card-metrics-id wrapper within #zg; no card/href/metadata mutation. No data-acp-path exists in original HTML."
+}

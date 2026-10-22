@@ -1,0 +1,45 @@
+{
+  "receipt": {
+    "request_url": "https://www.amazon.es/cml-health?pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025",
+    "final_url": "https://www.amazon.es/b?node=205103558031&pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025",
+    "observed_at": "2026-10-15T20:29:41.751848Z",
+    "source_id": "v4_aa64bca4d7272f05e91ad4c0",
+    "run_id": "global30000_d8c4546168db",
+    "status_code": 200,
+    "access_state": "NORMAL",
+    "sha256": "aa10a6ddfbe194b8cc81319ffe1e53fe6ada5abd4e8fdb78e7d1ee46a3eb5126",
+    "evidence_path": "F:\\AmazonESBestseller\\runtime\\global30000_batches\\global30000_d8c4546168db\\store\\runs\\global30000_d8c4546168db\\responses\\req_ea29fec13eab49dcb4f61d9943a12035.json"
+  },
+  "source": {
+    "source_id": "v4_aa64bca4d7272f05e91ad4c0",
+    "source_type": "CUSTOMER_FAVORITES",
+    "source_subtype": "CUSTOMERS_MOST_LOVED_CURATED_ZONE",
+    "actual_source_url": "https://www.amazon.es/cml-health?pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025",
+    "page_urls": [
+      "https://www.amazon.es/cml-health?pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025"
+    ],
+    "parser_profile": "V4",
+    "navigation_evidence": {
+      "anchor_dom_index": 80,
+      "anchor_dom_sha256": "494be84acb2426bb2a006c141efc0d8831896b0bf32efcd9f1f14f0033bdd939",
+      "approved": false,
+      "browse_node_id": null,
+      "destination_product_supply": "UNVERIFIED",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t2_15da5305d976\\store\\html\\a5\\a5152f41e3712229c89cacf15c31887622277f5788ac8342135e9b8be72f5b0c.html",
+      "evidence_sha256": "a5152f41e3712229c89cacf15c31887622277f5788ac8342135e9b8be72f5b0c",
+      "label_raw": "Salud y bienestar",
+      "observed_at": "2026-10-15T02:47:01.546576Z",
+      "page_url": "https://www.amazon.es/gp/browse.html?node=205103589031&ref_=nav_em_nav_CML_0_2_24_1",
+      "parent_access_status": "NORMAL",
+      "parent_http_status": 200,
+      "parent_source_id": "v4_2c03ed60de91ddddb8846156",
+      "parent_source_subtype": "CUSTOMERS_MOST_LOVED_CURATED_ZONE",
+      "parent_source_type": "CUSTOMER_FAVORITES",
+      "parent_status": "VERIFIED_WITH_PRODUCTS",
+      "raw_href": "/cml-health?pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025",
+      "relationship": "THEME_LINK",
+      "status": "PENDING_REVIEW",
+      "url": "https://www.amazon.es/cml-health?pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025"
+    }
+  }
+}

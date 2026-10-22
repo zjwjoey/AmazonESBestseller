@@ -41,6 +41,7 @@ class BrowserSession:
         self.context = None
         self._delivery_location_checked = False
         self._delivery_location: Optional[DeliveryLocation] = None
+        self.last_document_response = None
         # Retained for CLI compatibility and evidence metadata.  Challenges
         # are never solved automatically; explicit manual-assist mode can keep
         # the visible page open while a human clears the challenge.
@@ -78,8 +79,20 @@ class BrowserSession:
 
     def goto(self, url: str, timeout_ms: int = 45000) -> Optional[int]:
         """访问 URL，返回 HTTP 状态码（无响应对象时 None）。"""
+        self.last_document_response = None
         resp = self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        self.last_document_response = resp
         return resp.status if resp is not None else None
+
+    def delivery_diagnostics(self):
+        """Read current evidence without another request or invented status."""
+        html = self.page.content() if self.page is not None else ''
+        status = getattr(self.last_document_response, 'status', None)
+        location = inspect_delivery_location(html)
+        return html, {'http_status': status, 'final_url': self.page.url if self.page else None,
+                      'access_status': detect_access_status(status, html).value,
+                      'delivery_header': location.text, 'delivery_is_spain': location.is_spain,
+                      'postal_code': location.postal_code}
 
     def wait_for_product_page(self, timeout_ms: int = 20000) -> None:
         """给详情页固定渲染缓冲，避免 DOM 协议等待在失活页面上挂死。"""
@@ -218,17 +231,41 @@ class BrowserSession:
             state = detect_access_status(200, html)
         require_normal_access(state, "配送地点检查（Amazon.es 首页）")
         if current.is_spain is not True:
-            location_button = self._visible_locator((
+            location_selectors = (
+                # Current Amazon.es renders a modal action on the wrapper;
+                # clicking only the inner anchor can leave the destination
+                # popover closed while its hidden legacy fields remain present.
+                "#nav-global-location-data-modal-action",
                 "#nav-global-location-popover-link",
                 "#contextualIngressPtLink",
-            ))
+            )
+            location_button = self._visible_locator(location_selectors)
             if location_button is None:
                 raise DeliveryLocationError(
                     "无法打开 Amazon 配送地点设置；当前页未找到配送地点控件。"
                 )
             location_button.click(timeout=5000)
 
-            zip_input = self._visible_locator(("#GLUXZipUpdateInput",))
+            zip_selectors = (
+                "#GLUXZipUpdateInput",
+                "input[name='glow-enterLocationPostalCode']",
+            )
+            zip_input = self._visible_locator(zip_selectors,
+                                              timeout_seconds=2.0)
+            # Amazon.es has served both the modal action wrapper and the
+            # inner popover trigger. Try the other visible trigger once when
+            # the first click did not render a postal field.
+            if zip_input is None:
+                for selector in location_selectors[1:]:
+                    fallback = self._visible_locator((selector,),
+                                                     timeout_seconds=0.5)
+                    if fallback is None:
+                        continue
+                    fallback.click(timeout=5000)
+                    zip_input = self._visible_locator(
+                        zip_selectors, timeout_seconds=3.0)
+                    if zip_input is not None:
+                        break
             if zip_input is None:
                 raise DeliveryLocationError(
                     "Amazon 配送地点弹窗未提供西班牙邮编输入框。"
@@ -240,23 +277,38 @@ class BrowserSession:
             apply_button.click(timeout=5000)
 
             done_button = self._visible_locator((
-                "#a-autoid-67",
                 "#GLUXConfirmClose",
+                ".a-popover button[name='glowDoneButton']",
+                ".a-popover input[name='glowDoneButton']",
+                "#a-autoid-67",
                 "#a-autoid-67-announce",
             ))
-            if done_button is None:
-                raise DeliveryLocationError(
-                    "Amazon 未确认邮编 %s，无法完成配送地点切换。" % code
-                )
-            done_button.click(timeout=5000)
-            self.wait_for_product_page(timeout_ms=5000)
+            # Some popover versions apply and close immediately.  A missing
+            # Done button is not itself a failed change: the header below is
+            # the authority, never the presence of a particular button ID.
+            if done_button is not None:
+                done_button.click(timeout=5000)
+                self.wait_for_product_page(timeout_ms=5000)
+
+            # The current Spain modal can expose a second footer action
+            # ("Hecho") after the postal-code confirmation ("Continuar").
+            # Close that step when present before verifying the header.
+            modal_done = self._visible_locator((
+                "button[name='glowDoneButton']",
+            ), timeout_seconds=1.0)
+            if modal_done is not None:
+                modal_done.click(timeout=5000)
+                self.wait_for_product_page(timeout_ms=3000)
 
             # Amazon updates the ingress header asynchronously after closing
             # the popover.  Poll briefly, but keep the bound finite so a stale
             # or unresponsive page cannot hang a collection run.
             deadline = time.monotonic() + 5.0
             while True:
-                current = inspect_delivery_location(self._stable_page_content())
+                html = self._stable_page_content()
+                require_normal_access(
+                    detect_access_status(200, html), "配送地点切换后核验")
+                current = inspect_delivery_location(html)
                 if current.is_spain is True or time.monotonic() >= deadline:
                     break
                 time.sleep(0.2)

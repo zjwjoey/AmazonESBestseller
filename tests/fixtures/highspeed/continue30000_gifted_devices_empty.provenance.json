@@ -1,0 +1,9 @@
+{
+  "origin": "LIVE_CAPTURE",
+  "source_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\6f\\6fb342cdd19d8bf113b89c01ec125043d34c2d456a65066fa54c2723712af149.html",
+  "sha256": "6fb342cdd19d8bf113b89c01ec125043d34c2d456a65066fa54c2723712af149",
+  "request_url": "https://www.amazon.es/gp/most-gifted/amazon-devices",
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "fixture_copy_only": true
+}

@@ -1,0 +1,10 @@
+{
+  "original_evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\fd\\fd0cf77fa14b355e8efec2fdd2aaadb60d09f9009e965c03cea64cd4e1a0a714.html",
+  "original_evidence_sha256": "fd0cf77fa14b355e8efec2fdd2aaadb60d09f9009e965c03cea64cd4e1a0a714",
+  "source_url": "https://www.amazon.es/gp/bestsellers/kitchen/2822691031",
+  "source_type": "BEST_SELLERS",
+  "observed_at": "2026-10-13T15:54:43.375423Z",
+  "raw_product_url": "/Utopia-Bedding-Protector-Impermeable-hipoalerg%C3%A9nico/dp/B077T9VSNZ/ref=zg_bs_g_2822691031_d_sccl_1/524-6514838-9761305?psc=1",
+  "fixture_sha256": "823b1e24530c7a5949e20d813005614ed29f4905855357b9cee1f5da34feb245",
+  "derivation": "BeautifulSoup serialized first actual ranked card; not synthetic"
+}

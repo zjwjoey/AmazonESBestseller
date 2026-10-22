@@ -1,0 +1,370 @@
+{
+  "provenance": {
+    "full_jsonl_path": "F:\\AmazonESBestseller\\交付文件\\20261014\\3万快照_continue30000_20261013T204238Z\\最终交付_98795227ecb4\\候选商品链接快照_30026组.jsonl",
+    "full_jsonl_sha256": "aa476cf899f5dbfd328f4234557c634033295bdd9d6af015060ccacdd97e5387",
+    "source_url_count": 30026,
+    "historical_offline_only": true
+  },
+  "examples": [
+    {
+      "raw_product_url": "/Super-Sparrow-Botella-Inoxidable-est%C3%A1ndar/dp/B07XLXRWB9/ref=zg_bs_g_2928471031_d_sccl_1/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Super-Sparrow-Botella-Inoxidable-est%C3%A1ndar/dp/B07XLXRWB9/ref=zg_bs_g_2928471031_d_sccl_1/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Super-Sparrow-Botella-Inoxidable-est%C3%A1ndar/dp/B07XLXRWB9?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\cc\\cc580ef4b8806bb6f3bf9a7b613451591561dfed7856dbc55fdb03043dec4bc5.html",
+      "evidence_sha256": "cc580ef4b8806bb6f3bf9a7b613451591561dfed7856dbc55fdb03043dec4bc5",
+      "observation_id": "derived_c725defeb305af893c6428ef78371922",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:40:57.988215Z"
+    },
+    {
+      "raw_product_url": "/Seven-Blu-ray-Morgan-Freeman-Spacey/dp/B08KTZKPC9/ref=zg_bs_g_dvd_d_sccl_21/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Seven-Blu-ray-Morgan-Freeman-Spacey/dp/B08KTZKPC9/ref=zg_bs_g_dvd_d_sccl_21/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Seven-Blu-ray-Morgan-Freeman-Spacey/dp/B08KTZKPC9?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\73\\73fa8eb34c8d39bf94bb5a45a0af5d410c394793155ba14debb9115386c18b8a.html",
+      "evidence_sha256": "73fa8eb34c8d39bf94bb5a45a0af5d410c394793155ba14debb9115386c18b8a",
+      "observation_id": "derived_d61c5d7329cdadaaea2f3831403417ae",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:59:01.280029Z"
+    },
+    {
+      "raw_product_url": "/Utopia-Bedding-Protector-Impermeable-hipoalerg%C3%A9nico/dp/B077T9VSNZ/ref=zg_bs_c_kitchen_d_sccl_1/524-6514838-9761305?pd_rd_w=Jf5Oj&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B077T9VSNZ&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Utopia-Bedding-Protector-Impermeable-hipoalerg%C3%A9nico/dp/B077T9VSNZ/ref=zg_bs_c_kitchen_d_sccl_1/524-6514838-9761305?pd_rd_w=Jf5Oj&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B077T9VSNZ&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Utopia-Bedding-Protector-Impermeable-hipoalerg%C3%A9nico/dp/B077T9VSNZ?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_4f02bfc3eac5f296c768f384edac6be7",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Utopia-Bedding-resistente-manchas-Matrimonio/dp/B075JJRFVV/ref=zg_bs_c_kitchen_d_sccl_3/524-6514838-9761305?pd_rd_w=Jf5Oj&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B075JJRFVV&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Utopia-Bedding-resistente-manchas-Matrimonio/dp/B075JJRFVV/ref=zg_bs_c_kitchen_d_sccl_3/524-6514838-9761305?pd_rd_w=Jf5Oj&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B075JJRFVV&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Utopia-Bedding-resistente-manchas-Matrimonio/dp/B075JJRFVV?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_b9da1c5cd8114f4819df0bc96008b0dd",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Amazon-Basics-Non-Slip-Clothes-Hangers/dp/B00FXNAAW2/ref=zg_bs_c_kitchen_d_sccl_6/524-6514838-9761305?pd_rd_w=Jf5Oj&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B00FXNAAW2&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Amazon-Basics-Non-Slip-Clothes-Hangers/dp/B00FXNAAW2/ref=zg_bs_c_kitchen_d_sccl_6/524-6514838-9761305?pd_rd_w=Jf5Oj&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B00FXNAAW2&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Amazon-Basics-Non-Slip-Clothes-Hangers/dp/B00FXNAAW2?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_6c5753095b0453160c6e8f176ef1e6a6",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Apple-iPhone-Pro-128-Reacondicionado/dp/B0CVJ5WF3K/ref=zg_bs_c_amazon-renewed_d_sccl_5/524-6514838-9761305?pd_rd_w=kHvPi&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B0CVJ5WF3K&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Apple-iPhone-Pro-128-Reacondicionado/dp/B0CVJ5WF3K/ref=zg_bs_c_amazon-renewed_d_sccl_5/524-6514838-9761305?pd_rd_w=kHvPi&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B0CVJ5WF3K&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Apple-iPhone-Pro-128-Reacondicionado/dp/B0CVJ5WF3K?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_21c49cfd60a4f904a5b266ed8ce33e62",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/medicube-PDRN-S%C3%A9rum-p%C3%A9ptido-rosa/dp/B0DBF65JYY/ref=zg_bs_c_beauty_d_sccl_2/524-6514838-9761305?pd_rd_w=D7UAP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B0DBF65JYY&psc=1",
+      "old_normalized_url": "https://www.amazon.es/medicube-PDRN-S%C3%A9rum-p%C3%A9ptido-rosa/dp/B0DBF65JYY/ref=zg_bs_c_beauty_d_sccl_2/524-6514838-9761305?pd_rd_w=D7UAP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B0DBF65JYY&psc=1",
+      "expected_v3_url": "https://www.amazon.es/medicube-PDRN-S%C3%A9rum-p%C3%A9ptido-rosa/dp/B0DBF65JYY?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_43fbf987a81408b70ca7d21fe95de69d",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/medicube-Zero-Pore-155g-Pads/dp/B09V7Z4TJG/ref=zg_bs_c_beauty_d_sccl_4/524-6514838-9761305?pd_rd_w=D7UAP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B09V7Z4TJG&psc=1",
+      "old_normalized_url": "https://www.amazon.es/medicube-Zero-Pore-155g-Pads/dp/B09V7Z4TJG/ref=zg_bs_c_beauty_d_sccl_4/524-6514838-9761305?pd_rd_w=D7UAP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B09V7Z4TJG&psc=1",
+      "expected_v3_url": "https://www.amazon.es/medicube-Zero-Pore-155g-Pads/dp/B09V7Z4TJG?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_b56119f251dfbb84e74d42cc917af34f",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/medicube-PDRN-Collagen-Multi-Stick/dp/B0GHMZXX8Y/ref=zg_bs_c_beauty_d_sccl_6/524-6514838-9761305?pd_rd_w=D7UAP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B0GHMZXX8Y&psc=1",
+      "old_normalized_url": "https://www.amazon.es/medicube-PDRN-Collagen-Multi-Stick/dp/B0GHMZXX8Y/ref=zg_bs_c_beauty_d_sccl_6/524-6514838-9761305?pd_rd_w=D7UAP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B0GHMZXX8Y&psc=1",
+      "expected_v3_url": "https://www.amazon.es/medicube-PDRN-Collagen-Multi-Stick/dp/B0GHMZXX8Y?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_05a4f300376823fe2502c265ba8ee72e",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Renova-Maxiabsorption-Rollos-cocina-Triple/dp/B00KW8LZB8/ref=zg_bs_c_hpc_d_sccl_1/524-6514838-9761305?pd_rd_w=GN8ka&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B00KW8LZB8&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Renova-Maxiabsorption-Rollos-cocina-Triple/dp/B00KW8LZB8/ref=zg_bs_c_hpc_d_sccl_1/524-6514838-9761305?pd_rd_w=GN8ka&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B00KW8LZB8&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Renova-Maxiabsorption-Rollos-cocina-Triple/dp/B00KW8LZB8?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_93044789ed5956b125644c0b38dcfccd",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/PURE-WHEY-PROTEIN-recuperaci%C3%B3n-Chocolate/dp/B07Q31N9D4/ref=zg_bs_c_hpc_d_sccl_4/524-6514838-9761305?pd_rd_w=GN8ka&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B07Q31N9D4&psc=1",
+      "old_normalized_url": "https://www.amazon.es/PURE-WHEY-PROTEIN-recuperaci%C3%B3n-Chocolate/dp/B07Q31N9D4/ref=zg_bs_c_hpc_d_sccl_4/524-6514838-9761305?pd_rd_w=GN8ka&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B07Q31N9D4&psc=1",
+      "expected_v3_url": "https://www.amazon.es/PURE-WHEY-PROTEIN-recuperaci%C3%B3n-Chocolate/dp/B07Q31N9D4?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_ee372e66661a8b6892b2e1e8cfdee341",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/TP-Link-Tapo-P100-Inteligente-Concentrador/dp/B07Z5JD3T4/ref=zg_bs_c_tools_d_sccl_4/524-6514838-9761305?pd_rd_w=WI9yI&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B07Z5JD3T4&psc=1",
+      "old_normalized_url": "https://www.amazon.es/TP-Link-Tapo-P100-Inteligente-Concentrador/dp/B07Z5JD3T4/ref=zg_bs_c_tools_d_sccl_4/524-6514838-9761305?pd_rd_w=WI9yI&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B07Z5JD3T4&psc=1",
+      "expected_v3_url": "https://www.amazon.es/TP-Link-Tapo-P100-Inteligente-Concentrador/dp/B07Z5JD3T4?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_6626c55a04dead792d5d8cc8d983243b",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Guantes-desechables-ARNOMED-unidades-disponibles/dp/B093SVT4FX/ref=zg_bs_c_tools_d_sccl_5/524-6514838-9761305?pd_rd_w=WI9yI&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B093SVT4FX&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Guantes-desechables-ARNOMED-unidades-disponibles/dp/B093SVT4FX/ref=zg_bs_c_tools_d_sccl_5/524-6514838-9761305?pd_rd_w=WI9yI&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B093SVT4FX&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Guantes-desechables-ARNOMED-unidades-disponibles/dp/B093SVT4FX?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_99accc64bdf3cf59b969a3bb3abd9fcc",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Calvin-Klein-Hombre-el%C3%A1sticos-algod%C3%B3n/dp/B077B7HZ2V/ref=zg_bs_c_fashion_d_sccl_1/524-6514838-9761305?pd_rd_w=deSFP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B077B7HZ2V&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Calvin-Klein-Hombre-el%C3%A1sticos-algod%C3%B3n/dp/B077B7HZ2V/ref=zg_bs_c_fashion_d_sccl_1/524-6514838-9761305?pd_rd_w=deSFP&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=X01DEBC27KRC7YFEW7G4&pd_rd_wg=lOyBI&pd_rd_r=d9a27db1-26d8-4da1-878f-043f516d4c1f&pd_rd_i=B077B7HZ2V&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Calvin-Klein-Hombre-el%C3%A1sticos-algod%C3%B3n/dp/B077B7HZ2V?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\f5\\f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3.html",
+      "evidence_sha256": "f5de469905c3da9684562709625333bf4f29f5b71af0cdc60934f58f72b755d3",
+      "observation_id": "derived_a2ac1ff2e04be615e8979a80ae0541cc",
+      "origin": "HISTORICAL_REPLAY",
+      "observed_at": "2026-10-13T16:46:54.965649Z"
+    },
+    {
+      "raw_product_url": "/Mayaverra-Drenaje-Linf%C3%A1tico-Linfatico-Piernas/dp/B0HJWXDPY9/ref=zg_bsnr_c_hpc_d_sccl_4/524-6514838-9761305?pd_rd_w=ME4xH&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HJWXDPY9&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Mayaverra-Drenaje-Linf%C3%A1tico-Linfatico-Piernas/dp/B0HJWXDPY9/ref=zg_bsnr_c_hpc_d_sccl_4/524-6514838-9761305?pd_rd_w=ME4xH&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HJWXDPY9&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Mayaverra-Drenaje-Linf%C3%A1tico-Linfatico-Piernas/dp/B0HJWXDPY9?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_8fbff04af93d58f796da3334b411e201",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Inteligente-Bluetooth-Smartwatch-Frecuencia-Compatible/dp/B0HFJ48P8J/ref=zg_bsnr_c_fashion_d_sccl_1/524-6514838-9761305?pd_rd_w=9wvNN&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HFJ48P8J&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Inteligente-Bluetooth-Smartwatch-Frecuencia-Compatible/dp/B0HFJ48P8J/ref=zg_bsnr_c_fashion_d_sccl_1/524-6514838-9761305?pd_rd_w=9wvNN&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HFJ48P8J&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Inteligente-Bluetooth-Smartwatch-Frecuencia-Compatible/dp/B0HFJ48P8J?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_26a1180bde8d5bef9d16bd4394c09887",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Gen%C3%A9rico-Corset-Medieval-Halloween-Disfraz/dp/B0HLTM3JF2/ref=zg_bsnr_c_fashion_d_sccl_5/524-6514838-9761305?pd_rd_w=9wvNN&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HLTM3JF2&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Gen%C3%A9rico-Corset-Medieval-Halloween-Disfraz/dp/B0HLTM3JF2/ref=zg_bsnr_c_fashion_d_sccl_5/524-6514838-9761305?pd_rd_w=9wvNN&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HLTM3JF2&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Gen%C3%A9rico-Corset-Medieval-Halloween-Disfraz/dp/B0HLTM3JF2?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_7e55426563fd57cd9ba80c2896ea0d6a",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Wamicu-Calcetines-Deporte-Algod%C3%B3n-Acolchados/dp/B0H262G1KH/ref=zg_bsnr_c_fashion_d_sccl_6/524-6514838-9761305?pd_rd_w=9wvNN&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0H262G1KH&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Wamicu-Calcetines-Deporte-Algod%C3%B3n-Acolchados/dp/B0H262G1KH/ref=zg_bsnr_c_fashion_d_sccl_6/524-6514838-9761305?pd_rd_w=9wvNN&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0H262G1KH&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Wamicu-Calcetines-Deporte-Algod%C3%B3n-Acolchados/dp/B0H262G1KH?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_7dc6f708aa3b5ef9bcc1d6aa8793d4a2",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Rolipo-Limpiador-accesorios-seguridad-multifuncional/dp/B0HHMZZBK7/ref=zg_bsnr_c_kitchen_d_sccl_5/524-6514838-9761305?pd_rd_w=hkY8V&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HHMZZBK7&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Rolipo-Limpiador-accesorios-seguridad-multifuncional/dp/B0HHMZZBK7/ref=zg_bsnr_c_kitchen_d_sccl_5/524-6514838-9761305?pd_rd_w=hkY8V&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HHMZZBK7&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Rolipo-Limpiador-accesorios-seguridad-multifuncional/dp/B0HHMZZBK7?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_9e43db1516aa571ba9639afd8e7b0cc2",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Kitsure-Estante-Forma-Piezas-Negro/dp/B0GFDXNYFZ/ref=zg_bsnr_c_kitchen_d_sccl_6/524-6514838-9761305?pd_rd_w=hkY8V&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0GFDXNYFZ&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Kitsure-Estante-Forma-Piezas-Negro/dp/B0GFDXNYFZ/ref=zg_bsnr_c_kitchen_d_sccl_6/524-6514838-9761305?pd_rd_w=hkY8V&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0GFDXNYFZ&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Kitsure-Estante-Forma-Piezas-Negro/dp/B0GFDXNYFZ?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_869928bed9da53b6ae4d9d5cadc0c71d",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Proyector-techo-Navidad-L%C3%A1mpara-Navidad%EF%BC%8C/dp/B0HL8QCQBB/ref=zg_bsnr_c_lighting_d_sccl_1/524-6514838-9761305?pd_rd_w=nMZ0L&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HL8QCQBB&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Proyector-techo-Navidad-L%C3%A1mpara-Navidad%EF%BC%8C/dp/B0HL8QCQBB/ref=zg_bsnr_c_lighting_d_sccl_1/524-6514838-9761305?pd_rd_w=nMZ0L&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HL8QCQBB&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Proyector-techo-Navidad-L%C3%A1mpara-Navidad%EF%BC%8C/dp/B0HL8QCQBB?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_56fe9283d95355628fe3c71773f0cc3f",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/Note-17-Smartphone-bater%C3%ADa-7700mAh/dp/B0H4GYHGZQ/ref=zg_bsnr_c_electronics_d_sccl_5/524-6514838-9761305?pd_rd_w=qne0Y&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0H4GYHGZQ&psc=1",
+      "old_normalized_url": "https://www.amazon.es/Note-17-Smartphone-bater%C3%ADa-7700mAh/dp/B0H4GYHGZQ/ref=zg_bsnr_c_electronics_d_sccl_5/524-6514838-9761305?pd_rd_w=qne0Y&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0H4GYHGZQ&psc=1",
+      "expected_v3_url": "https://www.amazon.es/Note-17-Smartphone-bater%C3%ADa-7700mAh/dp/B0H4GYHGZQ?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+      "evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+      "observation_id": "obs_fcd56ebcf78d59829cd73f29b6d44003",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T20:59:21.432654Z"
+    },
+    {
+      "raw_product_url": "/BRPOM-Arrancador-bater%C3%ADas-compresor-Gasolina/dp/B0F6Y1L3Y4/ref=zg_bsnr_g_automotive_d_sccl_15/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/BRPOM-Arrancador-bater%C3%ADas-compresor-Gasolina/dp/B0F6Y1L3Y4/ref=zg_bsnr_g_automotive_d_sccl_15/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/BRPOM-Arrancador-bater%C3%ADas-compresor-Gasolina/dp/B0F6Y1L3Y4?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\48\\48faba10ff0c0de43beb91d3b8eb9b25c97af4dab7348e3a3e5d44a3c63bf215.html",
+      "evidence_sha256": "48faba10ff0c0de43beb91d3b8eb9b25c97af4dab7348e3a3e5d44a3c63bf215",
+      "observation_id": "obs_8ec85f1c64ee54558e06a5e18ac20532",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T21:00:30.536095Z"
+    },
+    {
+      "raw_product_url": "/Vicloon-Raspador-Inoxidable-Cortadora-Mantequilla/dp/B08YNNN1JS/ref=zg_bs_g_2165553031_d_sccl_100/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Vicloon-Raspador-Inoxidable-Cortadora-Mantequilla/dp/B08YNNN1JS/ref=zg_bs_g_2165553031_d_sccl_100/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Vicloon-Raspador-Inoxidable-Cortadora-Mantequilla/dp/B08YNNN1JS?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\2b\\2b1b894dfbc12c7b6c586d5717347e33953b0eccb6280204a30e279021a13b0e.html",
+      "evidence_sha256": "2b1b894dfbc12c7b6c586d5717347e33953b0eccb6280204a30e279021a13b0e",
+      "observation_id": "obs_3c61c1a793ed55d191107167ac07ac59",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T22:04:48.914631Z"
+    },
+    {
+      "raw_product_url": "/Living-Puppets-Schmackes-Monstruo-776/dp/B07DX6863M/ref=zg_bs_g_1642008031_d_sccl_92/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Living-Puppets-Schmackes-Monstruo-776/dp/B07DX6863M/ref=zg_bs_g_1642008031_d_sccl_92/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Living-Puppets-Schmackes-Monstruo-776/dp/B07DX6863M?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\7c\\7cb33daebe7a86a5982463c19b01fb2c26db1a0ce73900b96df7f0954d60d615.html",
+      "evidence_sha256": "7cb33daebe7a86a5982463c19b01fb2c26db1a0ce73900b96df7f0954d60d615",
+      "observation_id": "obs_2eb9885e7cfb551c935c5804af3aafd2",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T22:21:25.490009Z"
+    },
+    {
+      "raw_product_url": "/Bausch-Lomb-Gotas-humectantes-monodosis/dp/B00ULDNHYC/ref=zg_bs_g_4346881031_d_sccl_47/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Bausch-Lomb-Gotas-humectantes-monodosis/dp/B00ULDNHYC/ref=zg_bs_g_4346881031_d_sccl_47/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Bausch-Lomb-Gotas-humectantes-monodosis/dp/B00ULDNHYC?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e84c5c4bedcf5d13f532595eadc9eadbbda947f610b3a1cb0076fb48a5db99.html",
+      "evidence_sha256": "70e84c5c4bedcf5d13f532595eadc9eadbbda947f610b3a1cb0076fb48a5db99",
+      "observation_id": "obs_a66be51af71f5dc19a4fc515e7ed6c02",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T22:36:47.743386Z"
+    },
+    {
+      "raw_product_url": "/DOJA-Barcelona-Cepillo-Vers%C3%A1til-Resistente/dp/B0FBS9F6SP/ref=zg_bs_g_3915427031_d_sccl_34/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/DOJA-Barcelona-Cepillo-Vers%C3%A1til-Resistente/dp/B0FBS9F6SP/ref=zg_bs_g_3915427031_d_sccl_34/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/DOJA-Barcelona-Cepillo-Vers%C3%A1til-Resistente/dp/B0FBS9F6SP?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\79\\790dbb102050f0152789ff376ff3f9b721eebe2f2d0c753cb5a6afd85e87964a.html",
+      "evidence_sha256": "790dbb102050f0152789ff376ff3f9b721eebe2f2d0c753cb5a6afd85e87964a",
+      "observation_id": "obs_8fc1940f81a15519a765ba82f26ccd8f",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T22:53:00.774738Z"
+    },
+    {
+      "raw_product_url": "/Wilson-Baloncesto-Rendimiento-Superficies-Experimenta/dp/B0DN2H161S/ref=zg_bs_g_2928475031_d_sccl_33/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Wilson-Baloncesto-Rendimiento-Superficies-Experimenta/dp/B0DN2H161S/ref=zg_bs_g_2928475031_d_sccl_33/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Wilson-Baloncesto-Rendimiento-Superficies-Experimenta/dp/B0DN2H161S?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\e2\\e21851ab3d07bfdf51f6d469789d87f2f9e3772f0d396af3cb10b2724c0b2a5f.html",
+      "evidence_sha256": "e21851ab3d07bfdf51f6d469789d87f2f9e3772f0d396af3cb10b2724c0b2a5f",
+      "observation_id": "obs_3094982d943c5a459fa1d2ac42ba2edc",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-13T23:56:37.357100Z"
+    },
+    {
+      "raw_product_url": "/Gen%C3%A9rico-Conjunto-Renacentista-Halloween-Tem%C3%A1ticas/dp/B0HLLQYVFQ/ref=zg_bs_g_1641928031_d_sccl_30/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Gen%C3%A9rico-Conjunto-Renacentista-Halloween-Tem%C3%A1ticas/dp/B0HLLQYVFQ/ref=zg_bs_g_1641928031_d_sccl_30/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Gen%C3%A9rico-Conjunto-Renacentista-Halloween-Tem%C3%A1ticas/dp/B0HLLQYVFQ?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\46\\46ba6dfef06fc338e17f05e8d5ba06209554d5f7076495fdb97fd6a83cd2c7fc.html",
+      "evidence_sha256": "46ba6dfef06fc338e17f05e8d5ba06209554d5f7076495fdb97fd6a83cd2c7fc",
+      "observation_id": "obs_27225df7f65e5aab94026f6a9e8ebd84",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T00:19:21.735808Z"
+    },
+    {
+      "raw_product_url": "/ACWOO-Postparto-Abdominal-Recuperaci%C3%B3n-Moldeador/dp/B0F6VHH32L/ref=zg_bs_g_1895732031_d_sccl_6/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/ACWOO-Postparto-Abdominal-Recuperaci%C3%B3n-Moldeador/dp/B0F6VHH32L/ref=zg_bs_g_1895732031_d_sccl_6/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/ACWOO-Postparto-Abdominal-Recuperaci%C3%B3n-Moldeador/dp/B0F6VHH32L?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\ce\\ceaf318d442a6c601f857c078fad12d300f6531fd44d5d3958cf4af360f0519b.html",
+      "evidence_sha256": "ceaf318d442a6c601f857c078fad12d300f6531fd44d5d3958cf4af360f0519b",
+      "observation_id": "obs_069878166eb853b8acd75b256e844d82",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T00:38:32.522204Z"
+    },
+    {
+      "raw_product_url": "/MIDEA-Deshumidificador-Humedad-Silencioso-Control/dp/B0F1ZSC9LP/ref=zg_bs_g_3605960031_d_sccl_5/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/MIDEA-Deshumidificador-Humedad-Silencioso-Control/dp/B0F1ZSC9LP/ref=zg_bs_g_3605960031_d_sccl_5/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/MIDEA-Deshumidificador-Humedad-Silencioso-Control/dp/B0F1ZSC9LP?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\03\\035f8bd9c35dd7350a0745d509af673dfe3af21347166187af91f23f1ed3269c.html",
+      "evidence_sha256": "035f8bd9c35dd7350a0745d509af673dfe3af21347166187af91f23f1ed3269c",
+      "observation_id": "obs_c3a4a71f1406560a9b1ccba31df4a7d0",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T00:59:01.632203Z"
+    },
+    {
+      "raw_product_url": "/Ved-Gourmet-Original-Maraschino-Cherries/dp/B09K4FXP2T/ref=zg_bs_g_6347919031_d_sccl_31/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Ved-Gourmet-Original-Maraschino-Cherries/dp/B09K4FXP2T/ref=zg_bs_g_6347919031_d_sccl_31/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Ved-Gourmet-Original-Maraschino-Cherries/dp/B09K4FXP2T?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\ad\\adbb452a452c319e81d52f018ba42b2e846d7583d3f905a8fb83204db6e8a973.html",
+      "evidence_sha256": "adbb452a452c319e81d52f018ba42b2e846d7583d3f905a8fb83204db6e8a973",
+      "observation_id": "obs_db75c1917c945b27815530d59cd38b2e",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T02:02:36.280728Z"
+    },
+    {
+      "raw_product_url": "/JNYUTEEN-Pegatinas-Recompensa-Motivaci%C3%B3n-Autoadhesivas/dp/B0GYHNNGPV/ref=zg_bs_g_4352855031_d_sccl_43/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/JNYUTEEN-Pegatinas-Recompensa-Motivaci%C3%B3n-Autoadhesivas/dp/B0GYHNNGPV/ref=zg_bs_g_4352855031_d_sccl_43/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/JNYUTEEN-Pegatinas-Recompensa-Motivaci%C3%B3n-Autoadhesivas/dp/B0GYHNNGPV?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\43\\435a076e081ffd7469be022ec97d6242cbe3b9e4816dbf55c6b7f0e01d7140bf.html",
+      "evidence_sha256": "435a076e081ffd7469be022ec97d6242cbe3b9e4816dbf55c6b7f0e01d7140bf",
+      "observation_id": "obs_e538bfec7f5455c8bc273cbadc3b0153",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T02:23:39.944936Z"
+    },
+    {
+      "raw_product_url": "/Intensamente-Pigmentados-Maquillaje-Difuminar-Awakening/dp/B08RRSYNYN/ref=zg_bs_g_6397876031_d_sccl_3/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Intensamente-Pigmentados-Maquillaje-Difuminar-Awakening/dp/B08RRSYNYN/ref=zg_bs_g_6397876031_d_sccl_3/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Intensamente-Pigmentados-Maquillaje-Difuminar-Awakening/dp/B08RRSYNYN?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\7f\\7f05421b09dc22a602a2387026d284369332d9f2218e2faa2240a953997f6906.html",
+      "evidence_sha256": "7f05421b09dc22a602a2387026d284369332d9f2218e2faa2240a953997f6906",
+      "observation_id": "obs_ee5077c0a5cb58d0b89d361dd3052ee0",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T02:44:02.611533Z"
+    },
+    {
+      "raw_product_url": "/L%C3%A9ku%C3%A9-0207013V28U220-Esp%C3%A1tula-Ranurada/dp/B0BHWRFW63/ref=zg_bs_g_2165643031_d_sccl_12/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/L%C3%A9ku%C3%A9-0207013V28U220-Esp%C3%A1tula-Ranurada/dp/B0BHWRFW63/ref=zg_bs_g_2165643031_d_sccl_12/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/L%C3%A9ku%C3%A9-0207013V28U220-Esp%C3%A1tula-Ranurada/dp/B0BHWRFW63?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\ef\\ef72e33aad65a897bb3ff1e4ebd0d316baf10ea6df56fd52c7e4467088eb5ccb.html",
+      "evidence_sha256": "ef72e33aad65a897bb3ff1e4ebd0d316baf10ea6df56fd52c7e4467088eb5ccb",
+      "observation_id": "obs_cc15f930185e5182a152a775bf12dbf9",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T03:02:18.440723Z"
+    },
+    {
+      "raw_product_url": "/Litoral-Garbanzos-Abuela-Paquete-Total/dp/B079ZYVHMJ/ref=zg_bs_g_6349964031_d_sccl_25/524-6514838-9761305?psc=1",
+      "old_normalized_url": "https://www.amazon.es/Litoral-Garbanzos-Abuela-Paquete-Total/dp/B079ZYVHMJ/ref=zg_bs_g_6349964031_d_sccl_25/524-6514838-9761305?psc=1",
+      "expected_v3_url": "https://www.amazon.es/Litoral-Garbanzos-Abuela-Paquete-Total/dp/B079ZYVHMJ?psc=1",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\ae\\ae49e8668e3bd28839acf821acf57011b2b2516cdd0966951d706c8cb6b72d3a.html",
+      "evidence_sha256": "ae49e8668e3bd28839acf821acf57011b2b2516cdd0966951d706c8cb6b72d3a",
+      "observation_id": "obs_27c1e6a28cc55ae1b6d1b156f690d118",
+      "origin": "LIVE_CAPTURE",
+      "observed_at": "2026-10-14T03:21:36.790779Z"
+    }
+  ]
+}

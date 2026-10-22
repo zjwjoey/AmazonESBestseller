@@ -1,0 +1,11 @@
+{
+  "original_evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\70\\70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955.html",
+  "original_evidence_sha256": "70e05f3fbdd107373e7503719d2358eadec2dc5e384288100fa7a8af0b21e955",
+  "source_url": "https://www.amazon.es/gp/new-releases",
+  "source_type": "NEW_RELEASES",
+  "observed_at": "2026-10-13T20:59:21.432654Z",
+  "raw_product_url": "/drenaje-linf%C3%A1tico-linfatico-piernas-abdomen/dp/B0HKFF6Z73/ref=zg_bsnr_c_hpc_d_sccl_1/524-6514838-9761305?pd_rd_w=ME4xH&content-id=amzn1.sym.8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_p=8303e4e0-ff33-4e3a-a0df-6dca8366e606&pf_rd_r=WT7GDM5XYN1PEBQ9V079&pd_rd_wg=qqVlA&pd_rd_r=6ca87555-585b-4882-97c1-4ee33597e51a&pd_rd_i=B0HKFF6Z73&psc=1",
+  "fixture_sha256": "bd166d0f29ebb6e529b95ac621f9c511d408dae8c84d270d544f6ce0d9862ff6",
+  "representation": "SERVER",
+  "derivation": "BeautifulSoup serialized actual card; not synthetic"
+}

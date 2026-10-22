@@ -1,0 +1,9 @@
+{
+  "origin": "LIVE_CAPTURE",
+  "source_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\b4\\b44931b466c475d81cea339e8e85664193bf403e58c4bf113a55e1b5e91b9f41.html",
+  "sha256": "b44931b466c475d81cea339e8e85664193bf403e58c4bf113a55e1b5e91b9f41",
+  "request_url": "https://www.amazon.es/gp/bestsellers/luggage",
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "fixture_copy_only": true
+}

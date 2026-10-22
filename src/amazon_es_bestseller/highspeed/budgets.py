@@ -1,0 +1,104 @@
+"""Independent, finite V2 limits; no legacy phase or source quotas."""
+from __future__ import annotations
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+import math
+
+LIMIT_FIELDS = ("max_requests_per_run", "max_pages_per_run", "max_requests_per_day",
+                "max_raw_observations_per_run", "history_observation_limit")
+
+def aware_time(value=None):
+    if value is None:
+        return datetime.now(timezone.utc)
+    result = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if result.tzinfo is None:
+        raise ValueError("AWARE_TIMESTAMP_REQUIRED")
+    return result.astimezone(timezone.utc)
+
+def utc_text(value=None):
+    return aware_time(value).isoformat().replace("+00:00", "Z")
+
+def madrid_day(value=None):
+    return aware_time(value).astimezone(ZoneInfo("Europe/Madrid")).date().isoformat()
+
+def validate_plan(plan):
+    if plan.get('snapshot_contract_version') == 4:
+        from .v4_authorization import validate_plan_v4
+        return validate_plan_v4(plan)
+    if plan.get("mode") != "HIGH_SPEED_V2" or plan.get("stage") not in {"T0", "T1", "T2", "T3"}:
+        raise ValueError("HIGH_SPEED_STAGE_REQUIRED")
+    contract_version = plan.get("snapshot_contract_version", 2)
+    if type(contract_version) is not int or contract_version not in {2, 3}:
+        raise ValueError("UNSUPPORTED_SNAPSHOT_CONTRACT_VERSION")
+    probe_all = plan.get('probe_all_reviewed_page_urls', False)
+    if type(probe_all) is not bool:
+        raise ValueError('PROBE_SCOPE_BOOLEAN_REQUIRED')
+    if probe_all and (contract_version != 3 or plan.get('stage') != 'T1'):
+        raise ValueError('PROBE_ALL_SCOPE_ONLY_V3_T1')
+    if contract_version == 3:
+        from .v3_links import NORMALIZER_VERSION
+        if plan.get("normalizer_version") != NORMALIZER_VERSION:
+            raise ValueError("V3_REVIEWED_NORMALIZER_REQUIRED")
+        if plan.get("request_pacing_seconds", 0) < 3:
+            raise ValueError("V3_SERIAL_THREE_SECOND_PACING_REQUIRED")
+        if any(s.get("parser_profile") != "V3" for s in plan.get("sources", [])):
+            raise ValueError("V3_PARSER_PROFILE_REQUIRED")
+        if plan.get("stage") == "T3" and plan.get("origin") == "LIVE_CAPTURE":
+            if (plan.get("new_batch_required") is not True or plan.get("parent_run_id")
+                    or plan.get("continuation_mode") or plan.get("seed_reference")
+                    or any(s.get("offline_pages") or s.get("seed_reference") for s in plan.get("sources", []))):
+                raise ValueError("V3_T3_FRESH_BATCH_REQUIRED")
+    for field in (*LIMIT_FIELDS, "target_unique_links"):
+        if isinstance(plan.get(field), bool) or not isinstance(plan.get(field), int) or plan[field] <= 0:
+            raise ValueError("FINITE_POSITIVE_BUDGET_REQUIRED:" + field)
+    for field in ("max_duration_hours", "request_pacing_seconds"):
+        value = plan.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            raise ValueError("FINITE_DURATION_OR_PACING_REQUIRED:" + field)
+    if plan["request_pacing_seconds"] < 2 or plan.get("parallelism", 1) != 1:
+        raise ValueError("SERIAL_CONSERVATIVE_ACCESS_REQUIRED")
+    if plan.get("category_cooldown_seconds") != 0:
+        raise ValueError("V2_CATEGORY_COOLDOWN_MUST_BE_ZERO")
+    if plan.get("global_access_gate") is not True:
+        raise ValueError("GLOBAL_ACCESS_GATE_REQUIRED")
+    for field in ("detail_collection", "translation", "image_download", "action_filtering"):
+        if plan.get(field) is not False:
+            raise ValueError("FORBIDDEN_COLLECTION_FEATURE:" + field)
+    if not plan.get("sources"):
+        raise ValueError("SOURCE_PLAN_REQUIRED")
+    identifiers, physical_urls = set(), set()
+    for source in plan["sources"]:
+        if not source.get("source_id") or source["source_id"] in identifiers:
+            raise ValueError("UNIQUE_SOURCE_ID_REQUIRED")
+        identifiers.add(source["source_id"])
+        if source.get("source_type") not in {"BEST_SELLERS", "MOVERS_SHAKERS", "NEW_RELEASES", "MOST_WISHED_FOR", "MOST_GIFTED"}:
+            raise ValueError("VALID_SOURCE_TYPE_REQUIRED")
+        if not source.get("page_urls"):
+            raise ValueError("EXACT_SOURCE_PAGES_REQUIRED")
+        from ..multisource.contracts import canonical_page_url
+        for url in source["page_urls"]:
+            key = canonical_page_url(url)
+            if key in physical_urls:
+                raise ValueError("DUPLICATE_PHYSICAL_SOURCE_PAGE")
+            physical_urls.add(key)
+    return plan
+
+def budget_reason(plan, counters, *, now=None, started_at=None, kind="PAGE", raw_count=0, authorization=None):
+    now = aware_time(now)
+    extension=None
+    if authorization and authorization.get('time_extension_reference'):
+        from .task_clock import validate_task_clock
+        extension=validate_task_clock(plan,authorization,now=now)
+    if (extension and now>=aware_time(extension['request_deadline']) or not extension and started_at and (now - aware_time(started_at)).total_seconds() >= plan["max_duration_hours"] * 3600):
+        return "MAX_DURATION_REACHED"
+    if counters.get("requests", 0) >= plan["max_requests_per_run"]:
+        return "RUN_REQUEST_BUDGET_EXHAUSTED"
+    if counters.get("requests_by_day", {}).get(madrid_day(now), 0) >= plan["max_requests_per_day"]:
+        return "DAY_REQUEST_BUDGET_EXHAUSTED"
+    if kind == "PAGE" and counters.get("page_requests", counters.get("pages", 0)) >= plan["max_pages_per_run"]:
+        return "PAGE_BUDGET_EXHAUSTED"
+    if counters.get("observations", 0) + raw_count > plan["max_raw_observations_per_run"]:
+        return "RAW_OBSERVATION_BUDGET_EXHAUSTED"
+    if counters.get("history_observations", 0) + raw_count > plan["history_observation_limit"]:
+        return "HISTORY_STORAGE_BUDGET_EXHAUSTED"
+    return None

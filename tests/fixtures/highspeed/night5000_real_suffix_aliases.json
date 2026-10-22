@@ -1,0 +1,25 @@
+{
+  "provenance": {
+    "source_database": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\index.sqlite3",
+    "mode": "READ_ONLY_SQLITE",
+    "note": "Two actual saved card URLs with same opaque route and different ref/session suffixes; original URLs/candidate IDs unchanged."
+  },
+  "samples": [
+    {
+      "raw_product_url": "/Candure-Tijeras-Peluqueria-Profesional-Inoxidable/dp/B00CP3EA5G/ref=zg_bs_g_4346878031_d_sccl_14/524-6514838-9761305?psc=1",
+      "normalized_product_url": "https://www.amazon.es/Candure-Tijeras-Peluqueria-Profesional-Inoxidable/dp/B00CP3EA5G/ref=zg_bs_g_4346878031_d_sccl_14/524-6514838-9761305?psc=1",
+      "candidate_id": "link_cfdc61cb402c5268b926c9fb9ff14e4d",
+      "original_possible_duplicate_key": "https://www.amazon.es/Candure-Tijeras-Peluqueria-Profesional-Inoxidable/dp/B00CP3EA5G/ref=zg_bs_g_4346878031_d_sccl_14/524-6514838-9761305",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\d4\\d43a62ee5526e6cca0d077f433d571582291b37fec43f0c38d7bf9f9f3da843c.html",
+      "evidence_sha256": "d43a62ee5526e6cca0d077f433d571582291b37fec43f0c38d7bf9f9f3da843c"
+    },
+    {
+      "raw_product_url": "/Candure-Tijeras-Peluqueria-Profesional-Inoxidable/dp/B00CP3EA5G/ref=zg_bs_g_4347698031_d_sccl_48/524-6514838-9761305?psc=1",
+      "normalized_product_url": "https://www.amazon.es/Candure-Tijeras-Peluqueria-Profesional-Inoxidable/dp/B00CP3EA5G/ref=zg_bs_g_4347698031_d_sccl_48/524-6514838-9761305?psc=1",
+      "candidate_id": "link_8b53c67d0de95e0ea78dec6ffdf7ad97",
+      "original_possible_duplicate_key": "https://www.amazon.es/Candure-Tijeras-Peluqueria-Profesional-Inoxidable/dp/B00CP3EA5G/ref=zg_bs_g_4347698031_d_sccl_48/524-6514838-9761305",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\aa\\aaaec1f0833f2bbaf0470687f387b3adb32cf90391fb7e4e3b9f403674c6155d.html",
+      "evidence_sha256": "aaaec1f0833f2bbaf0470687f387b3adb32cf90391fb7e4e3b9f403674c6155d"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "source_type": "MOVERS_SHAKERS",
+    "original_saved_html_sha256": "0863758d38baaf11d0e4643e499a1aa095793878f67c05fa584905a71c35eeaa",
+    "fixture": "movers_shakers.html",
+    "selection": "Exact saved title, ranked landing H1s, browse-root subtree, shortcut-menu subtree; script/style removed only from shortcut-menu. No invented products."
+  },
+  {
+    "source_type": "MOST_WISHED_FOR",
+    "original_saved_html_sha256": "7f2b89171a71c6c9e326f88a787c30e940aaaa887256d16d86d710519df88c25",
+    "fixture": "most_wished_for.html",
+    "selection": "Exact saved title, ranked landing H1s, browse-root subtree, shortcut-menu subtree; script/style removed only from shortcut-menu. No invented products."
+  },
+  {
+    "source_type": "MOST_GIFTED",
+    "original_saved_html_sha256": "292e2c59a481979c7206ce2d746d6301af1ebae1e3b3143e03ee0dee471511f6",
+    "fixture": "most_gifted.html",
+    "selection": "Exact saved title, ranked landing H1s, browse-root subtree, shortcut-menu subtree; script/style removed only from shortcut-menu. No invented products."
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "original_html_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\26\\260336d97e8ed4262e09b9b2e39ac72a545adb8184af7a5beb4ceef2d27b16a9.html",
+  "original_html_sha256": "260336d97e8ed4262e09b9b2e39ac72a545adb8184af7a5beb4ceef2d27b16a9",
+  "source_url": "https://www.amazon.es/gp/most-wished-for/sports",
+  "origin": "HISTORICAL_REPLAY",
+  "excerpt_selector": "#zg_browseRoot, [class*=\"zg-browse-root\"]",
+  "fixture_sha256": "494ad436a209911d677c9b64235e203482163b58084bbe80595fa58d292834e0",
+  "literal_source_count": 62,
+  "actual_deep_nav_sample_urls": [
+    "https://www.amazon.es/gp/most-wished-for/sports/2928471031",
+    "https://www.amazon.es/gp/most-wished-for/sports/2928472031",
+    "https://www.amazon.es/gp/most-wished-for/sports/2928473031"
+  ]
+}
