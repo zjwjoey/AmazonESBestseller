@@ -9,7 +9,8 @@ from bs4 import BeautifulSoup
 
 from ..categories.provenance import category_evidence_from_detail
 from ..identity import asin_from_url, resolve_identity
-from .detail import parse_detail_page
+from .detail import (_page_asin_candidates, _parse_detail_page_soup,
+                     _weak_page_asin_observations)
 
 
 def _json_after(text: str, marker: str, opener: str = "{"):
@@ -77,35 +78,33 @@ def _variation_evidence(html: str) -> dict:
             "products": products, "count": len(products)}
 
 
-def _page_asins(html: str) -> set[str]:
-    soup = BeautifulSoup(html or "", "lxml")
-    values = set()
-    for element in soup.select("input#ASIN, input[name='ASIN'], input#productAsin, [data-asin]"):
-        value = str(element.get("value") or element.get("data-asin") or "").upper().strip()
-        if re.fullmatch(r"[A-Z0-9]{10}", value):
-            values.add(value)
-    for value in re.findall(r"/dp/([A-Z0-9]{10})", html or "", re.I):
-        values.add(value.upper())
-    return values
+def _page_asin_signals(html: str, soup=None) -> tuple[set[str], set[str]]:
+    """Split page-owned identity signals from page-wide card/link observations."""
+    soup = soup or BeautifulSoup(html or "", "lxml")
+    strong = _page_asin_candidates(soup)
+    weak = _weak_page_asin_observations(soup, strong)
+    return strong, weak
 
 
-def _canonical_asin(html: str) -> str:
-    soup = BeautifulSoup(html or "", "lxml")
+def _canonical_asin(soup) -> str:
     link = soup.select_one('link[rel="canonical"]')
     return asin_from_url(link.get("href") if link else "")
 
 
 def parse_detail_evidence_v2(html: str, requested_asin: str, *, requested_url: str = "",
                              final_url: str = "", ranking_context: dict | None = None) -> dict:
-    base = parse_detail_page(html, requested_asin)
+    html = html or ""
+    soup = BeautifulSoup(html, "lxml")
+    base = _parse_detail_page_soup(soup, html, requested_asin)
     variation = _variation_evidence(html)
-    page_asins = _page_asins(html)
-    canonical_asin = _canonical_asin(html)
+    page_asins, weak_page_asins = _page_asin_signals(html, soup)
+    canonical_asin = _canonical_asin(soup)
     identity = resolve_identity(
         ranking_asin=requested_asin, requested_asin=requested_asin,
         requested_url=requested_url, final_url_asin=final_url,
         canonical_asin=canonical_asin,
         embedded_asins=page_asins, parsed_detail_asin=variation.get("current_asin") or "",
+        weak_embedded_asins=weak_page_asins,
         parent_asin=variation.get("parent_asin") or base.get("parent_asin") or "",
         variation_family_asins=variation.get("family_asins") or [],
     )

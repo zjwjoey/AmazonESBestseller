@@ -5,8 +5,12 @@ import hashlib
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from bs4 import BeautifulSoup
+
 from ..access.detector import detect_access_status
-from ..collection.detail import _page_asin_evidence, parse_detail_page
+from ..collection.detail import (
+    _page_asin_candidates, _weak_page_asin_observations, parse_detail_page,
+)
 from ..identity import IDENTITY_MATCH, resolve_identity
 from ..models import is_valid_asin
 
@@ -69,12 +73,15 @@ def verify_candidate_selection(candidate_snapshot: Mapping, saved_detail_html: s
                                  "asin_observed": asin, "reason": "DETAIL_ACCESS_RESTRICTED"})
                 continue
             parsed = parse_detail_page(html, asin)
-            page_asins = _page_asin_evidence(html)
+            soup = BeautifulSoup(html, "lxml")
+            page_asins = _page_asin_candidates(soup)
+            weak_page_asins = _weak_page_asin_observations(soup, page_asins)
             identity = resolve_identity(
                 ranking_asin=asin, requested_asin=asin,
                 requested_url=str(observation.get("normalized_product_url") or ""),
                 canonical_asin=parsed.get("canonical_asin") or "",
                 embedded_asins=page_asins,
+                weak_embedded_asins=weak_page_asins,
                 parsed_detail_asin=asin if parsed.get("title_es_raw") and asin in page_asins else "",
             )
             if (identity.get("identity_status") != IDENTITY_MATCH or not parsed.get("title_es_raw")

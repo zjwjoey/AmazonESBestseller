@@ -250,6 +250,35 @@ def test_parallel_task_runner_writes_manifest_and_report(monkeypatch, tmp_path):
     assert (tmp_path / "run" / "run_report.json").exists()
 
 
+def test_system_persistence_failure_stops_task_without_category_retry(monkeypatch, tmp_path):
+    plan = _plan()
+    calls = []
+
+    def fail_first_category(category, plan, output, worker_id, headful, profile_dir,
+                            claim_asins, release_asins, completed_urls, stop_event=None):
+        group = category["research_category"]
+        calls.append(group)
+        if group == "A":
+            raise OSError("checkpoint storage unavailable")
+        return {
+            "research_category": group, "status": "COMPLETE", "rankings": [],
+            "details": [], "completed_source_urls": [], "raw_ranking_records": 0,
+            "unique_asins": 0, "detail_records": 0,
+        }
+
+    monkeypatch.setattr("amazon_es_bestseller.collection.task._run_category_live",
+                        fail_first_category)
+    report = run_task(plan, str(tmp_path / "run"), mode="serial")
+
+    assert calls == ["A"]
+    assert report["run_status"] == "SYSTEM_ERROR"
+    assert report["system_failures"] == [{
+        "category": "A", "error_type": "OSError",
+        "error": "checkpoint storage unavailable",
+    }]
+    assert json.loads((tmp_path / "run" / "final_manifest.json").read_text(encoding="utf-8")) == []
+
+
 def test_parallel_access_stop_closes_worker_request_gate(monkeypatch, tmp_path):
     plan = _plan()
     plan["scheduler"]["access_stop_scope"] = "all"

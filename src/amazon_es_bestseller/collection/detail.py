@@ -100,12 +100,16 @@ _DETAIL_CATEGORY_SKIP = {
 }
 
 
-def _detail_category_trail(soup) -> list[str]:
-    """Visible product breadcrumb, root → leaf, as raw Spanish evidence."""
-    container = soup.select_one("#wayfinding-breadcrumbs_feature_div")
-    if container is None:
-        return []
+_DETAIL_BREADCRUMB_SELECTORS = (
+    ("wayfinding-breadcrumbs", "#wayfinding-breadcrumbs_feature_div"),
+    # Amazon's newer desktop card has the same product breadcrumb, but some
+    # saved pages contain only this surface. It is a scoped fallback: never
+    # search arbitrary page-wide navigation or recommendation cards.
+    ("desktop-breadcrumbs", "#desktop-breadcrumbs_feature_div"),
+)
+def _category_links(container) -> tuple[list[str], list[dict]]:
     trail = []
+    links = []
     seen = set()
     for a in container.select("a"):
         name = _clean(a.get_text(" ", strip=True))
@@ -114,10 +118,77 @@ def _detail_category_trail(soup) -> list[str]:
             continue
         seen.add(key)
         trail.append(name)
-    return trail
+        links.append({"label_raw": name, "href_raw": str(a.get("href") or "").strip()})
+    return trail, links
 
 
-def _parent_asin(soup) -> str:
+def _detail_category_evidence(soup) -> list[dict]:
+    """Return distinct, scoped product breadcrumb candidates with provenance."""
+    candidates = []
+    seen_paths = set()
+    for source, selector in _DETAIL_BREADCRUMB_SELECTORS:
+        container = soup.select_one(selector)
+        if container is None or _hidden(container) or _secondary_product(container):
+            continue
+        trail, links = _category_links(container)
+        key = tuple(value.casefold() for value in trail)
+        if not trail or key in seen_paths:
+            # Preserve duplicate selector evidence only when it adds distinct
+            # labels; duplicate layouts should not imply a deeper path.
+            continue
+        seen_paths.add(key)
+        candidates.append({"source": source, "path": trail, "links": links})
+    return candidates
+
+
+def _detail_category_trail(soup) -> list[str]:
+    """Best scoped visible product breadcrumb, root → leaf, raw Spanish."""
+    candidates = _detail_category_evidence(soup)
+    return list(candidates[0]["path"]) if candidates else []
+
+
+def _bsr_category_evidence(soup) -> list[dict]:
+    """Preserve explicit BSR category links without treating them as a path."""
+    out, seen = [], set()
+    for selector in ("#SalesRank", "#detailBulletsWrapper_feature_div", "#prodDetails"):
+        for container in soup.select(selector):
+            if _hidden(container) or _secondary_product(container):
+                continue
+            for anchor in container.select("a[href]"):
+                href = str(anchor.get("href") or "").strip()
+                if not re.search(r"/gp/bestsellers/|(?:\?|&)node=", href, re.I):
+                    continue
+                label = _clean(anchor.get_text(" ", strip=True))
+                if not label:
+                    continue
+                # Only retain links attached to an explicit rank statement;
+                # unrelated help/store links in the same product block are
+                # not category evidence.
+                parent_text = ""
+                node = anchor
+                found_rank_context = False
+                while node is not None:
+                    parent_text = _clean(node.get_text(" ", strip=True))
+                    if re.search(r"(?:n\.?º|número|puesto)\s*[\d.,]+\s+en\s+", parent_text, re.I):
+                        found_rank_context = True
+                        break
+                    if node is container:
+                        break
+                    node = node.parent
+                if not found_rank_context:
+                    continue
+                match = re.search(r"(?:[?&]node=|/)(\d{5,})(?:[/?&#]|$)", href, re.I)
+                row = {"label_raw": label, "href_raw": href,
+                       "browse_node_id": match.group(1) if match else None,
+                       "source_container": selector}
+                key = (label.casefold(), href)
+                if key not in seen:
+                    seen.add(key)
+                    out.append(row)
+    return out
+
+
+def _parent_asin(soup, html: str | None = None) -> str:
     """隐藏域 parentASIN → 10 位 ASIN；值不合法 → 空（缺失→空，不臆造）。"""
     for sel in _PARENT_ASIN_SELECTORS:
         el = soup.select_one(sel)
@@ -128,7 +199,7 @@ def _parent_asin(soup) -> str:
             return v.upper()
     # Modern detail pages may expose the confirmed family ASIN in an explicit
     # page-state JSON object instead of the legacy hidden input.
-    for match in _PARENT_ASIN_JSON_RE.finditer(str(soup)):
+    for match in _PARENT_ASIN_JSON_RE.finditer(html if html is not None else str(soup)):
         v = match.group(1).strip()
         if _ASIN_RE.fullmatch(v):
             return v.upper()
@@ -434,7 +505,11 @@ def parse_detail_page(html: str, asin: str) -> dict:
     ``date_first_available_raw``（归一为 parse_es_date 接受的 "D M YYYY"）、
     ``product_url``（由 ASIN 确定性派生）、``image_url``（主图 src/高分辨率回退）。
     """
-    soup = BeautifulSoup(html, "lxml")
+    return _parse_detail_page_soup(BeautifulSoup(html or "", "lxml"), html or "", asin)
+
+
+def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
+    """Internal parser entry used by V2 to share one DOM for one HTML page."""
     body = soup.find("body")
     page_text = _clean(body.get_text(" ", strip=True)) if body is not None else ""
     is_captcha = bool(CAPTCHA_RE.search(page_text))
@@ -506,6 +581,20 @@ def parse_detail_page(html: str, asin: str) -> dict:
     # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
     selected_variation_raw = _selected_variation(soup)
 
+    bsr_category_raw = ""
+    if detail_bsr_raw:
+        bsr_match = re.search(r"\s+en\s+(.+)$", detail_bsr_raw, re.I)
+        if bsr_match:
+            bsr_category_raw = _clean(bsr_match.group(1))
+    bsr_links = _bsr_category_evidence(soup)
+    bsr_id_matches = []
+    for row in bsr_links:
+        label = re.sub(r"^ver el top\s*\d+\s+en\s+", "", row["label_raw"], flags=re.I).strip()
+        if bsr_category_raw and label.casefold() == bsr_category_raw.casefold() and row.get("browse_node_id"):
+            bsr_id_matches.append(row["browse_node_id"])
+
+    category_evidence = _detail_category_evidence(soup)
+    category_trail = list(category_evidence[0]["path"]) if category_evidence else []
     return {
         "asin": asin,
         "detail_schema_version": CURRENT_DETAIL_SCHEMA_VERSION,
@@ -520,16 +609,20 @@ def parse_detail_page(html: str, asin: str) -> dict:
         "review_count_raw": review_count_raw,
         "availability_raw": availability_raw,
         "detail_bsr_raw": detail_bsr_raw,
+        "bsr_category_id": (bsr_id_matches[0] if len(set(bsr_id_matches)) == 1 else None),
+        "bsr_category_path": ([bsr_category_raw] if bsr_category_raw else []),
+        "bsr_category_evidence": bsr_links,
         "seller_raw": seller_raw,
         "brand_raw": brand_raw,
         "selected_variation_raw": selected_variation_raw,
         "sold_by_amazon": sold_by_amazon,
         "fulfilled_by_amazon": fulfilled_by_amazon,
-        "parent_asin": _parent_asin(soup),
+        "parent_asin": _parent_asin(soup, html),
         "date_first_available_raw": _first_available_date_raw(soup),
         "product_url": _product_url(asin),
         "image_url": _main_image_url(soup),
-        "detail_category_trail": _detail_category_trail(soup),
+        "detail_category_trail": category_trail,
+        "detail_category_evidence": category_evidence,
         # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
         "attributes": _collect_attributes(soup),
         "feature_bullets_raw": _feature_bullets_raw(soup),
@@ -539,29 +632,48 @@ def parse_detail_page(html: str, asin: str) -> dict:
 
 
 def _page_asin_candidates(soup) -> set[str]:
-    """Extract explicit page identity signals when Amazon exposes them."""
+    """Return only page-owned identity signals; page-wide cards are weak."""
     strong = set()
-    weak = set()
     for el in soup.select("input#ASIN, input[name='ASIN'], input#productAsin"):
         value = el.get("value") or el.get("data-asin") or ""
         if _ASIN_RE.fullmatch(str(value).strip()):
             strong.add(str(value).strip().upper())
-    for el in soup.select("[data-asin]"):
-        value = el.get("data-asin") or ""
-        if _ASIN_RE.fullmatch(str(value).strip()):
-            weak.add(str(value).strip().upper())
     for link in soup.select("link[rel='canonical'], meta[property='og:url']"):
         value = link.get("href") or link.get("content") or ""
-        match = re.search(r"/dp/([A-Z0-9]{10})", str(value), re.I)
+        match = re.search(r"/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})(?:[/?#]|$)",
+                          str(value), re.I)
         if match:
             strong.add(match.group(1).upper())
-    return strong or weak
+    # Some modern detail pages expose the current ASIN on the main product
+    # shell rather than the legacy hidden input. Keep this scope explicit.
+    for el in soup.select("#dp-container[data-asin], #ppd[data-asin], #centerCol[data-asin]"):
+        value = str(el.get("data-asin") or "").strip()
+        if _ASIN_RE.fullmatch(value):
+            strong.add(value.upper())
+    return strong
+
+
+def _weak_page_asin_observations(soup, strong=None) -> set[str]:
+    """Keep recommendation/card ASINs for diagnostics without identity force."""
+    values = set()
+    for el in soup.select("[data-asin]"):
+        value = str(el.get("data-asin") or "").strip()
+        if _ASIN_RE.fullmatch(value):
+            values.add(value.upper())
+    for link in soup.select("a[href]"):
+        match = re.search(r"/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})(?:[/?#]|$)",
+                          str(link.get("href") or ""), re.I)
+        if match:
+            values.add(match.group(1).upper())
+    return values - set(strong or ())
 
 
 def _page_asin_evidence(html: str) -> list[str]:
     """Return explicit ASINs found in a saved page for mismatch diagnostics."""
     try:
-        return sorted(_page_asin_candidates(BeautifulSoup(html, "lxml")))
+        soup = BeautifulSoup(html, "lxml")
+        strong = _page_asin_candidates(soup)
+        return sorted(strong | _weak_page_asin_observations(soup, strong))
     except Exception:
         return []
 
@@ -640,12 +752,15 @@ def _classify_saved_page(html: str, asin: str, meta: dict, *,
 
 def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | None) -> dict:
     """Use the shared resolver for live and cached detail evidence."""
-    page_asins = _page_asin_evidence(html)
-    parsed = page_asins[0] if len(page_asins) == 1 else ""
+    soup = BeautifulSoup(html, "lxml")
+    page_asins = _page_asin_candidates(soup)
+    weak_page_asins = _weak_page_asin_observations(soup, page_asins)
+    parsed = next(iter(page_asins)) if len(page_asins) == 1 else ""
     record = record or {}
     identity = resolve_identity(
         ranking_asin=asin, requested_asin=asin, final_url_asin=final_url,
         embedded_asins=page_asins, parsed_detail_asin=parsed,
+        weak_embedded_asins=weak_page_asins,
         parent_asin=record.get("parent_asin") or record.get("parent_asin_raw"),
         variation_family_asins=record.get("variation_family_asins") or record.get("variation_asins") or [],
     )
@@ -937,8 +1052,21 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                           "recovered_from_challenge": meta.get("recovered_from_challenge"),
                           "requested_url": meta.get("requested_url"),
                           "_metadata_error": meta.get("_metadata_error")}
-            classification, parsed_state, rec = _classify_saved_page(
-                html, asin, cache_meta, parser_version=parser_version)
+            try:
+                classification, parsed_state, rec = _classify_saved_page(
+                    html, asin, cache_meta, parser_version=parser_version)
+            except OSError:
+                # Read/parse output cannot be committed if storage is failing.
+                # A system persistence fault must stop admission, not become an
+                # ordinary per-product failure.
+                raise
+            except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                failed.append(asin)
+                checkpoint(asin, {"asin": asin, "status": "failed",
+                    "detail_status": "PARSER_ERROR", "error_type": type(exc).__name__.upper(),
+                    "error": str(exc), "source": "cache"})
+                progress(asin, "failed")
+                continue
             force_refetch = execution_context.get(asin, {}).get("action") == "REFETCH_INVALID_CACHE"
             if classification == "CHALLENGE":
                 if not getattr(session, "manual_assist", False):
@@ -1019,23 +1147,29 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 continue
         request_started = False
         access_stopped = False
+        stage = "request"
         try:
             requested_url = str(request_urls.get(asin) or
                                 ("https://www.amazon.es/dp/" + asin))
             request_started = True
             status = session.goto(requested_url)
+            stage = "document_wait"
             session.wait_for_product_page()
             session.wait_for_price_text()
             time.sleep(1.5)
+            stage = "document_capture"
             html = session.page.content()
+            stage = "raw_persist"
             with open(path, "w", encoding="utf-8") as f:
                 f.write(html)  # 先保留证据，再判定访问状态
+            stage = "access_gate"
             initial_state = detect_access_status(status, html)
             state = initial_state
             from ..access.challenge import maybe_wait_for_challenge
             original_html = html
             state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
             if original_html != html and state.value == "NORMAL":
+                stage = "challenge_evidence_persist"
                 with open(path + ".challenge", "w", encoding="utf-8") as f:
                     f.write(original_html)
                 with open(path, "w", encoding="utf-8") as f:
@@ -1043,6 +1177,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             # Save HTTP evidence even when the gate stops here. Otherwise a
             # 403 with product-like HTML could be replayed as a legacy 200.
             final_url = str(getattr(session.page, "url", "") or "")
+            stage = "metadata_persist"
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"status_code": status, "final_url": final_url,
                            "requested_url": requested_url, "requested_asin": asin,
@@ -1051,6 +1186,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                            "recovered_from_challenge": recovered}, f,
                           ensure_ascii=False, indent=2)
             try:
+                stage = "access_checkpoint"
                 require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
                                       % (status, asin, len(details)))
             except AccessStopError as exc:
@@ -1061,6 +1197,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                  "access_state": state.value, "error": str(exc)})
                 progress(asin, "access_stop")
                 raise
+            stage = "parse"
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, {"status_code": status, "final_url": final_url,
                              "initial_access_state": initial_state.value,
@@ -1078,6 +1215,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                  "observed_page_asins": _page_asin_evidence(html)})
                 progress(asin, "invalid")
                 continue
+            stage = "identity"
             identity = _resolve_page_identity(asin, html, final_url, rec)
             if identity["identity_status"] in {"IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED"}:
                 quarantine_invalid(asin, path, meta_path)
@@ -1108,6 +1246,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             rec["identity_status_code"] = identity["identity_status"]
             rec["identity_evidence"] = identity["identity_evidence"]
             rec["detail_status"] = "SUCCESS"
+            stage = "success_checkpoint"
             checkpoint(asin, {"asin": asin, "status": "success",
                              "source": "network", "record": rec})
             progress(asin, "success")
@@ -1115,18 +1254,29 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             access_stopped = True
             raise  # 访问受限：按策略停止，受限页证据已落盘
         except Exception as exc:
-            failed.append(asin)  # 瞬时网络故障：失败隔离，不重试不绕过
             message = str(exc).lower()
             error_type = type(exc).__name__.upper()
-            if isinstance(exc, TimeoutError) or "timeout" in message:
-                detail_status = "TIMEOUT"
-            elif (isinstance(exc, ConnectionError)
-                  or any(token in message for token in ("network", "connection", "navigation"))):
-                detail_status = "TRANSIENT_NETWORK_FAILURE"
-            elif isinstance(exc, (ValueError, KeyError, TypeError)):
+            if isinstance(exc, OSError) and stage not in {
+                    "request", "document_wait", "document_capture"}:
+                # Evidence, metadata, and checkpoint persistence failures are
+                # system-level. TimeoutError is also an OSError on Python, so
+                # only capture-stage OSErrors are eligible for network typing.
+                raise
+            if stage == "parse" and isinstance(exc, (ValueError, KeyError, TypeError, AttributeError)):
                 detail_status = "PARSER_ERROR"
+            elif stage in {"request", "document_wait", "document_capture"} and (
+                    isinstance(exc, TimeoutError) or "timeout" in message):
+                detail_status = "TIMEOUT"
+            elif stage in {"request", "document_wait", "document_capture"} and (
+                    isinstance(exc, ConnectionError)
+                    or any(token in message for token in (
+                        "network", "connection", "navigation", "net::err_"))):
+                detail_status = "TRANSIENT_NETWORK_FAILURE"
             else:
-                detail_status = "FAILED"
+                # Unknown control-flow, browser, identity, and system failures
+                # have not been proven safe to isolate as a single bad SKU.
+                raise
+            failed.append(asin)
             checkpoint(asin, {"asin": asin, "status": "failed",
                              "detail_status": detail_status,
                              "error_type": error_type, "error": str(exc)})
