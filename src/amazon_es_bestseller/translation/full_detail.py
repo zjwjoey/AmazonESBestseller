@@ -249,35 +249,36 @@ def _display_rows(attributes) -> list:
         if label.lower() in _META_LABELS:
             continue
         # 折叠控件：还原完整文本，去掉 "Ver más" 按钮文字
-        value, _ = expand_collapsed_value(value)
+        value, truncated = expand_collapsed_value(value)
+        truncated = truncated or value.endswith(("…", "..."))
         # 零信息占位（"desconocido" / "No aplicable"）不进展示层
         if not value or _is_placeholder(value):
             continue
         key = label.lower()
         v = value.strip()
         if key not in best:
-            best[key] = [(label, v)]
+            best[key] = [(label, v, truncated)]
             order.append(key)
         else:
-            for index, (_, cur) in enumerate(best[key]):
+            for index, (_, cur, cur_truncated) in enumerate(best[key]):
                 if v == cur:
                     break
                 short = cur.rstrip(" .…").casefold()
                 long = v.casefold()
-                if short and long.startswith(short) and (
+                if cur_truncated and short and long.startswith(short) and (
                         len(long) == len(short) or long[len(short)] in " ,;:/()"):
-                    best[key][index] = (label, v)
+                    best[key][index] = (label, v, truncated)
                     break
                 short = v.rstrip(" .…").casefold()
                 long = cur.casefold()
-                if short and long.startswith(short) and (
+                if truncated and short and long.startswith(short) and (
                         len(long) == len(short) or long[len(short)] in " ,;:/()"):
                     break
             else:
                 # Distinct facts/conflicting values are source evidence too;
                 # choosing the longer string silently drops real attributes.
-                best[key].append((label, v))
-    return [pair for key in order for pair in best[key]]
+                best[key].append((label, v, truncated))
+    return [(label, value) for key in order for label, value, _ in best[key]]
 
 
 def detail_bullets_to_attributes(detail_bullets) -> list:

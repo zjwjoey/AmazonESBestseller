@@ -487,11 +487,22 @@ def _write_summary(output: Path, categories: list[Mapping], rankings: list,
             sources = {str(row.get("ranking_source_url") or "") for row in rows if row.get("ranking_source_url")}
             final_count = len(selected.get(group, []))
             target = int(category["target_unique"])
+            category_status = statuses.get(group, {}).get("status", "INCOMPLETE")
+            selected_asins = {str(row.get("asin") or "").upper()
+                              for row in selected.get(group, []) if row.get("asin")}
+            if category_status == "COMPLETE":
+                if final_count != target:
+                    category_status = "QUOTA_UNIQUE_SHORTFALL"
+                elif (selected_asins - set(by_detail)
+                      or statuses.get(group, {}).get("pending_detail_asins")):
+                    category_status = "DETAIL_INCOMPLETE"
+                else:
+                    category_status = "PASS"
             writer.writerow({"采集研究类目": group, "目标SKU": target,
                              "原始榜单记录": len(rows), "类目内唯一ASIN": len(asins),
                              "详情记录": len(asins & set(by_detail)), "最终保留": final_count,
                              "使用榜单数量": len(sources),
-                             "状态": "PASS" if final_count == target else statuses.get(group, {}).get("status", "INCOMPLETE")})
+                             "状态": category_status})
 
 
 def run_task(plan: Mapping, out_dir: str, mode: str | None = None,

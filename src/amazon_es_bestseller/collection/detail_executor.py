@@ -49,12 +49,14 @@ def _asin(row: Mapping) -> str:
 def _usable_record(record, asin: str) -> bool:
     return (isinstance(record, Mapping)
             and str(record.get("asin") or "").upper() == asin
-            and bool(record.get("title_es_raw"))
+            and bool(str(record.get("title_es_raw") or "").strip())
             and not record.get("is_captcha")
-            and str(record.get("access_state") or "").upper() not in {
+            and not any(str(record.get(key) or "").upper() in {
                 "BLOCKED", "CHALLENGE", "RATE_LIMITED", "NETWORK_ERROR", "UNKNOWN"}
-            and str(record.get("identity_status") or "").upper() not in {
+                for key in ("access_state", "final_access_state"))
+            and not any(str(record.get(key) or "").upper() in {
                 "IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED", "IDENTITY_REVIEW"}
+                for key in ("identity_status", "identity_status_code"))
             and str(record.get("resolved_asin") or asin).upper() == asin)
 
 
@@ -112,6 +114,7 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     root = Path(out_dir)
     checkpoint_dir = Path(checkpoint_root or (root / "checkpoints"))
     state = DetailState(root / "state" / "details_state.json")
+    state.ensure_valid()
     if len(state) == 0 and (root / "details.json").exists():
         try:
             legacy = json.loads((root / "details.json").read_text(encoding="utf-8"))
@@ -204,12 +207,18 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         pending.append(row)
 
     if reparse_rows:
-        html_root = saved_html or next((row.get("saved_html_dir") for row in reparse_rows
-                                        if row.get("saved_html_dir")), root / "html")
-        reparsed = reparse_saved_details(
-            html_root, state, asins=[_asin(row) for row in reparse_rows],
-            parser_version=parser_version)
-        reparsed_by_asin = {str(row.get("asin") or "").upper(): row for row in reparsed}
+        # Plans may bind different ASINs to different saved-evidence roots.
+        # Group by root so every row is replayed from its own evidence once.
+        grouped_reparse = {}
+        for row in reparse_rows:
+            html_root = saved_html or row.get("saved_html_dir") or (root / "html")
+            grouped_reparse.setdefault(str(html_root), (html_root, []))[1].append(row)
+        reparsed_by_asin = {}
+        for html_root, group in grouped_reparse.values():
+            reparsed = reparse_saved_details(
+                html_root, state, asins=[_asin(row) for row in group],
+                parser_version=parser_version)
+            reparsed_by_asin.update({str(row.get("asin") or "").upper(): row for row in reparsed})
         for row in reparse_rows:
             asin = _asin(row)
             rec = reparsed_by_asin.get(asin)
@@ -288,7 +297,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         asin = _asin(row)
         checkpoint = read_checkpoint(checkpoint_dir, asin) or {}
         status = checkpoint.get("status") if _checkpoint_matches(checkpoint, row) else None
-        if str(status or "").lower() == "success" and not _usable_record(state.get(asin), asin):
+        if (str(status or "").lower() == "success"
+                and not _usable_record(_checkpoint_record(checkpoint), asin)):
             status = None
         status = status or ("SUCCESS" if asin in detail_by_asin else "PENDING")
         outcomes.append({"snapshot_id": row.get("snapshot_id"), "ranking_asin": asin,

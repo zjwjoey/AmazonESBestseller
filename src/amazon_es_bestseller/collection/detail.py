@@ -253,9 +253,12 @@ def _current_price(soup) -> str:
 
 def _struck_price(soup) -> str:
     """只从明确 data-a-strike=true 的划线价格中取原价。"""
-    primary = soup.select("#corePrice_feature_div .a-text-price, #corePriceDisplay_desktop_feature_div .a-text-price")
-    containers = primary if primary else soup.select("#apex_price .a-text-price")
+    containers = soup.select("#corePrice_feature_div .a-text-price, "
+                             "#corePriceDisplay_desktop_feature_div .a-text-price, "
+                             "#apex_price .a-text-price")
     for container in containers:
+        if _hidden(container) or _secondary_product(container):
+            continue
         classes = " ".join(container.get("class") or [])
         parent_classes = " ".join(container.parent.get("class") or []) if container.parent else ""
         if re.search(r"priceperunit|pricePerUnit", classes + " " + parent_classes, re.I):
@@ -268,9 +271,11 @@ def _struck_price(soup) -> str:
         marked_parent = container.find_parent(attrs={"data-a-strike": "true"})
         offscreen = container.select_one(".a-offscreen")
         if offscreen is not None:
-            value = _clean(offscreen.get_text(" ", strip=True))
+            value = _evidence_text(offscreen)
             if str(marked).lower() == "true" or marked_parent is not None:
-                return value
+                from ..normalization.price import parse_price
+                if parse_price(value) is not None:
+                    return value
     return ""
 
 
@@ -484,8 +489,8 @@ def parse_detail_page(html: str, asin: str) -> dict:
     # 品牌（Byline，剥双前缀）
     brand_raw = ""
     byline = soup.select_one("#bylineInfo")
-    if byline is not None:
-        brand_raw = _clean(byline.get_text(" ", strip=True))
+    if byline is not None and not _hidden(byline) and not _secondary_product(byline):
+        brand_raw = _evidence_text(byline)
         brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
         brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
         brand_raw = _clean(brand_raw)
@@ -493,17 +498,10 @@ def parse_detail_page(html: str, asin: str) -> dict:
         # Some pages omit the byline but expose an explicit Marca row in the
         # product-overview table.  This is reliable page evidence, unlike a
         # title-prefix fallback (which is forbidden by the data rules).
-        overview = soup.select_one(_OVERVIEW_SEL)
-        if overview is not None:
-            for row in overview.select("tr"):
-                cells = row.select("td")
-                if len(cells) < 2:
-                    continue
-                label = _clean(cells[0].get_text(" ", strip=True)).casefold()
-                value = _clean(cells[1].get_text(" ", strip=True))
-                if label in {"marca", "brand"} and value:
-                    brand_raw = value
-                    break
+        for row in _overview_attributes(soup):
+            if row["label_raw"].casefold() in {"marca", "brand"}:
+                brand_raw = row["value_raw"]
+                break
 
     # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
     selected_variation_raw = _selected_variation(soup)
@@ -582,6 +580,29 @@ def _parse_detail_for_version(html: str, asin: str, *, parser_version: str = "v1
     return parse_detail_page(html, asin)
 
 
+def _load_detail_metadata(path) -> dict:
+    """Absent legacy metadata is allowed; damaged metadata is never discarded."""
+    from pathlib import Path
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(meta, dict):
+            raise ValueError("cache metadata must be an object")
+        status = meta.get("status_code")
+        if isinstance(status, str) and status.isdecimal():
+            status = int(status)
+            meta["status_code"] = status
+        if status is not None and (type(status) is not int or not 100 <= status <= 599):
+            raise ValueError("invalid cached HTTP status")
+        if "recovered_from_challenge" in meta and not isinstance(meta["recovered_from_challenge"], bool):
+            raise ValueError("invalid cached recovery flag")
+        return meta
+    except (OSError, ValueError) as exc:
+        return {"_metadata_error": "%s: %s" % (type(exc).__name__, exc)}
+
+
 def _classify_saved_page(html: str, asin: str, meta: dict, *,
                          parser_version: str = "v1") -> tuple[str, AccessState, Optional[dict]]:
     """Classify saved evidence and return parsed data only for valid pages."""
@@ -591,6 +612,8 @@ def _classify_saved_page(html: str, asin: str, meta: dict, *,
     html_state = detect_access_status(200, html)
     if html_state is AccessState.CHALLENGE:
         return "CHALLENGE", html_state, None
+    if meta.get("_metadata_error"):
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
 
     recovered = bool(meta.get("recovered_from_challenge"))
     effective_state = str(meta.get("access_state") or "").upper()
@@ -651,15 +674,8 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                 asin = match.group(1).upper() if match else ""
             if not asin or not _ASIN_RE.fullmatch(asin) or (wanted and asin not in wanted):
                 continue
-            meta = {}
             meta_path = path.with_suffix(".meta.json")
-            if meta_path.exists():
-                try:
-                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                    if not isinstance(meta, dict):
-                        continue
-                except (OSError, ValueError):
-                    meta = {}
+            meta = _load_detail_metadata(meta_path)
             classification, state_value, rec = _classify_saved_page(
                 html, asin, meta, parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":
@@ -719,21 +735,22 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
         if not root.is_dir():
             continue
         for path in sorted(root.glob("*.html")):
-            try:
-                html = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
             asin = path.stem.upper()
             if wanted and asin not in wanted:
                 continue
-            status_meta = {}
+            read_error = ""
+            try:
+                html = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                html = ""
+                read_error = "%s: %s" % (type(exc).__name__, exc)
             meta_path = path.with_suffix(".meta.json")
-            if meta_path.exists():
-                try:
-                    status_meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    status_meta = {}
-            classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
+            status_meta = _load_detail_metadata(meta_path)
+            error = read_error or status_meta.get("_metadata_error", "")
+            if read_error:
+                classification, access_state, parsed = "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+            else:
+                classification, access_state, parsed = _classify_saved_page(html, asin, status_meta)
             identity = _resolve_page_identity(
                 asin, html, status_meta.get("final_url") or "", parsed)
             if (classification == "VALID_PRODUCT_PAGE"
@@ -746,6 +763,7 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                             "recovered_from_challenge": bool(status_meta.get("recovered_from_challenge")),
                             "identity_status": identity["identity_status"],
                             "identity_evidence": identity["identity_evidence"],
+                            "error": error,
                             "quarantined": bool(quarantine) and classification != "VALID_PRODUCT_PAGE",
                             "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
@@ -901,22 +919,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     "detail_status": "CACHE_READ_ERROR", "error": str(exc), "source": "cache"})
                 progress(asin, "failed")
                 continue
-            meta = {}
-            if os.path.exists(meta_path):
-                try:
-                    with open(meta_path, encoding="utf-8") as f:
-                        meta = json.load(f)
-                    if not isinstance(meta, dict):
-                        raise ValueError("cache metadata must be an object")
-                except (OSError, ValueError):
-                    meta = {}
+            meta = _load_detail_metadata(meta_path)
             cached_status = meta.get("status_code", 200)
             cached_url = meta.get("final_url") or ""
             cache_meta = {"status_code": cached_status, "final_url": cached_url,
                           "initial_access_state": meta.get("initial_access_state"),
                           "access_state": meta.get("access_state"),
                           "recovered_from_challenge": meta.get("recovered_from_challenge"),
-                          "requested_url": meta.get("requested_url")}
+                          "requested_url": meta.get("requested_url"),
+                          "_metadata_error": meta.get("_metadata_error")}
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, cache_meta, parser_version=parser_version)
             force_refetch = execution_context.get(asin, {}).get("action") == "REFETCH_INVALID_CACHE"
@@ -940,6 +951,13 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     "source": "cache_quarantined_for_manual_assist",
                 })
                 progress(asin, "challenge_cached")
+            elif meta.get("_metadata_error"):
+                failed.append(asin)
+                checkpoint(asin, {"asin": asin, "status": "failed",
+                    "detail_status": "CACHE_READ_ERROR", "error": meta["_metadata_error"],
+                    "source": "cache"})
+                progress(asin, "failed")
+                continue
             elif force_refetch:
                 # Preserve every previous capture before honoring an explicit
                 # refetch. A historical challenge still takes the unchanged
@@ -1013,6 +1031,16 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     f.write(original_html)
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(html)
+            # Save HTTP evidence even when the gate stops here. Otherwise a
+            # 403 with product-like HTML could be replayed as a legacy 200.
+            final_url = str(getattr(session.page, "url", "") or "")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({"status_code": status, "final_url": final_url,
+                           "requested_url": requested_url, "requested_asin": asin,
+                           "initial_access_state": initial_state.value,
+                           "access_state": state.value,
+                           "recovered_from_challenge": recovered}, f,
+                          ensure_ascii=False, indent=2)
             try:
                 require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
                                       % (status, asin, len(details)))
@@ -1024,14 +1052,6 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                  "access_state": state.value, "error": str(exc)})
                 progress(asin, "access_stop")
                 raise
-            final_url = str(getattr(session.page, "url", "") or "")
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump({"status_code": status, "final_url": final_url,
-                           "requested_url": requested_url, "requested_asin": asin,
-                           "initial_access_state": initial_state.value,
-                           "access_state": state.value,
-                           "recovered_from_challenge": recovered}, f,
-                          ensure_ascii=False, indent=2)
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, {"status_code": status, "final_url": final_url,
                              "initial_access_state": initial_state.value,
