@@ -23,6 +23,9 @@ def _plan():
 
 def test_executor_only_passes_network_actions_and_records_checkpoint(tmp_path):
     calls = []
+    (tmp_path / "details.json").write_text(json.dumps([
+        {"asin": "B000000001", "title_es_raw": "Previously saved product"}
+    ]), encoding="utf-8")
 
     def fake_collector(asins, session, out_dir, **kwargs):
         calls.append((list(asins), kwargs["request_urls"].copy()))
@@ -102,7 +105,8 @@ def test_executor_resume_does_not_duplicate_successful_request(tmp_path):
         calls.append(list(asins))
         write_checkpoint(tmp_path / "checkpoints", asins[0], {
             "asin": asins[0], "status": "success", "snapshot_id": "snapshot_test",
-            "action": "FETCH_NEW"})
+            "action": "FETCH_NEW",
+            "record": {"asin": asins[0], "title_es_raw": "Saved product"}})
         return []
 
     execute_detail_plan(_plan(), object(), str(tmp_path), collector=fake_collector)

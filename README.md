@@ -217,6 +217,21 @@ python -m amazon_es_bestseller.cli collect `
 `--resume-access-stopped` 才能重新尝试受限任务。历史缓存中的验证码页仍按原规则
 阻止续跑，本轮没有自动清理或放行这类缓存。
 
+使用独立工作树时，可通过 `python scripts/amazon_es.py --runtime-info` 核对实际
+模块路径，再使用 `python scripts/amazon_es.py ...` 运行该工作树的 CLI。这个入口
+明确使用同一工作树的 `src`，不会误用 Python 环境里安装的另一份项目，也不会
+自动安装、更新或部署到生产目录。
+
+`detail-run` 只有取到实际详情记录才报告 `REUSED` 或 `ALREADY_SUCCESS`。
+缺少记录/证据的复用项保持 `PENDING`，汇总为 `INCOMPLETE`；可用保存页面会先
+离线重解析后合并到输出。显式重抓会保留旧页面到 `cache_history`；历史验证码
+缓存仍先触发原门禁。损坏缓存单独记录失败并保留原文件，其他商品可以继续。
+`execution_status=COMPLETE` 仅表示详情计划动作完成，不代表生产验收通过。
+
+详情解析覆盖当前商品的月购、现价、专属商品描述及全部已识别参数区，避免误取
+推荐/赞助商品和隐藏内容；未知参数标签、重复标签的不同事实及原始西语仍保留。
+保存页没有展示的字段保持空白；A+ 不冒充商品描述，多选数量不猜成单一件数。
+
 详情完成后可用 `download-images --products products.json --out-dir images
 --report image_download.json` 按 ASIN 串行补齐原图缓存。
 

@@ -127,6 +127,21 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     dfa = parse_es_date(out.get("date_first_available_raw"))
     out["date_first_available"] = dfa.strftime("%Y-%m-%d") if dfa else None
 
+    # Promote explicit saved detail-bullet facts before deriving specifications,
+    # not only when rendering the final display. Never mutate the source row.
+    attrs = list(out.get("attributes") or [])
+    extra_attrs = detail_bullets_to_attributes(out.get("detail_bullets_raw"))
+    seen_attr = {(str(a.get("label_raw", "")).casefold(), str(a.get("value_raw", "")).casefold())
+                 for a in attrs if isinstance(a, dict)}
+    for attr in extra_attrs:
+        key = (attr["label_raw"].casefold(), attr["value_raw"].casefold())
+        if key not in seen_attr:
+            attr["position"] = len(attrs)
+            attrs.append(attr)
+            seen_attr.add(key)
+    if attrs or "attributes" in out:
+        out["attributes"] = attrs
+
     details = _details_of(out)
     if not details:
         # 现代无损全量模型：attributes（列表）→ 规格 dict，供 build_spec_v2
@@ -143,19 +158,6 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     out["monthly_bought_min"] = parse_monthly_bought(out.get("monthly_bought_raw"))
 
     # 无损全量详情 → 展示渲染（DATA_MODEL §4-§8/§18-§19）：西语原文 + 中文派生
-    attrs = list(out.get("attributes") or [])
-    # Supplement (rather than replace) table attributes with explicit visible
-    # detail-bullet key/value pairs.  This closes layouts where Amazon splits
-    # attributes across overview tables and the detail-bullets block.
-    extra_attrs = detail_bullets_to_attributes(out.get("detail_bullets_raw"))
-    seen_attr = {(str(a.get("label_raw", "")).casefold(), str(a.get("value_raw", "")).casefold())
-                 for a in attrs if isinstance(a, dict)}
-    for attr in extra_attrs:
-        key = (attr["label_raw"].casefold(), attr["value_raw"].casefold())
-        if key not in seen_attr:
-            attr["position"] = len(attrs)
-            attrs.append(attr)
-            seen_attr.add(key)
     bullets = out.get("feature_bullets_raw")
     out["product_details_es"] = render_details_es(attrs)
     out["product_details_zh"] = render_details_zh(attrs)

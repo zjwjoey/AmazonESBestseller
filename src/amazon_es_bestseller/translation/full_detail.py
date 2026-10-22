@@ -231,12 +231,12 @@ def _prefer(new: str, cur: str) -> bool:
 
 
 def _display_rows(attributes) -> list:
-    """展示行：剔除元信息标签；同标签合并——相同值去重，完整行优先，按首次出现顺序。
+    """Display explicit values in source order, retaining different same-label facts.
 
     productOverview 常带截断后缀 ``… Ver más`` 而 technical_details 是同标签的完整
-    文本；同标签时保留完整行。数据层 attributes 不受影响。
+    文本；同内容的展开版本优先，冲突值不选择或覆盖。数据层 attributes 不受影响。
     """
-    best: dict = {}          # label_lower -> (首次序号, 标签原文, 值)
+    best: dict = {}          # label_lower -> ordered explicit values
     order: list = []
     for a in attributes or []:
         # Amazon 的 technical_details 表在文本前插入 LEFT-TO-RIGHT MARK 等
@@ -256,13 +256,28 @@ def _display_rows(attributes) -> list:
         key = label.lower()
         v = value.strip()
         if key not in best:
-            best[key] = (len(order), label, v)
+            best[key] = [(label, v)]
             order.append(key)
         else:
-            idx, _, cur = best[key]
-            if _prefer(v, cur):
-                best[key] = (idx, label, v)
-    return [(best[k][1], best[k][2]) for k in order]
+            for index, (_, cur) in enumerate(best[key]):
+                if v == cur:
+                    break
+                short = cur.rstrip(" .…").casefold()
+                long = v.casefold()
+                if short and long.startswith(short) and (
+                        len(long) == len(short) or long[len(short)] in " ,;:/()"):
+                    best[key][index] = (label, v)
+                    break
+                short = v.rstrip(" .…").casefold()
+                long = cur.casefold()
+                if short and long.startswith(short) and (
+                        len(long) == len(short) or long[len(short)] in " ,;:/()"):
+                    break
+            else:
+                # Distinct facts/conflicting values are source evidence too;
+                # choosing the longer string silently drops real attributes.
+                best[key].append((label, v))
+    return [pair for key in order for pair in best[key]]
 
 
 def detail_bullets_to_attributes(detail_bullets) -> list:

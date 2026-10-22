@@ -1,0 +1,44 @@
+{
+  "provenance": {
+    "source_audit": "F:\\AmazonESBestseller\\交付文件\\20261018\\Detail5500_5328条_AI字段审查\\字段判断完整证据.jsonl",
+    "sha256": "0722748e86e190081a2dcab2f69e6a05660717e158c55af557ca5f76a6bbc350",
+    "scope": "Reduced regression HTML from saved audit excerpts, not full original DOM"
+  },
+  "cases": [
+    {
+      "asin": "B0HJ81ZNBC",
+      "field": "月购买量",
+      "archived_text": "200+ comprados el mes pasado",
+      "reduced_regression_html": "<html><body><input id=\"ASIN\" value=\"B0HJ81ZNBC\"><h1 id=\"productTitle\">Historical evidence replay</h1><div id=\"socialProofingAsinFaceout_feature_div\">200+ comprados el mes pasado</div></body></html>",
+      "original_full_html": false
+    },
+    {
+      "asin": "B0HF4H2VTD",
+      "field": "月购买量",
+      "archived_text": "50+ comprados el mes pasado",
+      "reduced_regression_html": "<html><body><input id=\"ASIN\" value=\"B0HF4H2VTD\"><h1 id=\"productTitle\">Historical evidence replay</h1><div id=\"socialProofingAsinFaceout_feature_div\">50+ comprados el mes pasado</div></body></html>",
+      "original_full_html": false
+    },
+    {
+      "asin": "8419536709",
+      "field": "当前售价",
+      "archived_text": "8 , 55 €",
+      "reduced_regression_html": "<html><body><input id=\"ASIN\" value=\"8419536709\"><h1 id=\"productTitle\">Historical evidence replay</h1><div id=\"apex_desktop\"><span class=\"priceToPay apex-pricetopay-value\">8 , 55 €</span></div></body></html>",
+      "original_full_html": false
+    },
+    {
+      "asin": "B0H8DFT7ZD",
+      "field": "当前售价",
+      "archived_text": "38 , 79 €",
+      "reduced_regression_html": "<html><body><input id=\"ASIN\" value=\"B0H8DFT7ZD\"><h1 id=\"productTitle\">Historical evidence replay</h1><div id=\"apex_desktop\"><span class=\"priceToPay apex-pricetopay-value\">38 , 79 €</span></div></body></html>",
+      "original_full_html": false
+    },
+    {
+      "asin": "B0GD6Q6VZN",
+      "field": "商品描述",
+      "archived_text": "Descubre la versatilidad del Soplete Multiuso Profesional con Encendido Piezoeléctrico, la herramienta perfecta tanto para la cocina como para trabajos de bricolaje. Este potente soplete cuenta con un sistema de encendido instantáneo que te permite comenzar a trabajar sin complicaciones. Ideal para múltiples aplicaciones culinarias como flambear, caramelizar y gratinar tus creaciones gastronómicas con precisión profesional. En el ámbito del bricolaje, resulta excelente para pequeños trabajos de soldadura y proyectos DIY en exterior e interior. Su diseño ergonómico con mango antideslizante proporciona un agarre seguro y cómodo durante su uso. El soplete viene con un cartucho B-250 incluido, listo para usar. La llama azul de alta temperatura te permite trabajar con eficiencia en cualquier tarea. Una herramienta indispensable tanto para chefs aficionados como para entusiastas del bricolaje ",
+      "reduced_regression_html": "<html><body><input id=\"ASIN\" value=\"B0GD6Q6VZN\"><h1 id=\"productTitle\">Historical evidence replay</h1><div id=\"productDescription_feature_div\"><div id=\"productDescription\">Descubre la versatilidad del Soplete Multiuso Profesional con Encendido Piezoeléctrico, la herramienta perfecta tanto para la cocina como para trabajos de bricolaje. Este potente soplete cuenta con un sistema de encendido instantáneo que te permite comenzar a trabajar sin complicaciones. Ideal para múltiples aplicaciones culinarias como flambear, caramelizar y gratinar tus creaciones gastronómicas con precisión profesional. En el ámbito del bricolaje, resulta excelente para pequeños trabajos de soldadura y proyectos DIY en exterior e interior. Su diseño ergonómico con mango antideslizante proporciona un agarre seguro y cómodo durante su uso. El soplete viene con un cartucho B-250 incluido, listo para usar. La llama azul de alta temperatura te permite trabajar con eficiencia en cualquier tarea. Una herramienta indispensable tanto para chefs aficionados como para entusiastas del bricolaje </div></div></body></html>",
+      "original_full_html": false
+    }
+  ]
+}

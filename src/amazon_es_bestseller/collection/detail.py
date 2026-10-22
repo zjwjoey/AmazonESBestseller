@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import time
+import uuid
 from datetime import datetime
 from typing import Callable, List, Optional
 
@@ -34,6 +35,46 @@ def _clean(t) -> str:
 def _text(soup, sel) -> str:
     el = soup.select_one(sel)
     return _clean(el.get_text(" ", strip=True)) if el is not None else ""
+
+
+def _hidden(node, *, allow_expanders: bool = False) -> bool:
+    for element in [node, *node.parents]:
+        if getattr(element, "name", "") in {"script", "style", "template"}:
+            return True
+        if not hasattr(element, "get"):
+            continue
+        expandable = allow_expanders and "a-expander-content" in (element.get("class") or [])
+        if element.has_attr("hidden") or (not expandable and re.search(
+                r"display\s*:\s*none|visibility\s*:\s*hidden", element.get("style", ""), re.I)):
+            return True
+        if {"aok-hidden", "a-hidden"} & set(element.get("class") or []):
+            return True
+    return False
+
+
+def _evidence_text(node, *, allow_expanders: bool = False) -> str:
+    """Saved visible text, excluding scripts and explicitly hidden copies."""
+    parts = []
+    for text in node.strings:
+        if _hidden(text.parent, allow_expanders=allow_expanders):
+            continue
+        # Keep the saved full attribute rather than concatenating the visible
+        # truncated preview and its full offscreen copy.
+        cut = text.find_parent(class_="a-truncate-cut")
+        if cut is not None and cut.parent.select_one(".a-truncate-full") is not None:
+            continue
+        parts.append(str(text))
+    return _clean(" ".join(parts))
+
+
+def _secondary_product(node) -> bool:
+    for element in [node, *node.parents]:
+        if not hasattr(element, "get"):
+            continue
+        context = str(element.get("id") or "") + " " + " ".join(element.get("class") or [])
+        if re.search(r"sponsor|recommend|related|similar|desktop-dp-sims|p13n|a-carousel", context, re.I):
+            return True
+    return False
 
 
 # ---------- B4 低成本扩展：parent ASIN / 首次上架日期 / 图片 ----------
@@ -175,18 +216,38 @@ _MONTHLY_RE = re.compile(
 
 def _monthly_bought_raw(soup) -> str:
     """可见的上月购买文案 → 数字下限原文；无证据返回空。"""
-    selectors = ("#social-proofing-faceout", ".social-proofing-faceout")
-    texts = []
-    for sel in selectors:
-        for el in soup.select(sel):
-            texts.append(_clean(el.get_text(" ", strip=True)))
-    body = soup.find("body")
-    if body is not None:
-        texts.append(_clean(body.get_text(" ", strip=True)))
-    for text in texts:
+    for el in soup.select("#social-proofing-faceout, .social-proofing-faceout, "
+                          "#socialProofingAsinFaceout_feature_div"):
+        if _hidden(el) or _secondary_product(el):
+            continue
+        text = _evidence_text(el)
         m = _MONTHLY_RE.search(text)
         if m:
             return re.sub(r"\s+", " ", m.group(1)).strip()
+    return ""
+
+
+def _current_price(soup) -> str:
+    # Restrict fallbacks to explicit current-product price containers.
+    for node in soup.select("#corePrice_feature_div .a-price, "
+                            "#corePriceDisplay_desktop_feature_div .a-price, "
+                            ".apex-pricetopay-value, .priceToPay"):
+        if _hidden(node) or _secondary_product(node):
+            continue
+        if any(hasattr(a, "get") and (
+                "a-text-price" in (a.get("class") or [])
+                or str(a.get("data-a-strike")).lower() == "true"
+                or re.search(r"priceperunit|basisprice", " ".join(a.get("class") or []), re.I))
+                for a in [node, *node.parents]):
+            continue
+        offscreen = node.select_one(".a-offscreen")
+        value = _evidence_text(offscreen) if offscreen is not None else ""
+        if not value:
+            value = _evidence_text(node)
+        if value and not re.search(r"/\s*(kg|g|l|ml)\b", value, re.I):
+            from ..normalization.price import parse_price
+            if parse_price(value) is not None:
+                return value
     return ""
 
 
@@ -245,12 +306,12 @@ def _overview_attributes(soup) -> list:
     if po is None:
         return rows
     i = 0
-    for tr in po.select("table tr"):
-        tds = tr.select("td")
-        if len(tds) < 2:
+    for tr in po.select("tr"):
+        tds = tr.find_all(["th", "td"], recursive=False)
+        if len(tds) < 2 or _hidden(tr, allow_expanders=True):
             continue
-        label = _clean(tds[0].get_text(" ", strip=True))
-        value = _clean(tds[1].get_text(" ", strip=True))
+        label = _evidence_text(tds[0], allow_expanders=True)
+        value = _evidence_text(tds[1], allow_expanders=True)
         if label and value:
             rows.append(_attr_row("product_overview", label, value, i, "productOverview"))
             i += 1
@@ -270,20 +331,17 @@ def _prod_details_attributes(soup) -> list:
     ``*feedback*``（客户反馈，非商品属性）表，避免同一行被两个 section 重复捕获。
     """
     rows = []
-    pd = soup.select_one(_PROD_DETAILS_SEL)
-    if pd is None:
-        return rows
     i = 0
-    for table in pd.select("table"):
+    for table in soup.select("#prodDetails table, table[id^='productDetails_techSpec']"):
         if _is_excluded_detail_table(table):
             continue
         for tr in table.select("tr"):
             th = tr.select_one("th")
             td = tr.select_one("td")
-            if th is None or td is None:
+            if th is None or td is None or _hidden(tr, allow_expanders=True):
                 continue  # 表头行（colspan 无值）等非属性行
-            label = _clean(th.get_text(" ", strip=True))
-            value = _clean(td.get_text(" ", strip=True))
+            label = _evidence_text(th, allow_expanders=True)
+            value = _evidence_text(td, allow_expanders=True)
             if label and value:
                 rows.append(_attr_row("technical_details", label, value, i, "prodDetails"))
                 i += 1
@@ -291,40 +349,34 @@ def _prod_details_attributes(soup) -> list:
 
 
 def _additional_attributes(soup) -> list:
-    """additional_information：dt/dd 或 th/td 形式的附加信息（首个存在的 section）。"""
+    """Read all additional-information blocks; no first-block truncation."""
     rows = []
-    for sel, mode in ((_ADDITIONAL_SELS[0], "dl"), (_ADDITIONAL_SELS[1], "table")):
-        el = soup.select_one(sel)
-        if el is None:
-            continue
-        i = 0
-        if mode == "dl":
-            for dt, dd in zip(el.select("dt"), el.select("dd")):
-                label = _clean(dt.get_text(" ", strip=True))
-                value = _clean(dd.get_text(" ", strip=True))
-                if label and value:
-                    rows.append(_attr_row("additional_information", label, value, i, "detailBullets"))
-                    i += 1
-        else:
-            for tr in el.select("tr"):
-                th = tr.select_one("th")
-                td = tr.select_one("td")
-                if th is None or td is None:
-                    continue
-                label = _clean(th.get_text(" ", strip=True))
-                value = _clean(td.get_text(" ", strip=True))
-                if label and value:
-                    rows.append(_attr_row("additional_information", label, value, i, "detailBulletsSections"))
-                    i += 1
-        if rows:
-            break  # 只取第一个存在的附加信息区
+    for dt in soup.select("#detailBullets_feature_div dt"):
+        dd = dt.find_next_sibling()
+        if (dd is not None and dd.name == "dd" and not _hidden(dt, allow_expanders=True)
+                and not _hidden(dd, allow_expanders=True)):
+            label, value = _evidence_text(dt, allow_expanders=True), _evidence_text(dd, allow_expanders=True)
+            if label and value:
+                rows.append(_attr_row("additional_information", label, value, len(rows), "detailBullets"))
+    for tr in soup.select("table[id^='productDetails_detailBullets'] tr"):
+        th, td = tr.select_one("th"), tr.select_one("td")
+        if th is not None and td is not None and not _hidden(tr, allow_expanders=True):
+            label, value = _evidence_text(th, allow_expanders=True), _evidence_text(td, allow_expanders=True)
+            if label and value:
+                rows.append(_attr_row("additional_information", label, value, len(rows), "detailBulletsSections"))
     return rows
 
 
 def _collect_attributes(soup) -> list:
     """全部 Product Attribute 行（product_overview → technical_details → additional_information）。"""
-    return (_overview_attributes(soup) + _prod_details_attributes(soup)
+    rows = (_overview_attributes(soup) + _prod_details_attributes(soup)
             + _additional_attributes(soup))
+    for text in _detail_bullets_raw(soup):
+        label, separator, value = text.partition(":")
+        if separator and label.strip() and value.strip():
+            rows.append(_attr_row("detail_bullets", _clean(label), _clean(value),
+                                  len(rows), "detailBulletsWrapper"))
+    return rows
 
 
 def _feature_bullets_raw(soup) -> list:
@@ -339,7 +391,7 @@ def _feature_bullets_raw(soup) -> list:
             continue
         bullets = []
         for li in fb.select("li"):
-            t = _clean(li.get_text(" ", strip=True))
+            t = _evidence_text(li, allow_expanders=True)
             if t:
                 bullets.append(t)
         if bullets:
@@ -349,7 +401,12 @@ def _feature_bullets_raw(soup) -> list:
 
 def _product_description_raw(soup) -> str:
     """product_description_raw：#productDescription_feature_div 正文。"""
-    return _text(soup, _PROD_DESC_SEL)
+    for selector in ("#productDescription", _PROD_DESC_SEL):
+        for node in soup.select(selector):
+            value = _evidence_text(node, allow_expanders=True)
+            if value:
+                return value
+    return ""
 
 
 def _detail_bullets_raw(soup) -> list:
@@ -359,7 +416,7 @@ def _detail_bullets_raw(soup) -> list:
         return []
     out = []
     for li in el.select("li"):
-        t = _clean(li.get_text(" ", strip=True))
+        t = _evidence_text(li, allow_expanders=True)
         if t:
             out.append(t)
     return out
@@ -378,20 +435,7 @@ def parse_detail_page(html: str, asin: str) -> dict:
     is_captcha = bool(CAPTCHA_RE.search(page_text))
 
     # 现价（主 BuyBox 价格回退链，与 JS 一致）
-    price_el = None
-    for price_sel in (
-            "#corePrice_feature_div .a-price .a-offscreen",
-            "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
-            ".apex-pricetopay-value .a-offscreen",
-            ".priceToPay .a-offscreen",
-            # Newer Amazon apex markup may leave the offscreen span empty
-            # and expose the BuyBox amount only as visible text.
-            "#apex_price .apex-pricetopay-value"):
-        candidate = soup.select_one(price_sel)
-        if candidate is not None and _clean(candidate.get_text(" ", strip=True)):
-            price_el = candidate
-            break
-    current_price_raw = _clean(price_el.get_text(" ", strip=True)) if price_el else ""
+    current_price_raw = _current_price(soup)
 
     # 划线价（原价）——必须有明确 data-a-strike=true 证据
     original_price_raw = _struck_price(soup)
@@ -597,7 +641,7 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
         for path in sorted(root.glob("*.html")):
             try:
                 html = path.read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             asin = path.stem.upper()
             if not _ASIN_RE.fullmatch(asin):
@@ -612,6 +656,8 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
             if meta_path.exists():
                 try:
                     meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    if not isinstance(meta, dict):
+                        continue
                 except (OSError, ValueError):
                     meta = {}
             classification, state_value, rec = _classify_saved_page(
@@ -753,7 +799,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     execution_context: Optional[dict] = None,
                     write_summary: bool = True,
                     details_output_path: Optional[str] = None,
-                    parser_version: str = "v1") -> List[dict]:
+                    parser_version: str = "v1", checkpoint_root=None) -> List[dict]:
     """串行采集详情页：原始 HTML 落盘 html/<asin>.html + 结果 details.json。
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
@@ -783,13 +829,16 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
     failed: List[str] = []
     request_urls = request_urls or {}
     execution_context = execution_context or {}
-    checkpoint_dir = os.path.join(str(out_dir), "checkpoints")
+    checkpoint_dir = str(checkpoint_root or os.path.join(str(out_dir), "checkpoints"))
     quarantine_root = os.path.join(str(out_dir), "quarantine")
     total = len(asins)
+    completed_asins = set()
 
     def progress(asin, status):
+        if status != "challenge_cached":
+            completed_asins.add(asin)
         if on_progress is not None:
-            on_progress({"completed": len(details) + len(failed), "total": total,
+            on_progress({"completed": len(completed_asins), "total": total,
                          "asin": asin, "status": status})
 
     def quarantine_invalid(asin, path, meta_path):
@@ -843,13 +892,22 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
         path = os.path.join(html_dir, asin + ".html")
         meta_path = os.path.splitext(path)[0] + ".meta.json"
         if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                html = f.read()
+            try:
+                with open(path, encoding="utf-8") as f:
+                    html = f.read()
+            except (OSError, UnicodeError) as exc:
+                failed.append(asin)
+                checkpoint(asin, {"asin": asin, "status": "failed",
+                    "detail_status": "CACHE_READ_ERROR", "error": str(exc), "source": "cache"})
+                progress(asin, "failed")
+                continue
             meta = {}
             if os.path.exists(meta_path):
                 try:
                     with open(meta_path, encoding="utf-8") as f:
                         meta = json.load(f)
+                    if not isinstance(meta, dict):
+                        raise ValueError("cache metadata must be an object")
                 except (OSError, ValueError):
                     meta = {}
             cached_status = meta.get("status_code", 200)
@@ -861,6 +919,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                           "requested_url": meta.get("requested_url")}
             classification, parsed_state, rec = _classify_saved_page(
                 html, asin, cache_meta, parser_version=parser_version)
+            force_refetch = execution_context.get(asin, {}).get("action") == "REFETCH_INVALID_CACHE"
             if classification == "CHALLENGE":
                 if not getattr(session, "manual_assist", False):
                     raise AccessStopError(
@@ -881,6 +940,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     "source": "cache_quarantined_for_manual_assist",
                 })
                 progress(asin, "challenge_cached")
+            elif force_refetch:
+                # Preserve every previous capture before honoring an explicit
+                # refetch. A historical challenge still takes the unchanged
+                # gate above and never reaches this branch.
+                history = os.path.join(str(out_dir), "cache_history", asin, uuid.uuid4().hex)
+                os.makedirs(history, exist_ok=False)
+                for source in (path, meta_path):
+                    if os.path.exists(source):
+                        shutil.copy2(source, os.path.join(history, os.path.basename(source)))
             else:
                 if classification != "VALID_PRODUCT_PAGE":
                     quarantine_invalid(asin, path, meta_path)
@@ -923,6 +991,7 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 progress(asin, "success")
                 continue
         request_started = False
+        access_stopped = False
         try:
             requested_url = str(request_urls.get(asin) or
                                 ("https://www.amazon.es/dp/" + asin))
@@ -1013,8 +1082,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             checkpoint(asin, {"asin": asin, "status": "success",
                              "source": "network", "record": rec})
             progress(asin, "success")
-            session.wait_between_requests()
         except AccessStopError:
+            access_stopped = True
             raise  # 访问受限：按策略停止，受限页证据已落盘
         except Exception as exc:
             failed.append(asin)  # 瞬时网络故障：失败隔离，不重试不绕过
@@ -1035,7 +1104,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             progress(asin, "failed")
             print("详情采集失败 ASIN %s：%s（跳过，重跑将补齐）"
                   % (asin, type(exc).__name__))
-            if request_started:
+        finally:
+            if request_started and not access_stopped:
                 session.wait_between_requests()
 
     if write_summary or details_output_path:

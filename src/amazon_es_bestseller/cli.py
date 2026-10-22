@@ -537,8 +537,9 @@ def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
             result = execute_detail_plan(plan, session, args.out_dir, offline=bool(args.offline),
                                          saved_html=args.html_dir or None,
                                          parser_version=args.parser_version)
-    print("detail run 完成：计划网络动作 %d，执行记录 %d → %s" %
-          (result["requested_count"], len(result["records"]),
+    print("detail run %s：取得详情 %d，未完成 %d，计划网络动作 %d → %s" %
+          (result.get("execution_status", "UNKNOWN"), result.get("completed_count", 0),
+           result.get("incomplete_count", 0), result["requested_count"],
            Path(args.out_dir) / "detail_execution_manifest.json"))
 
 
