@@ -8,7 +8,7 @@ import os
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    not os.getenv("RUN_LIVE"),
+    os.getenv("RUN_LIVE") != "1",
     reason="联网采集需要显式 RUN_LIVE=1",
 )
 

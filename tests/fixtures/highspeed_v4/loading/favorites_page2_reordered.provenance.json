@@ -1,0 +1,12 @@
+{
+  "receipt_original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_loading_20261014T234722Z\\store\\runs\\v4_t1_loading_20261014T234722Z\\responses\\req_5feb8fa86bd6499fb32797511d049e30.json",
+  "receipt_sha256": "3810d647a5766c1a8d2f451637ede714cd791d62adfbbb3d2a88a3ae807d632c",
+  "requested_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=1-xk5ip44sMjW&qid=1792011200&ref=sr_pg_1",
+  "final_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&qid=1792011200&xpid=1-xk5ip44sMjW&ref=sr_pg_1",
+  "http_status": 200,
+  "access_state": "NORMAL",
+  "body_sha256": "0e25a986eb7eac482101fca0055cef3b0510c3a369cbb9652a149308f067ed49",
+  "body_original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_loading_20261014T234722Z\\store\\html\\0e\\0e25a986eb7eac482101fca0055cef3b0510c3a369cbb9652a149308f067ed49.html",
+  "observed_at": "2026-10-14T23:58:02.144908Z",
+  "new_network_requests": 0
+}

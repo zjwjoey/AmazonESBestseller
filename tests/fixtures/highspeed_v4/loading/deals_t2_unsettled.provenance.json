@@ -1,0 +1,13 @@
+{
+  "run_id": "v4_t2_15da5305d976",
+  "url": "https://www.amazon.es/deals",
+  "PAGE_observed_at": "2026-10-15T02:40:07.536991Z",
+  "captured_sha256": "42117d3d1ef6399b364b7c00f1446457e5701c4a515155a90c4b13015baac399",
+  "status": "UNVERIFIED",
+  "cards": 0,
+  "explicit_empty": false,
+  "fixture": "deals_t2_unsettled.html",
+  "historical_settled_fixture": "../F06b_deals_settled_complete.html",
+  "test_only_transition": "Offline fake DOM sequence, not proof this LIVE page will settle",
+  "network_calls_by_readiness_wait": 0
+}

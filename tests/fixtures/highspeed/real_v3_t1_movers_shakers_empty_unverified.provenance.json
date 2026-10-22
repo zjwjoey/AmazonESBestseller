@@ -1,0 +1,19 @@
+{
+  "source_url": "https://www.amazon.es/gp/movers-and-shakers",
+  "source_type": "MOVERS_SHAKERS",
+  "actual_run_id": "v3_t1_9ade8e5793a8",
+  "original_captured_at": "2026-10-14T10:55:28.718027Z",
+  "origin": "ACTUAL_LIVE_T1_SAVED_PAGE",
+  "original_html_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\html\\50\\5076a9ebb590d8413a6a7b901eb85108a686133afd2986cb2fe94926d048986b.html",
+    "sha256": "5076a9ebb590d8413a6a7b901eb85108a686133afd2986cb2fe94926d048986b"
+  },
+  "fixture_sha256": "5076a9ebb590d8413a6a7b901eb85108a686133afd2986cb2fe94926d048986b",
+  "capture_receipt_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\runs\\v3_t1_9ade8e5793a8\\responses\\req_60107ddf7b2a448380e4180f07c2e318.json",
+    "sha256": "fa62c2d988c414724315a1a254e6c16667c489e0a144513d2def6a5369a7afcf"
+  },
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "diagnosis": "Right-column empty; nav has only current department and empty group, no actual child links, cards, native metadata or affirmative source-empty statement. Preserve PARSER_EMPTY_UNVERIFIED, never COMPLETE or confirmed empty."
+}

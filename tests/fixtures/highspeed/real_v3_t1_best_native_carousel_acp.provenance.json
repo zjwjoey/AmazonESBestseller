@@ -1,0 +1,32 @@
+{
+  "origin": "ACTUAL_LIVE_T1_PAGE_AND_NATIVE_ACP_RESPONSE",
+  "source_type": "BEST_SELLERS",
+  "source_id": "src_1ba69573ae285045a44286c6ae6cf5c7",
+  "source_url": "https://www.amazon.es/gp/bestsellers",
+  "observed_at": "2026-10-14T12:22:10.368763Z",
+  "fixture_sha256": "e8277295342bd55afe8181593053ed9e439cb10972ed0c95cfc624d9a17d6762",
+  "parent_fixture_sha256": "609f8bfe96087c36ac3bcb184cf247b850fee5b0b183ae3cdd420a77f30697e4",
+  "ranking_context_binding": {
+    "page_evidence_sha256": "609f8bfe96087c36ac3bcb184cf247b850fee5b0b183ae3cdd420a77f30697e4",
+    "ranking_context_url": "https://www.amazon.es/gp/bestsellers/kitchen",
+    "source_id": "src_1ba69573ae285045a44286c6ae6cf5c7"
+  },
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "original_response_body_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\html\\e8\\e8277295342bd55afe8181593053ed9e439cb10972ed0c95cfc624d9a17d6762.html",
+    "sha256": "e8277295342bd55afe8181593053ed9e439cb10972ed0c95cfc624d9a17d6762"
+  },
+  "original_receipt_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\runs\\v3_t1_9ade8e5793a8\\responses\\req_1b498642db6e447ca50cecf989d58509.json",
+    "sha256": "bf268e0c3b6f56efa3a42093af93fe113af400b10878ee41f4959d27c4334720"
+  },
+  "expected_fragment_ranks": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ]
+}

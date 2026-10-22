@@ -1,3 +1,21 @@
 # Saved HTML is evidence; preserve source whitespace instead of treating it as
 # a code-format defect in diff checks.
 /tests/fixtures/amazon_es/*.html whitespace=-trailing-space
+# V3 fixtures have byte-level SHA provenance. Never apply checkout newline
+# conversion to these newly introduced evidence files.
+/tests/fixtures/highspeed/real_v3_*.html -text
+/tests/fixtures/highspeed/v3_real_department_navigation.html -text
+/tests/fixtures/highspeed/v3_real_wish_department_navigation.html -text
+/tests/fixtures/highspeed/v3_category_node_evidence/*.html -text
+# Prior reviewed planning is also immutable SHA-bound evidence. Its original
+# CRLF bytes must survive Linux checkout so conflicts stay verifiable.
+/tests/fixtures/highspeed/v3_prior_category_plan.json -text
+/tests/fixtures/highspeed/real_v3_t1_best_native_carousel_contract.json -text
+/tests/fixtures/highspeed_v4/*.html -text whitespace=-trailing-space
+/tests/fixtures/highspeed_v4/native_overlap/* -text whitespace=-trailing-space
+/tests/fixtures/highspeed_v4/native_consumed/* -text whitespace=-trailing-space
+/tests/fixtures/highspeed_v4/loading/* -text whitespace=-trailing-space
+/tests/fixtures/highspeed/*.html -text whitespace=-trailing-space
+/tests/fixtures/highspeed/v3_prior_category_plan.json whitespace=-trailing-space
+# Mainline candidate manifests also bind exact saved HTML bytes.
+/tests/fixtures/multisource_candidates/*.html -text whitespace=-trailing-space

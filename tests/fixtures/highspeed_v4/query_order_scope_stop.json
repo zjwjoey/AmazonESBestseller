@@ -1,0 +1,5 @@
+{
+  "provenance": "Actual 2026-10-21 snapshot20000_4a11cb206ee7 receipt req_6681b0b905004ade9042df0e69375d8e; URLs only, no invented product or HTTP evidence",
+  "requested_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=CeuYXw3Vdr0Bg&qid=1792594246&ref=sr_pg_1",
+  "observed_final_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&qid=1792594246&xpid=CeuYXw3Vdr0Bg&ref=sr_pg_1"
+}

@@ -1,0 +1,32 @@
+{
+  "origin": "ACTUAL_LIVE_T1_PAGE_AND_NATIVE_ACP_RESPONSE",
+  "source_type": "NEW_RELEASES",
+  "source_id": "src_d7c0a792fa38567e9142101c6d0a5d89",
+  "source_url": "https://www.amazon.es/gp/new-releases",
+  "observed_at": "2026-10-14T12:22:57.275409Z",
+  "fixture_sha256": "654f12ab919d473bcb5182c037bf7d1b80dd04864739ffa693e50e7d9a8d9c59",
+  "parent_fixture_sha256": "ca63ec23b2b287106129f9333a76dd97c02eeec88d4090f1a2dbdaf948e4b28b",
+  "ranking_context_binding": {
+    "page_evidence_sha256": "ca63ec23b2b287106129f9333a76dd97c02eeec88d4090f1a2dbdaf948e4b28b",
+    "ranking_context_url": "https://www.amazon.es/gp/new-releases/lawn-garden",
+    "source_id": "src_d7c0a792fa38567e9142101c6d0a5d89"
+  },
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "original_response_body_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\html\\65\\654f12ab919d473bcb5182c037bf7d1b80dd04864739ffa693e50e7d9a8d9c59.html",
+    "sha256": "654f12ab919d473bcb5182c037bf7d1b80dd04864739ffa693e50e7d9a8d9c59"
+  },
+  "original_receipt_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\runs\\v3_t1_9ade8e5793a8\\responses\\req_40807e98ad93468782f5b83793ef1537.json",
+    "sha256": "39825257019ef449a5d319ee8812e5a0356e08ded15a6570c085c25df03d7d8d"
+  },
+  "expected_fragment_ranks": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "origin": "LIVE_CAPTURE",
+  "source_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\9b\\9bd0d34517c7b0292ac21bb648bd617c4ffb3a500ae06ccac098bfc1ffff3947.html",
+  "sha256": "9bd0d34517c7b0292ac21bb648bd617c4ffb3a500ae06ccac098bfc1ffff3947",
+  "request_url": "https://www.amazon.es/gp/new-releases/boost",
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "fixture_copy_only": true
+}

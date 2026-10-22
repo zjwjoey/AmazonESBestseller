@@ -1,0 +1,84 @@
+[
+  {
+    "file": "favorites.html",
+    "sha256": "a3fd07c7b461b1770e48ad446b503bc25c7063b79d488588982421ae9ff5cc5a",
+    "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\html\\a3\\a3fd07c7b461b1770e48ad446b503bc25c7063b79d488588982421ae9ff5cc5a.html",
+    "run_id": "v4_t1_056014fcc8b9",
+    "observed_at": "2026-10-14T20:53:20.324238Z",
+    "source": {
+      "actual_source_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar",
+      "category_path": [],
+      "enabled": true,
+      "navigation_evidence": null,
+      "page_urls": [
+        "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar"
+      ],
+      "parser_profile": "V4",
+      "research_category": null,
+      "source_id": "v4_aff702e22979e9008de842c4",
+      "source_status": "UNVERIFIED",
+      "source_subtype": "CUSTOMER_FAVORITES_FILTERED_SEARCH",
+      "source_type": "CUSTOMER_FAVORITES",
+      "url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar"
+    },
+    "page_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar",
+    "actual_http": 200,
+    "pagination": {
+      "page_url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&ref=lp_88626813031_sar",
+      "raw_href": "/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=1-xk5ip44sMjW&qid=1792011200&ref=sr_pg_1",
+      "url": "https://www.amazon.es/s?i=kitchen&srs=88626813031&rh=n%3A88626813031&s=popularity-rank&fs=true&page=2&xpid=1-xk5ip44sMjW&qid=1792011200&ref=sr_pg_1",
+      "label_raw": "Siguiente",
+      "evidence_sha256": "a3fd07c7b461b1770e48ad446b503bc25c7063b79d488588982421ae9ff5cc5a"
+    }
+  },
+  {
+    "file": "lightning.html",
+    "sha256": "5731087dfc845a5d6d13d83cd5191e59ca5f53511d874b8e5555c3980f4428e7",
+    "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\html\\57\\5731087dfc845a5d6d13d83cd5191e59ca5f53511d874b8e5555c3980f4428e7.html",
+    "run_id": "v4_t1_056014fcc8b9",
+    "observed_at": "2026-10-14T20:53:01.995723Z",
+    "source": {
+      "actual_source_url": "https://www.amazon.es/deals?bubble-id=deals-collection-lightning-deals",
+      "category_path": [],
+      "enabled": true,
+      "navigation_evidence": null,
+      "page_urls": [
+        "https://www.amazon.es/deals?bubble-id=deals-collection-lightning-deals"
+      ],
+      "parser_profile": "V4",
+      "research_category": null,
+      "source_id": "v4_6902a09c0383953737a1f8e4",
+      "source_status": "UNVERIFIED",
+      "source_subtype": "LIGHTNING_DEAL_FILTER",
+      "source_type": "DEALS",
+      "url": "https://www.amazon.es/deals?bubble-id=deals-collection-lightning-deals"
+    },
+    "page_url": "https://www.amazon.es/deals?bubble-id=deals-collection-lightning-deals",
+    "actual_http": 200
+  },
+  {
+    "file": "haul.html",
+    "sha256": "f848151555f28a718f2ca971eecb9ea5bf7a2befeb7fa815cf468e63f03da8ae",
+    "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\html\\f8\\f848151555f28a718f2ca971eecb9ea5bf7a2befeb7fa815cf468e63f03da8ae.html",
+    "run_id": "v4_t1_056014fcc8b9",
+    "observed_at": "2026-10-14T20:53:26.877240Z",
+    "source": {
+      "actual_source_url": "https://www.amazon.es/-/en/haul/store",
+      "category_path": [],
+      "enabled": true,
+      "navigation_evidence": null,
+      "page_urls": [
+        "https://www.amazon.es/-/en/haul/store"
+      ],
+      "parser_profile": "V4",
+      "research_category": null,
+      "source_id": "v4_54613bccc13bbbd284c8c6a9",
+      "source_status": "UNVERIFIED",
+      "source_subtype": "HAUL_LOW_PRICE_ZONE",
+      "source_type": "AMAZON_HAUL",
+      "url": "https://www.amazon.es/-/en/haul/store"
+    },
+    "page_url": "https://www.amazon.es/-/en/haul/store",
+    "actual_http": 200
+  }
+]

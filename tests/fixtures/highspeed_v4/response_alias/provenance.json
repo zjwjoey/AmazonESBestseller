@@ -1,0 +1,11 @@
+{
+  "request_url": "https://www.amazon.es/cml-home?pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025",
+  "final_url": "https://www.amazon.es/b?node=205103628031&pf_rd_p=97ebb5b3-7494-4634-953d-fb9865c5df94&pf_rd_r=0HF90GV82A0GYF3HW3BX&ref_=EU5-CML-XPF-2025",
+  "source_id": "v4_639fd3edc3f3f6e80f878200",
+  "run_id": "global30000_d8c4546168db",
+  "observed_at": "2026-10-15T16:38:01.851487Z",
+  "status_code": 200,
+  "access_state": "NORMAL",
+  "sha256": "f339680fa98bc3875ffc31a3b70a19b00a2649f76e1c7f0a3c31faba87155d8c",
+  "evidence_path": "F:\\AmazonESBestseller\\runtime\\global30000_batches\\global30000_d8c4546168db\\store\\runs\\global30000_d8c4546168db\\responses\\req_2566b7af01ff4c2cbc79d3af7fecdeef.json"
+}

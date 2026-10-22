@@ -1,0 +1,7 @@
+{
+  "origin": "ACTUAL_BROWSER_PLUGIN_DOM_SNAPSHOT",
+  "source_url": "https://www.amazon.es/gp/bestsellers",
+  "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\browser_native_after_2.html",
+  "fixture_sha256": "b3561d539980e5b620cae87f606087320fce4ef5193d062c2336cf61b0ad9e7a",
+  "scope": "Actual initialized DOM before/after native Next; not proof of request endpoint or payload and not collector LIVE receipt."
+}

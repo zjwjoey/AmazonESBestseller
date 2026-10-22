@@ -1,0 +1,19 @@
+{
+  "parent_fixture_sha256": "ab951c05af6ce736f8d208e49bff8d1a9800a90e03b68e4d48a1e3c5818c38f3",
+  "receipt_reference": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\runs\\v4_t1_056014fcc8b9\\responses\\req_52998c7988474f78bd72da59aa2b5488.json",
+  "run_id": "v4_t1_056014fcc8b9",
+  "observed_at": "2026-10-14T20:32:23.622407Z",
+  "url": "https://www.amazon.es/gp/bestsellers",
+  "captures": [
+    {
+      "file": "contract_0.json",
+      "sha256": "7466286acabc0f3c4bbe8686fc73083caeddff3906b27d4ebb25d8a1e410670e",
+      "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\native_acp_contracts\\97351974d0a645bb99eab6a0b51f83b1.json"
+    },
+    {
+      "file": "contract_1.json",
+      "sha256": "48048ef7a5e5881519ef1f1302921c4d73e3fbcacb9f28ee5afe9ebf1ddb5ecc",
+      "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\native_acp_contracts\\e83fe637c0c143808ee069bcc49349cd.json"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "source_path": "F:\\AmazonESBestseller\\runtime\\p0_live_20261013T054928Z\\store\\html\\2a5fb7292c8210e0d126309796350a3294f04761ce4865fab6a107cb8cf2fd3e.html",
+  "source_sha256": "2a5fb7292c8210e0d126309796350a3294f04761ce4865fab6a107cb8cf2fd3e",
+  "fixture_sha256": "c69cee872a883e0d5a7d34ccf83deba460804b31bedac60efd71f48e774f1ab0",
+  "source_page_url": "https://www.amazon.es/gp/bestsellers",
+  "transform": "Original H1 and first two list-carousel data-card-metrics-id wrappers; remove data-acp-params and scripts. No href/rank/category mutation. Saved P0 extraction, not current request."
+}

@@ -1,0 +1,216 @@
+{
+  "source": {
+    "actual_source_url": "https://www.amazon.es/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031",
+    "category_path": [],
+    "collection_category_evidence": {
+      "category_label_raw": "Bricolaje y herramientas",
+      "node_sha256": "5b1e4152baa5832396d22590bacc400398e673e848c61b39fbae2b7d588c90d5",
+      "path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\source_probes\\v4_t1_665af02f5b5a\\store\\html\\7b\\7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6.html",
+      "provenance": "CURRENT_CAPTURED_ROOT_DEPARTMENT_NAVIGATION",
+      "selector": "a[href]",
+      "sha256": "7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6",
+      "statement_raw": "Bricolaje y herramientas"
+    },
+    "collection_category_key": "Bricolaje y herramientas",
+    "enabled": true,
+    "navigation_contract": "V4_THREE_SOURCE_5001",
+    "navigation_evidence": {
+      "anchor_dom_index": 56,
+      "anchor_dom_sha256": "34bf085116a8c768e4d81fb4b6c043ed10ac7d50cde225f6e314b4cba0f93204",
+      "approved": false,
+      "browse_node_id": "215733713031",
+      "destination_product_supply": "UNVERIFIED",
+      "evidence_path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\tasks\\snapshot20000_4a11cb206ee7\\store\\html\\09\\0998138af23c356a8340a841669fce2ddaf4d0e9ac0e6695424b1a74a614bc14.html",
+      "evidence_sha256": "0998138af23c356a8340a841669fce2ddaf4d0e9ac0e6695424b1a74a614bc14",
+      "label_raw": "Aserraderos",
+      "observed_at": "2026-10-21T18:10:49.584904Z",
+      "page_url": "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1",
+      "parent_access_status": "NORMAL",
+      "parent_http_status": 200,
+      "parent_source_id": "v4_6bc2a62c5f801eb342358ef4",
+      "parent_source_subtype": "BESTSELLER_SALES_RANKING",
+      "parent_source_type": "BEST_SELLERS",
+      "parent_status": "VERIFIED_WITH_PRODUCTS",
+      "raw_href": "/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031",
+      "relationship": "CHILD_CATEGORY",
+      "status": "PENDING_REVIEW",
+      "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031"
+    },
+    "navigation_parent": {
+      "actual_source_url": "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1",
+      "category_path": [],
+      "collection_category_evidence": {
+        "category_label_raw": "Bricolaje y herramientas",
+        "node_sha256": "5b1e4152baa5832396d22590bacc400398e673e848c61b39fbae2b7d588c90d5",
+        "path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\source_probes\\v4_t1_665af02f5b5a\\store\\html\\7b\\7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6.html",
+        "provenance": "CURRENT_CAPTURED_ROOT_DEPARTMENT_NAVIGATION",
+        "selector": "a[href]",
+        "sha256": "7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6",
+        "statement_raw": "Bricolaje y herramientas"
+      },
+      "collection_category_key": "Bricolaje y herramientas",
+      "enabled": true,
+      "navigation_contract": "V4_THREE_SOURCE_5001",
+      "navigation_evidence": {
+        "anchor_dom_index": 54,
+        "anchor_dom_sha256": "26fcbf7ccd803738538c4690d0c369280a0ab5427df7f36a0c8f7feae0db9ff7",
+        "approved": false,
+        "browse_node_id": "5940100031",
+        "destination_product_supply": "UNVERIFIED",
+        "evidence_path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\tasks\\snapshot20000_4a11cb206ee7\\store\\html\\3e\\3effcdc7382961b2d8414dde94c43f228955cc36724dd040b60ea9c1e492725a.html",
+        "evidence_sha256": "3effcdc7382961b2d8414dde94c43f228955cc36724dd040b60ea9c1e492725a",
+        "label_raw": "Cortacéspedes y herramientas eléctricas para exteriores",
+        "observed_at": "2026-10-21T18:09:25.289128Z",
+        "page_url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_nav_tools_0",
+        "parent_access_status": "NORMAL",
+        "parent_http_status": 200,
+        "parent_source_id": "v4_2ec70e857740ca373894ad6c",
+        "parent_source_subtype": "BESTSELLER_SALES_RANKING",
+        "parent_source_type": "BEST_SELLERS",
+        "parent_status": "VERIFIED_WITH_PRODUCTS",
+        "raw_href": "/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1",
+        "relationship": "CHILD_CATEGORY",
+        "status": "PENDING_REVIEW",
+        "url": "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1"
+      },
+      "navigation_parent": {
+        "actual_source_url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_nav_tools_0",
+        "category_path": [],
+        "collection_category_evidence": {
+          "category_label_raw": "Bricolaje y herramientas",
+          "node_sha256": "5b1e4152baa5832396d22590bacc400398e673e848c61b39fbae2b7d588c90d5",
+          "path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\source_probes\\v4_t1_665af02f5b5a\\store\\html\\7b\\7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6.html",
+          "provenance": "CURRENT_CAPTURED_ROOT_DEPARTMENT_NAVIGATION",
+          "selector": "a[href]",
+          "sha256": "7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6",
+          "statement_raw": "Bricolaje y herramientas"
+        },
+        "collection_category_key": "Bricolaje y herramientas",
+        "enabled": true,
+        "navigation_contract": "V4_THREE_SOURCE_5001",
+        "navigation_evidence": {
+          "anchor_dom_index": 59,
+          "anchor_dom_sha256": "5b1e4152baa5832396d22590bacc400398e673e848c61b39fbae2b7d588c90d5",
+          "approved": false,
+          "browse_node_id": null,
+          "destination_product_supply": "UNVERIFIED",
+          "evidence_path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\source_probes\\v4_t1_665af02f5b5a\\store\\html\\7b\\7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6.html",
+          "evidence_sha256": "7bbca26f353ed943f8a88a85fc27f62176adbf21d94d2eaad815a195ebe337f6",
+          "label_raw": "Bricolaje y herramientas",
+          "observed_at": "2026-10-21T14:08:21.561953Z",
+          "page_url": "https://www.amazon.es/gp/bestsellers",
+          "parent_access_status": "NORMAL",
+          "parent_http_status": 200,
+          "parent_source_id": "v4_8f19989acb79894b1f797ebc",
+          "parent_source_subtype": "BESTSELLER_SALES_RANKING",
+          "parent_source_type": "BEST_SELLERS",
+          "parent_status": "VERIFIED_WITH_PRODUCTS",
+          "raw_href": "/gp/bestsellers/tools/ref=zg_bs_nav_tools_0",
+          "relationship": "CHILD_CATEGORY",
+          "status": "PENDING_REVIEW",
+          "url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_nav_tools_0"
+        },
+        "navigation_parent": {
+          "actual_source_url": "https://www.amazon.es/gp/bestsellers",
+          "category_path": [],
+          "enabled": false,
+          "navigation_evidence": null,
+          "page_urls": [
+            "https://www.amazon.es/gp/bestsellers"
+          ],
+          "parser_profile": "V4",
+          "research_category": null,
+          "source_id": "v4_8f19989acb79894b1f797ebc",
+          "source_status": "UNVERIFIED",
+          "source_subtype": "BESTSELLER_SALES_RANKING",
+          "source_type": "BEST_SELLERS",
+          "url": "https://www.amazon.es/gp/bestsellers"
+        },
+        "owned_page_navigation": {
+          "contract": "OWNED_CATEGORY_PAGE_V1",
+          "max_category_depth": 6,
+          "max_pages_per_source": 160,
+          "max_sources_per_department": 120
+        },
+        "page_urls": [
+          "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_nav_tools_0"
+        ],
+        "parser_profile": "V4",
+        "research_category": null,
+        "source_id": "v4_2ec70e857740ca373894ad6c",
+        "source_status": "UNVERIFIED",
+        "source_subtype": "BESTSELLER_SALES_RANKING",
+        "source_type": "BEST_SELLERS",
+        "url": "https://www.amazon.es/gp/bestsellers/tools/ref=zg_bs_nav_tools_0"
+      },
+      "owned_page_navigation": {
+        "contract": "OWNED_CATEGORY_PAGE_V1",
+        "max_category_depth": 6,
+        "max_pages_per_source": 160,
+        "max_sources_per_department": 120
+      },
+      "page_urls": [
+        "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1"
+      ],
+      "parser_profile": "V4",
+      "research_category": null,
+      "snapshot_admission_root": "v4_2ec70e857740ca373894ad6c",
+      "snapshot_navigation_receipts": [
+        {
+          "navigation_sha256": "b96db7263ef9664e60ca74c8319b4c4703031b905f18a7e2f697484c7367516e",
+          "receipt_reference": {
+            "path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\tasks\\snapshot20000_4a11cb206ee7\\store\\runs\\snapshot20000_4a11cb206ee7\\responses\\req_a8611d89b3814e9cb4e81348585e5c0f.json",
+            "sha256": "e873b2eb16b3b58cb407abea547fced32e26ccbc031ce7eacece9df2c0de34b2"
+          }
+        }
+      ],
+      "source_id": "v4_6bc2a62c5f801eb342358ef4",
+      "source_status": "UNVERIFIED",
+      "source_subtype": "BESTSELLER_SALES_RANKING",
+      "source_type": "BEST_SELLERS",
+      "url": "https://www.amazon.es/gp/bestsellers/tools/5940100031/ref=zg_bs_nav_tools_1"
+    },
+    "owned_page_navigation": {
+      "contract": "OWNED_CATEGORY_PAGE_V1",
+      "max_category_depth": 6,
+      "max_pages_per_source": 160,
+      "max_sources_per_department": 120
+    },
+    "page_urls": [
+      "https://www.amazon.es/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031"
+    ],
+    "parser_profile": "V4",
+    "research_category": null,
+    "snapshot_admission_root": "v4_2ec70e857740ca373894ad6c",
+    "snapshot_navigation_receipts": [
+      {
+        "navigation_sha256": "b96db7263ef9664e60ca74c8319b4c4703031b905f18a7e2f697484c7367516e",
+        "receipt_reference": {
+          "path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\tasks\\snapshot20000_4a11cb206ee7\\store\\runs\\snapshot20000_4a11cb206ee7\\responses\\req_a8611d89b3814e9cb4e81348585e5c0f.json",
+          "sha256": "e873b2eb16b3b58cb407abea547fced32e26ccbc031ce7eacece9df2c0de34b2"
+        }
+      },
+      {
+        "navigation_sha256": "c53bef92bd0fea6aa5a8e7c5c37e8d9f505be2479792e4d1ea3393beb37c96d8",
+        "receipt_reference": {
+          "path": "F:\\AmazonESBestseller\\runtime\\snapshot20000_20261021\\tasks\\snapshot20000_4a11cb206ee7\\store\\runs\\snapshot20000_4a11cb206ee7\\responses\\req_cc9fb860196b4a05bb5d57f61477070b.json",
+          "sha256": "aa96a6d6803f738de49af10d1e973b624fe437900d815634b311239145f30cd4"
+        }
+      }
+    ],
+    "source_id": "v4_5d39d99940be86e872596830",
+    "source_status": "UNVERIFIED",
+    "source_subtype": "BESTSELLER_SALES_RANKING",
+    "source_type": "BEST_SELLERS",
+    "url": "https://www.amazon.es/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031"
+  },
+  "receipt": {
+    "run_id": "snapshot20000_4a11cb206ee7",
+    "request_url": "https://www.amazon.es/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031",
+    "observed_at": "2026-10-21T18:22:38.913867Z",
+    "status_code": 200,
+    "access_state": "NORMAL",
+    "final_url": "https://www.amazon.es/gp/bestsellers/lawn-garden/215733713031/ref=zg_bs_nav_lawn-garden_2_5940100031"
+  },
+  "html_sha256": "93d7aa98aa3807028ad2c9006c6eb3d38dd70571b9a3b3f4feb4fe39bd33bc71"
+}

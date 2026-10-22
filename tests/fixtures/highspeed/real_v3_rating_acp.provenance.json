@@ -1,0 +1,12 @@
+{
+  "source_type": "BEST_SELLERS",
+  "source_url": "https://www.amazon.es/gp/bestsellers/fashion/5517557031",
+  "raw_product_url": "/Joma-Treviso-Pantalones-Cortos-Equipamiento/dp/B06Y693DG7/ref=zg_bs_g_5517557031_d_sccl_31/524-6514838-9761305?psc=1",
+  "observed_at": "2026-10-13T16:25:16.707599Z",
+  "evidence_path": "F:\\AmazonESBestseller\\runtime\\night5000_20261013T155222Z\\store\\html\\cb\\cbc05623913d58d1f21d51357269432e02bdf68dc7888614a4f473db0f1eb1fa.html",
+  "evidence_sha256": "cbc05623913d58d1f21d51357269432e02bdf68dc7888614a4f473db0f1eb1fa",
+  "representation": "ACP_0",
+  "representation_slot": 0,
+  "fixture_sha256": "ae7c4a22f355c7175472b0ca223463284f39c3963f223c3b96e338633375891f",
+  "derivation": "Serialized actual ACP card; old capture not new LIVE"
+}

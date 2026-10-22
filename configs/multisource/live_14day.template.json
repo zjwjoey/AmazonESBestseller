@@ -1,0 +1,1 @@
+{"days":14,"enabled":false,"note":"Set reviewed start_date and daily source plan only after explicit phase authorization; does not automatically advance phases.","plan_file":"p0_review_plan.json","schedule_id":"live_days","schema_version":1,"start_date":null,"timezone":"Europe/Madrid"}

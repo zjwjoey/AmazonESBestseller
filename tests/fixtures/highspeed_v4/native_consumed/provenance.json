@@ -1,0 +1,14 @@
+{
+  "run_id": "v4_t1_056014fcc8b9",
+  "page_url": "https://www.amazon.es/gp/bestsellers",
+  "observed_at": "2026-10-14T20:40:10.577075Z",
+  "source_id": "v4_8f19989acb79894b1f797ebc",
+  "source_type": "BEST_SELLERS",
+  "source_subtype": "BESTSELLER_SALES_RANKING",
+  "evidence_sha256": "84d681bb3a524733abe006a34a81e23d43a73f3783e8a8427c170247988e2175",
+  "actual_card_count": 32,
+  "capture_receipt_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\runs\\v4_t1_056014fcc8b9\\responses\\req_e61ee59f946e4738baf1f038b21d0c73.json",
+    "sha256": "1c5da7cbed6d55884da59a1535129c7746d6bcdfc223b5ab394b1b1a2e072a85"
+  }
+}

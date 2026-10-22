@@ -1,0 +1,13 @@
+{
+  "origin": "ACTUAL_LIVE_T1_SAVED_HTML",
+  "actual_run_id": "v3_t1_9ade8e5793a8",
+  "source_url": "https://www.amazon.es/gp/most-wished-for/kitchen/2165211031",
+  "source_type": "MOST_WISHED_FOR",
+  "captured_at": "2026-10-14T11:10:06.835671Z",
+  "original_html_reference": {
+    "path": "F:\\AmazonESBestseller\\runtime\\highspeed_v3_fresh_batches\\v3_t1_9ade8e5793a8\\store\\html\\b8\\b8dbb93cb3f7043dbc48221994ea064a768fdb6bd4be60975e2c724047559e50.html",
+    "sha256": "b8dbb93cb3f7043dbc48221994ea064a768fdb6bd4be60975e2c724047559e50"
+  },
+  "fixture_sha256": "b8dbb93cb3f7043dbc48221994ea064a768fdb6bd4be60975e2c724047559e50",
+  "diagnosis": "Official empty grid client recs=[] and endOfList; unrelated ancestor ACP path must not synthesize a pending continuation."
+}

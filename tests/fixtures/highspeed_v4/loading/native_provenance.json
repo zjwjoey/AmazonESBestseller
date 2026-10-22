@@ -1,0 +1,20 @@
+[
+  {
+    "file": "haul_contract.json",
+    "sha256": "8b2ef878eccc7e91bbd1d5932d887f0b667456d3ecca2d7415c13a22958d7d2f",
+    "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\native_discovery_contracts\\fcfed01876514c5bb9c678623db859f8.json",
+    "new_network_requests": 0
+  },
+  {
+    "file": "haul_scroll_contract.json",
+    "sha256": "4853840196dffb7c55d7d3ebae9dbf82b3a13f74f2df6fdf56d19d05f7b35cb4",
+    "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\native_acp_contracts\\aa7a5b4b00174784a16c1ad77a0b7498.json",
+    "new_network_requests": 0
+  },
+  {
+    "file": "lightning_contract.json",
+    "sha256": "309b92cffa8426672adc45a25726225681d6e874f24048ceafb7fc3a337a8f76",
+    "original_path": "F:\\AmazonESBestseller\\runtime\\highspeed_v4_fresh_batches\\v4_t1_056014fcc8b9\\store\\native_discovery_contracts\\f0eb6aa7c6fd43a481b58dab000c6d8f.json",
+    "new_network_requests": 0
+  }
+]

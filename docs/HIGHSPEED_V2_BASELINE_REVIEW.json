@@ -1,0 +1,216 @@
+{
+  "baseline_branch": "codex/multisource-snapshot-test-v1-1",
+  "baseline_sha": "3db150392361e36589a0b29256dccfe23505666d",
+  "new_branch": "codex/multisource-highspeed-v2",
+  "main_modified": false,
+  "module_review": [
+    {
+      "path": "multisource/adapters.py",
+      "sha256": "c316584ef0488592df583b6fc26a294ec65f672cda0c42d60cb6f858f3dc7c69",
+      "lines": 501,
+      "public_symbols": [
+        "_fold",
+        "_text",
+        "_integer",
+        "_positive_attr",
+        "_response_body",
+        "RankingAdapter",
+        "BestSellersAdapter",
+        "MoversShakersAdapter",
+        "NewReleasesAdapter",
+        "MostWishedForAdapter",
+        "MostGiftedAdapter",
+        "get_adapter"
+      ]
+    },
+    {
+      "path": "multisource/sources.py",
+      "sha256": "bbabf9984299413997fe0f4a3b7cfa1af7734c3e69698a37c4973c3737137a3a",
+      "lines": 415,
+      "public_symbols": [
+        "_classification_path",
+        "source_type_value",
+        "normalize_source_url",
+        "source_type_from_url",
+        "browse_node_id",
+        "same_source_category",
+        "_validate_live_receipt",
+        "source_id",
+        "_mapping",
+        "discover_sources",
+        "SourceRegistry"
+      ]
+    },
+    {
+      "path": "multisource/identity.py",
+      "sha256": "675696990793e43541c8a816fd6fb6a3c747d82476678c50cec0e1586216cde4",
+      "lines": 596,
+      "public_symbols": [
+        "normalize_product_url",
+        "_amazon_url",
+        "_asin",
+        "identity_fingerprint",
+        "IdentityEvidenceResolver",
+        "ProductIdentityRegistry"
+      ]
+    },
+    {
+      "path": "multisource/snapshots.py",
+      "sha256": "49c6b5df16ee813ef32d8bd4bfacc62b93c477b940186cab8e9b3567b48739f8",
+      "lines": 625,
+      "public_symbols": [
+        "safe_id",
+        "CheckpointManager",
+        "SnapshotManager"
+      ]
+    },
+    {
+      "path": "multisource/budgets.py",
+      "sha256": "a2f2ce6866b81b0dae9d1aadb68c9c52b98c374bb25da6bfc127a5180b5ba8d1",
+      "lines": 133,
+      "public_symbols": [
+        "BudgetLedger"
+      ]
+    },
+    {
+      "path": "multisource/schedule.py",
+      "sha256": "ca60158e1b4f5cb930375f97e5149b58f547b577a344c530faeffb171d60c768",
+      "lines": 42,
+      "public_symbols": [
+        "daily_plan"
+      ]
+    },
+    {
+      "path": "multisource/authorization.py",
+      "sha256": "abb053f59edb65ad26c6441cc309eb41dd1fac24961e6ef8fe536a3de0a34992",
+      "lines": 109,
+      "public_symbols": [
+        "amazon_url",
+        "validate_authorization",
+        "authorize_request"
+      ]
+    },
+    {
+      "path": "multisource/quality.py",
+      "sha256": "cd433cd54daaffc06138b696d8a9ae6433f8f0fe336bb888d988275c0fd29210",
+      "lines": 387,
+      "public_symbols": [
+        "_finding",
+        "confirmed",
+        "_evidence",
+        "_page_key",
+        "_count_proof",
+        "_status",
+        "coverage_matrix",
+        "SnapshotQualityGate",
+        "audit_snapshot"
+      ]
+    },
+    {
+      "path": "multisource/comparison.py",
+      "sha256": "ecdfca2ec3250cb4eddf955cc1296934acf84ce64ea4938df5aab29032d80635",
+      "lines": 290,
+      "public_symbols": [
+        "_date",
+        "_context",
+        "_selection",
+        "_not_comparable",
+        "SnapshotComparator"
+      ]
+    },
+    {
+      "path": "multisource/cli.py",
+      "sha256": "8eb00f0bf045f86b2bd2dc47d29b5bc888c268d2be0df827227b57c13d6c00c4",
+      "lines": 242,
+      "public_symbols": [
+        "read_json",
+        "_plan",
+        "_filter_sources",
+        "_history",
+        "_execute",
+        "dispatch",
+        "register"
+      ]
+    },
+    {
+      "path": "collection/ranking_v2.py",
+      "sha256": "7139eaaff09c24f50fa82e73e1795bc5a7add682d0b3dbce39712212088e1479",
+      "lines": 419,
+      "public_symbols": [
+        "RankingSnapshotIncompleteError",
+        "_page_number",
+        "_recs_metadata",
+        "_rank",
+        "ranking_completeness",
+        "parse_ranking_snapshot_v2",
+        "make_acp_hydrator",
+        "require_authoritative_page",
+        "replay_acp_response_evidence",
+        "replay_ranking_snapshot_v2",
+        "build_ranking_snapshot_v2"
+      ]
+    },
+    {
+      "path": "access/browser.py",
+      "sha256": "92850183f02ddb863da731184117885365679d101e5c11f0a2486d967a5a1f6d",
+      "lines": 311,
+      "public_symbols": [
+        "_safe_print",
+        "BrowserSession"
+      ]
+    },
+    {
+      "path": "access/detector.py",
+      "sha256": "e0e61503a9c43e70a118c86e3babcba98eecfddb675f8db2052d96896d5ec842",
+      "lines": 52,
+      "public_symbols": [
+        "AccessStopError",
+        "require_normal_access",
+        "detect_access_status"
+      ]
+    },
+    {
+      "path": "transport/playwright.py",
+      "sha256": "78a12acbca8de4b844e368694e8122e1c2feb24a83822d73730074fdfee0fc1f",
+      "lines": 260,
+      "public_symbols": [
+        "PlaywrightTransport"
+      ]
+    },
+    {
+      "path": "monitoring/ranking_identity/adapters.py",
+      "sha256": "ea2280ce355b41325cf3402c16c60349acd3c1eb1014f871139d2abe9a6bc77d",
+      "lines": 362,
+      "public_symbols": [
+        "_text",
+        "_unique_nodes",
+        "select_ranking_cards",
+        "_first_href",
+        "_card_asin",
+        "_rank",
+        "extract_server_candidates",
+        "_jsonish",
+        "_mapping_candidate",
+        "extract_structured_candidates",
+        "extract_structured_candidates_with_status",
+        "extract_embedded_supplemental",
+        "extract_embedded_supplemental_with_status",
+        "expected_count_from_html"
+      ]
+    }
+  ],
+  "restrictions": {
+    "daily15": "configuration; current P0 revised45",
+    "P0_total45": "configuration with immutable run specification and reviewed amendments",
+    "P0_pages20": "configuration",
+    "P0_observations1500": "phase hard validation",
+    "total_observations30000": "old phase and global source-budget hard validation",
+    "schedule14days": "old schedule validation hard requirement",
+    "cooldown1800": "old default config; explicit0 authorization already supported",
+    "serial_and_minimum_pacing": "access safety validation",
+    "Access_Gate": "must preserve; currently old shared gate NETWORK_ERROR",
+    "ASIN_identity": "old snapshot parser and identity resolver rely onASIN; isolated link-first module replaces this dependency only"
+  },
+  "new_live_authorization": "NOT_GRANTED_FOR_T1_T2_T3",
+  "cancelled_automation_not_recreated": true
+}
