@@ -209,7 +209,13 @@ def package_count(d) -> Optional[str]:
                 continue
             m = re.match(r'([\d.,]+)', str(v).replace(' ', ''))
             if m:
-                val = float(m.group(1).replace(',', '.'))
+                try:
+                    val = float(m.group(1).replace(',', '.'))
+                except ValueError:
+                    # Real saved evidence B094K1DN4D lists "1, 24, 48".
+                    # It is an unresolved choice, not one numeric pack size.
+                    # Preserve the raw list and continue with other evidence.
+                    continue
                 if best is None or val > best:
                     best = val
     if best is None:

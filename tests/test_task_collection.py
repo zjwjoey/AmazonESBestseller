@@ -252,6 +252,7 @@ def test_parallel_task_runner_writes_manifest_and_report(monkeypatch, tmp_path):
 
 def test_parallel_access_stop_closes_worker_request_gate(monkeypatch, tmp_path):
     plan = _plan()
+    plan["scheduler"]["access_stop_scope"] = "all"
     a_raised = threading.Event()
     navigated_after_stop = []
 
@@ -279,6 +280,165 @@ def test_parallel_access_stop_closes_worker_request_gate(monkeypatch, tmp_path):
     report = run_task(plan, str(tmp_path / "run"), mode="parallel3")
     assert report["run_status"] == "ACCESS_STOP"
     assert navigated_after_stop == []
+
+
+def test_worker_access_stop_preserves_healthy_browser_and_requires_explicit_resume(monkeypatch, tmp_path):
+    from amazon_es_bestseller.access.detector import AccessStopError
+
+    plan = _plan()
+    stopped = threading.Event()
+    visits = []
+
+    def worker(category, plan, output, worker_id, headful, profile_dir,
+               claim_asins, release_asins, completed_urls, stop_event=None):
+        group = category["research_category"]
+        visits.append(group)
+        if group == "A":
+            stopped.set()
+            raise AccessStopError("HTTP 429: worker A")
+        assert stopped.wait(2)
+        assert not stop_event.is_set(), "healthy browser must remain open for requests"
+        return {
+            "status": "COMPLETE", "rankings": [{"asin": "B000000001",
+                "research_category": "B", "bestseller_rank": 1,
+                "ranking_source_url": category["sources"][0]["source_url"]}],
+            "details": [{"asin": "B000000001", "title_es_raw": "Producto"}],
+        }
+
+    monkeypatch.setattr(task_module, "_run_category_live", worker)
+    report = run_task(plan, str(tmp_path), mode="parallel3")
+    assert report["run_status"] == "ACCESS_STOP"
+    assert report["categories"]["B"]["status"] == "COMPLETE"
+    assert report["detail_records"] == 1
+    assert report["blocked_worker_slots"]
+    assert report["access_stop_scope"] == "worker"
+    assert sorted(visits) == ["A", "B"]
+    assert json.loads((tmp_path / "final_manifest.json").read_text()) == []
+    with pytest.raises(ValueError, match="resume-access-stopped"):
+        run_task(plan, str(tmp_path), mode="parallel3")
+    assert sorted(visits) == ["A", "B"]  # Restart must not silently retry A.
+    # Human approval permits A to be tried again; B stays complete/cached.
+    run_task(plan, str(tmp_path), mode="parallel3", resume_access_stopped=True)
+    assert visits.count("A") == 2
+    assert visits.count("B") == 1
+
+
+def test_worker_stop_does_not_reopen_blocked_slot_for_pending_category(monkeypatch, tmp_path):
+    from amazon_es_bestseller.access.detector import AccessStopError
+
+    plan = _plan()
+    visited = []
+
+    def worker(category, *args, **kwargs):
+        visited.append(category["research_category"])
+        raise AccessStopError("HTTP 403")
+
+    monkeypatch.setattr(task_module, "_run_category_live", worker)
+    report = run_task(plan, str(tmp_path), mode="serial")
+    assert visited == ["A"]
+    assert report["run_status"] == "ACCESS_STOP"
+    assert report["pending_categories"] == ["B"]
+    assert report["blocked_worker_slots"] == [1]
+
+
+def test_task_plan_rejects_unknown_access_stop_scope():
+    plan = _plan()
+    plan["scheduler"]["access_stop_scope"] = "ignore"
+    with pytest.raises(ValueError, match="access_stop_scope"):
+        validate_task_plan(plan)
+
+
+def test_real_detail_gate_keeps_partial_success_and_does_not_transfer_blocked_asin(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from amazon_es_bestseller.collection import detail as detail_module
+
+    plan = _plan()
+    plan["scheduler"]["cooldown_after_category_seconds"] = 0
+    a_stopped = threading.Event()
+    visits = []
+    # A succeeds once, then is blocked. B sees A's blocked ASIN in its own
+    # ranking context, but must not claim it through its healthy browser.
+    first, blocked, healthy = "A000000001", "A000000002", "B000000001"
+
+    class Page:
+        url = ""
+
+        def content(self):
+            asin = self.url.rsplit("/", 1)[-1]
+            return (f'<html><body><input id="ASIN" value="{asin}">'
+                    '<h1 id="productTitle">Producto de prueba</h1></body></html>')
+
+    class Session:
+        def __init__(self, *args, **kwargs):
+            self.page = Page()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def goto(self, url):
+            asin = url.rsplit("/", 1)[-1]
+            visits.append((self.group, asin))
+            self.page.url = url
+            if self.group == "A" and asin == blocked:
+                a_stopped.set()
+                return 403
+            return 200
+
+        def wait_for_product_page(self):
+            pass
+
+        def wait_for_price_text(self):
+            pass
+
+        def wait_between_requests(self):
+            pass
+
+    def rankings(urls, session, out_dir, **kwargs):
+        session.group = "A" if "beauty" in urls[0] else "B"
+        if session.group == "B":
+            assert a_stopped.wait(3)
+        return [{"asin": asin, "bestseller_rank": i + 1,
+                 "ranking_source_url": urls[0], "ranking_page_number": 1}
+                for i, asin in enumerate([first, blocked] if session.group == "A"
+                                         else [blocked, healthy])]
+
+    monkeypatch.setattr("amazon_es_bestseller.access.browser.BrowserSession", Session)
+    monkeypatch.setattr("amazon_es_bestseller.access.location.ensure_spain_delivery",
+                        lambda *args: None)
+    monkeypatch.setattr("amazon_es_bestseller.collection.ranking.collect_rankings", rankings)
+    monkeypatch.setattr(detail_module, "time", SimpleNamespace(sleep=lambda seconds: None))
+    report = run_task(plan, str(tmp_path), mode="parallel3")
+    assert report["run_status"] == "ACCESS_STOP"
+    assert report["categories"]["A"]["pending_detail_asins"] == [blocked]
+    assert report["categories"]["B"]["status"] == "COMPLETE"
+    assert visits == [("A", first), ("A", blocked), ("B", healthy)]
+    assert {row["asin"] for row in json.loads((tmp_path / "details.json").read_text())} == {
+        first, healthy}
+    assert (tmp_path / "categories" / "A" / "detail_cache" / "html" / f"{blocked}.html").exists()
+    state = json.loads((tmp_path / "batch_state_v2.json").read_text(encoding="utf-8"))
+    assert blocked in state["claimed_asins"]
+    assert json.loads((tmp_path / "final_manifest.json").read_text()) == []
+
+
+def test_task_cli_exposes_worker_policy_and_explicit_resume(monkeypatch, tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(_plan()), encoding="utf-8")
+    seen = {}
+
+    def runner(plan, out_dir, **kwargs):
+        seen.update(plan=plan, kwargs=kwargs)
+        return {"mode": "parallel3", "run_status": "ACCESS_STOP", "final_unique_asins": 0}
+
+    monkeypatch.setattr(task_module, "run_task", runner)
+    args = cli.build_parser().parse_args([
+        "task-collect", "--plan", str(plan_path), "--out-dir", str(tmp_path / "out"),
+        "--access-stop-scope", "worker", "--resume-access-stopped"])
+    args.func(args)
+    assert seen["plan"]["scheduler"]["access_stop_scope"] == "worker"
+    assert seen["kwargs"]["resume_access_stopped"] is True
 
 
 def test_task_export_keeps_core_sheets_and_adds_provenance_sheet():

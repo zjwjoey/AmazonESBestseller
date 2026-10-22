@@ -161,6 +161,9 @@ def validate_task_plan(plan: Mapping, *, plan_path: str | Path | None = None,
     mode = str(scheduler.get("mode") or "parallel3")
     if mode not in {"parallel3", "serial"}:
         raise ValueError("scheduler.mode 必须是 parallel3 或 serial")
+    access_stop_scope = str(scheduler.get("access_stop_scope", "worker"))
+    if access_stop_scope not in {"worker", "all"}:
+        raise ValueError("scheduler.access_stop_scope 必须是 worker 或 all")
     try:
         parallel = int(scheduler.get("max_parallel_categories", 3))
         cooldown = int(scheduler.get("cooldown_after_category_seconds", 600))
@@ -215,6 +218,7 @@ def validate_task_plan(plan: Mapping, *, plan_path: str | Path | None = None,
             "target_unique": int(target),
             "pages_per_url": plan_pages,
             "scheduler": {**scheduler, "mode": mode,
+                           "access_stop_scope": access_stop_scope,
                            "max_parallel_categories": parallel,
                            "cooldown_after_category_seconds": cooldown,
                            "fallback_cooldown_seconds": fallback_cooldown}}
@@ -356,8 +360,26 @@ def _run_category_live(category: Mapping, plan: Mapping, output: Path,
                     if asin not in successes:
                         pending_detail_asins.add(asin)
                         release_asins([asin])
-            except Exception:
-                release_asins(claimed)
+            except Exception as exc:
+                # collect_details checkpoints each success before requesting the
+                # next ASIN. Recover those successes if a later request stops,
+                # so another healthy worker never reclaims completed products.
+                from .checkpoints import read_checkpoint
+                for asin in claimed:
+                    checkpoint = read_checkpoint(Path(detail_dir) / "checkpoints", asin) or {}
+                    record = checkpoint.get("record")
+                    if checkpoint.get("status") == "success" and isinstance(record, Mapping):
+                        detail_map[asin] = dict(record)
+                        pending_detail_asins.discard(asin)
+                    else:
+                        pending_detail_asins.add(asin)
+                from ..access.detector import AccessStopError
+                if not isinstance(exc, AccessStopError):
+                    release_asins([asin for asin in claimed if asin not in detail_map])
+                # Keep a stopped browser's claims reserved for this run. They
+                # must not become a retry queue for another browser.
+                save_category("ACCESS_STOP" if isinstance(exc, AccessStopError)
+                              else "DETAIL_INCOMPLETE", "")
                 raise
 
         # A previous run may have finished ranking collection but left
@@ -465,17 +487,29 @@ def _write_summary(output: Path, categories: list[Mapping], rankings: list,
             sources = {str(row.get("ranking_source_url") or "") for row in rows if row.get("ranking_source_url")}
             final_count = len(selected.get(group, []))
             target = int(category["target_unique"])
+            category_status = statuses.get(group, {}).get("status", "INCOMPLETE")
+            selected_asins = {str(row.get("asin") or "").upper()
+                              for row in selected.get(group, []) if row.get("asin")}
+            if category_status == "COMPLETE":
+                if final_count != target:
+                    category_status = "QUOTA_UNIQUE_SHORTFALL"
+                elif (selected_asins - set(by_detail)
+                      or statuses.get(group, {}).get("pending_detail_asins")):
+                    category_status = "DETAIL_INCOMPLETE"
+                else:
+                    category_status = "PASS"
             writer.writerow({"采集研究类目": group, "目标SKU": target,
                              "原始榜单记录": len(rows), "类目内唯一ASIN": len(asins),
                              "详情记录": len(asins & set(by_detail)), "最终保留": final_count,
                              "使用榜单数量": len(sources),
-                             "状态": "PASS" if final_count == target else statuses.get(group, {}).get("status", "INCOMPLETE")})
+                             "状态": category_status})
 
 
 def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
              headful: bool = False, profile_dir: str = "",
              plan_path: str | Path | None = None,
-             project_root: str | Path | None = None) -> dict:
+             project_root: str | Path | None = None,
+             resume_access_stopped: bool = False) -> dict:
     """Run a reviewed plan in ``parallel3`` or ``serial`` mode."""
     plan = validate_task_plan(plan, plan_path=plan_path, project_root=project_root)
     scheduler = plan["scheduler"]
@@ -488,13 +522,22 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     output.mkdir(parents=True, exist_ok=True)
     state_path = output / "batch_state_v2.json"
     state = _read_json(state_path, {})
+    if not resume_access_stopped and (
+            state.get("blocked_worker_slots") or state.get("run_status") == "ACCESS_STOP"
+            or any(row.get("status") == "ACCESS_STOP"
+                   for row in (state.get("categories") or {}).values())):
+        raise ValueError("存在尚未人工处理的访问拦截；处理后显式使用 --resume-access-stopped")
+    access_stop_scope = scheduler["access_stop_scope"]
     categories = plan["categories"]
     category_map = {row["research_category"]: row for row in categories}
     force_reserve_sources = state.get("run_status") == "QUOTA_UNIQUE_SHORTFALL"
     plan = {**plan, "force_reserve_sources": force_reserve_sources}
     category_states = dict(state.get("categories") or {})
     for group, value in list(category_states.items()):
-        if value.get("status") == "RUNNING":
+        if value.get("status") == "ACCESS_STOP" and resume_access_stopped:
+            value["status"] = "PENDING"
+            value["attempts"] = 0
+        elif value.get("status") == "RUNNING":
             value["status"] = "PENDING"
         elif value.get("status") == "DETAIL_INCOMPLETE":
             # A new process gets a fresh retry budget for persisted detail
@@ -521,6 +564,8 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
         _write_json_atomic(state_path, {
             "schema_version": 2, "task_id": plan["task_id"], "mode": mode,
             "run_status": run_status, "categories": category_states,
+            "access_stop_scope": access_stop_scope,
+            "blocked_worker_slots": sorted(slot + 1 for slot in blocked_slots),
             "worker_ready_at": ready_at, "active_workers": active,
             "claimed_asins": sorted(claimed),
             "completed_source_urls": sorted(set(state.get("completed_source_urls", []))),
@@ -549,6 +594,7 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     ready_at = [float(value) for value in state.get("worker_ready_at", [])]
     slots = max(1, 3 if mode == "parallel3" else 1)
     ready_at = (ready_at + [0.0] * slots)[:slots]
+    blocked_slots: set[int] = set()
     statuses = category_states
     save_state("RUNNING", ready_at, [])
     stop_all = False
@@ -561,17 +607,16 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
             args = (category_map[group], plan, output, slot + 1, headful,
                     profile_dir, claim_asins, release_asins,
                     set(state.get("completed_source_urls", [])), stop_event)
-            if plan.get("manual_assist"):
+            if plan.get("manual_assist") and access_stop_scope == "all":
                 return _run_category_live(*args, challenge_pause=challenge_pause)
             # Preserve compatibility with legacy/offline worker doubles that
             # implement the original positional signature.
             return _run_category_live(*args)
         except Exception as exc:
-            # Trip the shared gate in the worker that observed access
-            # restriction, before the scheduler gets a chance to inspect the
-            # future.  Other workers therefore stop before their next request.
+            # In all-stop mode, trip the shared gate before the scheduler
+            # inspects the future. Worker mode leaves healthy sessions alone.
             from ..access.detector import AccessStopError
-            if isinstance(exc, AccessStopError):
+            if isinstance(exc, AccessStopError) and access_stop_scope == "all":
                 stop_event.set()
             raise
 
@@ -586,7 +631,7 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                     last_cooldown_log[slot] = now
             # Fill ready slots. A persisted deadline is honored after restart.
             for slot in range(slots):
-                if stop_all or any(existing_slot == slot for existing_slot, _ in futures.values()):
+                if stop_all or slot in blocked_slots or any(existing_slot == slot for existing_slot, _ in futures.values()):
                     continue
                 if not pending or ready_at[slot] > now:
                     continue
@@ -596,11 +641,14 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                                    "attempts": int(previous.get("attempts", 0)) + 1}
                 future = executor.submit(run_one, group, slot)
                 futures[future] = (slot, group)
-            save_state("ACCESS_STOP" if stop_all else "RUNNING", ready_at,
+            save_state("RUNNING_WITH_ACCESS_STOP" if blocked_slots else "RUNNING", ready_at,
                        [group for _, group in futures.values()])
             if not futures:
+                if stop_all or len(blocked_slots) == slots:
+                    break
                 if pending:
-                    delay = max(0.0, min(ready_at) - time.time())
+                    delay = max(0.0, min(ready_at[slot] for slot in range(slots)
+                                         if slot not in blocked_slots) - time.time())
                     if delay:
                         print("[任务] 等待下一工作槽冷却 %.0f 秒" % delay)
                         time.sleep(min(delay, 1.0))
@@ -615,12 +663,24 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                     result = future.result()
                 except Exception as exc:
                     from ..access.detector import AccessStopError
+                    saved_root = output / "categories" / group
+                    saved = _read_json(saved_root / "category_state.json", {})
                     statuses[group] = {**statuses.get(group, {}), "status":
                                        "ACCESS_STOP" if isinstance(exc, AccessStopError) else "FAILED",
                                        "error": str(exc)}
+                    for key in ("source_status", "pending_detail_asins", "detail_records"):
+                        if key in saved:
+                            statuses[group][key] = saved[key]
+                    all_rankings.extend(_read_json(saved_root / "rankings.json", []))
+                    all_details.extend(_read_json(saved_root / "details.json", []))
                     if isinstance(exc, AccessStopError):
-                        stop_all = True
-                        stop_event.set()
+                        blocked_slots.add(slot)
+                        if access_stop_scope == "all":
+                            stop_all = True
+                            stop_event.set()
+                        # Never recycle this slot or requeue its blocked
+                        # category through another browser in this run.
+                        print("[任务][槽位%d] 访问受限，已停止；其他浏览器按门禁范围继续" % (slot + 1))
                     elif statuses[group].get("attempts", 1) < 2:
                         statuses[group]["status"] = "PENDING"
                         pending.insert(0, group)
@@ -653,7 +713,7 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     selected = None
     selected_rows = []
     missing_detail_asins = []
-    run_status = "ACCESS_STOP" if stop_all else "INCOMPLETE"
+    run_status = "ACCESS_STOP" if blocked_slots else "INCOMPLETE"
     try:
         selected = select_research_quota(all_rankings, categories, plan["target_unique"])
         selected_rows = [row for group in selected.values() for row in group]
@@ -662,7 +722,7 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
         missing_detail_asins = sorted(selected_asins - detail_asins)
         incomplete_groups = [group for group in category_map
                              if statuses.get(group, {}).get("status") != "COMPLETE"]
-        if stop_all:
+        if blocked_slots:
             run_status = "ACCESS_STOP"
         elif missing_detail_asins:
             run_status = "DETAIL_INCOMPLETE"
@@ -677,12 +737,15 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                            selected_rows if run_status == "COMPLETE" else [])
     except QuotaError as exc:
         _write_json_atomic(output / "final_manifest.json", [])
-        run_status = "QUOTA_UNIQUE_SHORTFALL" if not stop_all else run_status
+        run_status = "QUOTA_UNIQUE_SHORTFALL" if not blocked_slots else run_status
         print("[任务] 尚未通过最终配额 Gate：%s" % exc)
     _write_summary(output, categories, all_rankings, all_details, selected, statuses)
     report = {
         "schema_version": 1, "task_id": plan["task_id"], "mode": mode,
         "run_status": run_status, "target_unique": plan["target_unique"],
+        "access_stop_scope": access_stop_scope,
+        "blocked_worker_slots": sorted(slot + 1 for slot in blocked_slots),
+        "pending_categories": list(pending),
         "ranking_records": len(all_rankings),
         "unique_ranking_asins": len({str(row.get("asin") or "").upper() for row in all_rankings if row.get("asin")}),
         "detail_records": len({str(row.get("asin") or "").upper() for row in all_details if row.get("asin")}),

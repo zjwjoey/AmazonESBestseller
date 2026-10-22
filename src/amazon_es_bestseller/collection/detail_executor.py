@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import inspect
 import json
 import os
 import uuid
@@ -43,6 +44,35 @@ def _checkpoint_record(checkpoint: Mapping | None) -> dict | None:
 
 def _asin(row: Mapping) -> str:
     return str(row.get("ranking_asin") or row.get("asin") or "").strip().upper()
+
+
+def _usable_record(record, asin: str) -> bool:
+    return (isinstance(record, Mapping)
+            and str(record.get("asin") or "").upper() == asin
+            and bool(str(record.get("title_es_raw") or "").strip())
+            and not record.get("is_captcha")
+            and not any(str(record.get(key) or "").upper() in {
+                "BLOCKED", "CHALLENGE", "RATE_LIMITED", "NETWORK_ERROR", "UNKNOWN"}
+                for key in ("access_state", "final_access_state"))
+            and not any(str(record.get(key) or "").upper() in {
+                "IDENTITY_MISMATCH", "IDENTITY_UNCONFIRMED", "IDENTITY_REVIEW"}
+                for key in ("identity_status", "identity_status_code"))
+            and str(record.get("resolved_asin") or asin).upper() == asin)
+
+
+def _checkpoint_matches(checkpoint, row) -> bool:
+    return (isinstance(checkpoint, Mapping)
+            and checkpoint.get("snapshot_id") == row.get("snapshot_id")
+            and checkpoint.get("action") == row.get("detail_action"))
+
+
+def _call_collector(collector, asins, session, root, **kwargs):
+    # Negotiate old adapter signatures before invocation. Retrying on TypeError
+    # could issue the same request twice after an internal parser failure.
+    parameters = inspect.signature(collector).parameters
+    if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        kwargs = {key: value for key, value in kwargs.items() if key in parameters}
+    return collector(asins, session, str(root), **kwargs)
 
 
 def _write_identity_queue(root: Path, rows: list[dict]) -> None:
@@ -84,6 +114,7 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     root = Path(out_dir)
     checkpoint_dir = Path(checkpoint_root or (root / "checkpoints"))
     state = DetailState(root / "state" / "details_state.json")
+    state.ensure_valid()
     if len(state) == 0 and (root / "details.json").exists():
         try:
             legacy = json.loads((root / "details.json").read_text(encoding="utf-8"))
@@ -120,6 +151,7 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     pending: list[dict] = []
     reparse_rows: list[dict] = []
     verify_rows: list[dict] = []
+    reuse_replays = {}
     for row in records:
         action = str(row.get("detail_action") or "")
         asin = _asin(row)
@@ -129,33 +161,64 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if action == "VERIFY_IDENTITY":
             verify_rows.append(row)
             continue
-        if action in {"REUSE_VALID_CACHE", "BLOCK_ACCESS_STATE", "BLOCK_LINK_IDENTITY", "BLOCK_CODE_FIX"}:
+        if action == "REUSE_VALID_CACHE":
+            html_root = saved_html or row.get("saved_html_dir") or (root / "html")
+            replay_key = str(html_root)
+            if replay_key not in reuse_replays:
+                reuse_asins = [_asin(r) for r in records if r.get("detail_action") == "REUSE_VALID_CACHE"
+                    and str(saved_html or r.get("saved_html_dir") or (root / "html")) == replay_key]
+                reparsed = reparse_saved_details(html_root, state, asins=reuse_asins,
+                                                parser_version=parser_version)
+                reuse_replays[replay_key] = {r["asin"]: r for r in reparsed}
+            # Contradictory/unreadable evidence must not be hidden by an older
+            # state record. Missing data stays pending without issuing a request.
+            roots = html_root if isinstance(html_root, (list, tuple)) else [html_root]
+            evidence_present = any((Path(p) / (asin + ".html")).exists() for p in roots)
+            record = reuse_replays[replay_key].get(asin)
+            if record is None and not evidence_present:
+                record = state.get(asin)
+            if not _usable_record(record, asin):
+                record = (None if evidence_present else
+                          _checkpoint_record(read_checkpoint(checkpoint_dir, asin)))
+            if _usable_record(record, asin):
+                state.update([record])
+                status = "REUSED"
+            else:
+                status = "PENDING"
             skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
-                            "status": "REUSED" if action == "REUSE_VALID_CACHE" else "BLOCKED"})
+                            "status": status})
+            continue
+        if action in {"BLOCK_ACCESS_STATE", "BLOCK_LINK_IDENTITY", "BLOCK_CODE_FIX"}:
+            skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
+                            "status": "BLOCKED"})
             continue
         if action not in NETWORK_ACTIONS:
             skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
                             "status": "PLAN_SKIPPED"})
             continue
         checkpoint = read_checkpoint(checkpoint_dir, asin)
-        if (checkpoint and checkpoint.get("status") == "success"
-                and checkpoint.get("snapshot_id") == row.get("snapshot_id")
-                and checkpoint.get("action") == action):
+        if (_checkpoint_matches(checkpoint, row) and checkpoint.get("status") == "success"):
             recovered = _checkpoint_record(checkpoint)
-            if recovered:
+            if _usable_record(recovered, asin):
                 state.update([recovered])
-            skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
-                            "status": "ALREADY_SUCCESS"})
-            continue
+                skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
+                                "status": "ALREADY_SUCCESS"})
+                continue
         pending.append(row)
 
     if reparse_rows:
-        html_root = saved_html or next((row.get("saved_html_dir") for row in reparse_rows
-                                        if row.get("saved_html_dir")), root / "html")
-        reparsed = reparse_saved_details(
-            html_root, state, asins=[_asin(row) for row in reparse_rows],
-            parser_version=parser_version)
-        reparsed_by_asin = {str(row.get("asin") or "").upper(): row for row in reparsed}
+        # Plans may bind different ASINs to different saved-evidence roots.
+        # Group by root so every row is replayed from its own evidence once.
+        grouped_reparse = {}
+        for row in reparse_rows:
+            html_root = saved_html or row.get("saved_html_dir") or (root / "html")
+            grouped_reparse.setdefault(str(html_root), (html_root, []))[1].append(row)
+        reparsed_by_asin = {}
+        for html_root, group in grouped_reparse.values():
+            reparsed = reparse_saved_details(
+                html_root, state, asins=[_asin(row) for row in group],
+                parser_version=parser_version)
+            reparsed_by_asin.update({str(row.get("asin") or "").upper(): row for row in reparsed})
         for row in reparse_rows:
             asin = _asin(row)
             rec = reparsed_by_asin.get(asin)
@@ -191,22 +254,24 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if offline:
             raise ValueError("offline detail execution contains network actions")
         try:
-            details = collector([_asin(row) for row in pending], session, str(root),
+            details = _call_collector(collector, [_asin(row) for row in pending], session, root,
                                 request_urls=request_urls, execution_context=context,
-                                write_summary=False, parser_version=parser_version)
-        except TypeError as exc:
-            if "unexpected keyword argument" not in str(exc):
-                raise
-            details = collector([_asin(row) for row in pending], session, str(root),
-                                request_urls=request_urls, execution_context=context)
+                                write_summary=False, parser_version=parser_version,
+                                checkpoint_root=checkpoint_dir)
         except AccessStopError as exc:
             access_stop = str(exc)
 
     for row in pending:
-        recovered = _checkpoint_record(read_checkpoint(checkpoint_dir, _asin(row)))
-        if recovered:
+        checkpoint = read_checkpoint(checkpoint_dir, _asin(row))
+        recovered = _checkpoint_record(checkpoint) if _checkpoint_matches(checkpoint, row) else None
+        if _usable_record(recovered, _asin(row)):
             state.update([recovered])
     if details:
+        expected = {_asin(row) for row in pending}
+        if any(str(record.get("asin") or "").upper() not in expected
+               or not _usable_record(record, str(record.get("asin") or "").upper())
+               for record in details):
+            raise ValueError("DETAIL_COLLECTOR_RETURNED_INVALID_OR_UNPLANNED_RECORD")
         state.update(details)
     state.save()
     details_full = state.records()
@@ -231,7 +296,11 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     for row in pending:
         asin = _asin(row)
         checkpoint = read_checkpoint(checkpoint_dir, asin) or {}
-        status = checkpoint.get("status") or ("SUCCESS" if asin in detail_by_asin else "PENDING")
+        status = checkpoint.get("status") if _checkpoint_matches(checkpoint, row) else None
+        if (str(status or "").lower() == "success"
+                and not _usable_record(_checkpoint_record(checkpoint), asin)):
+            status = None
+        status = status or ("SUCCESS" if asin in detail_by_asin else "PENDING")
         outcomes.append({"snapshot_id": row.get("snapshot_id"), "ranking_asin": asin,
                          **candidate_provenance.get(asin, {}),
                          "action": row.get("detail_action"), "status": status,
@@ -248,11 +317,17 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         outcomes.append(enriched)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "_" + uuid.uuid4().hex[:8]
     run_root = root / "detail_runs" / run_id
+    completed_count = sum(str(row.get("status") or "").upper() in {
+        "SUCCESS", "REUSED", "ALREADY_SUCCESS"} for row in outcomes)
+    execution_status = ("ACCESS_STOP" if access_stop else
+                        "COMPLETE" if completed_count == len(outcomes) else "INCOMPLETE")
     manifest = {"run_id": run_id, "snapshot_id": str(plan.get("snapshot_id") or ""),
                 "plan_id": plan.get("plan_id"), "plan_hash": plan.get("plan_hash"),
                 "records": outcomes, "details_delta": details, "requested_count": len(pending),
                 "access_stop": access_stop, "state_record_count": len(details_full),
-                "parser_version": parser_version}
+                "parser_version": parser_version, "execution_status": execution_status,
+                "completed_count": completed_count,
+                "incomplete_count": len(outcomes) - completed_count}
     _atomic_json(run_root / "manifest.json", manifest)
     _atomic_json(root / "latest_detail_run.json", {"run_id": run_id,
                                                      "path": str(run_root.relative_to(root))})
@@ -261,4 +336,6 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         raise AccessStopError(access_stop)
     return {"snapshot_id": manifest["snapshot_id"], "records": outcomes, "details": details,
             "details_delta": details, "skipped": skipped, "requested_count": len(pending),
-            "access_stop": access_stop, "run_id": run_id, "state_record_count": len(details_full)}
+            "access_stop": access_stop, "run_id": run_id, "state_record_count": len(details_full),
+            "execution_status": execution_status, "completed_count": completed_count,
+            "incomplete_count": len(outcomes) - completed_count}

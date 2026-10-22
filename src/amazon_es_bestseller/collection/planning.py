@@ -56,13 +56,27 @@ class DetailState:
     def __init__(self, path) -> None:
         self.path = Path(path)
         self._data: Dict[str, dict] = {}
+        self.load_error = ""
         if self.path.exists():
             try:
-                self._data = json.loads(self.path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                self._data = {}
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict) or any(
+                    not is_valid_asin(key) or not isinstance(record, dict)
+                    or normalize_asin(record.get("asin")) != normalize_asin(key)
+                    for key, record in data.items()
+                ):
+                    raise ValueError("invalid ASIN-keyed detail state")
+                self._data = {normalize_asin(key): record for key, record in data.items()}
+            except (ValueError, OSError) as exc:
+                self.load_error = "%s: %s" % (type(exc).__name__, exc)
+
+    def ensure_valid(self) -> None:
+        """Never overwrite damaged authority state or collect against an empty substitute."""
+        if self.load_error:
+            raise ValueError("DETAIL_STATE_UNREADABLE: %s: %s" % (self.path, self.load_error))
 
     def get(self, asin) -> Optional[dict]:
+        self.ensure_valid()
         a = normalize_asin(asin)
         return self._data.get(a) if a else None
 
@@ -71,6 +85,7 @@ class DetailState:
 
     def update(self, detail_records) -> None:
         """用本次采集结果更新缓存；缺失 collected_at 时盖章当前时间。"""
+        self.ensure_valid()
         now = datetime.now()
         for r in detail_records:
             a = normalize_asin(r.get("asin"))
@@ -82,6 +97,7 @@ class DetailState:
             self._data[a] = rec
 
     def save(self) -> None:
+        self.ensure_valid()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
         temporary.write_text(
@@ -95,6 +111,7 @@ class DetailState:
         cmd_collect 用它重建 details.json：resume 场景下本次 collect 结果只是
         增量，state 是跨 run 的全量权威缓存，details.json 必须反映全量。
         """
+        self.ensure_valid()
         return [dict(v) for _, v in sorted(self._data.items())]
 
     def __len__(self) -> int:
