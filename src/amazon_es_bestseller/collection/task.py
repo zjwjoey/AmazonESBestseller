@@ -598,6 +598,7 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     statuses = category_states
     save_state("RUNNING", ready_at, [])
     stop_all = False
+    system_failures: list[dict] = []
     stop_event = threading.Event()
     challenge_pause = threading.Event()
     last_cooldown_log = [0.0] * slots
@@ -612,6 +613,12 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
             # Preserve compatibility with legacy/offline worker doubles that
             # implement the original positional signature.
             return _run_category_live(*args)
+        except OSError:
+            # A persistence/state failure is not a retryable category failure.
+            # Signal active workers immediately and prevent the scheduler from
+            # admitting another category once this future is observed.
+            stop_event.set()
+            raise
         except Exception as exc:
             # In all-stop mode, trip the shared gate before the scheduler
             # inspects the future. Worker mode leaves healthy sessions alone.
@@ -665,15 +672,25 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                     from ..access.detector import AccessStopError
                     saved_root = output / "categories" / group
                     saved = _read_json(saved_root / "category_state.json", {})
-                    statuses[group] = {**statuses.get(group, {}), "status":
-                                       "ACCESS_STOP" if isinstance(exc, AccessStopError) else "FAILED",
+                    system_error = isinstance(exc, OSError)
+                    status = ("ACCESS_STOP" if isinstance(exc, AccessStopError)
+                              else "SYSTEM_ERROR" if system_error else "FAILED")
+                    statuses[group] = {**statuses.get(group, {}), "status": status,
                                        "error": str(exc)}
                     for key in ("source_status", "pending_detail_asins", "detail_records"):
                         if key in saved:
                             statuses[group][key] = saved[key]
                     all_rankings.extend(_read_json(saved_root / "rankings.json", []))
                     all_details.extend(_read_json(saved_root / "details.json", []))
-                    if isinstance(exc, AccessStopError):
+                    if system_error:
+                        system_failures.append({"category": group,
+                                                "error_type": type(exc).__name__,
+                                                "error": str(exc)})
+                        stop_all = True
+                        stop_event.set()
+                        print("[任务][槽位%d] 系统/持久化错误，停止所有新工作并保留状态：%s"
+                              % (slot + 1, exc))
+                    elif isinstance(exc, AccessStopError):
                         blocked_slots.add(slot)
                         if access_stop_scope == "all":
                             stop_all = True
@@ -713,7 +730,8 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
     selected = None
     selected_rows = []
     missing_detail_asins = []
-    run_status = "ACCESS_STOP" if blocked_slots else "INCOMPLETE"
+    run_status = ("SYSTEM_ERROR" if system_failures else
+                  "ACCESS_STOP" if blocked_slots else "INCOMPLETE")
     try:
         selected = select_research_quota(all_rankings, categories, plan["target_unique"])
         selected_rows = [row for group in selected.values() for row in group]
@@ -722,7 +740,9 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
         missing_detail_asins = sorted(selected_asins - detail_asins)
         incomplete_groups = [group for group in category_map
                              if statuses.get(group, {}).get("status") != "COMPLETE"]
-        if blocked_slots:
+        if system_failures:
+            run_status = "SYSTEM_ERROR"
+        elif blocked_slots:
             run_status = "ACCESS_STOP"
         elif missing_detail_asins:
             run_status = "DETAIL_INCOMPLETE"
@@ -737,12 +757,14 @@ def run_task(plan: Mapping, out_dir: str, mode: str | None = None,
                            selected_rows if run_status == "COMPLETE" else [])
     except QuotaError as exc:
         _write_json_atomic(output / "final_manifest.json", [])
-        run_status = "QUOTA_UNIQUE_SHORTFALL" if not blocked_slots else run_status
+        if not system_failures and not blocked_slots:
+            run_status = "QUOTA_UNIQUE_SHORTFALL"
         print("[任务] 尚未通过最终配额 Gate：%s" % exc)
     _write_summary(output, categories, all_rankings, all_details, selected, statuses)
     report = {
         "schema_version": 1, "task_id": plan["task_id"], "mode": mode,
         "run_status": run_status, "target_unique": plan["target_unique"],
+        "system_failures": system_failures,
         "access_stop_scope": access_stop_scope,
         "blocked_worker_slots": sorted(slot + 1 for slot in blocked_slots),
         "pending_categories": list(pending),

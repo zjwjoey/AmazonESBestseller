@@ -52,6 +52,7 @@ def _asins(values: Iterable[object] | object | None) -> set[str]:
 def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
                      requested_url: object = "", final_url_asin: object = "",
                      canonical_asin: object = "", embedded_asins=None,
+                     weak_embedded_asins=None,
                      parsed_detail_asin: object = "", parent_asin: object = "",
                      variation_family_asins=None) -> dict:
     """Resolve an identity and return status, resolved ASIN and evidence.
@@ -68,6 +69,7 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
     parsed = normalize_asin(parsed_detail_asin)
     parent = normalize_asin(parent_asin)
     embedded = _asins(embedded_asins)
+    weak_embedded = _asins(weak_embedded_asins)
     family = _asins(variation_family_asins)
     evidence = []
 
@@ -80,6 +82,8 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
             evidence.append({"source": label, "asin": value})
     for value in sorted(embedded):
         evidence.append({"source": "embedded_asin", "asin": value})
+    for value in sorted(weak_embedded):
+        evidence.append({"source": "weak_embedded_asin", "asin": value})
     if parent:
         evidence.append({"source": "parent_asin", "asin": parent})
     for value in sorted(family):
@@ -114,4 +118,5 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
         "identity_status": status,
         "identity_status_code": _V2_STATUS_CODES.get(status, status),
         "identity_evidence": evidence,
+        "weak_embedded_asins": sorted(weak_embedded),
     }
