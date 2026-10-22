@@ -1,49 +1,45 @@
-# Detail extraction optimization P1–P4
+# 商品详情提取优化 P1–P4
 
-## Scope
+## P1：类目与详情证据
 
-This change improves offline detail parsing and failure handling. It does not
-make Amazon requests, modify collected source files, or start translation.
+旧解析主要读取 `#wayfinding-breadcrumbs_feature_div`。现在也支持 Amazon 保存页中出现的 `#desktop-breadcrumbs_feature_div`，并只在这两个商品详情专属区域内取路径，保留每个路径的来源和原始链接。对 822 个本地保存 HTML 的只读扫描发现，725 个包含 desktop breadcrumb 区域；这说明该布局在本地样本中常见，但不表示 725 个页面都曾漏提。
 
-## Changes
+详情页 BSR 中明确关联排名语句的类目链接另存为 BSR 类目证据；它不会补进商品面包屑或榜单类目。没有页面证据的层级继续为空，不按标题推断。此次没有改动普通商品属性、卖点、描述、价格、变体或图片的抽取规则，所以这些字段的其他潜在漏提仍需独立案例验证。
 
-- P1 preserves product breadcrumb candidates and their source links, and records
-  BSR-linked category evidence separately. BSR category evidence does not fill
-  the product breadcrumb or ranking category.
-- P2 treats page-owned ASIN signals as identity evidence. ASINs found in page-wide
-  recommendations and links remain diagnostic evidence and cannot create a
-  false identity conflict; conflicting page-owned signals remain blocked.
-- P3 isolates recognized per-item parser, timeout, and transient network
-  failures while retaining checkpoints so later items can proceed. Access
-  restrictions still stop the run. Evidence/checkpoint storage failures stop
-  the task scheduler without retrying the category; no incomplete final
-  manifest is emitted as complete.
-- P4 shares one parsed DOM between the base and V2 detail parser.
+## P2：商品身份
 
-## Validation
+当前商品输入 ASIN、canonical 和明确属于主商品区域的 ASIN 才作为强身份证据。推荐商品卡片和页面其他 ASIN 链接仍记录为弱观察，供诊断使用，不再单独制造身份冲突，也不能单独证明当前商品身份。主商品强证据之间真实冲突时仍保持拦截。
 
-The final scoped regression run passed **131 tests** across detail parsing,
-collection, candidate handoff, identity, variation, category provenance,
-executor planning, and task scheduling.
-The complete offline repository suite also passed: **2,423 tests**.
-An offline 44-page saved-HTML comparison produced identical complete record and
-normalized-output hashes between the previous three-DOM call path and the new
-one-DOM path (`1259d778d3700b83cf3bfaafd9952606e775ac5434082712d09848882c0a5fd6`).
+候选商品交接流程也已使用相同的强弱证据规则，避免绕过详情解析器后又把整页推荐 ASIN 全当作当前商品身份。
 
-On the same 44 saved pages (124,704,071 input bytes), parse/extract time changed
-from 91.169264s to 62.583835s (31.4% lower); P50 changed from 2109.571ms to
-1450.459ms and P95 from 2404.497ms to 1638.777ms. Observed RSS growth changed
-from 82.60MB to 61.21MB. These are offline measurements, not live collection
-throughput guarantees.
+## P3：单条失败与停止边界
 
-GitHub CI is still required before merge.
+详情解析错误、页面等待超时和普通瞬时网络错误会为当前商品写失败 checkpoint，并继续处理后续商品；失败记录不会变成成功，也不会覆盖已验证成功记录。已保存且通过校验的详情仍可离线复用。
 
-## Scope limits and remaining work
+403、429、Challenge、Robot Check、CAPTCHA 等访问限制仍触发安全停止。原始 HTML、metadata 或 checkpoint 等证据不能可靠持久化时，异常向任务调度层传播，停止新任务领取并记录 `SYSTEM_ERROR`，不自动重试该类目，也不生成“完成”的最终清单。
 
-The observed saved-page gap addressed here is a missing scoped desktop breadcrumb
-layout and explicit BSR category-link evidence. Unknown raw product attributes,
-feature bullets, description, price, variation, and image extraction remain on
-their existing parser paths; this change does not claim to fix every possible
-field omission. Missing data in the source page remains missing rather than
-being inferred. GitHub CI is still required before merge. This branch has not
-been deployed to the production collector.
+## P4：解析性能
+
+V2 解析器现在把同一个 BeautifulSoup DOM 共享给基础详情提取、类目和身份相关提取；公开的 `parse_detail_page(html, asin)` 接口保持不变。V2 在同一批 44 个保存页面上与优化前的三 DOM 调用路径比较：
+
+- 输入：44 页、124,704,071 字节；
+- 完整详情记录及标准化输出 SHA256 相同：`1259d778d3700b83cf3bfaafd9952606e775ac5434082712d09848882c0a5fd6`；
+- 解析与提取总耗时：91.169264 秒降至 62.583835 秒，下降 31.4%；
+- P50：2109.571ms 降至 1450.459ms；P95：2404.497ms 降至 1638.777ms；
+- 观测到的 RSS 增量：82.60MB 降至 61.21MB。
+
+这是离线保存页结果，不代表线上抓取速度、生产内存曲线或 HTTP 并发提升。
+
+## 五线接入
+
+详情解析仍是每次输入 HTML、ASIN 并返回记录的同步接口；没有增加跨 worker 的共享状态。五线运行器可继续调用现有接口，无需为这次 DOM 复用另做解析器适配。此次没有启动五线联网采集，也没有做五 worker 压力测试；接入前仍应通过既有调度器验证全局访问节奏、共享停止门禁、持久化及断点恢复。
+
+## 测试、合并与限制
+
+- 131 项定向回归测试通过，覆盖详情解析、候选交接、身份、类目来源、任务执行及系统持久化错误停止。
+- 完整离线测试套件 **2,423 项通过**。
+- GitHub Offline CI 3.11 和 3.12 均通过；push 与 PR 触发的两组工作流共 4 个 job 全部成功。
+- PR [#20](https://github.com/zjwjoey/AmazonESBestseller/pull/20) 已于 2026-10-22 合并至 `main`，合并提交 `3d8e6c5cab25c50babe314bce206c9fb4113867b`。
+- 没有进行真实 Amazon 请求、生产数据修改或生产部署。
+
+剩余工作是继续用更多已保存的真实页面验证其他属性区块和特殊布局；来源缺失字段保持缺失，不猜补。本次性能样本为 44 页，不能单独证明所有商品类别和布局均无回归。
