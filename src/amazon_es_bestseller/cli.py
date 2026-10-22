@@ -1372,6 +1372,50 @@ def cmd_qa(args) -> None:
 
 # ---------- field closure audit（离线） ----------
 
+def _audit_progress(args):
+    """Bounded console feedback, plus an optional atomic observer file."""
+    import time
+    import os
+    import tempfile
+    destination = getattr(args, "progress_json", "")
+    if destination:
+        output_path = Path(destination).resolve()
+        for name in ("products", "details", "rankings", "translations", "source_manifest", "workbook"):
+            value = getattr(args, name, "")
+            if value and output_path == Path(value).resolve():
+                raise SystemExit("进度文件不得覆盖输入证据: %s" % output_path)
+        for name in ("html_dir", "detail_html", "ranking_html", "run_dir", "collection_run_dir"):
+            values = getattr(args, name, None) or []
+            values = [values] if isinstance(values, (str, Path)) else values
+            if any(output_path.is_relative_to(Path(value).resolve()) for value in values):
+                raise SystemExit("进度文件必须位于只读输入目录之外: %s" % output_path)
+    started = time.monotonic()
+    last = [0.0]
+    def observe(event):
+        now = time.monotonic()
+        if event.get("event") == "progress" and now - last[0] < 1.0:
+            return
+        last[0] = now
+        state = dict(event, observed_elapsed_seconds=round(now - started, 3))
+        print("审查进度：%s %s %s/%s；%.1fs" % (
+            event.get("stage", ""), event.get("check", event.get("event", "")),
+            event.get("completed", event.get("completed_checks", 0)),
+            event.get("total", event.get("total_checks", 0)), now - started), flush=True)
+        if destination:
+            path = Path(destination)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            handle = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                                  prefix=path.name, suffix=".tmp", delete=False)
+            try:
+                with handle:
+                    json.dump(state, handle, ensure_ascii=False, indent=2)
+                os.replace(handle.name, path)
+            finally:
+                if os.path.exists(handle.name):
+                    os.unlink(handle.name)
+    return observe
+
+
 def cmd_audit_fields(args) -> None:
     """Audit Source → Raw → Canonical → Derived → Excel without mutation."""
     from .qa.field_closure import audit_field_closure, write_report
@@ -1388,7 +1432,9 @@ def cmd_audit_fields(args) -> None:
           (len(products), "已启用" if args.html_dir else "未启用"), flush=True)
     report = audit_field_closure(products, details=details, rankings=rankings,
                                  html_dir=args.html_dir or None, run_dir=args.run_dir or None,
-                                 workbook_path=args.workbook or None, translations=translations)
+                                 workbook_path=args.workbook or None, translations=translations,
+                                 stage=getattr(args, "stage", "translation"),
+                                 progress=_audit_progress(args))
     write_report(report, args.out, args.md_out or None)
     s = report["summary"]
     print("Field Closure Audit：%d SKU、%d 字段；PASS %d / SOURCE_MISSING %d / PARSER_MISSED %d / MAPPING_MISSED %d / DERIVED_MISSING %d / EXPORT_MISMATCH %d / IMAGE_MISSING %d"
@@ -1447,6 +1493,8 @@ def _quality_audit_from_args(args, *, network_mode: str = "OFFLINE_QUALITY_AUDIT
         profile="stable-research",
         network_mode=network_mode,
         run_id=getattr(args, "run_id", "") or "",
+        stage=getattr(args, "stage", "source"),
+        progress=_audit_progress(args),
     )
     saved = write_quality_report(report, args.out_dir)
     report["report"] = saved
@@ -1469,7 +1517,7 @@ def cmd_quality_audit(args) -> None:
     """Offline-only audit of saved V1 records and HTML evidence."""
     report = _quality_audit_from_args(args)
     _print_quality_result(report)
-    if ((report.get("gate") or {}).get("research_status") != "RESEARCH_READY"
+    if ((report.get("gate") or {}).get("scope_research_status") != "RESEARCH_READY"
             and not args.allow_non_ready):
         raise SystemExit(2)
 
@@ -1490,6 +1538,7 @@ def cmd_source_evidence_audit(args) -> None:
             detail_html_dirs=args.detail_html or None,
             checks=args.check or None,
             network_mode="OFFLINE_SOURCE_EVIDENCE_AUDIT",
+            stage="source", progress=_audit_progress(args),
         )
         report["quality_gate_status"] = report["quality_gate"]["final_quality_status"]
     else:
@@ -1499,6 +1548,8 @@ def cmd_source_evidence_audit(args) -> None:
     print("只读来源证据审计：%d 条；请求证据 %d / 已核验保存证据 %d / 不足 %d；未生成正式 Source Audit PASS" % (
         report["record_count"], counts["REQUEST_EVIDENCE"],
         counts["VERIFIED_SAVED_EVIDENCE"], counts["INSUFFICIENT"]))
+    print("请求证据中：内容哈希已核验 %d；仅有未核验元数据 %d" % (
+        report["verified_request_count"], report["unverified_request_metadata_count"]))
 
 
 def _latest_run_dir(root: str) -> str:
@@ -1545,7 +1596,7 @@ def cmd_stable_research(args) -> None:
         report = _quality_audit_from_args(
             audit_args, network_mode="V1_COLLECTION_THEN_OFFLINE_AUDIT")
     _print_quality_result(report)
-    if ((report.get("gate") or {}).get("research_status") != "RESEARCH_READY"
+    if ((report.get("gate") or {}).get("scope_research_status") != "RESEARCH_READY"
             and not args.allow_non_ready):
         raise SystemExit(2)
 
@@ -1574,7 +1625,7 @@ def cmd_export(args) -> None:
     closure = audit_field_closure(products, details=details, rankings=rankings,
                                   html_dir=getattr(args, "html_dir", None) or None,
                                   run_dir=getattr(args, "run_dir", "") or None,
-                                  translations=translations) if closure_enabled else {"records": []}
+                                  translations=translations, stage="export") if closure_enabled else {"records": []}
     if not closure_enabled:
         # 门禁降级必须可见：静默跳过会让导出看起来通过了实际未执行的审计。
         print("警告：未找到 details/rankings/translations 证据，字段闭环门禁未运行；"
@@ -1582,7 +1633,7 @@ def cmd_export(args) -> None:
     blocked_closure = [r for r in closure.get("records", [])
                        if r.get("severity") == "P1" and r.get("classification") in
                        {"PARSER_MISSED", "MAPPING_MISSED", "DERIVED_MISSING",
-                        "TRANSLATION_INCOMPLETE"}]
+                        "TRANSLATION_INCOMPLETE", "FACT_CHANGED", "ORIGINAL_PRICE_INVALID"}]
     closure_findings = [(r.get("asin"), r.get("classification"), r.get("message"))
                         for r in blocked_closure]
     blocked = blocked + closure_findings
@@ -1944,6 +1995,9 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--translations", default="", help="翻译映射 JSON（可选，用于中文表对账）")
     a.add_argument("--out", default=str(OUTPUTS / "field_closure.json"))
     a.add_argument("--md-out", default="", help="Markdown 输出路径（默认与 JSON 同名 .md）")
+    a.add_argument("--stage", choices=("source", "translation", "export"), default="translation",
+                   help="source不要求中文；translation检查翻译；export对账展示")
+    a.add_argument("--progress-json", default="", help="可选的实时进度 JSON，不写入源数据")
     a.set_defaults(func=cmd_audit_fields)
 
     qa = sub.add_parser("quality-audit", help="离线：对已有 V1 数据和 HTML 运行统一 Quality Gate")
@@ -1963,6 +2017,8 @@ def build_parser() -> argparse.ArgumentParser:
     qa.add_argument("--check", action="append", choices=DEFAULT_CHECKS, default=[],
                     help="只运行指定检查，可重复；默认运行全部检查")
     qa.add_argument("--run-id", default="", help="报告运行 ID（可选）")
+    qa.add_argument("--stage", choices=("source", "translation", "export"), default="source")
+    qa.add_argument("--progress-json", default="", help="可选的实时进度 JSON")
     qa.add_argument("--out-dir", required=True, help="质量报告根目录")
     qa.add_argument("--allow-non-ready", action="store_true",
                     help="允许 REVIEW/BLOCK 状态以退出码0结束（仅诊断）")
@@ -1977,6 +2033,7 @@ def build_parser() -> argparse.ArgumentParser:
     from .quality.audit import DEFAULT_CHECKS as _SOURCE_AUDIT_CHECKS
     sea.add_argument("--check", action="append", choices=_SOURCE_AUDIT_CHECKS, default=[])
     sea.add_argument("--out", required=True, help="审计 JSON 输出路径")
+    sea.add_argument("--progress-json", default="", help="可选的实时进度 JSON")
     sea.set_defaults(func=cmd_source_evidence_audit)
 
     sr = sub.add_parser("stable-research", help="V1稳定采集 + 离线 Quality Gate")

@@ -29,3 +29,17 @@ def test_final_url_is_evidence_not_an_automatic_quarantine():
                               final_url_asin="https://www.amazon.es/dp/B000000002",
                               variation_family_asins=["B000000001", "B000000002"])
     assert result["identity_status"] == "VARIATION_RELATED"
+
+
+def test_matching_final_url_does_not_mask_multiple_page_identities():
+    result = resolve_identity(ranking_asin="B000000001",
+                              final_url_asin="https://www.amazon.es/dp/B000000001",
+                              embedded_asins=["B000000001", "B000000002"])
+    assert result["identity_status"] == "IDENTITY_MISMATCH"
+
+
+def test_explicit_family_explains_multiple_page_identities():
+    result = resolve_identity(ranking_asin="B000000001", parsed_detail_asin="B000000002",
+                              embedded_asins=["B000000001", "B000000002"],
+                              variation_family_asins=["B000000001", "B000000002"])
+    assert result["identity_status"] == "VARIATION_RELATED"

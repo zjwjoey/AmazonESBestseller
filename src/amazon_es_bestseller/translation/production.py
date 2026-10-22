@@ -186,10 +186,14 @@ def build_release_translation_candidate(state: Mapping[str, Any], *,
         asin = str(record.get("asin") or "").upper()
         candidates: list[dict[str, Any]] = []
         statuses: list[str] = []
+        effective_field_statuses = {}
         for envelope in record.get("fields") or []:
             if not isinstance(envelope, Mapping):
                 continue
             promotion = str(envelope.get("promotion_status") or "PENDING")
+            if promotion == "PROMOTED" and not str(envelope.get("final_zh") or "").strip():
+                promotion = "QA_BLOCKED"
+            effective_field_statuses[str(envelope.get("target_field") or "")] = promotion
             statuses.append(promotion)
             all_statuses.append(promotion)
             target_value = envelope.get("final_zh")
@@ -226,8 +230,7 @@ def build_release_translation_candidate(state: Mapping[str, Any], *,
                         "fields": {item["target_field"]: item["target_value"] for item in candidates},
                         "field_candidates": candidates,
                         "release_status": compute_release_status(statuses),
-                        "field_statuses": {str(field.get("target_field") or ""): str(field.get("promotion_status") or "")
-                                           for field in record.get("fields") or [] if isinstance(field, Mapping)}})
+                        "field_statuses": effective_field_statuses})
     return {"records": records,
             "release_status": compute_release_status(all_statuses) if records else "BLOCKED",
             "release_status_reason": sorted(set(all_statuses)),
@@ -365,8 +368,12 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
     status = str(result.get("translation_status") or "pending")
     base["translation_status"] = status
     if status in {"success", "cached"} and result.get("qa_status") == "pass" and not result.get("qa_issues"):
-        base["promotion_status"] = "PROMOTED"
-        base["final_zh"] = result.get("translated_text") or ""
+        if str(result.get("translated_text") or "").strip():
+            base["promotion_status"] = "PROMOTED"
+            base["final_zh"] = result["translated_text"]
+        else:
+            base.update(promotion_status="QA_BLOCKED", qa_status="qa_failed",
+                        qa_issues=[{"code": "EMPTY_TRANSLATION"}])
     elif status == "qa_failed" or result.get("qa_status") == "qa_failed":
         base["promotion_status"] = "QA_BLOCKED"
     elif status == "failed":

@@ -56,8 +56,10 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
     """
     ranking = normalize_asin(ranking_asin)
     requested = normalize_asin(requested_asin)
-    final = normalize_asin(final_url_asin) or asin_from_url(final_url_asin)
-    canonical = normalize_asin(canonical_asin) or asin_from_url(canonical_asin)
+    final = (normalize_asin(final_url_asin) if is_valid_asin(final_url_asin)
+             else asin_from_url(final_url_asin))
+    canonical = (normalize_asin(canonical_asin) if is_valid_asin(canonical_asin)
+                 else asin_from_url(canonical_asin))
     requested_from_url = asin_from_url(requested_url)
     parsed = normalize_asin(parsed_detail_asin)
     parent = normalize_asin(parent_asin)
@@ -80,7 +82,13 @@ def resolve_identity(*, ranking_asin: object = "", requested_asin: object = "",
         evidence.append({"source": "variation_family_asin", "asin": value})
 
     resolved = parsed or canonical or final or requested_from_url or (next(iter(embedded)) if len(embedded) == 1 else "")
-    if ranking and resolved == ranking:
+    page_identities = {value for value in (parsed, canonical) if is_valid_asin(value)} | embedded
+    explained_family = family | ({parent} if parent and family else set())
+    if len(page_identities) > 1 and not page_identities <= explained_family:
+        # A matching navigation URL cannot resolve conflicting owned-page
+        # evidence. Only explicit family evidence can explain multiple IDs.
+        status = IDENTITY_MISMATCH
+    elif ranking and resolved == ranking:
         status = IDENTITY_MATCH
     elif ranking and resolved and parent == resolved and ranking in family and resolved in family:
         status = PARENT_ASIN_MATCH

@@ -19,10 +19,14 @@ def qa_field(protected, translated: str, source: str, *, field: str = "",
 
 def build_qa_report(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     counts = Counter()
+    field_statuses = []
     issues: List[Dict[str, Any]] = []
     for record in records:
         for field, value in (record.get("fields") or {}).items():
             status = value.get("translation_status", "pending")
+            field_statuses.append(status)
+            if status in {"success", "cached"} and value.get("qa_status") not in (None, "pass"):
+                field_statuses.append("pending")
             counts[status] += 1
             for issue in value.get("qa_issues") or []:
                 code = issue.get("code", "UNKNOWN")
@@ -49,5 +53,16 @@ def build_qa_report(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     for alias, code in aliases.items():
         # Keep the human-facing aggregate aligned with the canonical issue code.
         counts[alias] = counts.get(code, 0)
+    unfinished = sum(name not in {"success", "cached", "source_missing"} for name in field_statuses)
+    if issues or counts["failed"] or counts["qa_failed"] or counts["preclean_blocked"] or counts["source_changed"]:
+        status = "qa_failed"
+    elif counts["partial"]:
+        status = "partial"
+    elif unfinished:
+        status = "pending"
+    elif counts["success"] + counts["cached"]:
+        status = "pass"
+    else:
+        status = "source_missing" if counts["source_missing"] else "not_run"
     return {"schema_version": TRANSLATION_SCHEMA_VERSION, "counts": dict(counts),
-            "issues": issues, "status": "pass" if not issues else "qa_failed"}
+            "issues": issues, "status": status, "unfinished_fields": unfinished}

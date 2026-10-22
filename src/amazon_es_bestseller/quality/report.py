@@ -27,8 +27,13 @@ def _now() -> str:
 
 def _git_sha() -> str:
     try:
+        root = Path(__file__).resolve().parents[3]
+        checkout = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=root,
+                                  check=True, capture_output=True, text=True).stdout.strip()
+        if Path(checkout).resolve() != root:
+            return ""
         return subprocess.run(["git", "rev-parse", "HEAD"], check=True,
-                              capture_output=True, text=True).stdout.strip()
+                              cwd=root, capture_output=True, text=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
 
@@ -78,6 +83,9 @@ def write_quality_report(report: Mapping, output_root: str | Path) -> dict[str, 
         "network_requests": 0,
         "final_quality_status": str(report.get("final_quality_status") or "BLOCKED"),
         "source_hashes": dict(report.get("source_hashes") or {}),
+        "stage": report.get("stage", "source"),
+        "elapsed_seconds": report.get("elapsed_seconds"),
+        "audit_scope": dict(report.get("gate") or {}),
     }
     _json_write(target / "quality_manifest.json", base_manifest)
     _json_write(target / "run_manifest.json", base_manifest)

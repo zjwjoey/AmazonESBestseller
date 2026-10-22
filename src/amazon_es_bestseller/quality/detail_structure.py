@@ -24,7 +24,7 @@ def audit_detail_structure(
         if attrs is None or (attrs == [] and isinstance(ordered, list) and ordered):
             attrs = ordered
         if attrs in (None, ""):
-            continue
+            attrs = []
         if not isinstance(attrs, list):
             issues.append(issue(
                 "detail_structure", QualityStatus.BLOCK, "P1", "DETAIL_ATTRIBUTES_SCHEMA",

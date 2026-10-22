@@ -17,6 +17,7 @@ class QualityStatus(str, Enum):
 
 
 class ResearchStatus(str, Enum):
+    PARTIAL_REVIEW = "PARTIAL_REVIEW"
     RESEARCH_READY = "RESEARCH_READY"
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
     BLOCKED = "BLOCKED"

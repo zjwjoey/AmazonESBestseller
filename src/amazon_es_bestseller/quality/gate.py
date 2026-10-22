@@ -9,6 +9,7 @@ from .models import QualityStatus, ResearchStatus
 
 def evaluate_research_readiness(
     checks: Mapping[str, Mapping] | Iterable[Mapping],
+    *, required_checks: Iterable[str] | None = None, scope_complete: bool = True,
 ) -> dict:
     if isinstance(checks, Mapping):
         rows = list(checks.values())
@@ -23,10 +24,19 @@ def evaluate_research_readiness(
         final = ResearchStatus.REVIEW_REQUIRED
     else:
         final = ResearchStatus.RESEARCH_READY
+    scope_status = final.value
+    completed = {str(row.get("check") or "") for row in rows}
+    missing = sorted(set(required_checks or ()) - completed)
+    if final is ResearchStatus.RESEARCH_READY and (missing or not scope_complete):
+        final = ResearchStatus.PARTIAL_REVIEW
     return {
         "final_quality_status": final.value,
         "research_status": final.value,
         "research_ready": final is ResearchStatus.RESEARCH_READY,
+        "scope_research_status": scope_status,
+        "checks_complete": not missing,
+        "scope_complete": scope_complete,
+        "missing_checks": missing,
         "checks": {str(row.get("check") or ""): str(row.get("status") or "PASS") for row in rows},
         "issue_counts": {key: counts.get(key, 0) for key in ("PASS", "WARN", "REVIEW", "BLOCK")},
         "warn_allowed": True,

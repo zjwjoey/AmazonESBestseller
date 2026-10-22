@@ -300,10 +300,11 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         closure = audit_field_closure(products, details=load_evidence_json(args.details, default_details),
                                       rankings=load_evidence_json(args.rankings, default_rankings),
                                       html_dir=args.html_dir or None, run_dir=args.collection_run_dir or None,
-                                      translations=translations)
+                                      translations=translations, stage="export")
         blocked += [(row.get('asin'), row.get('classification'), row.get('message'))
                     for row in closure.get('records', []) if row.get('severity') == 'P1' and
-                    row.get('classification') in {'PARSER_MISSED', 'MAPPING_MISSED', 'DERIVED_MISSING', 'TRANSLATION_INCOMPLETE'}]
+                    row.get('classification') in {'PARSER_MISSED', 'MAPPING_MISSED', 'DERIVED_MISSING',
+                                                  'TRANSLATION_INCOMPLETE', 'FACT_CHANGED', 'ORIGINAL_PRICE_INVALID'}]
         if blocked and not args.debug_export:
             raise SystemExit('Release Gate blocked: QA/field-closure findings=%d' % len(blocked))
         out_path = args.out or str(run_dir / 'release' / ('production_debug_unreleased.xlsx' if args.debug_export else 'production_release.xlsx'))
