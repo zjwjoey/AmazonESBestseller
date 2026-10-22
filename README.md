@@ -1,5 +1,8 @@
 # AmazonESBestseller
 
+详情结束后的审查阶段、范围、字段空缺/错误率与实时进度，见
+[docs/POST_DETAIL_AUDIT.md](docs/POST_DETAIL_AUDIT.md)。
+
 Amazon.es 畅销商品采集与选品研究项目。
 
 目标是从 Amazon 西班牙站 Best Sellers 和商品详情页采集真实商品数据，形成可用于内部选品、类目研究、价格研究和后续 AI 分析的结构化数据集。

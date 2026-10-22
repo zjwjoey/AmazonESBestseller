@@ -24,13 +24,13 @@ def audit_detail_structure(
         if attrs is None or (attrs == [] and isinstance(ordered, list) and ordered):
             attrs = ordered
         if attrs in (None, ""):
-            continue
+            attrs = []
         if not isinstance(attrs, list):
             issues.append(issue(
                 "detail_structure", QualityStatus.BLOCK, "P1", "DETAIL_ATTRIBUTES_SCHEMA",
                 asin=asin, source="detail", message="详情属性不是有序数组，可能发生 label/value 丢失。"))
             continue
-        positions = []
+        positions_by_section = {}
         fingerprints = Counter()
         for index, attr in enumerate(attrs):
             if not isinstance(attr, Mapping):
@@ -64,18 +64,22 @@ def audit_detail_structure(
                     asin=asin, source="detail", message="详情属性缺少可排序的 position。",
                     evidence={"index": index, "attribute": dict(attr)}))
             else:
-                positions.append(position_value)
+                positions_by_section.setdefault(section.casefold(), []).append(position_value)
             fingerprints[(section.casefold(), label.casefold(), value)] += 1
-        if len(positions) != len(set(positions)):
-            issues.append(issue(
-                "detail_structure", QualityStatus.BLOCK, "P1", "DETAIL_POSITION_DUPLICATE",
-                asin=asin, source="detail", message="详情属性出现重复 position，顺序证据不可靠。",
-                evidence={"positions": positions}))
-        if positions and positions != sorted(positions):
-            issues.append(issue(
-                "detail_structure", QualityStatus.REVIEW, "P2", "DETAIL_POSITION_ORDER",
-                asin=asin, source="detail", message="详情属性 position 与原始顺序不一致。",
-                evidence={"positions": positions}))
+        # The established parser contract numbers each source section locally.
+        # The list preserves overall evidence order. Repeated local numbers
+        # across sections are valid; duplicates within a section still block.
+        for section, positions in positions_by_section.items():
+            if len(positions) != len(set(positions)):
+                issues.append(issue(
+                    "detail_structure", QualityStatus.BLOCK, "P1", "DETAIL_POSITION_DUPLICATE",
+                    asin=asin, source="detail", message="同一详情 section 出现重复 position，顺序证据不可靠。",
+                    evidence={"section": section, "positions": positions}))
+            if positions != sorted(positions):
+                issues.append(issue(
+                    "detail_structure", QualityStatus.REVIEW, "P2", "DETAIL_POSITION_ORDER",
+                    asin=asin, source="detail", message="同一详情 section 的 position 与原始顺序不一致。",
+                    evidence={"section": section, "positions": positions}))
         duplicates = [list(key) + [count] for key, count in fingerprints.items() if count > 1]
         if duplicates:
             issues.append(issue(

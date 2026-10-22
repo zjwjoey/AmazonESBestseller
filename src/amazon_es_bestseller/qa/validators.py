@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal, InvalidOperation
 from typing import List, Optional, Tuple
 
 from ..models import QAStatus, QaIssue, normalize_asin
@@ -45,7 +46,20 @@ _DIM_KEYS_QA = (
     'dimensiones_articulo', 'dimensiones_del_articulo_l_x_a',
     'dimensiones_del_articulo_ancho_x_alto',
 )
-_VARIANT_CAP_RE = re.compile(r'^([\d.,]+)\s*[mM]?[lL]\s*$')
+_CAPACITY_RE = re.compile(r'([\d.,]+)\s*(ml|l|毫升|升)(?![a-z])', re.I)
+_VARIANT_CAP_RE = re.compile(r'^([\d.,]+)\s*(ml|l|毫升|升)\s*$', re.I)
+
+
+def _capacity_litres(number: str, unit: str) -> Decimal | None:
+    if "." in number and "," in number:
+        number = number.replace(".", "")
+    try:
+        value = Decimal(dec_comma(number))
+    except InvalidOperation:
+        return None
+    if not value.is_finite():
+        return None
+    return value / 1000 if unit.casefold() in {"ml", "毫升"} else value
 
 
 def _worst_status(issues: List[QaIssue]) -> QAStatus:
@@ -268,8 +282,10 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
     if variant:
         vm = _VARIANT_CAP_RE.match(str(variant).strip())
         if vm:
-            spec_digits = re.sub(r'[升毫升]', '', spec_str)
-            if dec_comma(vm.group(1)) not in spec_digits:
+            expected = _capacity_litres(vm.group(1), vm.group(2))
+            capacities = [_capacity_litres(m.group(1), m.group(2))
+                          for m in _CAPACITY_RE.finditer(str(spec_str))]
+            if expected is None or expected not in capacities:
                 issues.append(_issue(
                     'SPEC_VARIANT_MISMATCH', 'P1', 'spec',
                     '选中变体 %s 未反映到规格输出: %s' % (variant, spec_str)))
@@ -417,7 +433,12 @@ def validate_monthly_bought(record) -> Tuple[QAStatus, List[QaIssue]]:
         return QAStatus.WARN, [_issue(
             'MONTHLY_BOUGHT_UNPARSEABLE', 'P2', 'monthly_bought_min',
             '月购文本存在但无法解析: %r' % (raw,))]
-    if mn not in (None, '') and int(mn) != parsed:
+    try:
+        value = Decimal(str(mn)) if mn not in (None, '') else None
+        valid = value is None or (value.is_finite() and value == value.to_integral_value())
+    except (InvalidOperation, ValueError, TypeError):
+        value, valid = None, False
+    if not valid or (value is not None and value != parsed):
         return QAStatus.WARN, [_issue(
             'MONTHLY_BOUGHT_UNPARSEABLE', 'P2', 'monthly_bought_min',
             '月购下限 %s 与原始文本解析 %s 不一致' % (mn, parsed))]

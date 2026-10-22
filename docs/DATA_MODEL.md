@@ -103,6 +103,13 @@ value_zh
 
 Unknown/new Amazon fields must still be preservable through `label_raw` + `value_raw`.
 
+`position` is ordered within its `section`; different sections may restart at
+zero. The attribute list preserves overall source order. Quality checks must
+reject duplicate or descending positions within one section without treating
+the same local position in different sections as a conflict. Existing records
+with globally increasing positions remain readable; do not rewrite raw facts
+or their stored positions to satisfy an audit.
+
 ## 5. Detail sections
 
 `section` may include values conceptually equivalent to product_overview, technical_details, additional_information, selected_variation, feature_bullets, product_description, a_plus and other_visible_details.

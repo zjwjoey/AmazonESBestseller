@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
@@ -21,6 +22,9 @@ from bs4 import BeautifulSoup
 from ..export.excel import HEAD_ES, HEAD_ZH, _es_values, _zh_values
 from ..models import normalize_asin
 from ..normalization.price import discount_rate, parse_price
+from ..normalization.locale_numbers import parse_rating_es, parse_review_count_es
+from ..normalization.monthly_bought import parse_monthly_bought
+from ..saved_evidence import SavedHtmlIndex
 
 
 PASS = "PASS"
@@ -34,6 +38,10 @@ EVIDENCE_UNAVAILABLE = "EVIDENCE_UNAVAILABLE"
 EXPORT_MISSING = "EXPORT_MISSING"
 EXPORT_VALUE_MISMATCH = "EXPORT_VALUE_MISMATCH"
 IMAGE_MISSING = "IMAGE_MISSING"
+FACT_CHANGED = "FACT_CHANGED"
+NOT_APPLICABLE = "NOT_APPLICABLE"
+AUDIT_STAGES = ("source", "translation", "export")
+_TRANSLATED_CORE = {"title_zh", "spec_v2", "product_details_zh", "feature_bullets_zh"}
 
 # These fields are validly empty when Amazon does not expose the corresponding
 # page element.  They are coverage signals, not product-data defects.
@@ -237,21 +245,10 @@ class _LazyHtmlByAsin(dict):
             return default
 
 
-def _html_by_asin(html_dir: Optional[str | Path | Iterable[str | Path]]) -> Mapping[str, str]:
+def _html_by_asin(html_dir: Optional[str | Path | Iterable[str | Path]], *,
+                  asins=None, evidence_index=None) -> Mapping[str, str]:
     """Index saved detail HTML by ASIN while keeping page bodies lazy."""
-    indexed: dict[str, Path] = {}
-    for root in _html_roots(html_dir):
-        for path in sorted(root.rglob("*.html")):
-            try:
-                html = path.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
-                continue
-            asin = _html_asin(html)
-            if not asin and re.fullmatch(r"[A-Z0-9]{10}", path.stem, re.I):
-                asin = path.stem.upper()
-            if asin and asin not in indexed:
-                indexed[asin] = path
-    return _LazyHtmlByAsin(indexed)
+    return (evidence_index or SavedHtmlIndex(html_dir)).by_asin(asins)
 
 
 def _read_ranking_html(ranking_html_dir: Optional[str | Path | Iterable[str | Path]]) -> str:
@@ -331,6 +328,30 @@ def _clean_text_pair(row) -> bool:
     return label in {"marca", "brand"} and bool(value)
 
 
+def _category_depth(value: Any) -> int:
+    if isinstance(value, (list, tuple)):
+        return len([part for part in value if _has(part)])
+    return len([part for part in re.split(r"\s*[>›»]\s*", str(value or "")) if part.strip()])
+
+
+def _category_present(field: str, ranking: Mapping, html: str) -> bool:
+    depth = max(_category_depth(ranking.get(key)) for key in
+                ("category_path_raw", "ranking_category_path", "ranking_source_category_path", "category_path"))
+    required = {"category_l1": 1, "category_l2": 2, "category_l3": 3}.get(field, 1)
+    if depth >= required:
+        return True
+    if not html:
+        return False
+    soup = _cached_soup(html)
+    trail = soup.select("#wayfinding-breadcrumbs_feature_div a, #wayfinding-breadcrumbs_container a")
+    labels = [item.get_text(" ", strip=True) for item in trail if item.get_text(" ", strip=True)]
+    if len(labels) >= required:
+        return True
+    # A ranking tree contains siblings as well as ancestors. Its mere link
+    # count cannot prove a second or third level.
+    return required == 1 and bool(soup.select_one("#zg_browseRoot a"))
+
+
 def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapping,
                      html: str) -> tuple[bool, Any]:
     evidence: list[str] = []
@@ -345,11 +366,8 @@ def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapp
         # a ranking URL alone is only context, not category content.
         if _has(ranking.get(field)) or _has(record.get(field)):
             evidence.append(field)
-        if _has(ranking.get("category_path_raw")) or (
-                field != "category_l3" and _has(ranking.get("browse_node_id"))):
+        if _category_present(field, ranking, html):
             evidence.append("ranking.category_path")
-        if html and any(re.search(p, html, re.I) for p in _HTML_PATTERNS.get(field, ())):
-            evidence.append("html:category_path")
     elif field == "bestseller_rank":
         if _has(ranking.get("bestseller_rank")) or (_has(record.get("bestseller_rank")) and
                                                     (_has(record.get("ranking_source_url")) or _has(record.get("collected_at")))):
@@ -384,7 +402,7 @@ def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapp
             from ..collection.detail import struck_price_from_html
             if struck_price_from_html(html):
                 evidence.append(f"html:struck_price:{field}")
-        else:
+        elif not (field.startswith("category_") or field == "leaf_category"):
             patterns = _HTML_PATTERNS.get(field, ())
             matched = [p for p in patterns if re.search(p, html, re.I)]
             evidence.extend(f"html:{p}" for p in matched)
@@ -415,10 +433,12 @@ def _raw_value(field: str, record: Mapping, detail: Mapping, ranking: Mapping) -
         if field == "spec_v2":
             # Attribute presence alone is not specification evidence; only a
             # non-empty derived summary can close this field.
-            return record.get("spec_v2") or ""
-        return _attributes(record, detail) or detail.get("details_json") or record.get("details_json")
+            return record.get("specification_es") or record.get("spec_v2") or ""
+        return (_attributes(record, detail) or detail.get("details_json") or record.get("details_json")
+                or detail.get("product_details_es") or record.get("product_details_es"))
     if field == "feature_bullets_zh":
-        return detail.get("feature_bullets_raw") or record.get("feature_bullets_raw")
+        return (detail.get("feature_bullets_raw") or record.get("feature_bullets_raw")
+                or record.get("feature_bullets_es"))
     if field == "date_first_available":
         return detail.get("date_first_available_raw") or record.get("date_first_available_raw")
     if field == "seller":
@@ -478,7 +498,7 @@ def _classify(field: str, source: bool, raw: Any, canonical: Any, derived: Any,
 
 
 def _audit_one(field: str, asin: str, record: Mapping, detail: Mapping,
-               ranking: Mapping, html: str) -> FieldClosureResult:
+               ranking: Mapping, html: str, *, stage: str = "translation") -> FieldClosureResult:
     raw = _raw_value(field, record, detail, ranking)
 
     # Once a raw value is already present, source evidence is established by the
@@ -517,7 +537,25 @@ def _audit_one(field: str, asin: str, record: Mapping, detail: Mapping,
     classification, severity, message = _classify(
         field, source, raw, canonical, derived, display, raw_evidence=raw,
         page_available=bool(html))
-    if field == "title_zh" and display and str(canonical).casefold() == str(display).casefold():
+    if stage == "source" and field == "spec_v2":
+        classification, severity, message = NOT_APPLICABLE, "INFO", "核心规格属于后续派生检查"
+    elif stage == "source" and field in _TRANSLATED_CORE and _has(raw):
+        classification, severity, message = PASS, "INFO", "西语来源已保存；中文由翻译阶段检查"
+    parsers = {"current_price": parse_price, "original_price": parse_price,
+               "rating": parse_rating_es, "review_count": parse_review_count_es,
+               "monthly_bought_min": parse_monthly_bought}
+    expected = parsers[field](raw) if field in parsers and _has(raw) else None
+    if field == "discount_rate" and source:
+        expected = discount_rate(cur, orig)
+    if expected is not None and _has(canonical):
+        try:
+            matches = math.isclose(float(expected), float(canonical),
+                                   rel_tol=0, abs_tol=0.0001)
+        except (TypeError, ValueError, OverflowError):
+            matches = False
+        if not matches:
+            classification, severity, message = FACT_CHANGED, "P1", "原始事实与规范化/展示数值不一致"
+    if stage != "source" and field == "title_zh" and display and str(canonical).casefold() == str(display).casefold():
         classification, severity = TRANSLATION_INCOMPLETE, "P1"
         message = "中文展示字段为空或仍保留西语原文/整句"
     if field == "original_price":
@@ -658,19 +696,38 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
                         html_dir: Optional[str | Path | Iterable[str | Path]] = None,
                         run_dir: Optional[str | Path | Iterable[str | Path]] = None,
                         workbook_path: Optional[str | Path] = None,
-                        translations: Optional[Mapping] = None) -> dict:
+                        translations: Optional[Mapping] = None, *,
+                        stage: str = "translation", evidence_index=None,
+                        progress=None) -> dict:
     """Audit products without mutating any input mapping."""
     products = list(products or [])
+    if stage not in AUDIT_STAGES:
+        raise ValueError("unknown audit stage: %s" % stage)
+    if progress:
+        progress({"event": "start", "check": "field_closure", "stage": stage,
+                  "completed": 0, "total": len(products)})
     ranking_html = _read_ranking_html(run_dir or html_dir)
-    html_by_asin = _html_by_asin(html_dir)
+    evidence_index = evidence_index or SavedHtmlIndex(html_dir, progress=progress)
+    html_by_asin = _html_by_asin(html_dir, asins={normalize_asin(p.get("asin")) for p in products},
+                                 evidence_index=evidence_index)
     details_by = {normalize_asin(d.get("asin")): d for d in (details or []) if normalize_asin(d.get("asin"))}
     rankings_by = {normalize_asin(r.get("asin")): r for r in (rankings or []) if normalize_asin(r.get("asin"))}
     records: list[dict] = []
-    for product in sorted(products, key=lambda p: normalize_asin(p.get("asin"))):
+    for position, original in enumerate(sorted(products, key=lambda p: normalize_asin(p.get("asin"))), 1):
+        product = dict(original)
         asin = normalize_asin(product.get("asin"))
+        tr = (translations or {}).get(asin) if isinstance(translations, Mapping) else None
+        tr = tr if isinstance(tr, Mapping) else {}
+        if stage != "source":
+            product.update({key: value for key, value in tr.items() if key in _TRANSLATION_FIELDS})
+            if "specification_zh" in tr:
+                product["spec_v2"] = tr["specification_zh"]
         detail = details_by.get(asin, {})
         ranking = rankings_by.get(asin, {})
-        html = html_by_asin.get(asin) or ""
+        try:
+            html = html_by_asin.get(asin) or ""
+        except OSError:
+            html = ""
         # When a run directory is supplied, category evidence comes only from
         # ranking_*.html, while detail HTML remains available for other fields.
         if run_dir and ranking_html:
@@ -679,15 +736,20 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
             html_for_category = html
         for field in _FIELD_ORDER:
             records.append(_audit_one(field, asin, product, detail, ranking,
-                                      html_for_category if field.startswith("category_") or field == "leaf_category" else html).to_dict())
-        tr = (translations or {}).get(asin) if isinstance(translations, Mapping) else None
-        tr = tr if isinstance(tr, Mapping) else {}
+                                      html_for_category if field.startswith("category_") or field == "leaf_category" else html,
+                                      stage=stage).to_dict())
         for target, (source_key, column) in _TRANSLATION_FIELDS.items():
+            if stage == "source":
+                continue
             source = product.get(source_key)
             if source in (None, ""):
                 continue
             target_value = product.get(target) or tr.get(target)
             if _translation_residual(source, target_value):
+                # One physical cell may have several explanations, but a
+                # missing translated core field already has its own finding.
+                if target in _TRANSLATED_CORE and not _has(target_value):
+                    continue
                 records.append(FieldClosureResult(
                     asin=asin, field=target, display_column=column,
                     source_status="present", raw_status="present",
@@ -698,12 +760,25 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
                     canonical_value=source, derived_value=target_value,
                     display_value=target_value,
                     message="中文展示字段为空或仍保留西语原文/整句").to_dict())
+        if progress:
+            progress({"event": "progress", "check": "field_closure", "stage": stage,
+                      "completed": position, "total": len(products), "asin": asin})
     if workbook_path:
         records.extend(_audit_workbook(products, workbook_path, translations=translations))
+    # Merge multiple explanations for the same field into one authoritative
+    # finding. Preserve coverage states separately from data defects.
+    unique = {}
+    for row in records:
+        key = (row["asin"], row["field"], row.get("display_column"), row["classification"])
+        old = unique.get(key)
+        if old is None:
+            unique[key] = row
+    records = list(unique.values())
     counts = {c: sum(1 for r in records if r["classification"] == c)
               for c in (SOURCE_MISSING, PARSER_MISSED, MAPPING_MISSED, DERIVED_MISSING,
                         TRANSLATION_INCOMPLETE, NOT_OBSERVED, EVIDENCE_UNAVAILABLE, EXPORT_MISSING,
-                        EXPORT_VALUE_MISMATCH, IMAGE_MISSING)}
+                        EXPORT_VALUE_MISMATCH, IMAGE_MISSING, FACT_CHANGED, NOT_APPLICABLE,
+                        "ORIGINAL_PRICE_INVALID")}
     counts["pass"] = sum(1 for r in records if r["classification"] == PASS)
     field_summary = {}
     for field in _FIELD_ORDER:
@@ -712,10 +787,41 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
                                 for c in (PASS, SOURCE_MISSING, PARSER_MISSED, MAPPING_MISSED,
                                           DERIVED_MISSING, TRANSLATION_INCOMPLETE, NOT_OBSERVED, EVIDENCE_UNAVAILABLE,
                                           "ORIGINAL_PRICE_INVALID")}
-    defect_classes = (SOURCE_MISSING, PARSER_MISSED, MAPPING_MISSED, DERIVED_MISSING,
+    defect_classes = (PARSER_MISSED, MAPPING_MISSED, DERIVED_MISSING, FACT_CHANGED,
                       "ORIGINAL_PRICE_INVALID", EXPORT_MISSING, EXPORT_VALUE_MISMATCH,
                       IMAGE_MISSING, TRANSLATION_INCOMPLETE)
+    cells = {}
+    for row in records:
+        if row["classification"] != NOT_APPLICABLE:
+            cells.setdefault((row["asin"], row["display_column"]), []).append(row)
+    error_cells = sum(any(r["classification"] in defect_classes for r in rows) for rows in cells.values())
+    blank_cells = sum(any(r["display_status"] == "missing"
+                          and not (stage == "source" and r["field"] in _TRANSLATED_CORE and r["raw_status"] == "present")
+                          for r in rows) for rows in cells.values())
+    metrics = {"reviewed_cells": len(cells), "blank_cells": blank_cells,
+               "blank_rate": blank_cells / len(cells) if cells else None,
+               "error_cells": error_cells, "error_rate": error_cells / len(cells) if cells else None,
+               "error_skus": len({asin for (asin, _), rows in cells.items()
+                                  if any(r["classification"] in defect_classes for r in rows)}),
+               "issue_rows": sum(r["classification"] in defect_classes for r in records),
+               "rate_denominator": "unique reviewed (ASIN, display column) cells; source absence is not a defect"}
+    columns = {}
+    for (asin, column), rows in cells.items():
+        entry = columns.setdefault(column, {"reviewed_cells": 0, "blank_cells": 0, "error_cells": 0})
+        entry["reviewed_cells"] += 1
+        entry["blank_cells"] += int(any(r["display_status"] == "missing"
+            and not (stage == "source" and r["field"] in _TRANSLATED_CORE and r["raw_status"] == "present")
+            for r in rows))
+        entry["error_cells"] += int(any(r["classification"] in defect_classes for r in rows))
+    for entry in columns.values():
+        entry["blank_rate"] = entry["blank_cells"] / entry["reviewed_cells"]
+        entry["error_rate"] = entry["error_cells"] / entry["reviewed_cells"]
+    metrics["by_column"] = columns
+    if progress:
+        progress({"event": "complete", "check": "field_closure", "stage": stage,
+                  "completed": len(products), "total": len(products)})
     return {
+        "stage": stage, "metrics": metrics,
         "summary": {"total_skus": len(products), "fields_checked": len(_FIELD_ORDER), **counts},
         "coverage_summary": {
             "source_present": sum(1 for r in records if r["source_status"] == "present"),

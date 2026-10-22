@@ -10,6 +10,7 @@ from typing import Any
 from ..collection.detail import parse_detail_page
 from ..collection.ranking import parse_bestsellers_page
 from ..models import normalize_asin
+from ..saved_evidence import SavedHtmlIndex
 from .models import QualityStatus, check_result, issue
 
 
@@ -87,6 +88,8 @@ def audit_offline_replay(
     detail_html_dirs: str | Path | Iterable[str | Path] | None = None,
     run_dir: str | Path | None = None,
     asins: set[str] | None = None,
+    evidence_index: SavedHtmlIndex | None = None,
+    progress=None,
 ) -> object:
     ranking_rows = [dict(row) for row in (rankings or []) if isinstance(row, Mapping)]
     detail_rows = [dict(row) for row in (details or []) if isinstance(row, Mapping)]
@@ -138,6 +141,8 @@ def audit_offline_replay(
         replayed_rankings += 1
         for row in parsed:
             asin = normalize_asin(row.get("asin"))
+            if asins and asin not in asins:
+                continue
             expected = expected_by_key.get((page_url, page_number, asin))
             if expected is None:
                 candidates = expected_by_asin.get(asin, [])
@@ -169,8 +174,12 @@ def audit_offline_replay(
                 "offline_replay", QualityStatus.BLOCK, "P1", "OFFLINE_REPLAY_MISMATCH",
                 source="ranking", source_file=path, message="榜单 HTML 重放没有产生有效记录。"))
 
-    detail_files = _detail_files(detail_roots)
-    for row in detail_rows:
+    evidence_index = evidence_index or SavedHtmlIndex(detail_roots)
+    selected_details = [row for row in detail_rows
+                        if not asins or normalize_asin(row.get("asin") or row.get("requested_asin")) in asins]
+    wanted = {normalize_asin(row.get("asin") or row.get("requested_asin")) for row in selected_details}
+    detail_files = evidence_index.detail_paths(wanted, prefer_filename=True) if wanted else {}
+    for position, row in enumerate(selected_details, 1):
         asin = normalize_asin(row.get("asin") or row.get("requested_asin"))
         if asins and asin not in asins:
             continue
@@ -180,7 +189,14 @@ def audit_offline_replay(
                 "offline_replay", QualityStatus.BLOCK, "P1", "REPLAY_EVIDENCE_MISSING",
                 asin=asin, source="detail", message="找不到与详情记录对应的已保存 HTML。"))
             continue
-        path, html = found
+        path = found
+        try:
+            html = evidence_index.read(path)
+        except OSError as exc:
+            issues.append(issue(
+                "offline_replay", QualityStatus.BLOCK, "P1", "REPLAY_EVIDENCE_UNREADABLE",
+                asin=asin, source="detail", source_file=path, message=str(exc)))
+            continue
         parsed = parse_detail_page(html, asin)
         replayed_details += 1
         mismatches = {}
@@ -195,6 +211,9 @@ def audit_offline_replay(
                 asin=asin, source="detail", source_file=path,
                 message="详情 V1 在线记录与同 HTML 的离线解析核心字段不一致。",
                 evidence={"mismatches": mismatches}))
+        if progress:
+            progress({"event": "progress", "check": "offline_replay", "completed": position,
+                      "total": len(selected_details), "asin": asin})
     if ranking_rows and not ranking_files:
         issues.append(issue(
             "offline_replay", QualityStatus.BLOCK, "P1", "REPLAY_EVIDENCE_MISSING",

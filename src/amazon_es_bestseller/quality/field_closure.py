@@ -18,6 +18,7 @@ def audit_field_closure_quality(
     products: Iterable[Mapping] | None, details: Iterable[Mapping], rankings: Iterable[Mapping], *,
     html_dirs=None, run_dir=None, translations=None, workbook_path=None,
     asins: set[str] | None = None,
+    stage: str = "source", evidence_index=None, progress=None,
 ) -> object:
     detail_rows = [dict(row) for row in (details or []) if isinstance(row, Mapping)]
     ranking_rows = [dict(row) for row in (rankings or []) if isinstance(row, Mapping)]
@@ -28,11 +29,12 @@ def audit_field_closure_quality(
     report = audit_field_closure(
         product_rows, details=detail_rows, rankings=ranking_rows,
         html_dir=html_dirs, run_dir=run_dir, translations=translations,
-        workbook_path=workbook_path)
+        workbook_path=workbook_path, stage=stage,
+        evidence_index=evidence_index, progress=progress)
     issues = []
     for row in report.get("records") or []:
         classification = str(row.get("classification") or "")
-        if classification == "PASS":
+        if classification in {"PASS", "NOT_APPLICABLE"}:
             continue
         if classification in {"SOURCE_MISSING", "NOT_OBSERVED", "EVIDENCE_UNAVAILABLE"}:
             status, severity = QualityStatus.WARN, "P2"
@@ -51,4 +53,6 @@ def audit_field_closure_quality(
                       "derived_value": row.get("derived_value")}))
     summary = dict(report.get("summary") or {})
     summary["quality_issue_count"] = len(issues)
+    summary["field_metrics"] = report["metrics"]
+    summary["audit_stage"] = stage
     return check_result("field_closure", issues, summary=summary)

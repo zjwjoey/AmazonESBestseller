@@ -643,12 +643,21 @@ def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | 
     page_asins = _page_asin_evidence(html)
     parsed = page_asins[0] if len(page_asins) == 1 else ""
     record = record or {}
-    return resolve_identity(
+    identity = resolve_identity(
         ranking_asin=asin, requested_asin=asin, final_url_asin=final_url,
         embedded_asins=page_asins, parsed_detail_asin=parsed,
         parent_asin=record.get("parent_asin") or record.get("parent_asin_raw"),
         variation_family_asins=record.get("variation_family_asins") or record.get("variation_asins") or [],
     )
+    # A matching destination URL cannot settle contradictory strong page
+    # identities (e.g. ASIN input vs canonical URL). Only an explicit family
+    # containing every observed identity can explain that disagreement.
+    if len(page_asins) > 1 and not ({asin, *page_asins}
+                                  <= set(identity["variation_family_asins"])):
+        identity.update({"identity_status": "IDENTITY_UNCONFIRMED",
+                         "identity_status_code": "IDENTITY_UNCONFIRMED",
+                         "resolved_asin": ""})
+    return identity
 
 
 def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1") -> list[dict]:

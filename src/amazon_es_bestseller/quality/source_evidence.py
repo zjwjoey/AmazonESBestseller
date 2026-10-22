@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -63,21 +64,25 @@ def audit_detail_run_evidence(run_dir: str | Path) -> dict[str, Any]:
         detail = state_by_asin.get(asin, {})
         checkpoint_record = checkpoint.get("record") if isinstance(checkpoint.get("record"), Mapping) else {}
         merged = {**detail, **checkpoint_record, **checkpoint, **outcome}
-        if _has_request_evidence(merged):
+        metadata_present = _has_request_evidence(merged)
+        html_path_value = (merged.get("saved_html_path") or merged.get("html_path")
+                           or merged.get("evidence_path"))
+        html_path = Path(str(html_path_value)) if html_path_value else None
+        if html_path and not html_path.is_absolute():
+            html_path = root / html_path
+        expected_hash = str(merged.get("response_sha256") or merged.get("html_sha256")
+                            or merged.get("evidence_sha256") or "").lower()
+        verified = False
+        if html_path and re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+            try:
+                verified = hashlib.sha256(html_path.read_bytes()).hexdigest() == expected_hash
+            except OSError:
+                pass
+        if metadata_present:
             level = "REQUEST_EVIDENCE"
-            reason = "request/response metadata and response hash are present"
+            reason = ("request metadata and matching saved response content" if verified
+                      else "request metadata present; response content NOT verified")
         else:
-            html_path_value = (merged.get("saved_html_path") or merged.get("html_path")
-                               or merged.get("evidence_path"))
-            html_path = Path(str(html_path_value)) if html_path_value else None
-            if html_path and not html_path.is_absolute():
-                html_path = root / html_path
-            expected_hash = str(merged.get("html_sha256") or merged.get("evidence_sha256") or "").lower()
-            if html_path and html_path.is_file() and expected_hash:
-                actual_hash = hashlib.sha256(html_path.read_bytes()).hexdigest()
-                verified = actual_hash == expected_hash
-            else:
-                verified = False
             if verified:
                 level = "VERIFIED_SAVED_EVIDENCE"
                 reason = "saved HTML exists and its recorded SHA-256 matches"
@@ -90,6 +95,9 @@ def audit_detail_run_evidence(run_dir: str | Path) -> dict[str, Any]:
                        "candidate_evidence_file_path": outcome.get("candidate_evidence_file_path", ""),
                        "candidate_evidence_sha256": outcome.get("candidate_evidence_sha256", ""),
                        "status": outcome.get("status", ""), "evidence_level": level,
+                       "request_metadata_present": metadata_present,
+                       "content_hash_verified": verified,
+                       "verification_status": "CONTENT_HASH_VERIFIED" if verified else "UNVERIFIED",
                        "evidence_reason": reason})
     counts = {level: sum(row["evidence_level"] == level for row in graded)
               for level in EVIDENCE_LEVELS}
@@ -98,9 +106,14 @@ def audit_detail_run_evidence(run_dir: str | Path) -> dict[str, Any]:
         "manifest_present": manifest_path.is_file(),
         "record_count": len(graded),
         "evidence_counts": counts,
+        "verified_request_count": sum(row["request_metadata_present"] and row["content_hash_verified"]
+                                      for row in graded),
+        "unverified_request_metadata_count": sum(row["request_metadata_present"] and not row["content_hash_verified"]
+                                                 for row in graded),
         "records": graded,
         "source_audit_compatibility": {
-            "request_receipt_validation": "SUPPORTED_ONLY_WHEN_ACTUAL_REQUEST_FIELDS_EXIST",
+            "request_receipt_validation": "METADATA_PRESENCE_IS_NOT_RECEIPT_VALIDATION",
+            "legacy_request_evidence_level": "METADATA_PRESENT; SEE content_hash_verified",
             "repair_or_network_replay": "NOT_PERFORMED",
             "translation_preparation": "NOT_PERFORMED",
             "formal_source_audit_pass": False,

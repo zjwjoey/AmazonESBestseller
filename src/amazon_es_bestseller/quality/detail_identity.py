@@ -53,7 +53,14 @@ def audit_detail_identity(
             parent_asin=row.get("parent_asin") or row.get("parent_asin_raw") or "",
             variation_family_asins=_family(row),
         )
-        status = str(row.get("identity_status") or result.get("identity_status") or "").upper()
+        status = str(result.get("identity_status") or "").upper()
+        recorded_status = str(row.get("identity_status") or "").upper()
+        # A historical PASS cannot override contradictory current evidence.
+        # Preserve an explicit historical failure until it is adjudicated.
+        if (status in _ACCEPTED and recorded_status
+                and recorded_status not in _ACCEPTED
+                and recorded_status not in {"IDENTITY_UNCONFIRMED", "UNCONFIRMED"}):
+            status = recorded_status
         if status in _ACCEPTED:
             # A contradictory final URL is not masked by a matching parsed
             # field unless explicit variation-family evidence explains it.

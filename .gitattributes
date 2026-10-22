@@ -19,3 +19,5 @@
 /tests/fixtures/highspeed/v3_prior_category_plan.json whitespace=-trailing-space
 # Mainline candidate manifests also bind exact saved HTML bytes.
 /tests/fixtures/multisource_candidates/*.html -text whitespace=-trailing-space
+# Minimized live-detail regression evidence also carries exact SHA-256 hashes.
+/tests/fixtures/html/detail500_20261022/*.html -text whitespace=-trailing-space

@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import time
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ from .models import QUALITY_CONTRACT_VERSION
 from .ranking_identity import audit_ranking_identity
 from .ranking_integrity import audit_ranking_integrity
 from .replay import audit_offline_replay
+from ..saved_evidence import SavedHtmlIndex
 
 
 DEFAULT_CHECKS = (
@@ -62,15 +64,21 @@ def run_quality_audit(
     workbook_path=None, asins: Iterable[str] | None = None,
     checks: Iterable[str] | None = None, profile: str = "stable-research",
     git_sha: str = "", network_mode: str = "OFFLINE_QUALITY_AUDIT",
-    run_id: str = "",
+    run_id: str = "", stage: str = "source", progress=None,
 ) -> dict[str, Any]:
+    started_at = datetime.now(timezone.utc).isoformat()
+    started_clock = time.monotonic()
     ranking_rows = _rows(rankings)
     detail_rows = _rows(details)
     product_rows = _rows(products) if products is not None else None
-    selected = tuple(checks or DEFAULT_CHECKS)
+    selected = tuple(dict.fromkeys(checks or DEFAULT_CHECKS))
+    if progress:
+        progress({"event": "start", "stage": stage, "completed_checks": 0,
+                  "total_checks": len(selected)})
     asin_filter = {str(value).strip().upper() for value in (asins or ()) if str(value).strip()}
     status_rows, planned_pages = _manifest_rows(source_manifest)
     results = {}
+    evidence_index = SavedHtmlIndex(detail_html_dirs, progress=progress)
     check_args = {
         "ranking_identity": lambda: audit_ranking_identity(ranking_rows, asins=asin_filter or None),
         "ranking_integrity": lambda: audit_ranking_integrity(
@@ -82,7 +90,7 @@ def run_quality_audit(
         "offline_replay": lambda: audit_offline_replay(
             ranking_rows, detail_rows, ranking_html_dirs=ranking_html_dirs,
             detail_html_dirs=detail_html_dirs, run_dir=run_dir,
-            asins=asin_filter or None),
+            asins=asin_filter or None, evidence_index=evidence_index, progress=progress),
         "detail_structure": lambda: audit_detail_structure(
             detail_rows, asins=asin_filter or None),
         "category_provenance": lambda: audit_category_provenance(
@@ -90,18 +98,52 @@ def run_quality_audit(
         "field_closure": lambda: audit_field_closure_quality(
             product_rows, detail_rows, ranking_rows, html_dirs=detail_html_dirs,
             run_dir=run_dir, translations=translations, workbook_path=workbook_path,
-            asins=asin_filter or None),
+            asins=asin_filter or None, stage=stage,
+            evidence_index=evidence_index, progress=progress),
     }
-    for name in selected:
+    for position, name in enumerate(selected, 1):
         if name not in check_args:
             raise ValueError("unknown quality check: %s" % name)
-        results[name] = check_args[name]().to_dict()
-    gate = evaluate_research_readiness(results)
+        if progress:
+            progress({"event": "check_start", "check": name, "stage": stage,
+                      "completed_checks": position - 1, "total_checks": len(selected)})
+        try:
+            results[name] = check_args[name]().to_dict()
+        except Exception as exc:
+            if progress:
+                progress({"event": "failed", "check": name, "stage": stage,
+                          "error_type": type(exc).__name__, "error": str(exc)})
+            raise
+        if progress:
+            progress({"event": "check_complete", "check": name, "stage": stage,
+                      "completed_checks": position, "total_checks": len(selected)})
+    gate = evaluate_research_readiness(results, required_checks=DEFAULT_CHECKS,
+                                       scope_complete=not bool(asin_filter))
     all_issues = [row for value in results.values() for row in value.get("issues", [])]
     issue_counts = Counter(str(row.get("status") or "") for row in all_issues)
+    input_asins = {str(row.get("asin") or row.get("ranking_asin") or "").upper()
+                   for row in ranking_rows + detail_rows + (product_rows or [])
+                   if str(row.get("asin") or row.get("ranking_asin") or "").strip()}
+    selected_asins = input_asins & asin_filter if asin_filter else input_asins
+    by_status = {name: set() for name in ("BLOCK", "REVIEW", "WARN")}
+    for row in all_issues:
+        if row.get("status") in by_status and row.get("asin") in selected_asins:
+            by_status[row["status"]].add(row["asin"])
+    bad = by_status["BLOCK"] | by_status["REVIEW"]
+    global_failure = any(not row.get("asin") and row.get("status") in {"BLOCK", "REVIEW"}
+                         for row in all_issues)
     summary = {
-        "total_skus": len({str(row.get("asin") or "").upper() for row in ranking_rows + detail_rows
-                            if str(row.get("asin") or "").strip()}),
+        "input_skus": len(input_asins), "total_skus": len(selected_asins),
+        "selected_skus": len(selected_asins), "requested_asins": sorted(asin_filter),
+        "pass_skus": 0 if global_failure else len(selected_asins - bad - by_status["WARN"]),
+        "warn_skus": len(by_status["WARN"] - bad),
+        "review_skus": len(by_status["REVIEW"] - by_status["BLOCK"]),
+        "blocked_skus": len(by_status["BLOCK"]),
+        "legacy_count_units": "pass/warn/review/block count issue rows, not SKUs",
+        "sku_count_scope": "selected ASINs and completed checks only",
+        "evidence_io": {"physical_html_reads": evidence_index.read_count,
+                        "cache_body_limit": evidence_index.max_bodies},
+        "field_metrics": (results.get("field_closure") or {}).get("summary", {}).get("field_metrics"),
         "ranking_records": len(ranking_rows),
         "detail_records": len(detail_rows),
         "pass": issue_counts.get("PASS", 0),
@@ -113,13 +155,17 @@ def run_quality_audit(
         "final_quality_status": gate["final_quality_status"],
         "network_requests": 0,
     }
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     source_hashes = {
         "rankings": _hash_rows(ranking_rows),
         "details": _hash_rows(detail_rows),
         "products": _hash_rows(product_rows or []),
     }
+    elapsed = time.monotonic() - started_clock
+    if progress:
+        progress({"event": "complete", "stage": stage, "completed_checks": len(selected),
+                  "total_checks": len(selected), "elapsed_seconds": elapsed})
     return {
+        "stage": stage, "elapsed_seconds": elapsed,
         "run_id": run_id,
         "git_sha": git_sha,
         "profile": profile,
@@ -129,8 +175,8 @@ def run_quality_audit(
         "quality_checks_enabled": list(selected),
         "source_urls": _source_urls(ranking_rows),
         "planned_pages": planned_pages,
-        "started_at": now,
-        "completed_at": now,
+        "started_at": started_at,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
         "network_mode": network_mode,
         "final_quality_status": gate["final_quality_status"],
         "gate": gate,
