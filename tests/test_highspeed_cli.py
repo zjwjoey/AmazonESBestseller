@@ -183,7 +183,8 @@ def test_long_windows_root_rejected_before_store_writes_or_browser(tmp_path, mon
     monkeypatch.setattr(RunStore, "__init__", lambda *args, **kwargs: pytest.fail("unsupported path must fail before DB/store writes"))
     monkeypatch.setattr(BrowserSession, "__init__", lambda *args, **kwargs: pytest.fail("unsupported path must fail before browser"))
     path, plan = offline_fixture(tmp_path)
-    root = tmp_path / ("deep_runtime_"+"x"*80)
+    # Remain over the publication bound even with a short pytest basetemp.
+    root = tmp_path / ("deep_runtime_"+"x"*180)
     with pytest.raises(ValueError, match="SHORTER_ROOT_REQUIRED"):
         invoke("--offline", "highspeed", "run", "--root", str(root), "--plan", str(path))
     assert not root.exists()
