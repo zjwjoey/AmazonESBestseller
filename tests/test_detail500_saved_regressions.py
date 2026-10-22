@@ -53,6 +53,11 @@ def test_actual_quarantined_child_page_recovers_without_a_request():
     unrelated = _resolve_page_identity(asin, html, "https://www.amazon.es/dp/B000000099", record)
     assert unrelated["identity_status"] == "IDENTITY_MISMATCH"
 
+    unexplained = dict(record, variation_family_asins=[])
+    conflict = _resolve_page_identity(asin, html, url, unexplained)
+    assert conflict["identity_status"] == "IDENTITY_UNCONFIRMED"
+    assert conflict["resolved_asin"] == ""
+
 
 @pytest.mark.parametrize("asin", ["B07QHCNQ7M", "B0B8NPVTC4"])
 def test_actual_saved_sections_pass_quality_without_changing_raw_positions(asin):
