@@ -16,6 +16,9 @@ class CategoryEvidence:
     product_breadcrumb_candidates: tuple[dict, ...] = ()
     ranking_category_placement_id: str | None = None
     ranking_category_path: tuple[str, ...] = ()
+    ranking_source_type: str = ""
+    ranking_source_url: str = ""
+    ranking_source_category_path_raw: str = ""
     bsr_category_id: str | None = None
     bsr_category_path: tuple[str, ...] = ()
     bsr_category_evidence: tuple[dict, ...] = ()
@@ -28,6 +31,9 @@ class CategoryEvidence:
             "product_breadcrumb_candidates": [dict(row) for row in self.product_breadcrumb_candidates],
             "ranking_category_placement_id": self.ranking_category_placement_id,
             "ranking_category_path": list(self.ranking_category_path),
+            "ranking_source_type": self.ranking_source_type,
+            "ranking_source_url": self.ranking_source_url,
+            "ranking_source_category_path_raw": self.ranking_source_category_path_raw,
             "bsr_category_id": self.bsr_category_id,
             "bsr_category_path": list(self.bsr_category_path),
             "bsr_category_evidence": [dict(row) for row in self.bsr_category_evidence],
@@ -45,7 +51,13 @@ def category_evidence_from_detail(detail: dict, ranking_context: dict | None = N
         for row in (detail.get("detail_category_evidence") or []) if isinstance(row, dict)
     )
     ranking_context = ranking_context or {}
-    ranking_path = tuple(str(x).strip() for x in (ranking_context.get("ranking_category_path") or []) if str(x).strip())
+    path = ranking_context.get("ranking_category_path")
+    raw_path = ranking_context.get("ranking_source_category_path") or ""
+    if not path:
+        path = raw_path.split(" > ") if isinstance(raw_path, str) else raw_path
+    if isinstance(path, str):
+        path = path.split(" > ")
+    ranking_path = tuple(str(x).strip() for x in (path or []) if str(x).strip())
     bsr_path = tuple(str(x).strip() for x in (
         detail.get("bsr_category_path") or ranking_context.get("bsr_category_path") or []
     ) if str(x).strip())
@@ -63,6 +75,9 @@ def category_evidence_from_detail(detail: dict, ranking_context: dict | None = N
         product_breadcrumb_candidates=breadcrumb_candidates,
         ranking_category_placement_id=ranking_context.get("ranking_category_placement_id"),
         ranking_category_path=ranking_path,
+        ranking_source_type=str(ranking_context.get("ranking_source_type") or ""),
+        ranking_source_url=str(ranking_context.get("ranking_source_url") or ""),
+        ranking_source_category_path_raw=(raw_path if isinstance(raw_path, str) else ""),
         bsr_category_id=detail.get("bsr_category_id") or ranking_context.get("bsr_category_id"),
         bsr_category_path=bsr_path,
         bsr_category_evidence=bsr_evidence,

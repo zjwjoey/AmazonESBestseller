@@ -175,12 +175,23 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     # use the explicit product-detail breadcrumb as a secondary source; never
     # overwrite a ranking-context value already present.
     detail_trail = out.get("detail_category_trail")
-    if isinstance(detail_trail, (list, tuple)):
+    # Missing ranking levels may only be completed by a compatible path.
+    # Sharing L1 does not prove that two differently named L2 nodes are aliases.
+    category_keys = ("category_l1", "category_l2", "category_l3")
+    compatible = isinstance(detail_trail, (list, tuple)) and all(
+        not out.get(key) or (i < len(detail_trail)
+            and str(out[key]).strip().casefold() == str(detail_trail[i]).strip().casefold())
+        for i, key in enumerate(category_keys))
+    if detail_trail and compatible:
         dl1, dl2, dl3, dleaf = category_levels(detail_trail)
         for key, value in (("category_l1", dl1), ("category_l2", dl2),
                            ("category_l3", dl3), ("leaf_category", dleaf)):
             if not out.get(key) and value:
                 out[key] = value
+        # The explicit path may be deeper than the three display levels.
+        if out.get("leaf_category") in (None, "", out.get("category_l1"),
+                                        out.get("category_l2"), out.get("category_l3")):
+            out["leaf_category"] = dleaf
 
     # leaf 必须是已知最深的一级。榜单页常只暴露 L1/L2（leaf 因此 = L2），
     # 详情面包屑随后补上 L3；只填空字段会让 leaf 停在 L2，比 L3 还浅

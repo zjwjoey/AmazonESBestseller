@@ -375,6 +375,11 @@ def _attr_row(section: str, label: str, value: str, position: int, source: str) 
             "position": position, "source": source}
 
 
+def _attribute_label_key(value: str) -> str:
+    # Directional controls belong in raw evidence, not in label matching.
+    return _clean(re.sub(r"[\u200b-\u200f\u202a-\u202e\ufeff]", "", value)).casefold()
+
+
 def _overview_attributes(soup) -> list:
     """product_overview：Resumen del producto 表，td.a-span3(label)+td.a-span9(value)。"""
     rows = []
@@ -485,6 +490,33 @@ def _product_description_raw(soup) -> str:
     return ""
 
 
+def _aplus_content_raw(soup) -> list[dict]:
+    """Keep scoped A+ prose separate from facts and comparison-product tables."""
+    rows = []
+    for region in soup.select("#aplus_feature_div"):
+        if _hidden(region) or _secondary_product(region):
+            continue
+        for block in region.select("h1, h2, h3, h4, p, li"):
+            if block.find_parent(["p", "li"]) is not None:
+                continue
+            excluded = False
+            for ancestor in [block, *block.parents]:
+                if ancestor is region:
+                    break
+                context = str(ancestor.get("id") or "") + " " + " ".join(ancestor.get("class") or [])
+                if (ancestor.get("role") == "dialog" or _secondary_product(ancestor)
+                        or re.search(r"comparison|compare|modal|video", context, re.I)):
+                    excluded = True
+                    break
+            if excluded:
+                continue
+            value = _evidence_text(block, allow_expanders=True)
+            if value:
+                rows.append({"source": "aplus_feature_div", "position": len(rows),
+                             "tag": block.name, "text_raw": value})
+    return rows
+
+
 def _detail_bullets_raw(soup) -> list:
     """other_visible_details：#detailBulletsWrapper_feature_div 的 li 子弹（n.º 排名/日期等证据）。"""
     el = soup.select_one(_DETAIL_BULLETS_WRAPPER_SEL)
@@ -569,14 +601,17 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
         brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
         brand_raw = _clean(brand_raw)
+    attributes = _collect_attributes(soup)
     if not brand_raw:
         # Some pages omit the byline but expose an explicit Marca row in the
         # product-overview table.  This is reliable page evidence, unlike a
         # title-prefix fallback (which is forbidden by the data rules).
-        for row in _overview_attributes(soup):
-            if row["label_raw"].casefold() in {"marca", "brand"}:
+        for row in attributes:
+            if _attribute_label_key(row["label_raw"]) in {"marca", "brand"}:
                 brand_raw = row["value_raw"]
                 break
+    manufacturer_raw = next((row["value_raw"] for row in attributes
+        if _attribute_label_key(row["label_raw"]) in {"fabricante", "manufacturer"}), "")
 
     # 已选规格（变体）：旧版 selection + 现代 dropdown/swatch 选择状态
     selected_variation_raw = _selected_variation(soup)
@@ -614,6 +649,7 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         "bsr_category_evidence": bsr_links,
         "seller_raw": seller_raw,
         "brand_raw": brand_raw,
+        "manufacturer_raw": manufacturer_raw,
         "selected_variation_raw": selected_variation_raw,
         "sold_by_amazon": sold_by_amazon,
         "fulfilled_by_amazon": fulfilled_by_amazon,
@@ -624,9 +660,10 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         "detail_category_trail": category_trail,
         "detail_category_evidence": category_evidence,
         # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
-        "attributes": _collect_attributes(soup),
+        "attributes": attributes,
         "feature_bullets_raw": _feature_bullets_raw(soup),
         "product_description_raw": _product_description_raw(soup),
+        "aplus_content_raw": _aplus_content_raw(soup),
         "detail_bullets_raw": _detail_bullets_raw(soup),
     }
 

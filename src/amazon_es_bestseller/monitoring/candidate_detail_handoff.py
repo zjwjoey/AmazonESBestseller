@@ -8,6 +8,7 @@ from typing import Iterable, Mapping
 from bs4 import BeautifulSoup
 
 from ..access.detector import detect_access_status
+from ..categories.provenance import category_evidence_from_detail
 from ..collection.detail import (
     _page_asin_candidates, _weak_page_asin_observations, parse_detail_page,
 )
@@ -92,6 +93,12 @@ def verify_candidate_selection(candidate_snapshot: Mapping, saved_detail_html: s
                                  "identity_status": identity.get("identity_status")})
                 continue
             digest = hashlib.sha256(body).hexdigest()
+            source_context = {
+                "ranking_source_type": observation.get("ranking_source_type") or observation.get("source_type") or "",
+                "ranking_source_url": observation.get("source_url") or "",
+                "ranking_source_category_path": observation.get("ranking_source_category_path") or "",
+                "ranking_category_path": observation.get("ranking_category_path") or [],
+            }
             detail_record = {
                 **parsed, "asin": asin, "ranking_asin": asin,
                 "requested_asin": asin, "requested_url": observation.get("normalized_product_url") or "",
@@ -101,6 +108,7 @@ def verify_candidate_selection(candidate_snapshot: Mapping, saved_detail_html: s
                 "detail_status": "SUCCESS", "cache_classification": "VALID_PRODUCT_PAGE",
                 "detail_source_html_sha256": digest,
                 "detail_source_html_path": str(detail_path),
+                "category_evidence": category_evidence_from_detail(parsed, source_context).to_dict(),
             }
             verified.append({
                 "asin": asin, "ranking_asin": asin,
@@ -115,6 +123,9 @@ def verify_candidate_selection(candidate_snapshot: Mapping, saved_detail_html: s
                 "ranking_product_url_raw": observation.get("raw_product_url") or "",
                 "ranking_product_url_normalized": observation.get("normalized_product_url") or "",
                 "ranking_source_url": observation.get("source_url") or "",
+                "ranking_source_type": source_context["ranking_source_type"],
+                "ranking_source_category_path": source_context["ranking_source_category_path"],
+                "ranking_category_path": source_context["ranking_category_path"],
                 "ranking_page_number": observation.get("page_number"),
                 "bestseller_rank": observation.get("bestseller_rank"),
                 "identity_status": "IDENTITY_MATCH",
