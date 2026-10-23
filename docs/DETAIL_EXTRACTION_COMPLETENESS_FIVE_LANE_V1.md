@@ -1,6 +1,6 @@
 # 详情提取完整性与五线整合 V1
 
-基线：`24e2d1e0dbb51a1995fef853753be185171463f9`。本文件记录阶段证据；当前尚未完成五线整合，不能判定 READY_FOR_CONTROLLED_VALIDATION。
+原基线：`24e2d1e0dbb51a1995fef853753be185171463f9`。任务 A 已通过 PR #22 合并，任务 B 基于其合并结果 `0b45fb59991efcc37ce785f9da561190c8d85f33` 开发。当前任务 B 的最终性能、全量测试与远端 CI 尚在验收，不能提前判定 READY_FOR_CONTROLLED_VALIDATION。
 
 ## 1. 字段提取结果
 
@@ -66,4 +66,8 @@ task/candidate/selection ID、ASIN 和 URL 随任务保留；不能按标题或�
 
 ## 6. GitHub 交付
 
-任务 A：真实失败测试保留，定向关联测试最近一次 56 项通过（不与此前重叠套件相加）；完整离线测试和远端 Python 3.11/3.12 CI 尚待完成。任务 B、端到端负载验证、PR 与最终状态待后续补齐。
+任务 A：真实失败测试保留，定向关联测试 56 项通过（不与重叠套件相加）；完整离线测试 2,428 passed / 6 skipped，耗时 1,450.05 秒。两项真实 Live 测试需要 RUN_LIVE，其余四项依赖未提交的 scale_4500_final 生成物；没有把这些跳过算作已验证。
+
+PR-A：[#22](https://github.com/zjwjoey/AmazonESBestseller/pull/22)，已合并。代码提交 `33084a3efa38843c265bddfcffd9dc7d990007b9`，合并提交 `0b45fb59991efcc37ce785f9da561190c8d85f33`。远端 CI `39883822783`、`39883830446` 的 Python 3.11 / 3.12 全部 SUCCESS。
+
+任务 B：最终性能、完整离线测试、远端双版本 CI、PR 和最终状态待本轮验收后填写。原型结果、旧失败和被新修改打断的测试均单独保留，不当成最终完整通过。

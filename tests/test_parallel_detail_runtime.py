@@ -137,3 +137,26 @@ def test_null_http_timeout_is_only_isolated_with_scoped_normal_evidence(tmp_path
             assert result['state']=='ACCESS_STOP' and stops==['UNKNOWN']
             assert result['successful']==0
     asyncio.run(case())
+
+
+def test_terminal_disk_failure_stops_admission_and_keeps_saved_evidence(tmp_path):
+    async def case():
+        captured=[]
+        async def capture(task,lane,sent,stop,restrict):
+            sent();captured.append(task['task_id'])
+            return {'html':'original saved page','status_code':200,
+                    'request_url':task['request_url'],'document_start_observed':True}
+        def parse(task,*args):return {'asin':task['asin'],'resolved_asin':task['asin'],
+                                     'identity_status':'IDENTITY_MATCH','title_es_raw':'P'}
+        runner=ParallelDetailRunner(tmp_path,{'run_id':'run','tasks':tasks(2)},
+            {'max_requests':2,'prior_requests':0,'budget_holds':0},capture=capture,parse=parse,
+            check_gate=lambda:None,stop_gate=lambda state:None,lanes=1)
+        def fail(*args):raise OSError('LOCAL_TEST_TERMINAL_DISK_FAILURE')
+        runner.store.finish=fail
+        with pytest.raises(OSError,match='TERMINAL_DISK_FAILURE'):await runner.run()
+        assert captured==['0'] and runner.scheduler.stop.is_set()
+        directory=runner.store.directory(tasks(2)[0])
+        assert (directory/'response.html').read_text()=='original saved page'
+        assert (directory/'receipt.json').exists() and not (directory/'outcome.json').exists()
+        with pytest.raises(ValueError,match='UNRESOLVED_RESERVATION'):runner.store.pending()
+    asyncio.run(case())
