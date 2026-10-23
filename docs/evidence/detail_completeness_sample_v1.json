@@ -1,0 +1,2639 @@
+{
+  "base_commit": "24e2d1e0dbb51a1995fef853753be185171463f9",
+  "inventory": {
+    "product_pages": 607,
+    "desktop_breadcrumb_pages": 603
+  },
+  "unique_products": 606,
+  "sample_count": 200,
+  "counts": {
+    "aplus_content_raw_nonempty": 157,
+    "manufacturer_raw_nonempty": 191,
+    "aplus_text_blocks": 1443,
+    "metadata_extensions": 200,
+    "products": 200,
+    "old_field_changes_other_than_metadata": 0
+  },
+  "original_attributes": 5737,
+  "new_attributes": 5737,
+  "lost_attribute_pairs": 0,
+  "empty_outputs_not_automatically_parser_errors": {
+    "brand_raw": 1,
+    "current_price_raw": 5,
+    "original_price_raw": 70,
+    "rating_raw": 2,
+    "review_count_raw": 2,
+    "monthly_bought_raw": 33,
+    "attributes": 2,
+    "feature_bullets_raw": 3,
+    "product_description_raw": 133,
+    "date_first_available_raw": 95,
+    "seller_raw": 5,
+    "detail_category_trail": 3,
+    "aplus_content_raw": 43
+  },
+  "sample": [
+    {
+      "asin": "B0D8LJWZPB",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D8LJWZPB.html",
+      "sha256": "e5a82faeba045c3f39e6ea542c2e640c27b8e4055e51dbaea02804ca0f845a48",
+      "title": "Mando inal\u00e1mbrico Luna",
+      "category": [],
+      "density": 0
+    },
+    {
+      "asin": "B0167414DE",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0167414DE.html",
+      "sha256": "8015c4e5e54c89f276143ccbd8a13f51f25edb4ec9f04ef28b0f0437bf8ecaf2",
+      "title": "NaturGreen Aceite de S\u00e9samo Bio de Primera Presi\u00f3n (502278), 250 Mililitros",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Aceites, vinagres y ali\u00f1os para ensalada",
+        "Aceites",
+        "S\u00e9samo"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B018VN0GI8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B018VN0GI8.html",
+      "sha256": "dad06e9a9485d78001c167fe4a919ea81c7c939c697fe6348d3d2ab9f9dfb116",
+      "title": "7 UP Refresco cero de lima y lim\u00f3n, sin az\u00facares y sin calor\u00edas, bipack dos botellas de 2 litros, 4 litros en total",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Caf\u00e9, t\u00e9 y bebidas",
+        "Refrescos con gas",
+        "Gaseosas"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0CCJJHH6M",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CCJJHH6M.html",
+      "sha256": "677935f774f32894cb5dec524739bf6f42d23391fb7ec9ce335835674524791f",
+      "title": "By Amazon Pistachos tostados y salados, 500g",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Frutas deshidratadas, frutos secos y semillas",
+        "Frutos secos y semillas",
+        "Pistachos"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B00DN9JEWA",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00DN9JEWA.html",
+      "sha256": "f3b5a2b9768e89156e73ed5a81e4c81cb24c401fd51d22fde7ba9bb10b0ceade",
+      "title": "El Granero Integral - Levadura de Cerveza Desamargada - 300 g",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Productos para cocina y reposter\u00eda",
+        "Levaduras y leudantes",
+        "Levaduras secas activas"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B00XIJK5SC",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00XIJK5SC.html",
+      "sha256": "4c34ca84251942ab4b29643a150e24d46a07f2a2ab9198d3696f308c77e6287e",
+      "title": "Tabasco - Rojo Original, Salsa Picante Sabor Medio Fuerte, Elaborada con Chiles Rojos, \u00d3ptimo para Condimentar y Cocinar, 60 ml",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Salsas",
+        "Salsas picantes"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B00ARABK20",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00ARABK20.html",
+      "sha256": "22185f5abd0c76a83033f1ae86fd464f693b6abd7c948866fca62da3ad0ff457",
+      "title": "PUR Gum chicle sin az\u00facar con xilitol, vegano, sin aspartamo y sin gluten, sabor spearmint, 55 piezas (paquete de 1)",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Snacks y dulces",
+        "Dulces, chocolates y chicles",
+        "Chicles"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0BYH3CX2F",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BYH3CX2F.html",
+      "sha256": "f1a23c069939071747890aac78df7f2fd54675af859db07e5c2e59a05e6d0d7b",
+      "title": "WAIKAS 6 Bolsas para iRobot Roomba Series i & s & j, 104 105 405 504 505 705 706 Combo 10 Max, 2 Essential, i1+ i3+ i4+ i5+ i6+ i7+ i8+ s9+ j5+ j6+ j7+ s9+ j9+ Plus, Bolsas para Roomba Robot Aspirador",
+      "category": [
+        "Aspiraci\u00f3n, limpieza y cuidado de suelo y ventanas",
+        "Accesorios para aspiradoras",
+        "Bolsas para aspiradoras",
+        "Bolsas para aspiraci\u00f3n centralizada"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B00X7XNBMQ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00X7XNBMQ.html",
+      "sha256": "1147db3103fd4649a50906d7eea6b1f848b7d7963a549da33609c6dd15243a68",
+      "title": "TI TIN Pack 2 S\u00e1banas Bajeras Cuna 60x120 cm",
+      "category": [
+        "Beb\u00e9",
+        "Dormitorio",
+        "Ropa de cama",
+        "Ropa de cama para cunas",
+        "S\u00e1banas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0D4ZNZDRH",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D4ZNZDRH.html",
+      "sha256": "d189afd8eed9932a07229a42e9529644dbab4cf5c9376420b7bdde9af9d0c8f5",
+      "title": "Koala Babycare Fular portabebes- Cuddle Band 2.0 \u2013 Portabebes recien nacido homologado hasta 15 kg 100% algod\u00f3n - Ajustable y unisex",
+      "category": [
+        "Beb\u00e9",
+        "Porteadores y accesorios",
+        "Fulares portabeb\u00e9"
+      ],
+      "density": 27
+    },
+    {
+      "asin": "B084V9PP9B",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B084V9PP9B.html",
+      "sha256": "9ac706be60ad5c59ace335fddf51d08d14e6d8f71f66c143cfd659f592cb0065",
+      "title": "MARKHOR\u00ae Negro Mate Con Ba\u00f1o De Oro 24K - Navaja Afeitar Profesional con 20 Cuchillas para hoja de barbero - Cuchilla de Afeitar Hombre Estilo Barbero Cl\u00e1sico - Kit de Afeitado Premium",
+      "category": [
+        "Belleza",
+        "Afeitado y depilaci\u00f3n",
+        "Afeitado manual",
+        "Hombre",
+        "Maquinillas de afeitar para hombre"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B0DG56WTK7",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DG56WTK7.html",
+      "sha256": "0691e9b2ca798dd35bda96bfea7aae8ebc923238f9c5b04cd079332dda367b9f",
+      "title": "Dove Jab\u00f3n s\u00f3lido original hidratante 4 x 90 g",
+      "category": [
+        "Belleza",
+        "Ba\u00f1o e higiene personal",
+        "Limpieza personal",
+        "Pastillas de jab\u00f3n"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B0D2P1ZVZ8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D2P1ZVZ8.html",
+      "sha256": "e1a6c5e3fe386f429f37f06c514cbe0d2168d499e294ca55ca836915da8e5e97",
+      "title": "L'Or\u00e9al Paris Age Perfect S\u00e9rum Le Duo Antiarrugas Rejuvenecedor, 30ml",
+      "category": [
+        "Belleza",
+        "Cuidado de la piel",
+        "Cara",
+        "S\u00e9rums"
+      ],
+      "density": 24
+    },
+    {
+      "asin": "B08NF5JL3F",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08NF5JL3F.html",
+      "sha256": "133238978784da645f9484e87155ce20c5b4159c2c4f204d11c4fd50bba1d4dc",
+      "title": "Wella Professionals Color Fresh Mask Mascarilla de color Coloraci\u00f3n temporal Revive el color del cabello Hidratante Tono Pearl Blonde 150ml",
+      "category": [
+        "Belleza",
+        "Cuidado del cabello",
+        "Coloraci\u00f3n del cabello",
+        "Reavivadores de color",
+        "M\u00e1scaras refrescantes de color"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0FG77TF25",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FG77TF25.html",
+      "sha256": "89ffaf7728db9efa786f71eb810fa8a217ce05ad10bba1d9525c4d9bb1ab191e",
+      "title": "Capa de peluquer\u00eda,1 Pieza,Capa de corte de,paraguas impermeable y plegable, Ropa De Peluquer\u00eda Para Corte De Pelo,para adultos y ni\u00f1os,para peinado, cortes y salones",
+      "category": [
+        "Belleza",
+        "Equipo de sal\u00f3n y spa",
+        "Capas"
+      ],
+      "density": 9
+    },
+    {
+      "asin": "B0D4QMXTM2",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D4QMXTM2.html",
+      "sha256": "34237ae339e78a50d63fa51e5aa25fac58c10bd004f9811378a2f19f9f169f7a",
+      "title": "KIKO Milano Unlimited Precision Automatic Eyeliner And Kohl - Tono 16 Black",
+      "category": [
+        "Belleza",
+        "Maquillaje",
+        "Ojos",
+        "L\u00e1pices de ojos"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B0DXF8MTT1",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DXF8MTT1.html",
+      "sha256": "459f3e162a51fb30284d1bad0ed808fd64be65981c4d7f4122a9921f7328ab05",
+      "title": "Aomig Pesta\u00f1as Postizas, 570 Pcs Kit DIY, 8-16mm Natural",
+      "category": [
+        "Belleza",
+        "Utensilios y accesorios",
+        "Brochas y utensilios de maquillaje",
+        "Ojos",
+        "Pesta\u00f1as postizas y adhesivos",
+        "Pesta\u00f1as postizas"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0BLWJ1ND6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BLWJ1ND6.html",
+      "sha256": "864778f83b1079cd3efae09a6c2e4858fc9677146b921441c7de021cb05d606c",
+      "title": "Dpm Tapes - Burlete Bajo Puerta de Silicona con Adhesivo 3M, Junta Recortable Anticorrientes para puertas, ventanas y mamparas compatibles, 35 mm x 5 m, Transparente",
+      "category": [
+        "Bricolaje y herramientas",
+        "Ferreter\u00eda",
+        "Ferreter\u00eda y cerrojos para puertas",
+        "Burletes y aislantes"
+      ],
+      "density": 23
+    },
+    {
+      "asin": "B0G4F8DXWW",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G4F8DXWW.html",
+      "sha256": "23e73f3ca33e55d3bc941cb564104ca0e64039c87b24749ae191689abb64f0d7",
+      "title": "2pcs 5000mAh Recambio para Dewalt bater\u00eda 18V + 1pcs 10.8~20V 3A DCB107 para Dewalt Cargador de bater\u00eda con indicador LED",
+      "category": [
+        "Bricolaje y herramientas",
+        "Herramientas manuales y el\u00e9ctricas",
+        "Accesorios para herramientas el\u00e9ctricas",
+        "Accesorios de herramientas inal\u00e1mbricas",
+        "Bater\u00edas"
+      ],
+      "density": 27
+    },
+    {
+      "asin": "B0DDTF31WK",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DDTF31WK.html",
+      "sha256": "d98a5ef6597d53d62153051cc77abc7992e00a8e369a6771bab3a79f479a0c01",
+      "title": "shinfly 4,8 m Canaleta Cables Pared Adhesivo, Calha para Cabos, 15mm x 10mm",
+      "category": [
+        "Bricolaje y herramientas",
+        "Instalaci\u00f3n el\u00e9ctrica",
+        "Cableado de superficie",
+        "Canales portacables"
+      ],
+      "density": 28
+    },
+    {
+      "asin": "B0CQPCNQ1H",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CQPCNQ1H.html",
+      "sha256": "1fdd6b42e95dc4d994562fa1e84e8e6623743d34db1a38db418e583e26405089",
+      "title": "EDIESI, Estanterias Almacenaje, 180 x 90 x 40 cm, Metalicas, Galvanizadas, Material MDF, para Hogar, Trastero, Garaje, 5 Baldas Ajustables, Carga M\u00e1xima 875 kg (2 Unidades)",
+      "category": [
+        "Bricolaje y herramientas",
+        "Organizaci\u00f3n y almacenaje en casa",
+        "Almacenaje en garaje",
+        "Estantes multiusos"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B0916PXW3K",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0916PXW3K.html",
+      "sha256": "d642bd46c2196efc94bd66238482a52eaa01db1eacb652dbcba7ff60c2cae47b",
+      "title": "AEROSOLES P&F Filler primer - Aparejo alto espesor - Imprimaci\u00f3n spray para impresi\u00f3n 3D - Masilla relleno impresion 3D - Postprocesado PLA - Imprimaci\u00f3n universal -Smooth Layer 3D print (THICK, GRIS)",
+      "category": [
+        "Bricolaje y herramientas",
+        "Pinturas, herramientas y tratamiento de paredes",
+        "Pinturas e imprimaciones",
+        "Sprays de pintura"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B08R8JWGBQ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08R8JWGBQ.html",
+      "sha256": "e190fb6b2016af3b98405e7b3790487341b32d59d40550ec9d40c5a7a87a2c7e",
+      "title": "VOUNOT\u00ae Marquesinas Exterior para Puertas y Ventanas, 120 x 80 cm Tejadillo de Protecci\u00f3n, Toldo Cubierta de Policarbonato en Jard\u00edn, Gris",
+      "category": [
+        "Bricolaje y herramientas",
+        "Suministros de construcci\u00f3n",
+        "Material de construcci\u00f3n",
+        "Tejados y accesorios",
+        "Toldos"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0DQQ8CMZH",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DQQ8CMZH.html",
+      "sha256": "b757fadfc4950a5becd420fcf5aaa576cd9e8610fbb57540ba9889fc40d248d9",
+      "title": "Protector Pala de Padel Vinilo Calandrado - Pack 1/2 - Cubre los Bordes Laterales - Extrema Protecci\u00f3n Todas Las Palas - Padel Accesorios - Protector Padel Dentado - 60x420mm",
+      "category": [
+        "Deportes y aire libre",
+        "Deportes",
+        "P\u00e1del"
+      ],
+      "density": 6
+    },
+    {
+      "asin": "B0BJLFMT75",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BJLFMT75.html",
+      "sha256": "368e2842c5f5f6f7a944d8d331d969a58f23a14ceb8d01a20a800a667f7561d3",
+      "title": "Cecotec Pedales Est\u00e1ticos DrumFit Cycle Compact, Niveles de Resistencia Regulables manualmente, Funcionamiento Sencillo e Intuitivo, Pantalla LCD",
+      "category": [
+        "Deportes y aire libre",
+        "Fitness y ejercicio",
+        "M\u00e1quinas de cardio",
+        "Ejercitadores de pedales"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B082XJHQPC",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B082XJHQPC.html",
+      "sha256": "53019027e3ec1157999b6e0b1712481b89806419d2fe828e8db6c23e6356029e",
+      "title": "NirvanaShape Toalla de Microfibra | 14 Colores | 8 Dimensiones | Toalla de Viaje Ligera, Absorbente y de Secado R\u00e1pido | Toalla de Ba\u00f1o para Viajes | Ideal para Playa, Camping, Yoga y Sauna",
+      "category": [
+        "Deportes y aire libre",
+        "Ocio al aire libre",
+        "Acampada y senderismo",
+        "Cuidado personal",
+        "Toallas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0CFLQY62Q",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CFLQY62Q.html",
+      "sha256": "85e4ccc803d66a3b25ef89a82a36517c4f3ba32266064112aca65b706823198d",
+      "title": "4 Piezas Adaptador Enchufe Europeo a Americano, Adaptador Enchufe Americano a Espa\u00f1ol, Tipo C/E/F/L/N a Tipo A para Viajeros Que Visitan USA/Jap\u00f3n/M\u00e9xico/Canad\u00e1-Negro",
+      "category": [
+        "Electr\u00f3nica",
+        "Accesorios de alimentaci\u00f3n",
+        "Adaptadores internacionales"
+      ],
+      "density": 24
+    },
+    {
+      "asin": "B0CZXWGK79",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CZXWGK79.html",
+      "sha256": "8b5743564790f7aa6b29630b2484d96daa3fefaca0d09902b19e7a69712c331e",
+      "title": "Kobo Libra Colour eReader | Pantalla E Ink Kaleido\u2122 3 de 7\" | Temperatura del Color y Brillo Ajustables | Reducci\u00f3n luz Azul | eBooks y AudioBooks | Memor\u00eda 32 GB | Resistente al Agua | Blanco",
+      "category": [
+        "Electr\u00f3nica",
+        "Audio y v\u00eddeo port\u00e1til",
+        "Accesorios",
+        "Altavoces port\u00e1tiles y altavoces con puerto dock"
+      ],
+      "density": 40
+    },
+    {
+      "asin": "B0HK6L7CR2",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0HK6L7CR2.html",
+      "sha256": "014bb2802de4b54808136bfe2c08423feff018ec600f3bfdc890843130439084",
+      "title": "Auriculares Conducci\u00f3n \u00d3sea Nataci\u00f3n, IPX8, MP3 8 GB, Bluetooth 6.0",
+      "category": [
+        "Electr\u00f3nica",
+        "Auriculares y accesorios",
+        "Auriculares",
+        "Auriculares de o\u00eddo abierto"
+      ],
+      "density": 59
+    },
+    {
+      "asin": "B0F84D5PRT",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0F84D5PRT.html",
+      "sha256": "92d1aec885539aa9bb24f0e31efff6c6dedc949d67bb4d4f86e9cf0a4decf89f",
+      "title": "Power Bank 22.5W 20000mAh Bateria Externa Carga Rapida, Bateria Portatil PD3.0 QC4.0, Powerbank USB C Input & Output con Pantalla LCD Compatible con Smartphones, smartwatches, etc (black01)",
+      "category": [
+        "Electr\u00f3nica",
+        "Comunicaci\u00f3n m\u00f3vil y accesorios",
+        "Accesorios",
+        "Cargadores",
+        "Cargadores port\u00e1tiles"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B0FT3QZ9K4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FT3QZ9K4.html",
+      "sha256": "3910a109ed574463cc2ab2c0aff21b1908edff91b9f776fb1b68674059b5f00f",
+      "title": "Pel\u00edcula fotogr\u00e1fica Fujicolor C 200.",
+      "category": [
+        "Electr\u00f3nica",
+        "Fotograf\u00eda y videoc\u00e1maras",
+        "Accesorios",
+        "Pel\u00edculas fotogr\u00e1ficas"
+      ],
+      "density": 40
+    },
+    {
+      "asin": "B00RWBN6H4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00RWBN6H4.html",
+      "sha256": "55c32f811f42879b2fd52e34a98cd7975d56e84fa96389560adeb3446e84176c",
+      "title": "Duracell CR 2032 CR2032 - Pilas de litio (2 unidades, 3 V)",
+      "category": [
+        "Electr\u00f3nica",
+        "Pilas y cargadores",
+        "Pilas"
+      ],
+      "density": 24
+    },
+    {
+      "asin": "B0CFFFSFFN",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CFFFSFFN.html",
+      "sha256": "9c2e346c4898e9b62ee6d8f2ca554874fe6d1ca896c57cd0bf9b036616c04911",
+      "title": "UGREEN 8K Cable HDMI 2.1 Certificado 8K 60Hz 4K 240Hz 48Gbps (2M)",
+      "category": [
+        "Electr\u00f3nica",
+        "TV, v\u00eddeo y home cinema",
+        "Accesorios",
+        "Cables",
+        "Cables HDMI"
+      ],
+      "density": 41
+    },
+    {
+      "asin": "B0H8TCWZYF",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0H8TCWZYF.html",
+      "sha256": "e20b20b94590e9bcf5868b5556e5d98729fa925f719da128e5a58682dc07372e",
+      "title": "XIAOMI Redmi Watch 6 Lite, hasta 18 d\u00edas de autonom\u00eda, Gris Acero",
+      "category": [
+        "Electr\u00f3nica",
+        "Tecnolog\u00eda para vestir",
+        "Smartwatches"
+      ],
+      "density": 67
+    },
+    {
+      "asin": "B01M3SPEZF",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01M3SPEZF.html",
+      "sha256": "613680e6b0433719d38d179a48711371c60fd909fe3da234f98299fb4b5af89a",
+      "title": "Einhell Original Kit de Principiante PXC 4,0 Ah",
+      "category": [
+        "Herramientas manuales y el\u00e9ctricas",
+        "Accesorios para herramientas el\u00e9ctricas",
+        "Accesorios de herramientas inal\u00e1mbricas",
+        "Cargadores"
+      ],
+      "density": 39
+    },
+    {
+      "asin": "B0F83L18KB",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0F83L18KB.html",
+      "sha256": "737d54110f0ee4090bf2969ac8fbffdf12adeb5a38326c4eb0c11da75afed80c",
+      "title": "Nivel Laser Autonivelante con Tripode, Nivel L\u00e1ser Verde L\u00edneas",
+      "category": [
+        "Herramientas manuales y el\u00e9ctricas",
+        "Herramientas de medici\u00f3n y dise\u00f1o",
+        "Herramientas para medici\u00f3n l\u00e1ser y accesorios",
+        "L\u00e1seres de l\u00ednea"
+      ],
+      "density": 23
+    },
+    {
+      "asin": "B0DSFJ8QP6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DSFJ8QP6.html",
+      "sha256": "5588c33e4f2ce33a09ac08fcffea9996010feea0d707ef779407eabf53a9db6f",
+      "title": "4 Pzs Juntas de Silicona, Junta Herm\u00e9tico a Prueba de Fuga, Sellos de Cristal de Repuesto, Adecuado para una amplia gama de la mayor\u00eda de las latas-Naranja",
+      "category": [
+        "Hogar y cocina",
+        "Almacenamiento de cocina y despensa",
+        "Botes herm\u00e9ticos y accesorios",
+        "Cierres herm\u00e9ticos"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B00URURA7Y",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B00URURA7Y.html",
+      "sha256": "37bf387effc60dc9195c7f1e6ec2a4ba71535a2b60e98ab7e8e95e18108e9c29",
+      "title": "Curver - Cubo de basura Chic Bin con pedal antideslizante 25L,40,5 x 26,5 x 45 cm, color negro, tapa y aro para bolsa",
+      "category": [
+        "Hogar y cocina",
+        "Almacenamiento y organizaci\u00f3n",
+        "Basura y reciclaje",
+        "Cubos de basura para la cocina"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0D2J1BNY2",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D2J1BNY2.html",
+      "sha256": "4371291d889928c7f3bb2a8038fc3669c89d3f12b19d0e461ba96b893b66aa4f",
+      "title": "Rowenta X-Pert 7.60, Aspiradora Escoba Sin Cable, Lila",
+      "category": [
+        "Hogar y cocina",
+        "Aspiraci\u00f3n, limpieza y cuidado de suelo y ventanas",
+        "Aspiradoras",
+        "Aspiradoras escoba"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0GF1XR5TL",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GF1XR5TL.html",
+      "sha256": "ce3930c83cf580af7b75cb3bd8b6000ca50cff0cb0e714c6c1d8a313e40a09ae",
+      "title": "Vinabo Rasqueta Limpiacristales de Silicona para Ducha con Soporte, 21cm, Limpia Mamparas, Espejos y Ventanas sin Dejar Rayas, Dise\u00f1o Ergon\u00f3mico Antideslizante, Gris",
+      "category": [
+        "Hogar y cocina",
+        "Ba\u00f1o",
+        "Accesorios de ba\u00f1o",
+        "Accesorios para ducha",
+        "Rasquetas limpiacristales para ducha"
+      ],
+      "density": 32
+    },
+    {
+      "asin": "B0019M4H16",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B0019M4H16.html",
+      "sha256": "c33de9acbcfbf390a48c9ee91b943202f117b747d77e950041316c24e7f89e0e",
+      "title": "Bialetti - Moka Express: Ic\u00f3nica Cafetera Italiana para Espresso, Aut\u00e9ntico Caf\u00e9 Italiano, 2 Tazas (90 Ml), Aluminio, Plata",
+      "category": [
+        "Hogar y cocina",
+        "Caf\u00e9 y t\u00e9",
+        "Cafeteras italianas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B083WNZ4J7",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B083WNZ4J7.html",
+      "sha256": "64b44f1a8c1ecd07bfc3e277e0a67f6ba9e5e2a05877e0616e3933644406926d",
+      "title": "CREATE/WINDCALM/Ventilador de techo ABS con luz blanco aspas efecto madera clara y mando / 40W, Silencioso, \u00d8132 cm, 6 velocidades, 3 temperaturas de luz, temporizador, funci\u00f3n verano-invierno",
+      "category": [
+        "Hogar y cocina",
+        "Climatizaci\u00f3n y calefacci\u00f3n",
+        "Ventiladores",
+        "Ventiladores de techo"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B004BPJBKA",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B004BPJBKA.html",
+      "sha256": "90a581533c3db2a66104c35e8e4bb5906649fe6e3a5a4c3bfaceeb59a6129bf3",
+      "title": "Royal & Langnickel - Material Escolar (SILF13)",
+      "category": [
+        "Hogar y cocina",
+        "Costura y manualidades",
+        "Esgrafiado"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B01M0TIYMZ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01M0TIYMZ.html",
+      "sha256": "ac0bfb7407492684a6c5e07f78cfcc43eef7229461861c83016252b1c1badd7f",
+      "title": "Luminarc Vajilla de vidrio opal Zelie 19 piezas para 6 personas",
+      "category": [
+        "Hogar y cocina",
+        "Cuberter\u00eda, vajilla y cristaler\u00eda",
+        "Vajilla",
+        "Vajilla",
+        "Juegos de vajilla",
+        "Vajillas combinadas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0FL9S31FY",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FL9S31FY.html",
+      "sha256": "438033e0f4df566bd8f364ab6e815fd46f800c20cff48e4d4c5adf0939e44083",
+      "title": "SALVIA | Palo Santo Natural 50g Aprox (5-7 Varitas) | Incienso Sagrado para Limpieza Energ\u00e9tica y Relajaci\u00f3n | Madera Aut\u00e9ntica de Per\u00fa",
+      "category": [
+        "Hogar y cocina",
+        "Decoraci\u00f3n del hogar",
+        "Fragancias para el hogar",
+        "Incienso"
+      ],
+      "density": 24
+    },
+    {
+      "asin": "B0HDTHNGR3",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0HDTHNGR3.html",
+      "sha256": "0092d4ae64399bfddea886e9e05f34296a53e0e18a1cdf10a26203f638e998e2",
+      "title": "Metabisulfito Pot\u00e1sico E224 en Polvo 1 kg \u2013 Conservante para Vino y Cerveza",
+      "category": [
+        "Hogar y cocina",
+        "Fabricaci\u00f3n de cerveza y vino",
+        "Utensilios de limpieza y esterilizaci\u00f3n"
+      ],
+      "density": 9
+    },
+    {
+      "asin": "B07YG4QCN1",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07YG4QCN1.html",
+      "sha256": "6a151e253837e626ca551c49051f27a7b63b73a21b719b297fa3cd809164358f",
+      "title": "BRITA ON TAP Pro sistema filtro agua grifo de cocina, 1x filtro V-MF (600L)",
+      "category": [
+        "Hogar y cocina",
+        "Jarras, filtros y cartuchos",
+        "Filtros para grifo"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B086WQWSNT",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B086WQWSNT.html",
+      "sha256": "ae698a834c495f8de07c6376ab30285581fb556f56b97a7d6481fec831cab679",
+      "title": "Tefal Duetto - Juego de 3 sartenes, Acero inoxidable",
+      "category": [
+        "Hogar y cocina",
+        "Menaje de cocina",
+        "Sartenes y ollas",
+        "Juegos de sartenes y ollas",
+        "Juegos de sartenes"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0DB8NCH6Y",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DB8NCH6Y.html",
+      "sha256": "67376d5a96992c0f07cded1e9b1e6b493ae078a2e5aa8445f21e253befec9ce0",
+      "title": "Vigar Taburete Plegable Portatil Compacto para Adultos, 40 cm Antideslizante de Dos Pelda\u00f1os, Silla Banco Banqueta Asiento para Casa, Cocina, Ba\u00f1o, Oficina, hasta 150 kg, Gris Bamboo Print",
+      "category": [
+        "Hogar y cocina",
+        "Muebles",
+        "Oficina",
+        "Sillas y sof\u00e1s",
+        "Taburetes escalera"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0DRFNZL62",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DRFNZL62.html",
+      "sha256": "88cb2c72bdeaf6acc4b5aef542a8e464331e732aee71457d98a914e0a6e77457",
+      "title": "Diboniur Bolsas Vac\u00edo Alimentos, 3 Rollos 28/25/20 \u00d7 300 cm",
+      "category": [
+        "Hogar y cocina",
+        "Peque\u00f1o electrodom\u00e9stico",
+        "Accesorios y repuestos de peque\u00f1o electrodom\u00e9stico",
+        "Accesorios para envasadoras al vac\u00edo"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B07XYRS5M7",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07XYRS5M7.html",
+      "sha256": "7c93d4abacbdd2c70e8691d28d28b9dd8766d98e785c580b3ec7a8647041d11b",
+      "title": "arteneur Funda para tabla de planchar, con revestimiento de aluminio, hecha en Alemania, color gris, permeable al vapor y reflectante del calor, con cord\u00f3n, 130 x 45 cm (L)",
+      "category": [
+        "Hogar y cocina",
+        "Planchas, centros de planchado y accesorios",
+        "Accesorios de planchado",
+        "Fundas para tablas de planchar"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0FVDXLBXJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FVDXLBXJ.html",
+      "sha256": "481fdad7f79d499007b7ae21dc755772255f1ec24d9084caae4b58133d7b0f89",
+      "title": "flintronic Plumero Extensible de Plumas de Avestruz, 39-115cm Artificial Plumero de Plumas de Avestruz, Plumas Suaves, Reutilizable, Plumero Antiest\u00e1tico, para Suministros de Limpieza, Hogar",
+      "category": [
+        "Hogar y cocina",
+        "Productos y utensilios de limpieza",
+        "Plumeros"
+      ],
+      "density": 27
+    },
+    {
+      "asin": "B0CNCN7RW4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CNCN7RW4.html",
+      "sha256": "07f701affd4f036250a202e03c1a43500ba60aa45ba58474f29aa31a16c3f35a",
+      "title": "by Amazon - Papel de horno, 30 hojas (42 cm x 38 cm)",
+      "category": [
+        "Hogar y cocina",
+        "Reposter\u00eda",
+        "Utensilios de reposter\u00eda",
+        "Papel de horno"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B072J8S3TW",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B072J8S3TW.html",
+      "sha256": "0772a342c91f50647415bedf61709e7014c780d13d1d7ca964440f93b4764bc8",
+      "title": "Utopia Bedding Almohada 50x70 cm Pack de 2, Fibra Hueca, Blanco",
+      "category": [
+        "Hogar y cocina",
+        "Textiles del hogar",
+        "Ropa de cama y almohadas",
+        "Almohadas",
+        "Almohadas est\u00e1ndar"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0044R87W8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0044R87W8.html",
+      "sha256": "ff11e2282ffa42375ae922981030fa0f8b3e2e4f5aaee5a7aa6c8dadc29cb583",
+      "title": "Arcos Cuchillo Santoku Acero Inoxidable Nitrum. Cuchillo Cocina japon\u00e9s Pescado, Carne y Verduras. Mango ergon\u00f3mico polioximetileno Pom y Hoja 170 mm. Multiusos. Serie Maitre. Color Negro.",
+      "category": [
+        "Hogar y cocina",
+        "Utensilios",
+        "Cuchillos de cocina",
+        "Cuchillos asi\u00e1ticos",
+        "Cuchillos Santoku"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0GL822H3G",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GL822H3G.html",
+      "sha256": "e5ba8dd3a2d2d70af1bdf576bee4656b1a6701fad26ed41071f1d4050566bfad",
+      "title": "Realky Guirnaldas Luces Exterior Solar, 100 LED 18M Guirnalda Luces Solares",
+      "category": [
+        "Iluminaci\u00f3n",
+        "Guirnaldas luminosas",
+        "Exterior-Interior"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B0BF5L2PR8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BF5L2PR8.html",
+      "sha256": "e2a369775130452b93fdafb66d043f4721420fa2d431ab27e0c96afb1300f42a",
+      "title": "LOTMOS Luces Solares LED Exterior Jardin 4 Paquetes 72 LED Focos Exterior",
+      "category": [
+        "Iluminaci\u00f3n",
+        "Iluminaci\u00f3n de exterior",
+        "Iluminaci\u00f3n de caminos"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0747W72TV",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0747W72TV.html",
+      "sha256": "2c77892b7a14714757c0dbf4d1b2196c00303a47b00d98df82a08fdaacf5f091",
+      "title": "Da by 3 Velas LED Marfil con Mecha Oscilante M\u00f3vil Realista, Luz C\u00e1lida, 1 Mando, Cera Natural, 3 Tama\u00f1os Surtidos, Reutilizables y Ecol\u00f3gicas para Decoraci\u00f3n Hogar, Bodas y Eventos",
+      "category": [
+        "Iluminaci\u00f3n",
+        "Iluminaci\u00f3n de interior",
+        "Iluminaci\u00f3n decorativa y para usos espec\u00edficos",
+        "Velas el\u00e9ctricas y LED"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0182Z19JU",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0182Z19JU.html",
+      "sha256": "ae328a32e312aac28e167326c2a91dad50e1f81e2262dd939aa19347a2fff1de",
+      "title": "TECKNET Alfombrilla Rat\u00f3n con Reposamu\u00f1ecas, Viscoel\u00e1stica Tacto Agradable",
+      "category": [
+        "Inform\u00e1tica",
+        "Accesorios",
+        "Teclados, ratones y perif\u00e9ricos de entrada",
+        "Accesorios para teclados y ratones",
+        "Alfombrillas de rat\u00f3n"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B09X7DZ9LG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09X7DZ9LG.html",
+      "sha256": "e31044c34ae06a1994736557dc18ec4f01b91a7143df199485ff776dc6d73701",
+      "title": "SanDisk 128GB Extreme, Tarjeta de memoria, SDHC, hasta 180 MB/s + RescuePro Deluxe Class 10 U3 V30",
+      "category": [
+        "Inform\u00e1tica",
+        "Almacenamiento de datos",
+        "Almacenamiento de datos externo",
+        "Tarjetas de memoria",
+        "Tarjetas SD"
+      ],
+      "density": 40
+    },
+    {
+      "asin": "B0GR9W5G3K",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GR9W5G3K.html",
+      "sha256": "1bd2166d72e5d74ce4c90640de2c7fd8376dacc3f7e1333387b3f1a75aabd664",
+      "title": "HP 308 Negro y Tricolor, Pack de 2 Cartuchos de Tinta Originales",
+      "category": [
+        "Inform\u00e1tica",
+        "Impresoras y accesorios",
+        "Accesorios para impresoras",
+        "T\u00f3ners y tinta de impresora",
+        "Cartuchos de tinta de inyecci\u00f3n"
+      ],
+      "density": 49
+    },
+    {
+      "asin": "B0CW6K6R4H",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CW6K6R4H.html",
+      "sha256": "84cd18a0d8c35a3d53a98e78c23aa0434f89c26b537ea835c78b0e1c58225a12",
+      "title": "Philips Alcachofa de ducha con filtro, elimina eficazmente el cloro y otras part\u00edculas grandes, tres modos de pulverizaci\u00f3n, dise\u00f1o de mejora de presi\u00f3n, capacidad de filtrado de 1 mes",
+      "category": [
+        "Instalaci\u00f3n de ba\u00f1o y cocina",
+        "Fontaner\u00eda de ba\u00f1o",
+        "Duchas y componentes de la ducha",
+        "Alcachofas y rociadores de ducha",
+        "Filtros de ducha"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0D92332KY",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D92332KY.html",
+      "sha256": "b970c03eb8072eba64f68dcb2927303cabeb89b93534f5daffeb093314c6608f",
+      "title": "OUTIGO Cortadora de c\u00e9sped el\u00e9ctrica inal\u00e1mbrica, desbrozadora inal\u00e1mbrica con 2 bater\u00edas y 4 Cuchillas, Recortar Malas Hierbas, c\u00e9sped Exterior y Ramas peque\u00f1as, Decespugliatore Elettrico",
+      "category": [
+        "Jard\u00edn",
+        "Cortac\u00e9spedes y herramientas el\u00e9ctricas para exteriores",
+        "Herramientas el\u00e9ctricas de exterior",
+        "Recortadoras de cable"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0BSL978DG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BSL978DG.html",
+      "sha256": "6ce00fd78d9d9ceb27001c5aed66b8a3bce6254b83d8add631d7e1095513a7aa",
+      "title": "Pond Pellet Mix 3,3L / 462g - Alimento Flotante b\u00e1sico para Peces de Estanque, bajo Contenido en f\u00f3sforo no favorece la proliferaci\u00f3n de Algas",
+      "category": [
+        "Jard\u00edn",
+        "Decoraci\u00f3n de exterior",
+        "Estanques y jardines de agua",
+        "Suministros para peces de estanques",
+        "Alimento para peces de estanques"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0BGSQNKSQ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BGSQNKSQ.html",
+      "sha256": "e9742660b96d9e3c4834a67b1f93a672443a4f7c7a692704bd46d689774c47d0",
+      "title": "Zozen Colector de nueces Rodillo recolector Descarga lateral (5.68L)",
+      "category": [
+        "Jard\u00edn",
+        "Herramientas de jardiner\u00eda y equipos de riego",
+        "Herramientas de mano",
+        "Pinzas extensibles"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0G5DR1WFL",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G5DR1WFL.html",
+      "sha256": "d93fda3a7986b059638130058450e8aefe7aa8352540b5e40e65965433cd2fe7",
+      "title": "Flower - Sustrato para Orqu\u00eddeas 5 L | Corteza de Pino para Orqu\u00eddeas y Plantas Ep\u00edfitas | Drenaje y Aireaci\u00f3n | Retenci\u00f3n de Humedad | Desarrollo Radicular (Paquete de 2)",
+      "category": [
+        "Jard\u00edn",
+        "Jardiner\u00eda",
+        "Tierras, abonos y medios de plantaci\u00f3n",
+        "Tierras",
+        "Orqu\u00eddeas"
+      ],
+      "density": 5
+    },
+    {
+      "asin": "B07CWSP9LT",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07CWSP9LT.html",
+      "sha256": "1d7352284713019f610a9597798b35bcdc1ab44f9e8f6e7302c1a5d21bb57290",
+      "title": "Blooven 8 Piezas Pinzas Sujeta Manteles, Clips de Acero Inoxidable Mantel Pinza para Mantel Cubierta, para Mesas de 1-3 cm de Grosor (Peque\u00f1o x 8 Piezas)",
+      "category": [
+        "Jard\u00edn",
+        "Muebles y accesorios de jard\u00edn",
+        "Pinzas para mantel"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B01M11NWR8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01M11NWR8.html",
+      "sha256": "0e18dca58c2bd7876989a4ddaea8263583c7f86786ca0ea79bcb67986f11fd9e",
+      "title": "Kit Cultivo de Setas en Casa | Setas Ostra Gourmet Listas en 15 D\u00edas | Cultiva Tus Propias Setas Frescas | Regalo Original para Foodies, Cocineros y Amantes de la Cocina | F\u00e1cil y R\u00e1pido",
+      "category": [
+        "Jard\u00edn",
+        "Plantas, semillas y bulbos",
+        "Kits de cultivo en casa"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0BQTHTZG1",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BQTHTZG1.html",
+      "sha256": "df0487229ab5a102fc9dd154e525ba2f6194196228caa518a10e8c4277b81e03",
+      "title": "YPLUS Paint with Water Coloring Books for Toddlers 1-3 2-4, Animals Theme",
+      "category": [
+        "Juguetes y juegos",
+        "Actividades creativas",
+        "Arte y manualidades",
+        "Pintura"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B00VBQJFUI",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00VBQJFUI.html",
+      "sha256": "9d4f8064649c4ffae4dfab234c60f3a47cd8a3503841f3a1750f19231ee22090",
+      "title": "Ultimate Guard Deck Case 100+ Caja de Cartas Tama\u00f1o Est\u00e1ndar Transparente",
+      "category": [
+        "Juguetes y juegos",
+        "Coleccionables",
+        "Almacenamiento de coleccionables",
+        "\u00c1lbumes y fundas para cartas coleccionables",
+        "Cajas para cartas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0CH39J42V",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CH39J42V.html",
+      "sha256": "dcd07b2a0702458d99c36a68f5ba15300222739ff8a3847db3cac95c4dafdb4d",
+      "title": "Instrumentos Musicales de Madera para Ni\u00f1os de 1 a 3 A\u00f1os, Bater\u00eda Montessori con Tambor, Xil\u00f3fono y Percusi\u00f3n, Juguete Musical Educativo, Regalo para Ni\u00f1os y Ni\u00f1as",
+      "category": [
+        "Juguetes y juegos",
+        "Instrumentos musicales para ni\u00f1os",
+        "Viento"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B0FPXDQ7YP",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FPXDQ7YP.html",
+      "sha256": "4e666b4157e50b04d868e695c660c9af0306eccf8c758734d5e8a0d852208ff1",
+      "title": "LEGO Minecraft El Jard\u00edn P\u00e1lido 21586",
+      "category": [
+        "Juguetes y juegos",
+        "Juegos de construcci\u00f3n",
+        "Sets de construcci\u00f3n"
+      ],
+      "density": 33
+    },
+    {
+      "asin": "B0H29TRBMW",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0H29TRBMW.html",
+      "sha256": "4200f49a5b3038f65f896dcc5fb0daafa55b23909ac365ad798edf214f42389b",
+      "title": "Pok\u00e9mon: Lata Megaluz Lunar: Mega-Gengar ex de JCC Pok\u00e9mon (4 Sobres de Mejora y 1 Carta hologr\u00e1fica de promoci\u00f3n)",
+      "category": [
+        "Juguetes y juegos",
+        "Juegos y accesorios",
+        "Juego de mesa",
+        "Juegos de cartas",
+        "Juegos de cartas coleccionables",
+        "Paquetes de refuerzo"
+      ],
+      "density": 34
+    },
+    {
+      "asin": "B0G84HJ9P8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G84HJ9P8.html",
+      "sha256": "a79ed81a73eea42982311bc84e86426a082b8f998a3088e33f6d881feabe27c9",
+      "title": "Bitzee Mascota Virtual Acuario Interactivo 30 Criaturas Marinas Luces LED",
+      "category": [
+        "Juguetes y juegos",
+        "Juguetes electr\u00f3nicos",
+        "Mascotas electr\u00f3nicas"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B0GKNCH9X9",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GKNCH9X9.html",
+      "sha256": "19c55183dc35c20be3139e6efc62d1914875a36e5711b885d1c3d94638f36ecf",
+      "title": "Mirror Mi Suki Goldpetal Fashion Doll - Mu\u00f1eca de Moda Headphones On, con m\u00e1s de 15 Puntos articulados",
+      "category": [
+        "Juguetes y juegos",
+        "Mu\u00f1ecas y accesorios",
+        "Mu\u00f1ecas"
+      ],
+      "density": 23
+    },
+    {
+      "asin": "B0FK5SNT3Y",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FK5SNT3Y.html",
+      "sha256": "2252c9d6b665bf606e064558c0027359415355bb5dee5affb1123a138918c629",
+      "title": "SUPERTHINGS \u2013 Calendario de Adviento.Calendario de Adviento navide\u00f1o con 24 Regalos y sorpresas Especiales.Incluye Minifiguras de Superthings,Hideouts, Jets,Exoskeletons y Special Vehicles",
+      "category": [
+        "Juguetes y juegos",
+        "Mu\u00f1ecos y figuras",
+        "Conjuntos"
+      ],
+      "density": 22
+    },
+    {
+      "asin": "B0BNW8RGCD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BNW8RGCD.html",
+      "sha256": "a45678c8ae68fe4b0471a49e2b4ba0a70a8498c10c043b123457d91e2dd44aa2",
+      "title": "BONNYCO Cubos Rompecabezas Ni\u00f1os, Pack 30 Regalos Cumplea\u00f1os Ni\u00f1os Colegio",
+      "category": [
+        "Juguetes y juegos",
+        "Puzzles y rompecabezas",
+        "Rompecabezas"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B0CTTZ6L53",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CTTZ6L53.html",
+      "sha256": "20963487a532b91f1d5766c98a144ee4d88bda645040df8a1a244a730614382e",
+      "title": "Toys",
+      "category": [
+        "Juguetes y juegos",
+        "Regalos originales y de broma",
+        "Juguetes antiestr\u00e9s para dedos",
+        "Fidget spinners"
+      ],
+      "density": 60
+    },
+    {
+      "asin": "B091FWBG2S",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B091FWBG2S.html",
+      "sha256": "7605f475cc2501a202acac13685f41da2e95a18f087bcc5feae2a9de9b9577df",
+      "title": "WAYTEX Estuche para l\u00e1pices",
+      "category": [
+        "Material de oficina",
+        "Accesorios de escritorio y productos de almacenamiento",
+        "Materiales, organizadores y dispensadores de escritorio",
+        "Estuches escolares"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B07YQ4V8D6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07YQ4V8D6.html",
+      "sha256": "0adfb22bc5a18b613c3c5fd4f3c4d0d6c468ab8bf0c9ded935427b1bda953075",
+      "title": "WARRIOR Piercing para la Nariz Esp\u00e1rrago para la Nariz Esp\u00e1rrago Curvo con Bola de Cristal checo Acero quir\u00fargico est\u00e9ril 22G (0,8 mm) Longitud 6,5 mm x 2,5 mm PBS-002/PTB-002",
+      "category": [
+        "Moda",
+        "Bisuter\u00eda barata",
+        "Joyas para el cuerpo",
+        "Piercings",
+        "Piercings curvados"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B092339B6R",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B092339B6R.html",
+      "sha256": "eedf494976ab9c331ef08c333004aab1c97f889427a3a2bffe33ab5bc0306864",
+      "title": "Eastpak ORBIT XS Mochila peque\u00f1a, 33.5 x 23 x 15 cm, 10 L",
+      "category": [
+        "Moda",
+        "Equipaje y accesorios de viaje",
+        "Mochilas",
+        "Mochilas tipo casual"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B001QOE5EG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B001QOE5EG.html",
+      "sha256": "160b20a0f086046b7e2144e5bf6d31c7abf848ff0c00fea69318dd0244d06d5b",
+      "title": "Levi's Pantalones vaqueros para hombre 501 Original con tira de botones, corte recto",
+      "category": [
+        "Moda",
+        "Hombre",
+        "Ropa de hombre",
+        "Vaqueros"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B077VLKZP6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B077VLKZP6.html",
+      "sha256": "44cd0efa16a00184226a6cb71e9b9a3c73fcb39d528276d2fc9da01871ec3d05",
+      "title": "Levi's The Perfect Tee - Camiseta para mujer (1 unidad)",
+      "category": [
+        "Moda",
+        "Mujer",
+        "Ropa",
+        "Camisetas, tops y blusas",
+        "Camisetas"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B071X9GZ3N",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B071X9GZ3N.html",
+      "sha256": "b87ca40629fdac0a6fd779f9a7fb96f73d3dca97b5f554ec734e6c1dbf0b9f70",
+      "title": "Osama - Cinta Correctora Blanca, Pack 2 Piezas, 20 M - Set Cintas Correctoras Ideal para Material Escolar, Papeler\u00eda y Oficina para Borrar y Escribir de Inmediato con Alta Cobertura y Larga Duraci\u00f3n",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Bol\u00edgrafos, l\u00e1pices y \u00fatiles de escritura",
+        "Correctores y gomas de borrar",
+        "Cintas correctoras"
+      ],
+      "density": 12
+    },
+    {
+      "asin": "B00Q485HOG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00Q485HOG.html",
+      "sha256": "56a4961a307b73066d973774df49a9b25d53405367f6bae4b8248f23704f891c",
+      "title": "APLI 12859 - Gomas El\u00e1sticas 200 x 3 mm, Bolsa de 100 g",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Material de oficina",
+        "Cintas, adhesivos y sujeciones",
+        "Gomas el\u00e1sticas"
+      ],
+      "density": 25
+    },
+    {
+      "asin": "8485109627",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\8485109627.html",
+      "sha256": "540c819bad467592e3b5cdde7fd7d696b1c031fa3e9597a9fb71fc984e56aecb",
+      "title": "7 Problemas RUBIO | Ejercicios para sumar y restar sin llevar | +6 a\u00f1os",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Material escolar y educativo",
+        "Material escolar",
+        "Libretas de ejercicios"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0D3QRKT9H",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D3QRKT9H.html",
+      "sha256": "594787f11848c48dbfb38c6376481a3765b6c5d54b760b0e9fb917b30390e63d",
+      "title": "Cuaderno de Puntos A5, Bullet Dot Journal,Cuaderno de Espiral de 300 P\u00e1ginas,Papel Antitinta de 100 g/M\u00b2,Tapa Dura de PVC, con Regla,Bolsillos Ampliables,Bandas El\u00e1sticas,14,5 x 21 cm-Verde",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Productos de papel para oficina",
+        "Cuadernos, blocs de notas y diarios",
+        "Cuadernos de anillas"
+      ],
+      "density": 14
+    },
+    {
+      "asin": "B094735N16",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B094735N16.html",
+      "sha256": "24870d982808c1e579346f47ecbd6039bcd6dae211a4b125679648faebe8b779",
+      "title": "50 Mascarillas FFP2 Negras o Blancas CE 0598 \u2013 5 Capas, Filtraci\u00f3n hasta 99,5% \u2013 Sin V\u00e1lvula, Hipoalerg\u00e9nicas, C\u00f3modas y Sin Olor \u2013 Mascarillas FFP2 con Embalaje Individual + 2 Ganchos Salva Orejas",
+      "category": [
+        "Prevenci\u00f3n y seguridad",
+        "Equipos e indumentaria de seguridad",
+        "Mascarillas y respiradores",
+        "Mascarillas de seguridad antipolvo plegables desechables"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0CLY2PZJ1",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CLY2PZJ1.html",
+      "sha256": "e6b98685c2594532031b6f25e598214d333e711722b29a746db579e13b237a35",
+      "title": "GERUI Mini Calentador de Acuario 15L, 100-240V, 50/60Hz, Rango de Control de Temperatura: 20 \u00b0C a 34 \u00b0C, Utilizado para Acuario y Acuario PTC Aislamiento T\u00e9rmico Consistente Autom\u00e1tico Fine",
+      "category": [
+        "Productos para mascotas",
+        "Acu\u00e1ticos",
+        "Accesorios para acuarios",
+        "Climatizadores"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B000OLUT1K",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B000OLUT1K.html",
+      "sha256": "36ea2df0a6f8698bb5d91be4d4a35b5cf16c459011626f6d11930a086fbd8cd0",
+      "title": "TRIXIE Puente Flexible Natural Living, 28 \u00d7 17 cm, Peque\u00f1os Mam\u00edferos",
+      "category": [
+        "Productos para mascotas",
+        "Animales peque\u00f1os",
+        "Casas y h\u00e1bitats",
+        "Decoraci\u00f3n del h\u00e1bitat"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0095SMIUS",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0095SMIUS.html",
+      "sha256": "66b77b5542374fd543457a09c6826d2d96e625e1eef91041c2d0ea4fbfdebcd9",
+      "title": "Vitakraft Magic Clean Classic, Arena no aglomerante para Gatos, Fabricada con microesferas minerales, inhibe Las bacterias, Especialmente Baja en Polvo, Tiene una duraci\u00f3n de 8 semanas (1x 8,4l)",
+      "category": [
+        "Productos para mascotas",
+        "Gatos",
+        "Arena y limpieza del hogar",
+        "Arena"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B01G7G6XDI",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01G7G6XDI.html",
+      "sha256": "77984c08e47caca665450165403369efd6b2bd96f543feb4af14fd9090a5270c",
+      "title": "Advance Dental Stick Mini Dogs pack 28 d\u00edas",
+      "category": [
+        "Productos para mascotas",
+        "Perros",
+        "Art\u00edculos de salud",
+        "Cuidado dental",
+        "Sticks dentales"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B01IUNG7C8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01IUNG7C8.html",
+      "sha256": "cfaf59c89563357aa8e516853cc1ebad32a2ed0b2ad3af3d805af7b51b43e397",
+      "title": "HOMCOM Camilla de Masaje Plegable y Port\u00e1til 210x81x62-85 cm Mesa Ajustable en Altura con Reposacabezas y Apoyabrazos para Tatuaje Fisioterapia Negro y Naranja",
+      "category": [
+        "Salud y cuidado personal",
+        "Bienestar",
+        "Masaje y relajaci\u00f3n",
+        "Equipos de masaje profesional",
+        "Camillas"
+      ],
+      "density": 27
+    },
+    {
+      "asin": "B0HHRK4MFW",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0HHRK4MFW.html",
+      "sha256": "12431c84ddd371a4976d1ab7ca0f820e50f7980ed61f725b7311411af58bce79",
+      "title": "Tapones O\u00eddos Dormir Reutilizables con 7 Pares Almohadillas Silicona, Cancelaci\u00f3n de Ruido hasta 46dB, Tapones para Dormir, Estudiar, Viajar, Conciertos, Protecci\u00f3n Auditiva C\u00f3moda y Ajustable",
+      "category": [
+        "Salud y cuidado personal",
+        "Cuidado de la salud",
+        "Cuidado del o\u00eddo",
+        "Tapones"
+      ],
+      "density": 26
+    },
+    {
+      "asin": "B00XA019CK",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00XA019CK.html",
+      "sha256": "5d24a45e375a8859af27a0ad653ba4d9538957053280b18b645ef4b26af629b6",
+      "title": "Raid Insecticida Multi-insectos, para todo tipo de eficacia inmediata, 1 aerosol 400ml",
+      "category": [
+        "Salud y cuidado personal",
+        "Cuidado y limpieza del hogar",
+        "Insecticidas y plaguicidas",
+        "Pulverizadores"
+      ],
+      "density": 18
+    },
+    {
+      "asin": "B0GZQSBXGR",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GZQSBXGR.html",
+      "sha256": "1de75e1842f794b63f45e76a0d9816db239752566ec5746071fdb67e284aa0da",
+      "title": "C\u00e1mara exterior 2K+ Blink con Blink Videotimbre 2K+ con pilas (\u00faltima generaci\u00f3n), Negro, m\u00f3dulo de sincronizaci\u00f3n b\u00e1sico Incluido",
+      "category": [],
+      "density": 0
+    },
+    {
+      "asin": "B0G9431HLT",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G9431HLT.html",
+      "sha256": "294e36265e77277035211db2218963222b746b0d7976cf9af0069f0ef4451c8f",
+      "title": "PLANETA HUERTO | Pack 3x Vinagre de manzana ECO crudo sin filtrar con la madre 1L - 5% Acidez, No pasteurizado, Vegano, Origen Espa\u00f1a",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Aceites, vinagres y ali\u00f1os para ensalada",
+        "Vinagres",
+        "Sidra de manzana"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B09RZQN4QQ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09RZQN4QQ.html",
+      "sha256": "1dac0499e024eebb7e80f2e8bd02477cc125faa1b2c1f6dea9875721e3adff7b",
+      "title": "Lavazza, Crema e Gusto Classico, 30 C\u00e1psulas Caf\u00e9 Compatibles Nespresso",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Caf\u00e9, t\u00e9 y bebidas",
+        "Caf\u00e9",
+        "C\u00e1psulas de caf\u00e9"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0F6NG6M4K",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0F6NG6M4K.html",
+      "sha256": "340608c5237b35640925e1dba61791a60eb51a2edee809a9bc762e4e87946b02",
+      "title": "NaturGreen Semillas de Lino Dorado Molido Bio 150g Alto en Fibra y Prote\u00edna Fuente de Omega-3 Sin Az\u00facares A\u00f1adidos Superalimento Vegano Ideal para Smoothies y Yogures sin gluten",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Frutas deshidratadas, frutos secos y semillas",
+        "Frutos secos y semillas",
+        "Semillas de linaza"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B01M9FLB80",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01M9FLB80.html",
+      "sha256": "15c39d6b332ad1598f1749edc5cdafe31478535bbddcd8ff4dec53a45c6bc990",
+      "title": "NaturGreen Sirope de Agave Crudo Bio 500 ml, Alternativa a la Miel",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Productos para cocina y reposter\u00eda",
+        "Siropes, az\u00facares y edulcorantes para hornear",
+        "N\u00e9ctares y siropes de agave"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B08L4D5J5B",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08L4D5J5B.html",
+      "sha256": "3fa3f081c34ef73416725fe42ef0399ece0584afd55dbc47e7b0bf5be015c22f",
+      "title": "Kikkoman - Salsa de Soja Original, Receta Tradicional, Fermentaci\u00f3n Natural, 500ml",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Salsas",
+        "Salsas para servir y cocinar",
+        "Soja"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B07H2Q5PGJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07H2Q5PGJ.html",
+      "sha256": "3e14a5fd3e7a7817bca8dc8c2ae21b1ac6d5ce7f806038ae1ea124bc073aaf1e",
+      "title": "SMINT Tin Sabor Menta, Caramelos Comprimidos Sin Az\u00facar, Pack 2x35 g",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Snacks y dulces",
+        "Dulces, chocolates y chicles",
+        "Caramelos de menta"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0D2P84RDZ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D2P84RDZ.html",
+      "sha256": "e55d19b1055efdf8e7a9f29a8364e0e2d96239b1ae58419361fb27cc653c1414",
+      "title": "Jan\u00e9 Dual Mochila Portabeb\u00e9 Ergon\u00f3mica, Desde Nacimiento (3,5\u201315 kg), 3 Posiciones, Transpirable y Acolchada, Gris",
+      "category": [
+        "Beb\u00e9",
+        "Porteadores y accesorios",
+        "Porteadores para beb\u00e9s y ni\u00f1os peque\u00f1os"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B09PCBTJGD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09PCBTJGD.html",
+      "sha256": "464184444ecafbb07453c12c39f38d64dfa5df699bbfb189caa558731de57839",
+      "title": "Floid After Shave Lotion The Genuine, T\u00f3nico Facial Refrescante, 400 ml",
+      "category": [
+        "Belleza",
+        "Afeitado y depilaci\u00f3n",
+        "Cuidados post-depilaci\u00f3n y afeitado",
+        "Aftershave",
+        "Lociones y l\u00edquidos"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B07GSFWR73",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07GSFWR73.html",
+      "sha256": "5c445f481f87236939788f5981aa46b13afead7d49c1fd15db67ca0a8ad8a35a",
+      "title": "NIVEA MEN Black & White Invisible Original Spray 72h (6 x 200 ml), desodorante antimanchas de cuidado masculino (El embalaje puede variar)",
+      "category": [
+        "Belleza",
+        "Ba\u00f1o e higiene personal",
+        "Desodorantes y antitranspirantes",
+        "Desodorante"
+      ],
+      "density": 34
+    },
+    {
+      "asin": "B0GD6R7CFJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GD6R7CFJ.html",
+      "sha256": "4561769576ac42234416332b066759995dcac931df723255334086039b93a1df",
+      "title": "BIODANCE Parches de Ojos con P\u00e9ptidos de Col\u00e1geno, Antiarrugas para L\u00edneas de Expresi\u00f3n y Bolsas, Contorno de Ojos, Cuidado de la Piel Coreano (60 uds)",
+      "category": [
+        "Belleza",
+        "Cuidado de la piel",
+        "Ojos",
+        "Mascarillas"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B06XZNJWZL",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B06XZNJWZL.html",
+      "sha256": "18782f171c61b988ef9a7372b332b6e88e468be77599aaa8cb5eeadfac320f72",
+      "title": "Slick Gorilla Polvo Voluminizador y Texturizante Capilar para Hombre, 20 g",
+      "category": [
+        "Belleza",
+        "Cuidado del cabello",
+        "Productos de peinado",
+        "Polvos para levantar la ra\u00edz"
+      ],
+      "density": 23
+    },
+    {
+      "asin": "B0DF58DRN6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DF58DRN6.html",
+      "sha256": "b8d42e3b0033539a5866b4aa0e5bf734852a9a5eba5b15c5a9ba8fb31e353f20",
+      "title": "200ml Botella Pulverizadora,Botella Pulverizadora de Agua para Peluqueria, Plantas, Grooming\uff08Negro, Blanco\uff09",
+      "category": [
+        "Belleza",
+        "Equipo de sal\u00f3n y spa",
+        "Frascos de spray"
+      ],
+      "density": 32
+    },
+    {
+      "asin": "B08WLZN9C3",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08WLZN9C3.html",
+      "sha256": "a63149db3a309acebcdf696e765fea6477c0cfabeb94c998cf91d13a62f4e6cc",
+      "title": "KIKO Milano Colour Kajal 15 | L\u00e1piz Kh\u00f4l Para El Interior Del Ojo",
+      "category": [
+        "Belleza",
+        "Maquillaje",
+        "Ojos",
+        "L\u00e1pices de ojos"
+      ],
+      "density": 39
+    },
+    {
+      "asin": "B0CXGB63D3",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CXGB63D3.html",
+      "sha256": "45cb20b2203e5d63fbb488bb78086d3e0f86b7f5a1d706c684001f18d51fa0d4",
+      "title": "MIRRORVANA Espejo de Mano Profesional con Mango ergon\u00f3mico, Blanco 20x28 cm",
+      "category": [
+        "Belleza",
+        "Utensilios y accesorios",
+        "Espejos de mano"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B0F5WWWZC8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0F5WWWZC8.html",
+      "sha256": "0fbf6846d7f57d593da1e6c29f8166bd551d3537600daca22472ea6a129b85ec",
+      "title": "Elalove Ganchos Adhesivos para Pared 24 Unidades, Colgadores Adhesivos Resistentes de 10kg, Ganchos Adhesivos Transparentes sin Clavos, Cuelga Cuadros sin Clavos para Ba\u00f1o, Cocina, Multiusos",
+      "category": [
+        "Bricolaje y herramientas",
+        "Ferreter\u00eda",
+        "Accesorios de ba\u00f1o",
+        "Toalleros de gancho"
+      ],
+      "density": 32
+    },
+    {
+      "asin": "B082PHDT9M",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B082PHDT9M.html",
+      "sha256": "83e1bae8704b187e68c20bc3a4d4551bd6ae3e7d74326d554d67ef16ed9b82d4",
+      "title": "WD-40 Producto Multi-Uso Doble Acci\u00f3n, Paquete de 2, 2 x 400 ml",
+      "category": [
+        "Bricolaje y herramientas",
+        "Herramientas manuales y el\u00e9ctricas",
+        "Accesorios para herramientas el\u00e9ctricas",
+        "Lubricantes"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B01ET1NZN4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01ET1NZN4.html",
+      "sha256": "16f15753cfef0878c06a47bb4b24fc5cd5723003d16e7bc12d63e8c1bee64bd2",
+      "title": "Garza 400600 Temporizador anal\u00f3gico, Blanco",
+      "category": [
+        "Bricolaje y herramientas",
+        "Instalaci\u00f3n el\u00e9ctrica",
+        "Temporizadores"
+      ],
+      "density": 40
+    },
+    {
+      "asin": "B0BQ7PJFZF",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BQ7PJFZF.html",
+      "sha256": "3d4c39e85dc4103f586fbd40d8e559349c16f714677c0d4161b5482ace7b5b8d",
+      "title": "PECTRO Pintura a la Tiza Chalk Paint para Muebles 750ml Mate (Blanco Puro)",
+      "category": [
+        "Bricolaje y herramientas",
+        "Pinturas, herramientas y tratamiento de paredes",
+        "Pinturas e imprimaciones",
+        "Pintura especializada",
+        "Pintura para muebles"
+      ],
+      "density": 40
+    },
+    {
+      "asin": "B0FR4CJ88Y",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FR4CJ88Y.html",
+      "sha256": "13dcd3bc2caf46044f2eb072c882d5f0663477731901639894d0e3491a469bc6",
+      "title": "SONGMICS Escalera Plegable, Escalera de 4 Pelda\u00f1os, Bloqueo de Seguridad",
+      "category": [
+        "Bricolaje y herramientas",
+        "Suministros de construcci\u00f3n",
+        "Escaleras de mano",
+        "Escaleras plegables"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B09GFFBPSK",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09GFFBPSK.html",
+      "sha256": "958ade891ee88e9609254e7b93976aa0a685483699d4fa16e5ded3f72273a424",
+      "title": "Protector Pala de Padel Negro con Acabado Rugoso para Mayor Proteccion + Pegatina Padel incluida 35 x 370 mm",
+      "category": [
+        "Deportes y aire libre",
+        "Deportes",
+        "P\u00e1del",
+        "Fundas de palas"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B08NCGV6KN",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08NCGV6KN.html",
+      "sha256": "87bcb3c229b2d2066a3c90ffbdec71abdace55d4f8382a573c8f20e78898ac69",
+      "title": "unycos - Mancuernas Antideslizantes de Neopreno 1-10 kg para Fitness",
+      "category": [
+        "Deportes y aire libre",
+        "Fitness y ejercicio",
+        "Musculaci\u00f3n",
+        "Pesas y accesorios",
+        "Mancuernas"
+      ],
+      "density": 35
+    },
+    {
+      "asin": "B00CFNKX6G",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00CFNKX6G.html",
+      "sha256": "243e6c591e098fee1e45306dd63f35621aabb35e9a07c2a3a2f53aaf2e7f9299",
+      "title": "Tayg - Bid\u00f3n 10 litros grifo, Multicolor",
+      "category": [
+        "Deportes y aire libre",
+        "Ocio al aire libre",
+        "Acampada y senderismo",
+        "Hidrataci\u00f3n",
+        "Almacenamiento de agua"
+      ],
+      "density": 28
+    },
+    {
+      "asin": "B0FJ7YXCMD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FJ7YXCMD.html",
+      "sha256": "e0cc130531b6c85f19424f23ee73af81c96431a740f2b7e80bfef85c0a0efd0d",
+      "title": "JSVER Adaptador de Viaje para Jap\u00f3n, Enchufe de Viaje Bidireccional con 4 Puertos USB (2 A y 2 C), Adaptador Compacto Tipo A para Conectar Desde Espa\u00f1a a Jap\u00f3n,EE. UU.,M\u00e9xico,Canad\u00e1(Blanco)",
+      "category": [
+        "Electr\u00f3nica",
+        "Accesorios de alimentaci\u00f3n",
+        "Adaptadores internacionales"
+      ],
+      "density": 27
+    },
+    {
+      "asin": "B0D2XRXNGY",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D2XRXNGY.html",
+      "sha256": "79ccf0fdb392bd71edf8d4113df9874eafe20d5a37e54024b0c3ab05fe69058a",
+      "title": "Soundcore Anker V20i Auriculares Open-Ear, Ganchos Ajustables para Orejas",
+      "category": [
+        "Electr\u00f3nica",
+        "Auriculares y accesorios",
+        "Auriculares",
+        "Auriculares de o\u00eddo abierto"
+      ],
+      "density": 64
+    },
+    {
+      "asin": "B0FGJPWCW5",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FGJPWCW5.html",
+      "sha256": "86de69cd94a7f2c43eb768d2695c8f5789a5c471fe9346b789500bb0674ec5cb",
+      "title": "25W Cargador Carga Rapida, USB C Cargador Carga Rapida para iPhone con 2M C-Lightning Cable for iPhone 14/14 Pro/14 Pro Max/14 Plus 13 12 11 SE XR X XS 8 7, Air Plus, iPad Pro/iPad Air, Blanco",
+      "category": [
+        "Electr\u00f3nica",
+        "Comunicaci\u00f3n m\u00f3vil y accesorios",
+        "Accesorios",
+        "Cargadores",
+        "Cargadores de red"
+      ],
+      "density": 39
+    },
+    {
+      "asin": "B084SDXVBD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B084SDXVBD.html",
+      "sha256": "6f937fcb61710b0b7ba01ed0438153de6fc8c0224e6b192057f3eae895aabec3",
+      "title": "Polaroid Pel\u00edcula Instant\u00e1nea Color para i-Type, Multicolores (Pel\u00edcula de color), Paquete individual (8 fotos)",
+      "category": [
+        "Electr\u00f3nica",
+        "Fotograf\u00eda y videoc\u00e1maras",
+        "Accesorios",
+        "Pel\u00edcula instant\u00e1nea"
+      ],
+      "density": 51
+    },
+    {
+      "asin": "B07MLDJF3B",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07MLDJF3B.html",
+      "sha256": "d84f81eb3db06e9e1bc1bce1174226fa1c94d89f8db6d4cb51df0582cde5968d",
+      "title": "Amazon Basics - Paquete de 40 pilas industriales alcalinas AAA, 1,5 voltios, vida \u00fatil de 5 a\u00f1os",
+      "category": [
+        "Electr\u00f3nica",
+        "Pilas y cargadores",
+        "Pilas"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B00SWYTYY4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00SWYTYY4.html",
+      "sha256": "fff551b4dd4f8a07803cd0d782bc5457f6c7b804c33b1beac696f128dde3c766",
+      "title": "KabelDirekt \u2013 Cable Antena TV 4K \u2013 1,5m, 90\u00b0",
+      "category": [
+        "Electr\u00f3nica",
+        "TV, v\u00eddeo y home cinema",
+        "Accesorios",
+        "Cables",
+        "Cables de antena"
+      ],
+      "density": 43
+    },
+    {
+      "asin": "B0863RK1KX",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0863RK1KX.html",
+      "sha256": "aa6752d95d26d847aef2ef4a57679f1ebdbc26f120d1759fe9bcc7cbb40d0fbe",
+      "title": "Medidor L\u00e1ser,RockSeed Medidor de Distancia L\u00e1ser Digital con 2 Niveles de Burbuja,Tel\u00e9metro L\u00e1ser Port\u00e1til con LCD Retroiluminado Unidad M/in/Ft y Medici\u00f3n de Distancia/Area/Volumen/Pitag\u00f3rico",
+      "category": [
+        "Herramientas manuales y el\u00e9ctricas",
+        "Herramientas de medici\u00f3n y dise\u00f1o",
+        "Herramientas para medici\u00f3n l\u00e1ser y accesorios",
+        "Tel\u00e9metros l\u00e1ser"
+      ],
+      "density": 34
+    },
+    {
+      "asin": "B0FJRXRSGM",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FJRXRSGM.html",
+      "sha256": "e36a4e2341d49217d6f0ae83439a742897f10ae1fb09e2e1f8c8771dfd0d2b02",
+      "title": "Molinos de sal y pimienta Molino de pimienta el\u00e9ctrico con almacenamiento",
+      "category": [
+        "Hogar y cocina",
+        "Almacenamiento de cocina y despensa",
+        "Dosificadores de ali\u00f1o y especias",
+        "Juegos de molinillos de sal y pimienta"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0857BD3PD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B0857BD3PD.html",
+      "sha256": "e6313c686700cc341adbdc2d369620d74afa1326b93c42700a89d561f038d2d9",
+      "title": "SONGMICS Cubo de Basura para Cocina, 3 x 18 L, Pedales, Acero",
+      "category": [
+        "Hogar y cocina",
+        "Almacenamiento y organizaci\u00f3n",
+        "Basura y reciclaje",
+        "Sistemas de clasificaci\u00f3n de basura"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0F6CWS4ZN",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0F6CWS4ZN.html",
+      "sha256": "c07da2aba3dd327901d6a9c09b0b1a313dd74352f5ca355000e83548fecfc048",
+      "title": "BISSELL SpotClean Mini Aspiradora de Agua Tapicer\u00eda con Cable 41491",
+      "category": [
+        "Hogar y cocina",
+        "Aspiraci\u00f3n, limpieza y cuidado de suelo y ventanas",
+        "Aspiradoras"
+      ],
+      "density": 28
+    },
+    {
+      "asin": "B01M1OKTKU",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B01M1OKTKU.html",
+      "sha256": "65d3d081a43e6e1c2a2fe76fbae34be9479b5119c91101e894a3aa0cfa56c084",
+      "title": "Orbegozo KFI 460 , Cafetera italiana inducci\u00f3n , 4 tazas , mango ergon\u00f3mico, apta para cocinas de gas, el\u00e9ctricas y de vitrocer\u00e1mica, se puede usar en lavavajillas, color acero inoxidable",
+      "category": [
+        "Hogar y cocina",
+        "Caf\u00e9 y t\u00e9",
+        "Cafeteras italianas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0GL93F94G",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GL93F94G.html",
+      "sha256": "7d2c24d8466fae9528e1fd342588bddd8dcd51188c48c23f63abe2736c8e53d4",
+      "title": "CREATE / WINDSTYLANCE S/Ventilador de techo ABS con luz blanco aspas efecto madera clara con mando/ 40W, Silencioso, \u00d8112 cm, 6 velocidades, temporizador, verano-invierno, doble altura, motor DC",
+      "category": [
+        "Hogar y cocina",
+        "Climatizaci\u00f3n y calefacci\u00f3n",
+        "Ventiladores",
+        "Ventiladores de techo"
+      ],
+      "density": 48
+    },
+    {
+      "asin": "B09C1FBGKG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B09C1FBGKG.html",
+      "sha256": "39c6df080c3e5b7668a3e812cf603b1ffa05d0bfd108fce28497de1f0496afe9",
+      "title": "Bonanzana - Mapa del Mundo para Rascar XXL 70 x 42 cm - Con 25 Alimentos y 197 Banderas - para Foodies Con Raspador - Regalo",
+      "category": [
+        "Hogar y cocina",
+        "Costura y manualidades",
+        "Esgrafiado"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B076M5ZDN2",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B076M5ZDN2.html",
+      "sha256": "5b2d6878be5ff237226974930f4ae32f127f8bf8a5a53d5e4b4a3fcb2802af9c",
+      "title": "Tramontina Cuchillo de Cocina para Queso Acero Inoxidable Mango de Polipropileno Plenus 15 cm",
+      "category": [
+        "Hogar y cocina",
+        "Cuberter\u00eda, vajilla y cristaler\u00eda",
+        "Cuberter\u00eda",
+        "Cuchillos",
+        "Cuchillos para queso"
+      ],
+      "density": 34
+    },
+    {
+      "asin": "B0DVCD6KZJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DVCD6KZJ.html",
+      "sha256": "aae75469e18bfccccc51cb24ea4b94f9cd5d707745065c1345890c6129ed1ed4",
+      "title": "Paco Home Alfombra Moderna y Suave para Sal\u00f3n a Pelo Corto Lavable Fluffy Uni Efecto Piel Intemporal Elegante Antideslizante F\u00e1cil de Limpiar, tama\u00f1o:200x280 cm, Color:Crema 4",
+      "category": [
+        "Hogar y cocina",
+        "Decoraci\u00f3n del hogar",
+        "Alfombras, almohadillas y protectores",
+        "Alfombras de \u00e1rea"
+      ],
+      "density": 35
+    },
+    {
+      "asin": "B0GW5WDNW6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0H6MTL8RN.html",
+      "sha256": "e10fc00e42582c3b022809a202a136e7b19d63e4e9c59a1a8e7f2d87a4dedf3f",
+      "title": "Kit de Fermentaci\u00f3n de 3 Unidades Tubos de Pl\u00e1stico Recipiente Transparente",
+      "category": [
+        "Hogar y cocina",
+        "Fabricaci\u00f3n de cerveza y vino",
+        "Fermentaci\u00f3n",
+        "Fermentadores"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B079GY9CZK",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B079GY9CZK.html",
+      "sha256": "b1c491867308ddf070a4ae19285bd1efecb53f4f90de2cfa0389966ffcb6fa15",
+      "title": "Filtros de agua Hydro Pure+ filtrantes compatibles con jarras Brita Maxtra/Maxtra+/PerfectFit/Amazon Basics que reducen la cal y el cloro NO REQUIERE ADAPTADOR (Paquete de 6)",
+      "category": [
+        "Hogar y cocina",
+        "Jarras, filtros y cartuchos",
+        "Cartuchos de filtrado para el agua"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B0G4SGHRDX",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G4SGHRDX.html",
+      "sha256": "f8aaeea32ab63179ccc83d3e2d7b3b887e978e246aef579d7edc175c10e6b496",
+      "title": "Fackelmann Vita3 Set 2 Sartenes, Sart\u00e9n 20 cm + 26 cm, Acero Inoxidable sin Antiadherente",
+      "category": [
+        "Hogar y cocina",
+        "Menaje de cocina",
+        "Sartenes y ollas",
+        "Juegos de sartenes y ollas",
+        "Juegos de sartenes"
+      ],
+      "density": 32
+    },
+    {
+      "asin": "B0G266S7ML",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G266S7ML.html",
+      "sha256": "67442d55a4cb3ea87228d1a47a855a36658dc4a422cde8b932171950600a2bb2",
+      "title": "JUPPLIES Cajas de Zapatos Transparentes (Pack de 12)",
+      "category": [
+        "Hogar y cocina",
+        "Muebles",
+        "Pasillo",
+        "Zapateros",
+        "Cajas de botas y zapatos"
+      ],
+      "density": 34
+    },
+    {
+      "asin": "B07PTNZT75",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07PTNZT75.html",
+      "sha256": "e49455ab2ce21d484888cb8b6b9610a11d388ae944246e51e4729ca2005a4fa6",
+      "title": "ETEKCITY EK6015, B\u00e1scula de Cocina Digital de Acero Inoxidable, Balanza Cocina de Alta Precisi\u00f3n 5 kg/ 11 lbs, Peso Cocina con Pantalla LCD, Multifuncional, 2 Bater\u00edas Incluidas",
+      "category": [
+        "Hogar y cocina",
+        "Peque\u00f1o electrodom\u00e9stico",
+        "B\u00e1sculas de cocina",
+        "Balanzas digitales"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B0BZQSCB5H",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BZQSCB5H.html",
+      "sha256": "dfe7e3cd30f0b7bb0f4bdd67befd2acac55af093497d658de7741a54cd56d429",
+      "title": "Plancha Vertical Vapor EFFEKTIV, 1800W, 3 en 1 Vapor Vertical Premium, Plancha Ropa con Suela Cer\u00e1mica, Cepillo de Vapor, Dep\u00f3sito 250ml, Vapor Continuo 750mg/sec, Pantalla led, Autoapagado, Cable 3m",
+      "category": [
+        "Hogar y cocina",
+        "Planchas, centros de planchado y accesorios",
+        "Planchas de vapor verticales"
+      ],
+      "density": 30
+    },
+    {
+      "asin": "B011IVHDH2",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B011IVHDH2.html",
+      "sha256": "78cb4b31b81dfbdffe26139c7ce590f27e70d446e7a1a871a18dab704fe12c83",
+      "title": "Bayeta Multiusos de Microfibra PVA de Vileda en 38x35 cm. Pack 5 uds",
+      "category": [
+        "Hogar y cocina",
+        "Productos y utensilios de limpieza",
+        "Pa\u00f1os de limpieza"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B0BD8NCYSD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BD8NCYSD.html",
+      "sha256": "768ebbaeb04e4953d225724312fe43303b12da62198b915a7fae5458856f7bca",
+      "title": "AiQInu Papel Freidora Aire Cuadrado, 100 Piezas 16-20 cm",
+      "category": [
+        "Hogar y cocina",
+        "Reposter\u00eda",
+        "Utensilios de reposter\u00eda",
+        "Papel de horno"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B0BWNC18MM",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BWNC18MM.html",
+      "sha256": "d47bb52b7da9feab9e23bba9001c15a7258554bbbaba7924c7f1c9216c82610d",
+      "title": "Funda de Almohada 40x70 Algod\u00f3n Reforzado (Pack de 2) - Blanco - Tela Apretada de 57 Hilos/cm\u00b2 - Funda Almohada 40 x 70 - Certificaci\u00f3n Oeko Tex - Dreamzie",
+      "category": [
+        "Hogar y cocina",
+        "Textiles del hogar",
+        "Ropa de cama y almohadas",
+        "S\u00e1banas y fundas de almohada",
+        "Fundas para almohada"
+      ],
+      "density": 39
+    },
+    {
+      "asin": "B0C1GZTF3D",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0C1GZTF3D.html",
+      "sha256": "56460e10eccd36f7297b4646a91e7fd0c85497862ec518881598df1267c7645b",
+      "title": "HOTUT Juego de Cuchillos de Cocina de Pl\u00e1stico,9pcs Juego de Cuchillos para Ni\u00f1os,Juego Cuchillos Cocina Ni\u00f1os para Cortar Frutas o Verduras,Cuchillo Seguro",
+      "category": [
+        "Hogar y cocina",
+        "Utensilios",
+        "Cuchillos de cocina",
+        "Juegos de cuchillos de cocina"
+      ],
+      "density": 33
+    },
+    {
+      "asin": "B0FLK6YBH9",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FLK6YBH9.html",
+      "sha256": "8858c8c5a853692b1ceb8a9544b139f3477567460f26f5b21eabe87e14b856b6",
+      "title": "Aigostar - Foco solar exterior con mando a distancia,Cable de 5m.8000mAH,Bater\u00eda de gran capacidad y gran panel solar.regulable 3000/4000/6500K. Uso interior/exterior IP66:jard\u00edn,patio,2 Piezas",
+      "category": [
+        "Iluminaci\u00f3n",
+        "Iluminaci\u00f3n de exterior",
+        "Iluminaci\u00f3n de seguridad"
+      ],
+      "density": 51
+    },
+    {
+      "asin": "B0HCYCF4VX",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0HCYCF4VX.html",
+      "sha256": "11b2df5cbe80b8f0c52c1edc56a09d663bad8df343ed9142869cf207a9adca2e",
+      "title": "10 Velas LED Colgantes con Mando, Luz C\u00e1lida Parpadeante y Llama a Pilas",
+      "category": [
+        "Iluminaci\u00f3n",
+        "Iluminaci\u00f3n de interior",
+        "Iluminaci\u00f3n decorativa y para usos espec\u00edficos",
+        "Velas el\u00e9ctricas y LED"
+      ],
+      "density": 41
+    },
+    {
+      "asin": "B09X2NB8PF",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09X2NB8PF.html",
+      "sha256": "3f2cae8e7109cd1ba481badc7f1cbef780d873e87c9483cbc06b5b04bdfd8a51",
+      "title": "Nixsto Cable Ethernet 5 metros, Cat 6 Cable de Red, Cable Internet Plano",
+      "category": [
+        "Inform\u00e1tica",
+        "Accesorios",
+        "Cables y accesorios",
+        "Cables y conectores",
+        "Cables Ethernet",
+        "Cables categor\u00eda 6"
+      ],
+      "density": 41
+    },
+    {
+      "asin": "B087DH9GT3",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B087DH9GT3.html",
+      "sha256": "df8107ad1a8a35a496d6b359269e88d399778bcd7ee6af4270101e0f5f830133",
+      "title": "HP 305XL Negro, Cartucho de Tinta Original, Alta Capacidad",
+      "category": [
+        "Inform\u00e1tica",
+        "Impresoras y accesorios",
+        "Accesorios para impresoras",
+        "T\u00f3ners y tinta de impresora",
+        "Cartuchos de tinta de inyecci\u00f3n"
+      ],
+      "density": 54
+    },
+    {
+      "asin": "B0BRG38XM8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BRG38XM8.html",
+      "sha256": "1c97d9f3ef6bb488bc633ac2f4ccb4c8a4d5e32d3668d7fe582ed08fc1ebb2af",
+      "title": "Magichome Alcachofa de Ducha Alta Presi\u00f3n con Filtro 3 Capas y Piedras",
+      "category": [
+        "Instalaci\u00f3n de ba\u00f1o y cocina",
+        "Fontaner\u00eda de ba\u00f1o",
+        "Duchas y componentes de la ducha",
+        "Alcachofas y rociadores de ducha",
+        "Alcachofas m\u00f3viles"
+      ],
+      "density": 38
+    },
+    {
+      "asin": "B00L46JVYK",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00L46JVYK.html",
+      "sha256": "cef538a27a38b4950e0e32e5848157fa95a1177ee4eac66b9dbfe957996894a7",
+      "title": "Oregon Disco de Desbrozadora 4.0 x 300 mm con 2 Dientes",
+      "category": [
+        "Jard\u00edn",
+        "Cortac\u00e9spedes y herramientas el\u00e9ctricas para exteriores",
+        "Accesorios y piezas para cortac\u00e9spedes",
+        "Piezas de repuesto para cortac\u00e9spedes",
+        "Cuchillas"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B0BV29JYRD",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BV29JYRD.html",
+      "sha256": "02cb7c60fda22c8e22ee00a4fe11041536aef934f87faf1b23af3ed44c8e116a",
+      "title": "Rollo de C\u00e9sped Artificial de 40 mm (2_X_3_Metros)",
+      "category": [
+        "Jard\u00edn",
+        "Decoraci\u00f3n de exterior",
+        "C\u00e9sped artificial"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0DK3LFPJS",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DK3LFPJS.html",
+      "sha256": "880df9d7cf315ea83c715bcb6ec721094b04f7098a5159522ff3e773b805f2b9",
+      "title": "2 piezas Tijera Podar Peque\u00f1a Para Jardiner\u00eda, Punta Recta Profesionales para Recoger Frutas \u00e1rbol Flor Ramas, Cuchillas de Acero IInoxidable, Mangos de Pl\u00e1stico(16.5cm, Naranja, Verde)",
+      "category": [
+        "Jard\u00edn",
+        "Herramientas de jardiner\u00eda y equipos de riego",
+        "Herramientas de mano",
+        "Tijeras de podar"
+      ],
+      "density": 31
+    },
+    {
+      "asin": "B08D246QL2",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08D246QL2.html",
+      "sha256": "6813c0dceba3b2fece6d57b858e5c53691a2fe2c547fa8cf19770425bdc7112d",
+      "title": "Catchmaster 100i \u2013 Trampas para Cucarachas 30 Piezas \u2013 Trampas Cucarachas Adhesivas de m\u00e1xima Calidad \u2013 Sin Veneno ni Biocidas \u2013 Seguras para Ni\u00f1os y Mascotas \u2013 Adhesivo Natural",
+      "category": [
+        "Jard\u00edn",
+        "Jardiner\u00eda",
+        "Control de plagas y protecci\u00f3n de plantas",
+        "Trampas"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0D7ZNCCMS",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0D7ZNCCMS.html",
+      "sha256": "07d47b94fc788fd4e8bb8d3ef32e8fb9b71dd6861929bb3662b007751ca724a1",
+      "title": "Enzeno Funda para Mesa de Jard\u00edn Resistente Impermeable,150 x 90 x 74 cm,Tela Oxford 420D para Muebles de Sal\u00f3n,Fundas Protectora para Muebles de Sal\u00f3n,Cubierta de Sal\u00f3n con Salida de Aire para",
+      "category": [
+        "Jard\u00edn",
+        "Muebles y accesorios de jard\u00edn",
+        "Fundas para muebles de jard\u00edn",
+        "Sof\u00e1s"
+      ],
+      "density": 20
+    },
+    {
+      "asin": "B0173F8QAU",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0173F8QAU.html",
+      "sha256": "f6d6afeab17e2c363a612e82e10119b743a0aae0378924b0ef4dc4efb2b86d22",
+      "title": "Semillas Batlle C\u00e9sped Compacto de gran Resistencia - 5kg",
+      "category": [
+        "Jard\u00edn",
+        "Plantas, semillas y bulbos",
+        "Semillas",
+        "C\u00e9sped"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0DNFPRP3V",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DNFPRP3V.html",
+      "sha256": "81c37c265317be22ee22d3b5a9cd8933797595ef09ffc5bb94da94171b2855f4",
+      "title": "Play-Doh, Pack de 8 Botes de 85 Gramos de Colores del arco\u00edris",
+      "category": [
+        "Juguetes y juegos",
+        "Actividades creativas",
+        "Arcilla y plastilina"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B000Q5ZMM0",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B000Q5ZMM0.html",
+      "sha256": "1672a1deb3d99be731fec504f9df2baa94c4a886cbe03485c53c00f0dae30c72",
+      "title": "Ultra Pro Regular Toploader 63.5 mm x 88.9 mm (3 'x 4') Cart\u00f3n\u2013 Pack of 25",
+      "category": [
+        "Juguetes y juegos",
+        "Coleccionables",
+        "Almacenamiento de coleccionables",
+        "\u00c1lbumes y fundas para cartas coleccionables",
+        "Fundas"
+      ],
+      "density": 28
+    },
+    {
+      "asin": "B08VSJQ6T4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08VSJQ6T4.html",
+      "sha256": "1a0bdc2605af0acbc5a698af7ccb76a9770a0a6cf3e3e4e04a71d7183e429a38",
+      "title": "Woet\u00ae Acorde\u00f3n de Juguete Rojo para Ni\u00f1os, Instrumento Musical con Libro de Canciones y 8 Canciones, Juguete Educativo para Principiantes, Desarrollo Musical, A Partir de 3 A\u00f1os",
+      "category": [
+        "Juguetes y juegos",
+        "Instrumentos musicales para ni\u00f1os",
+        "Pianos y teclados"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B0DJRPG6TC",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DJRPG6TC.html",
+      "sha256": "8262b660c3e270280931d8eda3a7f9ce88b9e0a309aac3c88a5950b65c518152",
+      "title": "Desire Deluxe - Juego de bloques magn\u00e9ticos de construcci\u00f3n para ni\u00f1os (100 piezas) - Aprender con imanes STEM - Juguete educativo de construcci\u00f3n para ni\u00f1os de 3 a\u00f1os en adelante - Desarrollo",
+      "category": [
+        "Juguetes y juegos",
+        "Juegos de construcci\u00f3n",
+        "Construcciones magn\u00e9ticas"
+      ],
+      "density": 38
+    },
+    {
+      "asin": "B0H8SXC5L9",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0H8SXC5L9.html",
+      "sha256": "49faee4047b154d03f6363a8f4b5e07be7034104090cc56687738a0e3784bfc0",
+      "title": "Pok\u00e9mon: Colecci\u00f3n con p\u00f3ster de Celebraci\u00f3n 30.\u00ba Aniversario de JCC Pok\u00e9mon (3 Cartas de promoci\u00f3n, 1 p\u00f3ster y 3 Sobres de Mejora)",
+      "category": [
+        "Juguetes y juegos",
+        "Juegos y accesorios",
+        "Juego de mesa",
+        "Juegos de cartas",
+        "Juegos de cartas coleccionables",
+        "Paquetes de refuerzo"
+      ],
+      "density": 41
+    },
+    {
+      "asin": "B0DTHCGPD3",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DTHCGPD3.html",
+      "sha256": "4cefd25d5dcd2564f48e8a061b574051148ecb39f12c68d02806e16edc35b979",
+      "title": "GuKKK C\u00e1mara Fotos Infantil Instantanea 12MP Selfi, C\u00e1mara Instant\u00e1nea1080P 2,4''HD Video, Tarjeta SD 32GB, Regalo Comuni\u00f3n Ni\u00f1as 3-12 A\u00f1os Cumplea\u00f1os(Morado)",
+      "category": [
+        "Juguetes y juegos",
+        "Juguetes electr\u00f3nicos",
+        "C\u00e1maras digitales"
+      ],
+      "density": 43
+    },
+    {
+      "asin": "B0DL7FXY8Q",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DL7FXY8Q.html",
+      "sha256": "947aacd534019ed353aab142bd7fdd14293bff0c0f2dc1051bc6e1da404cb2d5",
+      "title": "Polly Pocket Planet Polly Estuche Espacial",
+      "category": [
+        "Juguetes y juegos",
+        "Mu\u00f1ecas y accesorios",
+        "Sets de accesorios"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B0DYG1HLJV",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DYG1HLJV.html",
+      "sha256": "72204173157863575af1444b13f90cb3f79b60639a271c0326b83ecc20aee6aa",
+      "title": "PLAYMOBIL | Collector Cars | Volkswagen T1 Camper | Coche de colecci\u00f3n para Adultos y ni\u00f1os | con Pegatinas para Personalizar | Regalo para Fans de Autos | Dise\u00f1o detallado | 71857",
+      "category": [
+        "Juguetes y juegos",
+        "Mu\u00f1ecos y figuras",
+        "Veh\u00edculos en miniatura de juguete"
+      ],
+      "density": 47
+    },
+    {
+      "asin": "B0C28KCKY9",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0C28KCKY9.html",
+      "sha256": "6e21fd2e444b090eb6d8af41401b571539d96ff073cc0d310abc3a6b35e8572b",
+      "title": "Trefl - Gabby's Dollhouse, la Casa del Gato de Gabi - Puzzle de 100 Piezas - Puzzles de Colores con Personajes de Cuentos de Hadas, Entretenimiento Creativo, Diversi\u00f3n para Ni\u00f1os a Partir de 5 A\u00f1os",
+      "category": [
+        "Juguetes y juegos",
+        "Puzzles y rompecabezas",
+        "Puzzles"
+      ],
+      "density": 47
+    },
+    {
+      "asin": "B00NWIYDR8",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00NWIYDR8.html",
+      "sha256": "2d6e7354d9bbc1e90bd869bad76e6283bb7a06fb24694c630790e75bd9cd1d53",
+      "title": "EASTPAK Oval Single Estuche - Black Denim (Gris)",
+      "category": [
+        "Material de oficina",
+        "Accesorios de escritorio y productos de almacenamiento",
+        "Materiales, organizadores y dispensadores de escritorio",
+        "Estuches escolares"
+      ],
+      "density": 39
+    },
+    {
+      "asin": "B0BFJ1S9YT",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BFJ1S9YT.html",
+      "sha256": "ee580a86e1d6ad06389f32d5136f5348c7265f87af8b1260fea417f2e4840b2e",
+      "title": "MILACOLATO Pendientes Aro Peque\u00f1os Para Mujer Hombre Acero Quir\u00fargico",
+      "category": [
+        "Moda",
+        "Bisuter\u00eda barata",
+        "Joyas para el cuerpo",
+        "Piercings",
+        "Aros"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0DFW8JQ9R",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DFW8JQ9R.html",
+      "sha256": "f5db9761c28bfcef386654d8ee97c8866f23015ecd453e53f61f165869232752",
+      "title": "Reebok Brooklyn Colors Mochila para port\u00e1til, fabricada en poli\u00e9ster, Tirantes anchos, ergon\u00f3micos y acolchados, varios compartimentos, de Joumma Bags",
+      "category": [
+        "Moda",
+        "Equipaje y accesorios de viaje",
+        "Mochilas",
+        "Mochilas tipo casual"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B01MYEKA9Q",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B01MYEKA9Q.html",
+      "sha256": "45a85bd798471cc86b34f4157bdace9dffdf67183f25d36778d3de3d787b87c2",
+      "title": "Skechers Burns Agoura - Zapatillas Hombre",
+      "category": [
+        "Moda",
+        "Hombre",
+        "Zapatos",
+        "Zapatillas y calzado deportivo",
+        "Aire libre y deporte",
+        "Running",
+        "Correr en asfalto"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B07NY4FTB1",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07NY4FTB1.html",
+      "sha256": "7f843b69315fb603f5667bdc633b2aa9a821d6945286510ab33bb3938a3627e8",
+      "title": "SINOPHANT 2 Leggins Mujer Pantalon Yoga Mallas Deporte Leggings Suaves El\u00e1sticos de Cintura Alta Pilates",
+      "category": [
+        "Moda",
+        "Mujer",
+        "Ropa",
+        "Ropa deportiva",
+        "Leggings"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B006T8O2PG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B006T8O2PG.html",
+      "sha256": "3b4a150d6b799faa86f9ad519f955d5302b659e91d7d6fa760e47247bc63acf6",
+      "title": "Goma de borrar milan 430 blister , 4 Unidades ( Paquete de 1)",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Bol\u00edgrafos, l\u00e1pices y \u00fatiles de escritura",
+        "Correctores y gomas de borrar",
+        "Borradores de cubo"
+      ],
+      "density": 33
+    },
+    {
+      "asin": "B00ABJVBXA",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00ABJVBXA.html",
+      "sha256": "4161e9f948552ee91942278c56bda2838b0dddcece51738e19bbcbf7c218f621",
+      "title": "Pritt Multi Tack (1 pack de 65 pcs), cuadrados de masilla adhesiva blanca multiusos, adhesivo reposicionable y reutilizable para manualidades y proyectos de DIY",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Material de oficina",
+        "Cintas, adhesivos y sujeciones",
+        "Chinchetas y masilla adhesiva"
+      ],
+      "density": 35
+    },
+    {
+      "asin": "B0744KH4RY",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0744KH4RY.html",
+      "sha256": "2afca3921fd368d70384201635e1bda81f8a1543deaa39cb80cca5696ca4c822",
+      "title": "PACK LOTE Faber Castell T\u00e9cnico - Regla 813-30 Cms + Escuadra 566-25 Cms + Cartab\u00f3n 666-25 Cms + REGALO",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Material escolar y educativo",
+        "Material escolar",
+        "Reglas y escuadras"
+      ],
+      "density": 17
+    },
+    {
+      "asin": "B0FVFTSDLS",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FVFTSDLS.html",
+      "sha256": "dd272c58748c4f4699058b61081e6c91958f0a3784cfed7fc3cbd15a4ab9c0ae",
+      "title": "MILAN\u00ae Bloc 250 notas adhesivas removibles redondas, colores pastel \u00d8 67mm",
+      "category": [
+        "Oficina y papeler\u00eda",
+        "Productos de papel para oficina",
+        "Cuadernos, blocs de notas y diarios",
+        "Notas autoadhesivas"
+      ],
+      "density": 22
+    },
+    {
+      "asin": "B0FS1Y3Q9Z",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FS1Y3Q9Z.html",
+      "sha256": "878c6aec0ef649a86834d0e27b07e81832e0320bdd520337f0f66b99621e6f50",
+      "title": "ADESTE \u2013 50 Mascarillas FFP2 Blancas con Certificado CE, cadena controlada, el\u00e1sticos c\u00f3modos, hipoalerg\u00e9nicos y regulables. Seguras: potencia de filtrado BFE >99,5%. Sobres individuales sellados",
+      "category": [
+        "Prevenci\u00f3n y seguridad",
+        "Equipos e indumentaria de seguridad",
+        "Mascarillas y respiradores",
+        "Mascarillas de seguridad antipolvo plegables desechables"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0GRNH3FJJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0GRNH3FJJ.html",
+      "sha256": "ca43958c0dfe16e33946b0d7ec40845e54cbef295455a18cea2585b34d0d8dcc",
+      "title": "Calentador Sumergible Seguro de 25W para Acuarios con Termostato Ajustable, Vidrio de Cuarzo Antiexplosi\u00f3n,Control de Temperatura Preciso de 20\u00b0C a 34\u00b0C,para Peceras y Tanques de Tortugas 10-30 Litros",
+      "category": [
+        "Productos para mascotas",
+        "Acu\u00e1ticos",
+        "Accesorios para acuarios",
+        "Climatizadores"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B00LV2I5QM",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00LV2I5QM.html",
+      "sha256": "e8811106023cf5a0ee8050c5756c8a47f305d357cdb0d8c590add5c8e7bcaeb3",
+      "title": "VERSELE-LAGA - Complete Cuni Junior - Pienso extrusionado Todo en uno para Conejos (Enanos) hasta 6 a 8 Meses de Edad - 1,75kg",
+      "category": [
+        "Productos para mascotas",
+        "Animales peque\u00f1os",
+        "Comida"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0C3R74GL9",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0C3R74GL9.html",
+      "sha256": "f69ec5e0330101c725b70426de3345fe79cb2ed1f7bb4dfb40ceaf0017133df4",
+      "title": "FELIWAY Happy Snack Delicioso Premio Calmante con Sabor a Pollo para Gatos",
+      "category": [
+        "Productos para mascotas",
+        "Gatos",
+        "Aperitivos",
+        "Snacks",
+        "Aperitivos blandos"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B0CC22MCCJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CC22MCCJ.html",
+      "sha256": "fb463880d220d4778ed31b37ec2fe92c53178f8835152e14a8558443c3191e0a",
+      "title": "WEOK Juguete de latido del coraz\u00f3n para cachorros, juguete para aliviar la ansiedad por separaci\u00f3n, latido del coraz\u00f3n de cachorro, juguete de peluche calmante para la ansiedad y el comportamiento",
+      "category": [
+        "Productos para mascotas",
+        "Perros",
+        "Juguetes",
+        "Juguetes de peluche"
+      ],
+      "density": 10
+    },
+    {
+      "asin": "B00IYE0I5Q",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00IYE0I5Q.html",
+      "sha256": "c1838afdd59b9431ce78319e87a88f52301891118a632bb7be8c548111f093f5",
+      "title": "tectake Camilla de Masaje Mesa de Masaje Banco de Masaje en Aluminio 3 Zonas (Negro | No. 401045)",
+      "category": [
+        "Salud y cuidado personal",
+        "Bienestar",
+        "Masaje y relajaci\u00f3n",
+        "Equipos de masaje profesional",
+        "Camillas"
+      ],
+      "density": 33
+    },
+    {
+      "asin": "B0HFNHT955",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0HFNHT955.html",
+      "sha256": "bd0fc763029cef139d3e548989f1b13a0e8b119488d96f9a1597e54b81aa0df7",
+      "title": "Tapones Oidos Ruido Dormir, Tapones Oidos Silicona Reducci\u00f3n de Ruido 45 dB",
+      "category": [
+        "Salud y cuidado personal",
+        "Cuidado de la salud",
+        "Cuidado del o\u00eddo",
+        "Tapones"
+      ],
+      "density": 33
+    },
+    {
+      "asin": "B0B5LT3PBV",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0B5LT3PBV.html",
+      "sha256": "47f73a51d31b513a252763aedc2fea04eac312955cf2bf83725234c5f3671453",
+      "title": "Bolsas Antihumedad Armarios - SIAMO - Deshumidificador colgante, absorbe humedad, moho y olores en armarios, casa, trastero, coche y ropa - Percha absorbente, 120 g, 24x14 cm (Pack 5)",
+      "category": [
+        "Salud y cuidado personal",
+        "Cuidado y limpieza del hogar",
+        "Absorbentes de humedad"
+      ],
+      "density": 28
+    },
+    {
+      "asin": "B0CX23929Q",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CX23929Q.html",
+      "sha256": "52faff875d0ae47d1ca6f4a086aa40b86d20c9b2a4875da28a27e0a56a5fea42",
+      "title": "Apple Cable de USB-C a conector Lightning (1 m) \u200b\u200b\u200b\u200b\u200b\u200b\u200b",
+      "category": [],
+      "density": 10
+    },
+    {
+      "asin": "B07YMY2FMN",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07YMY2FMN.html",
+      "sha256": "d8184dd00fd433c5b210d793113284570bbbb17fa01ac7fbc6cf69237dbef76e",
+      "title": "Aceite MCT de Coco Drasanvi Energia de Facil Absorcion 500ml Sin Gluten",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Aceites, vinagres y ali\u00f1os para ensalada",
+        "Aceites",
+        "Coco"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0F4K4RCJK",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0F4K4RCJK.html",
+      "sha256": "9be4c08ca3f336aa7000696c48b5e072c1274ab3d4bf14fba43f4c5f0a54bfc5",
+      "title": "L'OR Espresso Caf\u00e9 Colombia | 50 C\u00e1psulas",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Caf\u00e9, t\u00e9 y bebidas",
+        "Caf\u00e9",
+        "C\u00e1psulas de caf\u00e9"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0CCV5Z5R4",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CCV5Z5R4.html",
+      "sha256": "32e60824f61e456d77f81bf5e24f7068bfad8b38d85124e09d51e63a26528bc3",
+      "title": "by Amazon PIPAS DE CALABAZA, 350 g",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Frutas deshidratadas, frutos secos y semillas",
+        "Frutos secos y semillas",
+        "Semillas de calabaza"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B07Z4Z18BS",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B07Z4Z18BS.html",
+      "sha256": "cd5713e921b781555f7d9dcaa245de2ce5e8fc2e233c09973c0dc9cdb1ca98c3",
+      "title": "DR. OETKER - Deco Cookies Halloween 484 g, Kit de Reposter\u00eda, Preparado de Galletas de Mantequilla, Decoraci\u00f3n para Halloween, Incluye L\u00e1pices Pasteleros de Colores, F\u00e1cil de Usar",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Productos para cocina y reposter\u00eda",
+        "Mezclas para reposter\u00eda",
+        "Galletas"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0BVBJLYBG",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BVBJLYBG.html",
+      "sha256": "3dcdb389cfbd6252d30bc3725e701ccfd0851ad25d99cd21f0058be10a491342",
+      "title": "Momoya Salsa Kimchi (Kimchee No Moto) - 450 g",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Salsas",
+        "Salsas picantes"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0C5J3LWFR",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0C5J3LWFR.html",
+      "sha256": "f16bfb0c87a8520a4b9aaf700007b26190bf12e0b9954b756c9c8c0ed14dc6ce",
+      "title": "Suchard Pr\u00edncipe Turr\u00f3n Chocolate Leche, Galleta y Arroz Inflado, 230g",
+      "category": [
+        "Alimentaci\u00f3n y bebidas",
+        "Snacks y dulces",
+        "Dulces, chocolates y chicles",
+        "Dulces de caramelo",
+        "Turrones"
+      ],
+      "density": 0
+    },
+    {
+      "asin": "B0BWGZDTX6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0BWGZDTX6.html",
+      "sha256": "ed92fab76a86c0d84c289b1bf0dd3715e1231921e03ef751bd6a5a5d2ce10f42",
+      "title": "One Blade Cuchilla Nariz y Orejas compatible con One Blade, Cascara Protectora, Limpieza Facil (1 unidad) (Cuchilla Nariz)",
+      "category": [
+        "Belleza",
+        "Afeitado y depilaci\u00f3n",
+        "Afeitadoras el\u00e9ctricas",
+        "Afeitadoras el\u00e9ctricas para hombre",
+        "Cabezales de repuesto para afeitadoras el\u00e9ctricas"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B0DMFM92B6",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DMFM92B6.html",
+      "sha256": "aaa6c08758d41f9947b47b1b2e427c88c86a9105b620bb9cccd46119bafe10d7",
+      "title": "Jean & Len Jab\u00f3n de manos Bergamot & Cedarwood, vegan, 250 ml",
+      "category": [
+        "Belleza",
+        "Ba\u00f1o e higiene personal",
+        "Limpieza personal",
+        "Jab\u00f3nes de manos"
+      ],
+      "density": 32
+    },
+    {
+      "asin": "B0FJLNLKSJ",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FJLNLKSJ.html",
+      "sha256": "4da80666166995a24df2c12cc455ffa9633bf321323651f8f372dd2cbb101990",
+      "title": "d\u2019Alba Parches Ojos Bolsas y Ojeras \u2013 White Truffle Intensive Eye Patch 90 g (68 unidades), Mascarillas Contorno de Ojos Antiedad, Hidratantes e Iluminadoras \u2013 Korean Skincare",
+      "category": [
+        "Belleza",
+        "Cuidado de la piel",
+        "Ojos",
+        "Mascarillas"
+      ],
+      "density": 29
+    },
+    {
+      "asin": "B0FKT2BB18",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0FKT2BB18.html",
+      "sha256": "1549bb9155643764af9d0a7dbfb7bf48c7fb299e922d8872fa5ce42ab34dcfb2",
+      "title": "Cecotec Cepillo de Aire Voluminizador CeramicCare Single Peach. 1200W, Desenreda, Seca, Da Volumen, Alisa y Ondula, Revestimiento Cer\u00e1mico con Queratina y Aceite de Arg\u00e1n, 3 Modos",
+      "category": [
+        "Belleza",
+        "Cuidado del cabello",
+        "Aparatos y utensilios de peluquer\u00eda",
+        "Cepillos de aire caliente"
+      ],
+      "density": 33
+    },
+    {
+      "asin": "B0G1XDQV11",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0G1XDQV11.html",
+      "sha256": "18664df2f2a6120692113c83af0ec4e60d5e0eaea115ff1ffc9872cccd53946b",
+      "title": "2 Bote Spray Pulverizador Atomizador Pl\u00e1st. 300ml Reutilizable Verde",
+      "category": [
+        "Belleza",
+        "Equipo de sal\u00f3n y spa",
+        "Frascos de spray"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B0CZ5VPJ81",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0CZ5VPJ81.html",
+      "sha256": "4e6b10023033e2812f1c0a41070c607b07d28eeb37ec2d3d2c2f8ec75fb6cba3",
+      "title": "NYX PROFESSIONAL MAKEUP Rubor en polvo Buttermelt, resistente a la decoloraci\u00f3n y a la transferencia, hasta 12 horas de uso, f\u00f3rmula vegana - Feeling Butta",
+      "category": [
+        "Belleza",
+        "Maquillaje",
+        "Cara",
+        "Coloretes"
+      ],
+      "density": 44
+    },
+    {
+      "asin": "B0DBLR17VH",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0DBLR17VH.html",
+      "sha256": "b83e8b8bfce4c6d6044227f1efca596cf5ed023ff48701c57b62a568e36eac63",
+      "title": "OSDUE Botellas de Viaje,4 Piezas Botellas de Viaje Silicona Juego Compresible Prueba de Fugas,sin Bpa,Silicona Botes Viaje Rellenables para Champ\u00fa, Loci\u00f3N, Acondicionador y Gel de Ducha (100ml)",
+      "category": [
+        "Belleza",
+        "Utensilios y accesorios",
+        "Envases recargables",
+        "Kits"
+      ],
+      "density": 37
+    },
+    {
+      "asin": "B08QCJYQTM",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B08QCJYQTM.html",
+      "sha256": "8bbc721a02c97652ffed70e3a6cbc12f9e0d54d3fabd6f315e08f1a9c3e7a34d",
+      "title": "Blanqueador de Juntas - Juntas Azulejos, Lechada Tubo - Natural + Esp\u00e1tula",
+      "category": [
+        "Bricolaje y herramientas",
+        "Ferreter\u00eda",
+        "Adhesivos y selladores",
+        "Lechada"
+      ],
+      "density": 34
+    },
+    {
+      "asin": "B06XCBPFRN",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B06XCBPFRN.html",
+      "sha256": "e18eb0ea8ea08cb325ba5a096e84c4523f1449d6d87b1cb67c48ed5cf5009c58",
+      "title": "STANLEY Caja herramientas rodante Essential, pestillos metal, STST1-80151",
+      "category": [
+        "Bricolaje y herramientas",
+        "Herramientas manuales y el\u00e9ctricas",
+        "Organizadores de herramientas",
+        "Cajas y maletines"
+      ],
+      "density": 35
+    },
+    {
+      "asin": "B09ZBGWYH9",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09ZBGWYH9.html",
+      "sha256": "f70e895d7e936f407fe69d5525e2aa6c62065c924b0d7f26fa4fd0e47671331c",
+      "title": "Tapo P115(1-Pack)-Enchufe Inteligente WiFi, Plug&Play, Monitoreo Energ\u00e9tico",
+      "category": [
+        "Bricolaje y herramientas",
+        "Instalaci\u00f3n el\u00e9ctrica",
+        "Enchufes y accesorios",
+        "Enchufes inteligentes y a control remoto"
+      ],
+      "density": 47
+    },
+    {
+      "asin": "B00HRXY3SS",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00HRXY3SS.html",
+      "sha256": "4fa18bac442113f8297be6179e1fdf3fea565df669d5f66fe06e9c9bb0ee861f",
+      "title": "AMBRO-SOL - Pintura acr\u00edlica en spray, color Gris Antracita, RAL 7016, resultado profesional en m\u00faltiples superficies, exteriores e interiores, 400 ml",
+      "category": [
+        "Bricolaje y herramientas",
+        "Pinturas, herramientas y tratamiento de paredes",
+        "Pinturas e imprimaciones",
+        "Sprays de pintura"
+      ],
+      "density": 42
+    },
+    {
+      "asin": "B00N2T9QNI",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B00N2T9QNI.html",
+      "sha256": "5fb4fa40053f152f542bbd4fbf9f717f17f59112abb097da8cdb2b8974e5b38b",
+      "title": "SIKA - Minipack Mortero de Reparaci\u00f3n - Gris - 5kg",
+      "category": [
+        "Bricolaje y herramientas",
+        "Suministros de construcci\u00f3n",
+        "Material de construcci\u00f3n",
+        "Materiales b\u00e1sicos de construcci\u00f3n"
+      ],
+      "density": 36
+    },
+    {
+      "asin": "B09WTT3R66",
+      "path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B09WTT3R66.html",
+      "sha256": "bfb5c0b66a2a367ad95a4f2cf142c65d553db4d1e70c122e97d836ec5e6120cc",
+      "title": "Favoto Funda Bicicleta Exterior Impermeable Anti UV para 1-2 Bicicletas",
+      "category": [
+        "Deportes y aire libre",
+        "Deportes",
+        "Ciclismo",
+        "Accesorios",
+        "Fundas para bicicletas"
+      ],
+      "density": 30
+    }
+  ],
+  "limits": [
+    "No automotive L1 present in available selected corpus.",
+    "607 accessible product pages is not a recount of the historical 822-page scan.",
+    "Manufacturer was already present in raw attributes; scalar promotion is not recovered missing RAW.",
+    "Independent table text is diagnostic and requires visibility/script/truncation adjudication."
+  ]
+}

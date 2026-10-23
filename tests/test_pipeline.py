@@ -266,18 +266,8 @@ def test_real_30_no_rank_bsr_mix():
         assert not prod.get("detail_bsr_segments"), "遗留 BSR 不得进入 detail_bsr_segments"
 
 
-def test_leaf_category_never_regresses_behind_l3():
-    """真实回归（文具/宠物 100 SKU 实采，100/100 命中）：
-
-    榜单页只暴露 L1/L2，leaf 因此等于 L2；详情面包屑随后补上 L3。合并只填
-    空字段，leaf 不被更新，结果 细分类目 比 三级类目 还浅：
-
-        L2   Peces y mascotas acuáticas
-        L3   Accesorios para acuarios
-        leaf Peces y mascotas acuáticas   ← 层级倒退
-
-    leaf 必须是已知最深的一级（category_levels 文档：leaf==L3 是定义使然）。
-    """
+def test_different_pet_paths_are_preserved_without_splicing():
+    """Historical pet evidence has different L2 labels, not a proven prefix."""
     from amazon_es_bestseller.pipeline import normalize_product
     out = normalize_product({
         "asin": "B000255PFI",
@@ -288,8 +278,9 @@ def test_leaf_category_never_regresses_behind_l3():
                                   "Accesorios para acuarios",
                                   "Tratamientos para el agua"],
     })
-    assert out["category_l3"] == "Accesorios para acuarios"
-    assert out["leaf_category"] == "Accesorios para acuarios"
+    assert not out.get("category_l3")
+    assert out["leaf_category"] == "Peces y mascotas acuáticas"
+    assert out["detail_category_trail"][-1] == "Tratamientos para el agua"
 
 
 def test_leaf_category_kept_when_already_deepest():

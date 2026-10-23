@@ -1,0 +1,11 @@
+{
+  "source_path": "F:\\AmazonESBestseller\\runtime\\detail500_validation_20261022_191458_c11f\\saved_evidence\\html\\B0167414DE.html",
+  "source_sha256": "8015c4e5e54c89f276143ccbd8a13f51f25edb4ec9f04ef28b0f0437bf8ecaf2",
+  "scope": "productTitle and aplus_feature_div saved DOM projection; no synthetic product facts",
+  "fixture_sha256": "9f9a05b61f4147be8f04a1e4ac7378be84a454db0bd72d20513b4cb1fff6434b",
+  "additional_fixture": {
+    "path": "B0167414DE_details.html.gz",
+    "scope": "detailBulletsWrapper_feature_div saved DOM projection",
+    "sha256": "7d9fbe1653acc2b7e4f49ac85483a99f1116d5c3c744e045391782a098864774"
+  }
+}
