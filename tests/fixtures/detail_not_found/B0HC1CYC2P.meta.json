@@ -1,0 +1,9 @@
+{
+  "status_code": 404,
+  "final_url": "https://www.amazon.es/dp/B0HC1CYC2P",
+  "requested_url": "https://www.amazon.es/dp/B0HC1CYC2P",
+  "requested_asin": "B0HC1CYC2P",
+  "initial_access_state": "UNKNOWN",
+  "access_state": "UNKNOWN",
+  "recovered_from_challenge": false
+}

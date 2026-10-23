@@ -14,6 +14,7 @@ import time
 import uuid
 from datetime import datetime
 from typing import Callable, List, Optional
+from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -884,6 +885,29 @@ def _load_detail_metadata(path) -> dict:
         return {"_metadata_error": "%s: %s" % (type(exc).__name__, exc)}
 
 
+def _confirmed_product_not_found(html: str, meta: dict) -> bool:
+    """Recognize the saved Amazon.es 404 template without relaxing Access Gate.
+
+    Unknown errors remain access stops. Restriction signals take precedence,
+    and a missing product is never NORMAL access or successful detail evidence.
+    """
+    if meta.get("_metadata_error") or meta.get("status_code") != 404:
+        return False
+    if detect_access_status(404, html) is not AccessState.UNKNOWN:
+        return False
+    try:
+        url = urlsplit(str(meta.get("final_url") or ""))
+        if url.scheme != "https" or url.hostname not in {"amazon.es", "www.amazon.es"}:
+            return False
+    except ValueError:
+        return False
+    soup = BeautifulSoup(html, "lxml")
+    return (_text(soup, "title").casefold() == "documento no encontrado"
+            and "no es una página activa de nuestro sitio" in soup.get_text(" ", strip=True).casefold()
+            and soup.select_one('a[href="/ref=cs_404_link"]') is not None
+            and soup.select_one("#productTitle, #ASIN, input[name=ASIN]") is None)
+
+
 def _classify_saved_page(html: str, asin: str, meta: dict, *,
                          parser_version: str = "v1") -> tuple[str, AccessState, Optional[dict]]:
     """Classify saved evidence and return parsed data only for valid pages."""
@@ -894,6 +918,8 @@ def _classify_saved_page(html: str, asin: str, meta: dict, *,
     if html_state is AccessState.CHALLENGE:
         return "CHALLENGE", html_state, None
     if meta.get("_metadata_error"):
+        return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
+    if _confirmed_product_not_found(html, meta):
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
 
     recovered = bool(meta.get("recovered_from_challenge"))
@@ -1119,6 +1145,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
     访问门禁（ARCHITECTURE §6/§67）：受限页（CHALLENGE/BLOCKED/RATE_LIMITED/
     NETWORK_ERROR/UNKNOWN）HTML 先落盘保留证据，随即抛 AccessStopError——
     challenge 页绝不空解析进结果，details.json 不写出（不产出不可信详情）。
+    已核验 Amazon.es 商品不存在 404 模板只记单品 PRODUCT_NOT_FOUND；
+    不转为 NORMAL，不生成商品记录，不自动重试，未知 404 仍停止。
 
     断点续采（幂等恢复）：已落盘且非受限的 html/<ASIN>.html 直接离线恢复，
     不再发请求——重跑命令天然只补缺失 ASIN。resume 判定只看 CAPTCHA 信号
@@ -1197,6 +1225,16 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 enriched.setdefault("resolved_asin", match.group(1).upper())
         write_checkpoint(checkpoint_dir, asin, enriched)
 
+    def product_not_found(asin, meta, source):
+        failed.append(asin)
+        checkpoint(asin, {"asin": asin, "status": "failed",
+            "detail_status": "PRODUCT_NOT_FOUND", "classification": "INVALID_OR_EMPTY",
+            "http_status": 404, "access_state": AccessState.UNKNOWN.value,
+            "initial_access_state": meta.get("initial_access_state"),
+            "final_url": meta.get("final_url"), "requested_url": meta.get("requested_url"),
+            "source": source})
+        progress(asin, "failed")
+
     for asin in asins:
         if should_stop is not None and should_stop():
             raise AccessStopError("其他工作槽触发访问限制，停止新的详情请求")
@@ -1257,6 +1295,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     "source": "cache_quarantined_for_manual_assist",
                 })
                 progress(asin, "challenge_cached")
+            elif _confirmed_product_not_found(html, cache_meta):
+                product_not_found(asin, cache_meta, "cache")
+                continue
             elif meta.get("_metadata_error"):
                 failed.append(asin)
                 checkpoint(asin, {"asin": asin, "status": "failed",
@@ -1354,6 +1395,11 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                            "access_state": state.value,
                            "recovered_from_challenge": recovered}, f,
                           ensure_ascii=False, indent=2)
+            if _confirmed_product_not_found(html, {"status_code": status, "final_url": final_url}):
+                stage = "missing_product_checkpoint"
+                product_not_found(asin, {"initial_access_state": initial_state.value,
+                    "final_url": final_url, "requested_url": requested_url}, "network")
+                continue
             try:
                 stage = "access_checkpoint"
                 require_normal_access(state, "HTTP %s，ASIN %s，已采 %d 条"
