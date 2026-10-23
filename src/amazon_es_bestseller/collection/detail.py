@@ -934,8 +934,6 @@ def _classify_saved_page(html: str, asin: str, meta: dict, *,
         return "CHALLENGE", access_state, None
     if not html.strip():
         return "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
-    soup = BeautifulSoup(html, "lxml")
-    candidates = _page_asin_candidates(soup)
     parsed = _parse_detail_for_version(
         html, asin, parser_version=parser_version,
         requested_url=str(meta.get("requested_url") or ""),
