@@ -265,7 +265,11 @@ class BrowserSession:
                 "input[name='glow-enterLocationPostalCode']",
             )
             zip_input = self._visible_locator(zip_selectors,
-                                              timeout_seconds=2.0)
+                                              timeout_seconds=15.0)
+            modal_open = self._visible_locator(('div[role="dialog"][aria-modal="true"]',), timeout_seconds=0)
+            if zip_input is None and modal_open is not None:
+                require_normal_access(detect_access_status(200, self._stable_page_content()), "配送弹窗加载检查")
+                raise DeliveryLocationError("配送弹窗已经打开，但邮编表单未在15秒内加载完成；保留现场后停止。")
             # Amazon.es has served both the modal action wrapper and the
             # inner popover trigger. Try the other visible trigger once when
             # the first click did not render a postal field.

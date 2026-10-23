@@ -237,3 +237,37 @@ def test_previously_verified_session_preserves_http_access_gate(monkeypatch, sta
     with pytest.raises(AccessStopError):
         session.ensure_spain_delivery()
     assert session._delivery_location_checked is False
+
+
+def test_delayed_modal_does_not_click_obscured_fallback(monkeypatch):
+    page=_FakePage(); session=BrowserSession();session.page=page
+    monkeypatch.setattr(session,"goto",lambda *a,**kw:200)
+    monkeypatch.setattr(session,"wait_for_product_page",lambda **kw:None)
+    original=page.locator;counts={"zip":0}
+    def locator(selector):
+        result=original(selector)
+        if selector=="#GLUXZipUpdateInput":
+            visible=result.is_visible
+            def delayed():
+                counts["zip"]+=1
+                return counts["zip"]>6 and visible()
+            result.is_visible=delayed
+        if selector=="#nav-global-location-popover-link":
+            result.click=lambda **kw:pytest.fail("must wait for open modal, not click underlay")
+        return result
+    page.locator=locator
+    assert session.ensure_spain_delivery().is_spain is True
+
+
+def test_empty_open_modal_stops_as_delivery_error_without_fallback(monkeypatch):
+    page=_FakePage();session=_gate_session(monkeypatch,page)
+    original=page.locator
+    def locator(selector):
+        result=original(selector)
+        if "GLUXZip" in selector:result.is_visible=lambda:False
+        if selector=='div[role="dialog"][aria-modal="true"]':result.is_visible=lambda:page.modal
+        if selector=="#nav-global-location-popover-link":result.click=lambda **kw:pytest.fail("obscured underlay")
+        return result
+    page.locator=locator
+    with pytest.raises(DeliveryLocationError,match="15秒"):session.ensure_spain_delivery()
+    assert session._delivery_location_checked is False

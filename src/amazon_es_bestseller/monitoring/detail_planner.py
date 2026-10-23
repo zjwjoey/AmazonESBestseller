@@ -242,6 +242,12 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
                     or candidate_actual_hash != candidate_expected_hash
                     or not isinstance(candidate.get("detail_record"), Mapping)):
                 raise ValueError("详情 planner 拒绝身份或原始证据未核验的候选")
+    elif snapshot_kind == "CANDIDATE_LINK_IDENTITY":
+        from .favorite_identity import verify_favorite_links
+        checked = verify_favorite_links(ranking_snapshot.get("candidates") or [])
+        if (snapshot_status != "LINK_IDENTITY_VERIFIED" or checked["rejected"]
+                or not checked["records"] or checked["records"] != ranking_snapshot.get("records")):
+            raise ValueError("喜爱榜候选原始证据或链接身份未核验")
     elif snapshot_status not in {"AUTHORITATIVE", "IDENTITY_COMPLETE"}:
         raise ValueError("详情 planner 只能使用 AUTHORITATIVE ranking snapshot")
     ranking_rows = _rows(ranking_snapshot)
