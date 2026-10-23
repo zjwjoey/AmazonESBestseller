@@ -9,6 +9,7 @@ import asyncio
 import math
 import time
 from urllib.parse import urlsplit
+from ..access.detector import detect_access_status
 
 
 class ParallelBrowserCapture:
@@ -151,10 +152,16 @@ class ParallelBrowserCapture:
             for i in range(6):
                 await asyncio.sleep(max(0,start+i*.6-time.perf_counter()))
                 body=await page.content();snapshot_count+=1
+                snapshot_state=detect_access_status(status,body).value
+                if snapshot_state in ('BLOCKED','CHALLENGE','RATE_LIMITED'):
+                    restrict(snapshot_state)
+                    active['render_stop_state']=snapshot_state
+                    break
             return {'html':body,'status_code':status,'request_url':task['request_url'],
                     'final_url':page.url,'document_start_observed':bool(active.get('root_id')),
                     'native_document_start':active.get('native_document_start'),
                     'document_responses':active['document_responses'],'timed_out':timed_out,
                     'error':error,'window_id':self.window_ids[lane],
+                    'render_stop_state':active.get('render_stop_state'),
                     'render_snapshot_count':snapshot_count,'render_elapsed_seconds':time.perf_counter()-start}
         finally:self.active.pop(lane,None)

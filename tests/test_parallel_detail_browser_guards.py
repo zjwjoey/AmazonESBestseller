@@ -48,3 +48,23 @@ def test_route_callback_keeps_the_bound_integer_lane():
         await capture._route_handler(3)(value)
         assert seen==[(3,value)]
     asyncio.run(case())
+
+
+def test_render_challenge_is_observed_before_waiting_for_remaining_samples():
+    from types import SimpleNamespace
+    async def case():
+        class Page:
+            url='https://www.amazon.es/dp/B000000001'
+            calls=0
+            async def goto(self,*args,**kwargs):return SimpleNamespace(status=200)
+            async def content(self):
+                self.calls+=1
+                return '<html>'+('x'*10000)+'Robot Check</html>'
+        capture=ParallelBrowserCapture(None,lanes=1,check_gate=lambda:None)
+        page=Page();capture.pages=[page];capture.window_ids=[1]
+        stop=asyncio.Event();signals=[]
+        def restrict(state):signals.append(state);stop.set()
+        result=await capture({'request_url':page.url},0,lambda:None,stop,restrict)
+        assert signals==['CHALLENGE'] and stop.is_set()
+        assert page.calls==1 and result['render_snapshot_count']==1
+    asyncio.run(case())
