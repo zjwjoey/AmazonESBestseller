@@ -12,7 +12,9 @@ def documents(tmp_path):
     base={'run_id':'run','starts_at':'2026-10-23T00:00:00Z','deadline':'2026-10-24T00:00:00Z',
           'request_deadline':'2026-10-23T20:00:00Z','max_requests':20,'max_page_requests':20,
           'max_other_requests':8,'max_attempts_per_task':1,'request_start_interval_seconds':3.6,
-          'browser_profile':str(tmp_path/'profile')}
+          'browser_profile':str(tmp_path/'profile'),'runtime_root':str(tmp_path),
+          'required_postal_code':'28001',
+          'plan_sha256':digest(plan)}
     def save(name,value):
         path=tmp_path/name;path.write_text(json.dumps(value),encoding='utf8')
         return {'path':str(path),'sha256':digest(path.read_bytes())}
@@ -65,3 +67,30 @@ def test_validate_only_does_not_open_profile_or_create_run_state(tmp_path,monkey
     assert result['state']=='VALIDATED_NOT_STARTED'
     assert not (tmp_path/'profile').exists()
     assert not (tmp_path/'parallel_contract.json').exists()
+
+
+def test_approval_cannot_rebind_the_original_root_or_frozen_plan(tmp_path):
+    plan,approval=documents(tmp_path)
+    now=datetime(2026,10,23,1,tzinfo=timezone.utc)
+    changed_root=tmp_path/'different_run_root'
+    with pytest.raises(ValueError,match='ORIGINAL'):
+        validate_approval({**approval,'runtime_root':str(changed_root)},plan,changed_root,
+                          tmp_path/'profile','current',now=now)
+    changed_plan={**plan,'tasks':[{'task_id':'foreign','asin':'B000000002',
+                                 'request_url':'https://www.amazon.es/dp/B000000002'}]}
+    with pytest.raises(ValueError,match='ORIGINAL'):
+        validate_approval({**approval,'plan_sha256':digest(changed_plan)},changed_plan,tmp_path,
+                          tmp_path/'profile','current',now=now)
+
+
+@pytest.mark.parametrize('paid,holds',[(-1,3),(2,-1),(30,3)])
+def test_invalid_cumulative_ledger_rejected_during_preflight(tmp_path,paid,holds):
+    plan,approval=documents(tmp_path)
+    path=tmp_path/'ledger.json'
+    value=json.loads(path.read_text(encoding='utf8'))
+    value.update(paid_requests=paid,budget_holds=holds)
+    path.write_text(json.dumps(value),encoding='utf8')
+    approval['cumulative_budget_reference']['sha256']=digest(path.read_bytes())
+    with pytest.raises(ValueError):
+        validate_approval(approval,plan,tmp_path,tmp_path/'profile','current',
+                          now=datetime(2026,10,23,1,tzinfo=timezone.utc))

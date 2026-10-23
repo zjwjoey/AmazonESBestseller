@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime,timezone
 import json
 import math
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -40,13 +41,21 @@ def validate_approval(approval,plan,root,profile,code_sha,*,now=None):
             or Path(approval['browser_profile']).resolve()!=Path(profile).resolve()):
         raise ValueError('EXPLICIT_CURRENT_FIVE_LANE_APPROVAL_REQUIRED')
     base=checked_document(approval['base_authorization_reference'])
+    if (Path(base['runtime_root']).resolve()!=Path(root).resolve()
+            or base.get('plan_sha256')!=digest(plan)):
+        raise ValueError('ORIGINAL_ROOT_AND_FROZEN_PLAN_REQUIRED')
     if Path(base['browser_profile']).resolve()!=Path(profile).resolve():
         raise ValueError('ORIGINAL_BROWSER_PROFILE_REQUIRED')
     for key in ('run_id','starts_at','deadline','request_deadline','max_requests',
-                'max_page_requests','max_other_requests','max_attempts_per_task'):
+                'max_page_requests','max_other_requests','max_attempts_per_task','required_postal_code'):
         if approval.get(key)!=base.get(key):raise ValueError('ORIGINAL_CONTROL_CHANGED:'+key)
     if base.get('run_id')!=plan['run_id'] or base.get('max_attempts_per_task')!=1:
         raise ValueError('SAME_RUN_SINGLE_ATTEMPT_REQUIRED')
+    if not re.fullmatch(r'\d{5}',str(base.get('required_postal_code') or '')):
+        raise ValueError('ORIGINAL_DELIVERY_POSTAL_EVIDENCE_REQUIRED')
+    for key in ('max_requests','max_page_requests','max_other_requests'):
+        if type(base.get(key)) is not int or base[key]<(0 if key=='max_other_requests' else 1):
+            raise ValueError('INVALID_ORIGINAL_BUDGET')
     interval=approval.get('request_start_interval_seconds')
     if (not isinstance(interval,(int,float)) or isinstance(interval,bool)
             or not math.isfinite(interval) or interval<3.6
@@ -59,8 +68,16 @@ def validate_approval(approval,plan,root,profile,code_sha,*,now=None):
         raise ValueError('ORIGINAL_BUDGET_LEDGER_REQUIRED')
     if type(ledger.get('paid_requests')) is not int or type(ledger.get('budget_holds')) is not int:
         raise ValueError('CUMULATIVE_PAID_AND_HOLDS_REQUIRED')
+    maximum=min(base['max_requests'],base['max_page_requests'])
+    if (min(ledger['paid_requests'],ledger['budget_holds'])<0
+            or ledger['paid_requests']+ledger['budget_holds']>maximum):
+        raise ValueError('INVALID_CUMULATIVE_LEDGER')
     if len(set(approval.get('access_gate_paths') or []))!=2:
         raise ValueError('TWO_ORIGINAL_SHARED_GATES_REQUIRED')
+    ids=[task['task_id'] for task in plan['tasks']]
+    asins=[task['asin'] for task in plan['tasks']]
+    if len(ids)!=len(set(ids)) or len(asins)!=len(set(asins)):
+        raise ValueError('DUPLICATE_FROZEN_TASK_OR_PRODUCT')
     for task in plan['tasks']:
         parsed=urlsplit(task['request_url'])
         if (parsed.scheme!='https' or parsed.hostname not in ('amazon.es','www.amazon.es')

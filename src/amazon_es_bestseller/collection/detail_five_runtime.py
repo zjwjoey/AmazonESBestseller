@@ -33,6 +33,7 @@ async def run(plan_path,approval_path,root,profile,*,validate_only=False):
     gates.require_normal()
     if validate_only:
         return {'state':'VALIDATED_NOT_STARTED','parser_contract':2,'lanes':5,
+                'validation_scope':'authorization_and_gates_only; history checked before browser creation',
                 'plan_sha256':digest(plan),'code_sha':sha,'budget':budget}
     root=Path(root).resolve();profile=Path(profile).resolve()
     def check():
@@ -45,8 +46,15 @@ async def run(plan_path,approval_path,root,profile,*,validate_only=False):
         # Preflight history before opening a browser. No success is refetched,
         # and unresolved old captures cannot be silently promoted or retried.
         store=ParallelDetailStore(root,plan,budget)
-        store.import_legacy_successes();store.pending()
+        store.import_legacy_successes()
+        pending=store.pending()
         immutable_json(root/'parallel_execution_approval.json',sealed(approval))
+        if not pending:
+            runner=ParallelDetailRunner(root,plan,budget,capture=None,
+                check_gate=check,stop_gate=gates.stop,postal_code=approval['required_postal_code'])
+            return await runner.run()
+        if store.used_requests>=budget['max_requests']:
+            raise ValueError('CUMULATIVE_BUDGET_EXHAUSTED_BEFORE_BROWSER')
         from playwright.async_api import async_playwright
         async with async_playwright() as playwright:
             context=await playwright.chromium.launch_persistent_context(str(profile),headless=False)
@@ -56,6 +64,7 @@ async def run(plan_path,approval_path,root,profile,*,validate_only=False):
                 await capture.open()
                 runner=ParallelDetailRunner(root,plan,budget,capture=capture,
                     check_gate=check,stop_gate=gates.stop,
+                    postal_code=approval['required_postal_code'],
                     interval=approval['request_start_interval_seconds'])
                 result=await runner.run()
                 if result['state']=='ACCESS_STOP':
