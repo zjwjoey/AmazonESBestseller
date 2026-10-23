@@ -1,0 +1,135 @@
+{
+  "source_code_commit": "4f9ec6b6d2def5cf122e6c908265e204a9a16737",
+  "amazon_requests_performed": 0,
+  "production_profile_touched": false,
+  "evidence": [
+    {
+      "file": "outputs\\parallel_final_stress50.json",
+      "sha256": "704bc2845ef38c6798d6248af652b64b1c2b546f5f043e0d7f88a86c306182b0",
+      "passed": true,
+      "evidence_directory": "outputs/parallel_final_stress50_evidence",
+      "count": 50,
+      "elapsed_seconds": 203.67651920000026,
+      "successful_details_per_hour": 883.7543017084307,
+      "server_http_peak": 1,
+      "native_start_min_gap": 3.6111599999994723,
+      "resources": {
+        "peak_rss_bytes": 2600775680,
+        "cpu_seconds": 907.28125,
+        "measurement_scope": "peak sampled process-tree totals, including setup; exited children may be missed"
+      },
+      "runtime": {
+        "state": "DRAINED",
+        "successful": 50,
+        "failed": 0,
+        "pending": 0,
+        "used_requests": 50,
+        "capture_peak": 4,
+        "parser_contract": 2,
+        "local_parser_pids": [
+          31444,
+          31200,
+          29048,
+          31244,
+          25544
+        ],
+        "new_admissions": 50,
+        "new_successful": 50,
+        "parse_seconds": 127.10627599999589,
+        "save_seconds": 9.976065500003642
+      }
+    },
+    {
+      "file": "outputs\\parallel_final_item_error.json",
+      "sha256": "9a89fdc2db05e2feb0eb8465d20522e3a9c636c8dea00c9c7639e702602b0873",
+      "passed": true,
+      "evidence_directory": "outputs/parallel_final_item_error_evidence",
+      "count": 8,
+      "elapsed_seconds": 37.47376070000064,
+      "successful_details_per_hour": 672.4705374979771,
+      "server_http_peak": 1,
+      "native_start_min_gap": 3.617855000000418,
+      "resources": {
+        "peak_rss_bytes": 2153459712,
+        "cpu_seconds": 135.578125,
+        "measurement_scope": "peak sampled process-tree totals, including setup; exited children may be missed"
+      },
+      "runtime": {
+        "state": "DRAINED_WITH_ITEM_ERRORS",
+        "successful": 7,
+        "failed": 1,
+        "pending": 0,
+        "used_requests": 8,
+        "capture_peak": 3,
+        "parser_contract": 2,
+        "local_parser_pids": [
+          26396,
+          35500,
+          12052,
+          33024,
+          1580
+        ],
+        "new_admissions": 8,
+        "new_successful": 7,
+        "parse_seconds": 18.026945599998726,
+        "save_seconds": 1.4809175999998843
+      }
+    },
+    {
+      "file": "outputs\\parallel_final_redirect.json",
+      "sha256": "1183fad07a88f10b8c75a7483c3df3b9ee7d02aa6fa13fe7aa4b838df8d1cd9c",
+      "passed": true,
+      "evidence_directory": "outputs/parallel_final_redirect_evidence",
+      "logical_tasks": 5,
+      "real_http_hops": 6,
+      "native_root_starts": 5,
+      "min_initial_root_gap": 3.6171340000000782,
+      "all_full_records_equal": true
+    },
+    {
+      "file": "outputs\\parallel_final_challenge.json",
+      "sha256": "4158bf2494bced2d230536eed9cf5b208542b7b93f4c5ccd57a32810534406b5",
+      "passed": true,
+      "evidence_directory": "outputs/parallel_final_challenge_evidence",
+      "real_http_requests": 2,
+      "real_document_requests": 1,
+      "request_paths": [
+        "/dp/B0D8LJWZPB",
+        "/favicon.ico"
+      ],
+      "gate_states": [
+        "CHALLENGE",
+        "CHALLENGE"
+      ],
+      "summary": {
+        "state": "ACCESS_STOP",
+        "successful": 0,
+        "failed": 2,
+        "pending": 3,
+        "used_requests": 2,
+        "capture_peak": 1,
+        "parser_contract": 2,
+        "local_parser_pids": [
+          22020,
+          35784,
+          34100,
+          8728,
+          20592
+        ],
+        "new_admissions": 2,
+        "new_successful": 0,
+        "parse_seconds": 0,
+        "save_seconds": 0.021095299999615236
+      }
+    }
+  ],
+  "preservation": {
+    "sample_html_checked": 200,
+    "sample_html_changed": [],
+    "earlier_dirty_files_checked": 14,
+    "earlier_dirty_files_different": [],
+    "production_head": "24e2d1e0dbb51a1995fef853753be185171463f9",
+    "production_writes_performed_by_this_verification": false
+  },
+  "unique_related_test_cases_passed": 58
+}

@@ -508,6 +508,14 @@ def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
     print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
 
 
+def cmd_detail_five_run(args) -> None:
+    import asyncio
+    from .collection.detail_five_runtime import run
+    result = asyncio.run(run(args.plan, args.approval, args.out_dir, args.profile_dir,
+                             validate_only=args.validate_only))
+    print(json.dumps(result, ensure_ascii=True))
+
+
 def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
     """Execute only actions already present in a saved detail plan."""
     from .collection.detail_executor import NETWORK_ACTIONS, execute_detail_plan
@@ -1768,6 +1776,14 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--parser-version", choices=("v1", "v2"), default="v1",
                     help="详情解析契约；v2 保留变体/身份/重复属性证据（默认 v1）")
     dr.set_defaults(func=lambda a, p=dr: cmd_detail_run(a, p))
+
+    five = sub.add_parser("detail-five-run", help="显式批准：单队列五窗口、统一V2、全局3.6秒起始间隔")
+    five.add_argument("--plan", required=True, help="冻结 run_id/tasks 清单，保留原任务及候选标识")
+    five.add_argument("--approval", required=True, help="绑定当前代码、原授权、累计预算和两处Gate的批准文件")
+    five.add_argument("--out-dir", required=True)
+    five.add_argument("--profile-dir", required=True)
+    five.add_argument("--validate-only", action="store_true", help="只读预检，不创建浏览器或发请求")
+    five.set_defaults(func=cmd_detail_five_run)
 
     bc = sub.add_parser("batch-collect", help="联网：按计划分批采集，类目间保持倒计时冷却并自动续跑")
     bc.add_argument("--plan", required=True, help="来源页提取计划 JSON")
