@@ -28,13 +28,33 @@
 
 ## 2. 五线并行结果
 
-待第二阶段完成。历史参考：6574a4a（五线）、568eec8（普通错误隔离）、806ce803/251385ac（超时恢复历史）。旧分支包含大量与当前 main 冲突的历史内容，不能整体合并。
+历史参考：6574a4a（五线）、568eec8（普通错误隔离）、806ce803/251385ac（超时恢复历史）。逐项移植统一调度、原始起始事件、任务隔离和证据持久化思路，没有整体合并旧分支，也没有移植旧恢复控制器或消费历史批准。
 
-当前 main 的 detail-run 默认 V1 保持原含义；新五线入口必须明确绑定统一 V2。目标为一个队列、五个窗口、独立解析、单一结果写入与共享全局调度。
+当前 `detail-run` 默认 V1 保持原含义。新 `detail-five-run` 显式绑定统一 V2，使用一个队列、五个真实窗口、五个独立 parser 进程和父进程统一持久化锁。新代码按职责分为：
+
+|模块|职责|
+|---|---|
+|detail_dispatch.py|唯一领取、初始请求全局节奏、在途排空|
+|detail_parallel_browser.py|真实窗口、CDP 原始 GET 起始、跳转链、完整渲染快照|
+|detail_parallel_runtime.py|共享 V2 解析、三类错误隔离、统一保存与结果导出|
+|parallel_detail_store.py|不可变 reservation / HTML / receipt / outcome、历史成功哈希引用、断点恢复|
+|detail_parallel_authorization.py|原 run/计划/根目录/profile/预算/时钟/双 Gate 绑定|
+|detail_five_runtime.py|显式受控入口、浏览器创建前预检、失败现场保留|
+
+task/candidate/selection ID、ASIN 和 URL 随任务保留；不能按标题或行号替换身份。新结果写独立 `parallel_*` 命名空间，不覆盖旧成功和原 `details.json`。已有成功必须验证历史 checkpoint 与保存 HTML，并继承累计已付请求；新 reservation 也保守占额，崩溃后不会自动重发。未决旧失败要求离线复核，入口没有无限重试或恢复功能。
+
+授权和调用说明见 `docs/DETAIL_FIVE_CONTROLLED_ENTRY.md`。没有创建生产批准，没有切换默认入口，没有启动 Amazon 请求。
 
 ## 3. 错误处理结果
 
-任务 A 没有改变访问门禁、请求策略或恢复授权。第二阶段将分别验证普通单品错误隔离、系统持久化错误停止、真实访问限制停止；证据不足的 UNKNOWN 不自动放行。
+任务 A 没有改变访问门禁、请求策略或恢复授权。任务 B 具体区分：
+
+- 普通商品身份不符、缺标题、parser 异常和已证实的普通单品网络错误：保存原始证据与不可变失败 outcome，再继续其他任务；不计成功、不自动重试。
+- 原始 HTML、checkpoint 或统一状态无法持久化、parser 进程故障、重复领取或证据哈希变化：停止新工作，保留未决状态与现场，不能把它们降级成商品失败来继续。
+- 403/429、Challenge/Robot Check 等访问限制：立即关闭新请求准入，排空已开始任务，保存双 Gate 的先前状态与本次停止；保持可见现场，不自动清除或恢复。
+- 证据不足的 UNKNOWN：同样停止。仅严格同 URL、原 GET 起始与 main Document 200、明确 DOMContentLoaded 超时、完整保存页无限制信号和正确配送地点的失败可隔离；终端 null HTTP 仍为 null，绝不由响应事件回填成 NORMAL/200。
+
+原生 CDP root 事件必须有正确 frame、GET、原 URL、request ID、原始时间戳；孤立响应、foreign frame、POST、第二个 root/reload 不释放调度。全局至少 3.6 秒，最多五个未提交任务。普通页保持六次完整 HTML 快照和最终至少三秒渲染观察；一旦快照识别限制立即停止，不等待剩余快照。
 
 ## 4. 性能结果
 

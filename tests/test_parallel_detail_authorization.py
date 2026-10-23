@@ -14,6 +14,7 @@ def documents(tmp_path):
           'max_other_requests':8,'max_attempts_per_task':1,'request_start_interval_seconds':3.6,
           'browser_profile':str(tmp_path/'profile'),'runtime_root':str(tmp_path),
           'required_postal_code':'28001',
+          'access_gate_paths':[str(tmp_path/'gate1'),str(tmp_path/'gate2')],
           'plan_sha256':digest(plan)}
     def save(name,value):
         path=tmp_path/name;path.write_text(json.dumps(value),encoding='utf8')
@@ -92,5 +93,13 @@ def test_invalid_cumulative_ledger_rejected_during_preflight(tmp_path,paid,holds
     path.write_text(json.dumps(value),encoding='utf8')
     approval['cumulative_budget_reference']['sha256']=digest(path.read_bytes())
     with pytest.raises(ValueError):
+        validate_approval(approval,plan,tmp_path,tmp_path/'profile','current',
+                          now=datetime(2026,10,23,1,tzinfo=timezone.utc))
+
+
+def test_original_gate_paths_cannot_be_replaced_by_unrestricted_files(tmp_path):
+    plan,approval=documents(tmp_path)
+    approval['access_gate_paths']=[str(tmp_path/'fake1'),str(tmp_path/'fake2')]
+    with pytest.raises(ValueError,match='GATE'):
         validate_approval(approval,plan,tmp_path,tmp_path/'profile','current',
                           now=datetime(2026,10,23,1,tzinfo=timezone.utc))

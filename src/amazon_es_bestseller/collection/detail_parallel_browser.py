@@ -65,6 +65,14 @@ class ParallelBrowserCapture:
             await self._route(lane,route)
         return handle
 
+    def _document_in_scope(self,active,url):
+        target=urlsplit(url)
+        original=urlsplit(active['task']['request_url'])
+        if self.localhost_only:
+            return target.scheme==original.scheme and target.netloc==original.netloc
+        return (target.scheme=='https' and target.hostname in ('amazon.es','www.amazon.es')
+                and not target.username and not target.password)
+
     def _native(self,lane,frame,event):
         active=self.active.get(lane)
         if not active or event.get('type')!='Document' or event.get('frameId')!=frame:return
@@ -73,7 +81,10 @@ class ParallelBrowserCapture:
                                  'root_id':active.get('root_id')})
         request=event.get('request') or {}
         root_id=event.get('requestId')
-        if active.get('root_id')==root_id:return  # same redirect chain / duplicate event
+        if active.get('root_id')==root_id:
+            if not self._document_in_scope(active,request.get('url') or ''):
+                active['restrict']('UNKNOWN')
+            return  # same redirect chain / duplicate event, never a second start
         if active.get('root_id'):
             active['restrict']('UNKNOWN');return
         if (active['stop'].is_set() or not active['goto_requested'] or request.get('method')!='GET'
@@ -106,7 +117,8 @@ class ParallelBrowserCapture:
             await route.abort();return
         original=request
         while original.redirected_from:original=original.redirected_from
-        if original.url!=active['task']['request_url'] or request.method!='GET':
+        if (original.url!=active['task']['request_url'] or request.method!='GET'
+                or not self._document_in_scope(active,request.url)):
             self.diagnostics.append({'event':'route_abort_scope','lane':lane,'url':request.url})
             active['restrict']('UNKNOWN');await route.abort();return
         if active.get('original_request') is None:active['original_request']=original
@@ -122,6 +134,7 @@ class ParallelBrowserCapture:
         original=request
         while original.redirected_from:original=original.redirected_from
         if original.url!=active['task']['request_url']:return
+        if not self._document_in_scope(active,response.url):active['restrict']('UNKNOWN')
         active['document_responses'].append({'url':response.url,'status_code':response.status,
                                              'from_service_worker':response.from_service_worker})
         if response.status in (403,429):active['restrict']('BLOCKED' if response.status==403 else 'RATE_LIMITED')

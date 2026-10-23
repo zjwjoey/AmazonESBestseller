@@ -72,7 +72,9 @@ def validate_approval(approval,plan,root,profile,code_sha,*,now=None):
     if (min(ledger['paid_requests'],ledger['budget_holds'])<0
             or ledger['paid_requests']+ledger['budget_holds']>maximum):
         raise ValueError('INVALID_CUMULATIVE_LEDGER')
-    if len(set(approval.get('access_gate_paths') or []))!=2:
+    original_gates=[Path(path).resolve() for path in base.get('access_gate_paths',[])]
+    current_gates=[Path(path).resolve() for path in approval.get('access_gate_paths',[])]
+    if len(set(original_gates))!=2 or set(current_gates)!=set(original_gates) or len(current_gates)!=2:
         raise ValueError('TWO_ORIGINAL_SHARED_GATES_REQUIRED')
     ids=[task['task_id'] for task in plan['tasks']]
     asins=[task['asin'] for task in plan['tasks']]

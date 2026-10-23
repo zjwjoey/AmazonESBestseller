@@ -68,3 +68,28 @@ def test_render_challenge_is_observed_before_waiting_for_remaining_samples():
         assert signals==['CHALLENGE'] and stop.is_set()
         assert page.calls==1 and result['render_snapshot_count']==1
     asyncio.run(case())
+
+
+def test_same_native_redirect_chain_cannot_leave_amazon_scope():
+    capture,starts,errors=adapter()
+    capture._native(0,'main',event())
+    capture._native(0,'main',event(request={'url':'https://foreign.invalid/dp/B000000001','method':'GET'}))
+    assert len(starts)==1 and errors==['UNKNOWN']
+
+
+def test_redirect_route_refuses_foreign_document_before_continue():
+    from types import SimpleNamespace
+    async def case():
+        capture,starts,errors=adapter()
+        frame=object();capture.pages=[SimpleNamespace(main_frame=frame)]
+        original=SimpleNamespace(url='https://www.amazon.es/dp/B000000001',redirected_from=None)
+        request=SimpleNamespace(url='https://foreign.invalid/dp/B000000001',method='GET',
+            redirected_from=original,frame=frame,is_navigation_request=lambda:True)
+        calls=[]
+        class Route:
+            async def abort(self):calls.append('abort')
+            async def continue_(self):calls.append('continue')
+        route=Route();route.request=request
+        await capture._route(0,route)
+        assert calls==['abort'] and errors==['UNKNOWN']
+    asyncio.run(case())
