@@ -84,7 +84,7 @@ def test_saved_hot_air_tool_flow_rates_do_not_become_container_capacity_conflict
 
 @pytest.mark.parametrize('text', [
     'Volumen 1,5 L; escala interna 250 ml a 1500 ml',
-    'Capacidad 260 ml / Tamaño 250-350ml',
+    'Capacidad 260 ml / Tamaño rango 250-350ml',
     'Capacidad 17 litros cada uno. Ideales para bolsas de basura de 20 o 30 litros',
     'Papelera de 25 litros. Tiene capacidad para una bolsa de 30-35L',
     'Jarra de 2,3 L con 1,4 L de capacidad de filtrado de agua',
@@ -96,8 +96,9 @@ def test_explicit_ranges_and_distinct_object_roles_are_not_scalar_conflicts(text
 
 
 @pytest.mark.parametrize('text', [
-    'Capacidad 500 ml / Tamaño 250-350ml',
-    'Capacidad 260 ml / Tamaño 250-259,9 ml',
+    'Capacidad 500 ml / Tamaño rango 250-350ml',
+    'Capacidad 260 ml / Tamaño rango 250-259,9 ml',
+    'Capacidad: 24-946 ml y 24-473 ml',
     'Capacidad 9 L / 25,4 L. Compatible con bolsas de 30 L',
     'Capacidad de filtrado: 1,4 L / 1,9 L',
     'Recipiente inferior capacidad 500 ml y capacidad 600 ml. Envase superior 200 ml',

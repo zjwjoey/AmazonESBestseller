@@ -114,5 +114,22 @@
     "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0754HFH1M.html",
     "source_sha256": "6b8e2608dadd2ed2f7082b97324320601e2c101b258602d3134b563cb432cbf6",
     "provenance": "Unmodified strings from saved page evidence; no collection or provider calls."
+  },
+  {
+    "record": {
+      "asin": "B09B8SR69P",
+      "feature_bullets_raw": [
+        "PAQUETE A GRANEL DE 48 JUEGOS: Cada pedido a granel incluye un total de 48 recipientes redondos de plástico para almacenar alimentos con tapas en 2 tamaños y 54 tapas. Recipientes con tapas de 24-946 ml de capacidad y 24-473 ml de tamaño pinta. Las tapas son de un solo tamaño y se adaptan a todos los recipientes, por lo que no tendrá que preocuparse por buscar la tapa adecuada. Diseñados para el uso diario, son una excelente opción para guardar sobras, alimentos precocinados e incluso ingredientes crudos.",
+        "APTO PARA MICROONDAS, CONGELADOR Y LAVAVAJILLAS: Estos recipientes para almacenar alimentos con tapa son aptos para microondas, congelador y lavavajillas (bandeja superior). Excelentes para catering, comida para llevar, preparación de comidas, guardar sobras, almacenar alimentos, congelar sopas o caldos. Además, estos prácticos recipientes con tapa tienen muchos usos, como organizar pequeños objetos en el hogar.",
+        "TAPAS HERMÉTICAS Y A PRUEBA DE FUGAS: Utilice estos recipientes de plástico con tapa como recipientes de viaje, recipientes para el almuerzo o recipientes para sopa con tapa y no tendrá que preocuparse por fugas o derrames. Los recipientes de plástico con tapa son herméticos, lo que garantiza un almacenamiento a prueba de fugas. Estos recipientes para almacenar alimentos con tapa, de calidad superior y aptos para restaurantes, se apilan perfectamente y están fabricados para resistir el desgaste diario.",
+        "RECIPIENTES DELI DE PRIMERA CALIDAD SIN BPA: Diseñados para una gran variedad de usos cotidianos, estos recipientes para alimentos con tapa están fabricados con polipropileno apto para uso alimentario y sin BPA. Están fabricados para soportar temperaturas altas y bajas durante largos periodos de tiempo. Esto significa que obtendrá la gran calidad que necesita, perfecta para una gran variedad de usos. ADVERTENCIA: Retire la tapa cuando los utilice en el microondas.",
+        "GARANTÍA DE GRAN VALOR: Aproveche al máximo su dinero con los envases reutilizables para alimentos JoyServe a granel. Estos envases de plástico para alimentos con tapa le ofrecen la mejor combinación de calidad y valor. Estos envases para delicatessen con tapa son de primera calidad, duraderos, ligeros, lavables, reutilizables, desechables y siempre están respaldados por nuestra garantía de satisfacción del 100 %."
+      ]
+    },
+    "field": "feature_bullets",
+    "expected_allowed": false,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B09B8SR69P.html",
+    "source_sha256": "ca7a2d129dbe8ce741960503432350dc62992fcb2c5fa9ade7bfdd3185abed6a",
+    "provenance": "Original quantity-capacity hyphen notation; no unsupported interval inference."
   }
 ]

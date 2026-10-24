@@ -19,26 +19,27 @@ it never writes converted, selected or inferred values into a source record.
   value restores the conservative combined comparison.
 - A stated range remains an interval in the audit. A scalar outside it or
   inconsistent values inside the same object role remain blocked. No point
-  value is invented from the interval.
+  value is invented from the interval. Unqualified hyphen notation such as
+  `24-946 ml` is not assumed to be an interval; it may encode quantity and capacity.
 
 ## Saved evidence and validation
 
 The 1,343 remaining target pages passed their recorded SHA-256 checks. The 235
 exact typed-equivalence groups bind to previously verified actual DOM cells;
-both source values and their original positions remain available. Seventeen
+both source values and their original positions remain available. Eighteen
 saved-source fixture cases include a heat gun's flow rates and actual
 container/range assertions. Synthetic negatives retain unexplained scalar
 conflicts, wrong masses, incomplete dimensions and ambiguous number formats.
 
-The 50 added regressions and related tests total 203 passes, no failures or
+The 52 added regressions and related tests total 205 passes, no failures or
 skips. Full 5,412-record replay preserves every ASIN and source text. It routes
-4,296 products as Pre-Clean usable and 1,116 for review, clearing 227 of the
-previous 1,343. Field slots are 51,591 retained, 1,163 under review and 6,778
+4,295 products as Pre-Clean usable and 1,117 for review, clearing 226 of the
+previous 1,343. Field slots are 51,590 retained, 1,164 under review and 6,778
 originally absent. None of the previously clear fields acquired a blocker.
 All 305 legacy source/business holds remain in the derived screening view.
 
 Remaining reasons overlap: 716 products have different literal attribute
-values/meanings, 296 need a category-source business choice, 119 have unresolved
+values/meanings, 296 need a category-source business choice, 120 have unresolved
 capacity/object context, nine retain page anomalies, and one retains an
 identity token in description. These are not additive error counts or proof
 that a page is wrong. They are preserved for field-specific decisions.

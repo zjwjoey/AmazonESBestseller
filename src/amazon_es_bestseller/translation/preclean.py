@@ -399,6 +399,11 @@ def _capacity_scope(value: str, match: Any) -> str:
 
 
 def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, structured_label: bool) -> bool:
+    def explicit_hyphen_range(start: int) -> bool:
+        prefix = value[max(0, start - 60):start]
+        return bool(re.search(r"\b(?:rango|entre|desde|intervalo)\b[^;\n]{0,35}$|"
+                              r"\b(?:medium|small|large|pequeñ[oa]|median[oa]|grande)\s*\(\s*$",
+                              prefix, re.I))
     scopes = [(m, amount, "unknown" if structured_label else _capacity_scope(value, m))
               for m, amount in capacities]
     # Accessory compatibility and graduation marks do not assert the vessel's
@@ -420,13 +425,15 @@ def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, str
             low = high = amount
             if index + 1 < len(group):
                 following, next_amount = group[index + 1]
-                if re.fullmatch(r"\s*(?:-|–|a|hasta)\s*", value[match.end():following.start()], re.I):
+                link = re.fullmatch(r"\s*(-|–|a|hasta)\s*", value[match.end():following.start()], re.I)
+                if link and (link.group(1).lower() in {"a", "hasta"} or explicit_hyphen_range(match.start())):
                     low, high = amount, next_amount
                     index += 1
             if low == high:
-                bare = re.search(r"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:-|–|a|hasta)\s*$",
-                                 value[max(0, match.start() - 30):match.start()], re.I)
-                if bare:
+                prefix_start = max(0, match.start() - 60)
+                bare = re.search(r"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(-|–|a|hasta)\s*$",
+                                 value[prefix_start:match.start()], re.I)
+                if bare and (bare.group(2).lower() in {"a", "hasta"} or explicit_hyphen_range(prefix_start + bare.start(1))):
                     factor = {"ml": Decimal(1), "cl": Decimal(10), "L": Decimal(1000)}[
                         UNIT_CANONICAL[match.group("unit").casefold()]]
                     low = Decimal(bare.group(1).replace(",", ".")) * factor
