@@ -40,6 +40,7 @@ EXPORT_VALUE_MISMATCH = "EXPORT_VALUE_MISMATCH"
 IMAGE_MISSING = "IMAGE_MISSING"
 FACT_CHANGED = "FACT_CHANGED"
 NOT_APPLICABLE = "NOT_APPLICABLE"
+CATEGORY_SOURCE_CONFLICT = "CATEGORY_SOURCE_CONFLICT"
 AUDIT_STAGES = ("source", "translation", "export")
 _TRANSLATED_CORE = {"title_zh", "spec_v2", "product_details_zh", "feature_bullets_zh"}
 
@@ -310,6 +311,12 @@ def _html_visible_evidence(field: str, html: str) -> bool:
     if field == "feature_bullets_zh":
         return any(el.select("li") for sel in ("#feature-bullets", "#featurebullets_feature_div", "#pqv-feature-bullets")
                    for el in soup.select(sel))
+    if field == 'monthly_bought_min':
+        from ..collection.detail import _monthly_bought_raw
+        return bool(_monthly_bought_raw(soup))
+    if field == 'product_details_zh':
+        from ..collection.detail import _collect_attributes
+        return bool(_collect_attributes(soup))
     return False
 
 
@@ -382,7 +389,7 @@ def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapp
     else:
         if _has(detail.get(field)) or _has(record.get(field)):
             evidence.append(field)
-    if html:
+    if html and field != "bestseller_rank":
         if field == "parent_asin":
             child_asin = normalize_asin(record.get("asin"))
             confirmed = [value for value in _html_parent_values(html)
@@ -390,9 +397,14 @@ def _source_evidence(field: str, record: Mapping, detail: Mapping, ranking: Mapp
             if confirmed:
                 evidence.append("html:confirmed_parent_asin")
         elif field in {"seller", "brand", "current_price", "rating", "review_count",
-                       "feature_bullets_zh"}:
+                       "feature_bullets_zh", 'monthly_bought_min', 'product_details_zh'}:
             if _html_visible_evidence(field, html):
                 evidence.append(f"html:visible:{field}")
+            if field == 'product_details_zh':
+                from ..collection.detail import _current_model_comparison_attributes
+                attributes, _ = _current_model_comparison_attributes(_cached_soup(html), record.get('asin') or detail.get('asin') or '')
+                if attributes:
+                    evidence.append('html:current_asin_comparison_column')
         elif field in {"original_price", "discount_rate"}:
             # 复用采集器本身的划线价语义，而不是另写一条更宽松的正则：
             # Amazon 的 "Precio único" 用 data-a-strike=true 重述当前售价，
@@ -565,11 +577,28 @@ def _audit_one(field: str, asin: str, record: Mapping, detail: Mapping,
             classification, severity = "ORIGINAL_PRICE_INVALID", "P1"
             message = "原价小于或等于当前售价，不作为有效划线原价展示"
             canonical = derived = display = None
+    if field == 'bestseller_rank':
+        family = str(ranking.get('ranking_source_type') or record.get('ranking_source_type') or '').upper()
+        if family in {'NEW_RELEASES', 'CUSTOMER_FAVORITES'}:
+            if _has(display):
+                classification, severity = FACT_CHANGED, 'P1'
+                message = '非畅销榜来源不能填入畅销榜排名'
+            else:
+                classification, severity, message = NOT_APPLICABLE, 'INFO', '该来源不是畅销榜，详情BSR不作为榜单排名依据'
+    if (field.startswith('category_') or field == 'leaf_category') and not _has(canonical):
+        trail = detail.get('detail_category_trail') or record.get('detail_category_trail') or []
+        current = [record.get(f'category_l{i}') or ranking.get(f'category_l{i}') for i in range(1,4)]
+        if isinstance(trail, (list, tuple)) and any(value and i < len(trail)
+                and str(value).strip().casefold() != str(trail[i]).strip().casefold() for i,value in enumerate(current)):
+            classification, severity = CATEGORY_SOURCE_CONFLICT, 'P2'
+            message = '榜单与详情类目路径不兼容，保留各自来源，不能把另一条路径误报为漏提后拼接'
+            source_evidence = {'ranking_path': current, 'detail_path': list(trail)}
     return FieldClosureResult(
         asin=asin,
         field=field,
         display_column=FIELD_COLUMNS[field],
-        source_status=("present" if source else
+        source_status=('not_applicable' if classification == NOT_APPLICABLE else
+                       'conflict' if classification == CATEGORY_SOURCE_CONFLICT else "present" if source else
                        ("not_observed" if classification == NOT_OBSERVED else
                         "unavailable" if classification == EVIDENCE_UNAVAILABLE else "missing")),
         raw_status="present" if _has(raw) else "missing",
@@ -778,7 +807,7 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
               for c in (SOURCE_MISSING, PARSER_MISSED, MAPPING_MISSED, DERIVED_MISSING,
                         TRANSLATION_INCOMPLETE, NOT_OBSERVED, EVIDENCE_UNAVAILABLE, EXPORT_MISSING,
                         EXPORT_VALUE_MISMATCH, IMAGE_MISSING, FACT_CHANGED, NOT_APPLICABLE,
-                        "ORIGINAL_PRICE_INVALID")}
+                        "ORIGINAL_PRICE_INVALID", CATEGORY_SOURCE_CONFLICT)}
     counts["pass"] = sum(1 for r in records if r["classification"] == PASS)
     field_summary = {}
     for field in _FIELD_ORDER:
@@ -786,7 +815,7 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
         field_summary[field] = {c: sum(1 for r in rows if r["classification"] == c)
                                 for c in (PASS, SOURCE_MISSING, PARSER_MISSED, MAPPING_MISSED,
                                           DERIVED_MISSING, TRANSLATION_INCOMPLETE, NOT_OBSERVED, EVIDENCE_UNAVAILABLE,
-                                          "ORIGINAL_PRICE_INVALID")}
+                                          "ORIGINAL_PRICE_INVALID", CATEGORY_SOURCE_CONFLICT)}
     defect_classes = (PARSER_MISSED, MAPPING_MISSED, DERIVED_MISSING, FACT_CHANGED,
                       "ORIGINAL_PRICE_INVALID", EXPORT_MISSING, EXPORT_VALUE_MISMATCH,
                       IMAGE_MISSING, TRANSLATION_INCOMPLETE)

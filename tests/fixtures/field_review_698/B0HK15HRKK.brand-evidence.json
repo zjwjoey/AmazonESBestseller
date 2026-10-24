@@ -1,0 +1,26 @@
+{
+  "asin": "B0HK15HRKK",
+  "source_url": "https://www.amazon.es/dp/B0HK15HRKK",
+  "source_html_sha256": "1822c2629d40d758405cc085b824b450a1e5945e5e4809dcbc856b5b90c3d415",
+  "brand": "Clim Profesional",
+  "evidence": [
+    {
+      "source": "bylineInfo",
+      "value_raw": "Visita la tienda de Clim Profesional"
+    },
+    {
+      "section": "product_overview",
+      "label_raw": "Marca",
+      "value_raw": "Clim Profesional",
+      "position": 1,
+      "source": "productOverview"
+    },
+    {
+      "section": "technical_details",
+      "label_raw": "Marca",
+      "value_raw": "Clim Profesional",
+      "position": 0,
+      "source": "prodDetails"
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+[
+  {
+    "asin": "B0D9L982GG",
+    "source_sha256": "7efd1e1dbb5596d6a7faa07d23f86ae4db50afd3dd34ed12a8f6d7b3055d1cfd",
+    "fixture_sha256": "11a95232f232a8ca792162828eb326e3cfc85d30a0bd45f288b545ac7b02e195",
+    "source_url": "https://www.amazon.es/dp/B0D9L982GG",
+    "fixture": "B0D9L982GG.html.gz"
+  },
+  {
+    "asin": "B0FZPRQ9KS",
+    "source_sha256": "8af034fe730ba7757d686a7ace076781321900585a7bf24e16beea3a6c00fea5",
+    "fixture_sha256": "e1b0c70ca5eea4ab27aff212700accd5539caf220d3e444295cf278990c68db4",
+    "source_url": "https://www.amazon.es/dp/B0FZPRQ9KS",
+    "fixture": "B0FZPRQ9KS.html.gz"
+  },
+  {
+    "asin": "B0001IW56S",
+    "source_sha256": "29aa3909a8a92f38983307651ed2f5d0326721e72bc8213a3010c58cd275528c",
+    "fixture_sha256": "81821485e8c7bd324bb26552b9109e6d93584aeb0dba88ea3fd015724ec8c143",
+    "source_url": "https://www.amazon.es/dp/B0001IW56S",
+    "fixture": "B0001IW56S.html.gz"
+  },
+  {
+    "asin": "B00H52GC2G",
+    "source_sha256": "4d9cdfa1e3891c645d6fa711ad3dccbd3f953dad8ba9a58694a16599c2bdcf91",
+    "fixture_sha256": "2126614d2ac4c48c676539d9151baba5128a543a1deb154d3f0505fd48bdac69",
+    "source_url": "https://www.amazon.es/dp/B00H52GC2G",
+    "fixture": "B00H52GC2G.html.gz"
+  },
+  {
+    "asin": "B0H6FWF1Z7",
+    "source_sha256": "8ac14ed241736cefb3fc82d6c031c25d98bc822fac976ec6add172494c1c103d",
+    "fixture_sha256": "b5d09464b3cf6f3aeff5d58263be973a6b32846526ed7d0ef7eafb0b3fa7ace3",
+    "source_url": "https://www.amazon.es/dp/B0H6FWF1Z7",
+    "fixture": "B0H6FWF1Z7.html.gz"
+  },
+  {
+    "asin": "B00008XWO7",
+    "source_sha256": "72bf75246c703cd7be17f3d81fe44f38a266590578a0ca9aa3cc866c2d59982e",
+    "fixture_sha256": "beb1fb5eb708687208bb929bb5f6ab607125433133462be664595bcf21392cd1",
+    "source_url": "https://www.amazon.es/dp/B00008XWO7",
+    "fixture": "B00008XWO7.html.gz"
+  },
+  {
+    "asin": "B002G6I5TY",
+    "source_sha256": "bec0f8d7b7617e67f4830af18a2574e20e13a9608ad244b8693b8000111797fd",
+    "fixture_sha256": "8d0e7f668ebb0feae26c4fc9d05135a2f028ce17756008e3378ca03bf0c27136",
+    "source_url": "https://www.amazon.es/dp/B002G6I5TY",
+    "fixture": "B002G6I5TY.html.gz"
+  },
+  {
+    "asin": "B00008XVNG",
+    "source_sha256": "184e6377b2fa4423c915af245bf8a1430b61b6ea709e27c7e8b314726303b460",
+    "fixture_sha256": "766492c65b70d3fd78d3d4452540d5462e1c39270d7d0b39ecfef0686678a781",
+    "source_url": "https://www.amazon.es/dp/B00008XVNG",
+    "fixture": "B00008XVNG.html.gz"
+  },
+  {
+    "asin": "B000QW4W8I",
+    "source_sha256": "4adab134f954c4ab59861a7c031df23fdb0b693c9c0ef5f94e4eb0ce0fec17b7",
+    "fixture_sha256": "656904c0aab99c58aa21c0ebe62d695e063a5dc9ed03dce05de120d5425aa817",
+    "source_url": "https://www.amazon.es/dp/B000QW4W8I",
+    "fixture": "B000QW4W8I.html.gz"
+  },
+  {
+    "asin": "B000GPI5ME",
+    "source_sha256": "0336d034a4663c047cd81e999b85090f35a9a2acc61cfc179cee7aae3e48caa1",
+    "fixture_sha256": "c44d905ee410814511ab2011582d9f2bb1ff672a511e241448e05fb482da62ce",
+    "source_url": "https://www.amazon.es/dp/B000GPI5ME",
+    "fixture": "B000GPI5ME.html.gz"
+  },
+  {
+    "asin": "B083ZMBSW1",
+    "source_url": "https://www.amazon.es/dp/B083ZMBSW1",
+    "source_sha256": "16a148a98678a54049fe063ea1ea519b6ab832172e81f86a635ebb87044d91e0",
+    "fixture_sha256": "8a9af50093b56fe7a12d4ccfde62eb31f4ee72b285c295f02f3e53dde5ade6d7",
+    "fixture": "B083ZMBSW1.html.gz"
+  },
+  {
+    "asin": "B0863MBGTH",
+    "source_url": "https://www.amazon.es/dp/B0863MBGTH",
+    "source_sha256": "837b75d5a9adcc47cabef274944b851bf80f0af49fbfa5f864f1480fde276f0e",
+    "fixture_sha256": "443087a63f91847552c6caeb897a0e5dcdbacd3c9c22950d93f6be9e98226a7b",
+    "fixture": "B0863MBGTH.html.gz"
+  }
+]

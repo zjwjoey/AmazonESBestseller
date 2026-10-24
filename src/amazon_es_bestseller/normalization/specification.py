@@ -153,7 +153,9 @@ def classify_value_unit(s) -> Optional[str]:
         return None
     t = re.sub(r'\s+', ' ', str(s).strip()).lower()
     # 西语尺寸简写（l.=largo, an.=ancho, al.=alto）→ dimension
-    if re.search(r'\b(?:l|f|an|al)\.', t):
+    if (re.search(r'\d\s*(?:f|an|al)\.', t)
+            or (re.search(r'\d\s*l\.', t) and (re.search(r'\s*(?:x|×)\s*\d', t)
+                or re.search(r'\d\s*l\.\s*(?:centímetros?|centimetros?|milímetros?|milimetros?|metros?)\b', t)))):
         return 'dimension'
     # 容量词（长词优先，如 centímetros cúbicos 含 centímetros）+ 数字紧邻短单位
     if re.search(r'\b(?:centímetros?\s+cúbicos?|centimetros?\s+cubicos?|litros?|mil+ilitros?)\b', t):
@@ -279,8 +281,7 @@ def resolve_package_count(d, variant=None, title_es=None) -> Optional[int]:
     泛型数量 1（numero_de_sets=1 / package=1 / 变体 "Paquete de 1"）不产生
     件数展示——它不是规格证据，且绝不能盖过变体/标题里的显式容量。
     """
-    if not d:
-        return None
+    d = d if isinstance(d, dict) else {}
     # 变体里的显式数量是最高优先级证据：写着 "Paquete de 1" 就是 1 包，
     # 属性表里的 "Número de productos: 12" 与之矛盾，不得回落上去
     # （真实回归 B005A3X9S2：118 ml 单瓶被标成 12 件套）。
@@ -327,7 +328,7 @@ _DIM_KEYS = (
 _PAPER_FORMAT_RE = re.compile(r'^[AB][0-9]$', re.I)
 #: 变体容量：30L / 300 ml / 30 l，允许后跟包装说明（"100 ml (Paquete de 1)"）
 _VARIANT_CAP_RE = re.compile(
-    r'^([\d.,]+\s*[mM]?[lL])\s*(?:[（(][^）)]*[）)])?\s*$')
+    r'^([\d.,]+\s*(?:mill?ilitros?|litros?|ml|l))\s*(?:[（(][^）)]*[）)])?\s*$', re.I)
 #: 变体重量：1 kg / 500 g，同样允许包装后缀（"1 kg (Paquete de 1)"）
 _VARIANT_WEIGHT_RE = re.compile(
     r'^([\d.,]+\s*(?:kg|g|mg))\s*(?:[（(][^）)]*[）)])?\s*$', re.I)
@@ -359,9 +360,10 @@ def _pick_capacity(d, variant=None):
     显式规格证据，不能因为带包装后缀就被整体丢弃。
     """
     if variant:
-        m = _VARIANT_CAP_RE.match(str(variant).strip())
-        if m:
-            return m.group(1).strip()
+        values = {m.group(1).strip() for part in re.split(r'\s*/\s*', str(variant))
+                  if (m := _VARIANT_CAP_RE.match(part.strip()))}
+        if len(values) == 1:
+            return values.pop()
     for k in _CAPACITY_KEYS:
         v = d.get(k)
         if v:
@@ -621,12 +623,32 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
 
     ``attributes`` is preferred because it retains the original Spanish label.
     ``details`` is a compatibility fallback for legacy normalized records.  A
-    selected variation is only used when no recognized attribute is available;
-    no value is inferred from rank, price, or a translated Chinese summary.
+    explicit selected capacity/count take precedence over technical defaults;
+    an explicit title count precedes generic package metadata. Raw attributes
+    remain unchanged. No value is inferred from rank, price or Chinese output.
     """
     picked = []          # (组优先级, 页面顺序, 展示文本)
     seen = set()
     seen_groups = set()
+    preferred = {}
+    capacity = _pick_capacity({}, variant)
+    if capacity:
+        preferred['capacity'] = 'Capacidad seleccionada: ' + capacity
+    selected_count = _variant_total_count(variant)
+    count_source = variant if selected_count is not None else title_es
+    # Preserve the actual selected/count text, including 1 x 12 packaging,
+    # instead of replacing it with a guessed total or a lower-priority field.
+    if selected_count is not None or (_count_from_text(title_es) or 0) > 1:
+        count_parts = [part.strip() for part in re.split(r'\s*/\s*', str(count_source or ''))
+                       if _count_from_text(part) is not None]
+        if count_parts:
+            text = ' / '.join(count_parts) if selected_count is not None else count_parts[0]
+            if selected_count is None:
+                m = _COUNT_BEFORE_RE.search(text) or _COUNT_AFTER_RE.search(text)
+                text = m.group(0) if m else text
+            preferred['count'] = ('Cantidad seleccionada: ' if selected_count is not None
+                                  else 'Cantidad explícita: ') + text
+    has_structured = bool(attributes) or bool(details)
     for position, attr in enumerate(attributes or []):
         if not isinstance(attr, dict):
             continue
@@ -635,6 +657,8 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         key = _normalize_spec_label(label)
         group = _es_core_group(key)
         if not label or not value or not _is_es_core_key(key) or group is None:
+            continue
+        if group in preferred:
             continue
         # Amazon's overloaded "Número de unidades" may describe volume or
         # weight.  Keep it in raw attributes, but never show it as a count in
@@ -665,6 +689,8 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             if (not value or not _is_es_core_key(key_norm) or group is None
                     or group in seen_groups or _is_generic_one_count(key_norm, value)):
                 continue
+            if group in preferred:
+                continue
             # 与 attributes 路径同一守卫：Amazon 的 "Número de unidades" 可能装
             # 的是容量/重量/尺寸，不能当件数展示（真实回归 B000255PFI）。
             if key_norm == 'numero_de_unidades' and classify_value_unit(value) in {
@@ -673,6 +699,12 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             seen_groups.add(group)
             parts.append('%s: %s' % (key, value))
 
+    if has_structured:
+        if not parts and (capacity or selected_count is not None) and _valid_spec_text(variant):
+            return _valid_spec_text(variant)
+        parts = ([preferred['capacity']] if 'capacity' in preferred else []) + parts
+        if 'count' in preferred:
+            parts.append(preferred['count'])
     if parts:
         return ' / '.join(parts)
     variant_text = _valid_spec_text(variant)
