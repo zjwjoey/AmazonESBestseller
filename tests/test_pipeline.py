@@ -104,7 +104,9 @@ def test_enrich_preserves_spanish_core_spec_from_modern_attributes():
     ]
     d = dict(DETAIL[0], details_json=None, attributes=attrs)
     p = enrich_products(RANKING, [d])[0]
-    assert p["specification_es"] == "Tamaño: Cama 90 x 190 x 40 cm"
+    assert p["specification_es"] == (
+        "Tamaño: Cama 90 x 190 x 40 cm / Cantidad seleccionada: 4 piezas")
+    assert d["attributes"] == attrs  # the selected count must not rewrite raw facts
 
 
 def test_enrich_fills_missing_category_depth_from_detail_breadcrumb():

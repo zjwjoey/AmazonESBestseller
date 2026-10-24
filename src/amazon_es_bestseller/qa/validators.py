@@ -18,15 +18,16 @@ from decimal import Decimal, InvalidOperation
 from typing import List, Optional, Tuple
 
 from ..models import QAStatus, QaIssue, normalize_asin
-from ..normalization.brand import is_brand_suspicious
+from ..normalization.brand import is_brand_suspicious, clean_brand, BRAND_FALSE_POSITIVE
 from ..normalization.monthly_bought import parse_monthly_bought
 from ..normalization.price import parse_price
 from ..normalization.specification import (
     classify_value_unit,
     is_suspicious_dimension,
     package_count,
+    _variant_total_count,
 )
-from ..normalization.text import dec_comma
+from ..normalization.text import dec_comma, strip_zero_width
 from ..translation.product_type import detect_product_type
 
 _ASIN_RE = re.compile(r'^[A-Z0-9]{10}$')
@@ -46,8 +47,8 @@ _DIM_KEYS_QA = (
     'dimensiones_articulo', 'dimensiones_del_articulo_l_x_a',
     'dimensiones_del_articulo_ancho_x_alto',
 )
-_CAPACITY_RE = re.compile(r'([\d.,]+)\s*(ml|l|毫升|升)(?![a-z])', re.I)
-_VARIANT_CAP_RE = re.compile(r'^([\d.,]+)\s*(ml|l|毫升|升)\s*$', re.I)
+_CAPACITY_RE = re.compile(r'([\d.,]+)\s*(mill?ilitros?|litros?|ml|l|毫升|升)(?![a-z])', re.I)
+_VARIANT_CAP_RE = re.compile(r'^([\d.,]+)\s*(mill?ilitros?|litros?|ml|l|毫升|升)\s*$', re.I)
 
 
 def _capacity_litres(number: str, unit: str) -> Decimal | None:
@@ -59,7 +60,7 @@ def _capacity_litres(number: str, unit: str) -> Decimal | None:
         return None
     if not value.is_finite():
         return None
-    return value / 1000 if unit.casefold() in {"ml", "毫升"} else value
+    return value / 1000 if unit.casefold() in {"ml", "毫升"} or unit.casefold().startswith('mil') else value
 
 
 def _worst_status(issues: List[QaIssue]) -> QAStatus:
@@ -211,13 +212,27 @@ def validate_review_count(raw) -> Tuple[QAStatus, List[QaIssue]]:
     return QAStatus.PASS, []
 
 
-def validate_brand(brand, brand_raw=None) -> Tuple[QAStatus, List[QaIssue]]:
+def validate_brand(brand, brand_raw=None, *, evidence=None) -> Tuple[QAStatus, List[QaIssue]]:
     """品牌证据（QA_RULES §10：宁缺毋假，缺失优于误判）。"""
     b = (brand or '').strip()
     if not b:
         return QAStatus.WARN, [_issue(
             'BRAND_MISSING', 'P2', 'brand', '品牌缺失（缺失优于误判）')]
-    if is_brand_suspicious(b):
+    matches = [row for row in (evidence or []) if isinstance(row, dict)
+        and (row.get('source') == 'bylineInfo' or str(row.get('label_raw') or '').strip().casefold() in {'marca', 'brand'})
+        and clean_brand(row.get('value_raw')).casefold() == b.casefold()]
+    proven = bool(matches)
+    generic_words = any(word.casefold() in BRAND_FALSE_POSITIVE for word in re.findall(r'\w+', b))
+    long_explicit_brand = proven and len(b.split()) > 4 and not generic_words
+    # A named brand such as Clim Profesional requires two concordant controls
+    # before overriding a mixed generic token. Wholly generic phrases and a
+    # lone byline retain the existing guard.
+    named_token = any(word.casefold() not in BRAND_FALSE_POSITIVE | {'de','la','el','los','las','the','and'}
+                      for word in re.findall(r'[^\W\d_]+', b))
+    corroborated_brand = (len(b.split()) > 1 and named_token
+        and any(row.get('source') == 'bylineInfo' for row in matches)
+        and any(str(row.get('label_raw') or '').strip().casefold() in {'marca','brand'} for row in matches))
+    if is_brand_suspicious(b) and not (long_explicit_brand or corroborated_brand):
         return QAStatus.FAIL, [_issue(
             'BRAND_FALSE_POSITIVE', 'P1', 'brand',
             '品牌为西语普通名词或标题片段，疑似误判: %r' % (b,))]
@@ -241,7 +256,16 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
     if isinstance(details, dict):
         for k in _CAPACITY_KEYS_QA:
             v = details.get(k)
-            if v and classify_value_unit(v) in ('dimension', 'weight'):
+            actual = classify_value_unit(v)
+            # An explicit generic Capacidad label may denote bean/flour mass.
+            # Only accept that raw meaning with matching attribute evidence;
+            # unproven legacy values and explicit liquid-volume fields retain
+            # the existing unit gate.
+            mass_evidence = (actual == 'weight' and k in {'capacidad', 'capacidad_de_salida'}
+                and any(strip_zero_width(str(a.get('label_raw') or '')).strip().casefold() in {'capacidad', 'capacidad de salida'}
+                        and strip_zero_width(str(a.get('value_raw') or '')).strip() == strip_zero_width(str(v)).strip()
+                        for a in record.get('attributes') or [] if isinstance(a, dict)))
+            if v and actual in ('dimension', 'weight') and not mass_evidence:
                 issues.append(_issue(
                     'SPEC_UNIT_MISMATCH', 'P1', 'spec',
                     '容量字段填入了非容量单位: %s = %s' % (k, v)))
@@ -262,11 +286,14 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
         m = re.search(r'(\d+)\s*(?:piezas?|unidades?|uds\.?|artículos?)\b', title_es, re.I)
         if m and int(m.group(1)) > 1:
             pc = package_count(details)
-            if pc and float(pc) == 1:
+            outputs = [str(record.get(key) or '') for key in ('spec_v2', 'specification', 'specification_es', 'specification_zh') if record.get(key)]
+            count_re = re.compile(r'(?<![\d.,])'+re.escape(m.group(1))+r'\s*(?:件|只|piezas?|unidades?|uds\.?|artículos?)', re.I)
+            count_retained = bool(outputs) and all(count_re.search(text) for text in outputs)
+            if pc and float(pc) == 1 and _variant_total_count(record.get('selected_variation_raw')) is None and not count_retained:
                 issues.append(_issue(
                     'SPEC_QUANTITY_CONFLICT', 'P1', 'spec',
-                    '标题 %s 件套被泛型 package 数量 1 覆盖' % m.group(1)))
-    spec_str = record.get('spec_v2') or record.get('specification') or ''
+                    '标题明确 %s 件，但规格输出未保留该数量，且通用包装数为 1' % m.group(1)))
+    spec_str = record.get('spec_v2') or record.get('specification') or record.get('specification_es') or ''
     # Identity values are never valid specifications.  This catches stale
     # exports that copied a child/parent ASIN into the core-spec column.
     asin = normalize_asin(record.get('asin'))
@@ -283,13 +310,14 @@ def validate_spec(record) -> Tuple[QAStatus, List[QaIssue]]:
         vm = _VARIANT_CAP_RE.match(str(variant).strip())
         if vm:
             expected = _capacity_litres(vm.group(1), vm.group(2))
-            capacities = [_capacity_litres(m.group(1), m.group(2))
-                          for m in _CAPACITY_RE.finditer(str(spec_str))]
-            if expected is None or expected not in capacities:
+            outputs = list(dict.fromkeys(str(record.get(key)) for key in
+                ('spec_v2', 'specification', 'specification_es', 'specification_zh') if record.get(key)))
+            if expected is None or not outputs or any(expected not in [
+                    _capacity_litres(m.group(1), m.group(2)) for m in _CAPACITY_RE.finditer(text)] for text in outputs):
                 issues.append(_issue(
                     'SPEC_VARIANT_MISMATCH', 'P1', 'spec',
                     '选中变体 %s 未反映到规格输出: %s' % (variant, spec_str)))
-    if '1×1×1' in spec_str or '1x1x1' in spec_str:
+    if re.search(r'(?<![\d.,])1\s*[×x]\s*1\s*[×x]\s*1(?![\d.,])(?:\s*(?:cm|mm|m))?(?!\w)', spec_str, re.I):
         issues.append(_issue(
             'SPEC_SUSPICIOUS_VALUE', 'P2', 'spec', '规格含占位尺寸 1×1×1'))
     return _worst_status(issues), issues

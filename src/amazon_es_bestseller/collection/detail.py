@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
-from ..identity import resolve_identity
+from ..identity import resolve_identity, asin_from_url
 from ..models import AccessState
 from .checkpoints import write_checkpoint
 
@@ -530,6 +530,118 @@ def _detail_bullets_raw(soup) -> list:
     return out
 
 
+def _seller_visible(node) -> bool:
+    return not _hidden(node) and not _secondary_product(node)
+
+
+def _seller_from_dom(soup) -> tuple[str, dict]:
+    """Read seller-owned controls, never the first shipping/BuyBox span."""
+    active_roots = [root for root in soup.select('#merchantInfoFeature_feature_div')
+                    if root.get('data-csa-c-is-in-initial-active-row') == 'true' and _seller_visible(root)]
+
+    def eligible(node):
+        # The telemetry flag is also false on ordinary single-offer pages.
+        # Use it only to distinguish alternatives when an explicit active
+        # merchant block exists; never treat every false flag as hidden.
+        return _seller_visible(node) and (not active_roots or any(
+            parent is root for parent in [node, *node.parents] for root in active_roots))
+
+    for selector, source in (
+        ('#merchantInfoFeature_feature_div #sellerProfileTriggerId', 'merchantInfoFeature_feature_div'),
+        ('#merchantInfoFeature_feature_div a[href*="seller="]', 'merchantInfoFeature_feature_div'),
+        ('#merchantInfoFeature_feature_div a', 'merchantInfoFeature_feature_div'),
+        ('#sellerProfileTriggerId', 'sellerProfileTriggerId'),
+    ):
+        values = {_evidence_text(node) for node in soup.select(selector)
+                  if eligible(node)} - {''}
+        if len(values) == 1:
+            value = values.pop()
+            return value, {'source': source, 'selector': selector, 'value_raw': value}
+        if len(values) > 1:
+            return '', {}  # conflicting offers are not a license to pick one
+    for root in soup.select('#merchantInfoFeature_feature_div'):
+        if not eligible(root):
+            continue
+        # Amazon-owned offers can use plain text instead of a seller link.
+        for node in root.select('.offer-display-feature-text-message'):
+            value = _evidence_text(node)
+            if value and eligible(node) and not re.search(r'vendido|remitente|vendedor', value, re.I):
+                return value, {'source': 'merchantInfoFeature_feature_div', 'value_raw': value}
+    return '', {}
+
+
+def _seller_evidence(soup, html: str) -> tuple[str, dict]:
+    value, evidence = _seller_from_dom(soup)
+    if value or not html:
+        return value, evidence
+    # The saved TurboCheckout script in B0D9L982GG causes BeautifulSoup's
+    # streaming builder to swallow the following BuyBox. Recover only actual
+    # DOM elements from lxml, not HTML-looking strings inside JavaScript.
+    from lxml import html as lhtml, etree
+    try:
+        tree = lhtml.fromstring(html)
+    except (ValueError, etree.ParserError):
+        return '', {}
+    fragments = []
+    for node in tree.xpath('//*[@id="merchantInfoFeature_feature_div" or @id="sellerProfileTriggerId"]'):
+        unsafe = False
+        for ancestor in [node, *node.iterancestors()]:
+            context = str(ancestor.get('id') or '') + ' ' + str(ancestor.get('class') or '')
+            if (ancestor.tag in {'script', 'style', 'template'} or ancestor.get('hidden') is not None
+                    or re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', ancestor.get('style', ''), re.I)
+                    or re.search(r'sponsor|recommend|related|similar|desktop-dp-sims|p13n|a-carousel|aok-hidden|a-hidden', context, re.I)):
+                unsafe = True
+                break
+        if not unsafe:
+            fragments.append(etree.tostring(node, encoding='unicode', method='html'))
+    value, evidence = _seller_from_dom(BeautifulSoup(''.join(fragments), 'lxml'))
+    if evidence:
+        evidence['dom_recovery'] = 'lxml_scoped_buybox'
+    return value, evidence
+
+
+def _current_model_comparison_attributes(soup, asin: str) -> tuple[list, list]:
+    """Preserve only a uniquely ASIN-linked, explicitly current device column.
+
+    Comparative prices/ratings remain raw attributes, never canonical prices.
+    Unlabelled icons are retained as markup evidence, not guessed booleans.
+    """
+    attrs, visual = [], []
+    for table in soup.select('#mars-comp-chart_feature_div table.ucc-v2-widget__table'):
+        if _hidden(table) or _secondary_product(table):
+            continue
+        rows = [row for row in table.select('tr') if row.find_parent('table') is table]
+        if not rows:
+            continue
+        headers = rows[0].find_all(['th', 'td'], recursive=False)
+        if any(cell.get('rowspan') or cell.get('colspan') for cell in headers):
+            continue
+        active = [i for i, cell in enumerate(headers) if cell.select_one('[aria-current="page"]') is not None]
+        if len(active) != 1:
+            continue
+        index = active[0]
+        links = {asin_from_url(a.get('href')) for a in headers[index].select('a[href]')}
+        links.discard('')
+        if index == 0 or links != {str(asin).upper()}:
+            continue
+        for row in rows[1:]:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if len(cells) != len(headers) or any(cell.get('rowspan') or cell.get('colspan') for cell in cells):
+                continue
+            label = _evidence_text(cells[0])
+            cell = cells[index]
+            if not label or _hidden(row) or _hidden(cell):
+                continue
+            value = _evidence_text(cell)
+            if value:
+                attrs.append({**_attr_row('current_model_comparison', label, value, len(attrs),
+                                         'mars-comp-chart:current-asin-link'), 'asin': str(asin).upper()})
+            elif cell.select_one('svg, img, i') is not None:
+                visual.append({'label_raw': label, 'asin': str(asin).upper(),
+                               'source': 'mars-comp-chart:current-asin-link', 'markup_raw': str(cell)})
+    return attrs, visual
+
+
 def parse_detail_page(html: str, asin: str) -> dict:
     """详情页 HTML → 原始详情字段（只读证据层，不做业务推断）。
 
@@ -579,12 +691,7 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
             detail_bsr_raw = "n.º %s en %s" % (m.group(1), _clean(m.group(2)))
 
     # 卖家（BuyBox "Vendido por X"）
-    merchant_el = (soup.select_one("#merchantInfoFeature_feature_div a")
-                   or soup.select_one("#sellerProfileTriggerId"))
-    seller_raw = _clean(merchant_el.get_text(" ", strip=True)) if merchant_el else ""
-    if not seller_raw:
-        bb = soup.select_one('#tabular-buybox .tabular-buybox-text[role="text"] span')
-        seller_raw = _clean(bb.get_text(" ", strip=True)) if bb else ""
+    seller_raw, seller_evidence = _seller_evidence(soup, html)
 
     # 是否亚马逊自营 / 亚马逊配送
     buybox_el = soup.select_one("#buybox")
@@ -595,13 +702,18 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
 
     # 品牌（Byline，剥双前缀）
     brand_raw = ""
+    brand_evidence = []
     byline = soup.select_one("#bylineInfo")
     if byline is not None and not _hidden(byline) and not _secondary_product(byline):
         brand_raw = _evidence_text(byline)
         brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
         brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
         brand_raw = _clean(brand_raw)
+        if brand_raw:
+            brand_evidence.append({'source': 'bylineInfo', 'value_raw': _evidence_text(byline)})
     attributes = _collect_attributes(soup)
+    comparison_attributes, comparison_visuals = _current_model_comparison_attributes(soup, asin)
+    attributes.extend(comparison_attributes)
     if not brand_raw:
         # Some pages omit the byline but expose an explicit Marca row in the
         # product-overview table.  This is reliable page evidence, unlike a
@@ -609,6 +721,8 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         for row in attributes:
             if _attribute_label_key(row["label_raw"]) in {"marca", "brand"}:
                 brand_raw = row["value_raw"]
+                brand_evidence.append({'source': row['source'], 'label_raw': row['label_raw'],
+                                       'value_raw': row['value_raw']})
                 break
     manufacturer_raw = next((row["value_raw"] for row in attributes
         if _attribute_label_key(row["label_raw"]) in {"fabricante", "manufacturer"}), "")
@@ -648,7 +762,9 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         "bsr_category_path": ([bsr_category_raw] if bsr_category_raw else []),
         "bsr_category_evidence": bsr_links,
         "seller_raw": seller_raw,
+        "seller_evidence": seller_evidence,
         "brand_raw": brand_raw,
+        "brand_evidence": brand_evidence,
         "manufacturer_raw": manufacturer_raw,
         "selected_variation_raw": selected_variation_raw,
         "sold_by_amazon": sold_by_amazon,
@@ -661,6 +777,7 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         "detail_category_evidence": category_evidence,
         # 无损全量详情（DATA_MODEL §4-§8）：完整 Key/Value 证据 + 卖点 + 描述
         "attributes": attributes,
+        "current_model_comparison_visual_evidence": comparison_visuals,
         "feature_bullets_raw": _feature_bullets_raw(soup),
         "product_description_raw": _product_description_raw(soup),
         "aplus_content_raw": _aplus_content_raw(soup),
