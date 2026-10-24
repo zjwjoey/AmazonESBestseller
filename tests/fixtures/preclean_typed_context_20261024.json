@@ -1,0 +1,166 @@
+[
+  {
+    "asin": "B0000CFU6X",
+    "label": "dimensiones del producto",
+    "values": [
+      "13f. x 30an. x 13al. centímetros",
+      "13 x 30 x 13 cm; 852,75 g"
+    ],
+    "source_sha256": "a476fbe35fdf14ae10d889a2c9a6072745a1afd1e1348c508a6d6d8215957bb0",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0000CFU6X.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[5]"
+      ],
+      [
+        "/html/body/div[1]/div[2]/div[2]/div[17]/div[8]/div/div[1]/ul/li[2]"
+      ]
+    ]
+  },
+  {
+    "asin": "B0001IX3M8",
+    "label": "dimensiones del producto",
+    "values": [
+      "23f. x 24an. x 7al. centímetros",
+      "23 x 24 x 7 cm; 566 g"
+    ],
+    "source_sha256": "cbfa733ea9adf24c0d5ea571434d7f3e0e9aae5cab439d57b55d9d7819690f01",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0001IX3M8.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[6]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[8]/div/div[1]/ul/li[2]"
+      ]
+    ]
+  },
+  {
+    "asin": "B000TK62AS",
+    "label": "numero de unidades",
+    "values": [
+      "10 Conteo",
+      "10"
+    ],
+    "source_sha256": "044f86cbd49a1e17754b0acaa49085dc988aa1d3a4edc67aa5a1a65e24a84e0c",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B000TK62AS.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[8]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[9]/div/div/div/div/div/div/div[1]/div[1]/div/div/div/div/table/tbody/tr[4]"
+      ]
+    ]
+  },
+  {
+    "asin": "B00YSLD4X2",
+    "label": "numero de unidades",
+    "values": [
+      "1.0 Conteo",
+      "1"
+    ],
+    "source_sha256": "d8effb247d3ad9e02803a6af629da436dd1e2db6ff9dfbca17b6a77b3b5dc568",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B00YSLD4X2.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[10]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[8]/div/div/div/div/div/div/div[1]/div[1]/div/div/div/div/table/tbody/tr[5]"
+      ]
+    ]
+  },
+  {
+    "asin": "B07S5C3C33",
+    "label": "forma articulo",
+    "values": [
+      "Circular",
+      "Redonda"
+    ],
+    "source_sha256": "bffa09a1f40cff8d9c7a2268dc21ad66766803540df5835735b0104643f67578",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B07S5C3C33.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[18]/div[9]/div/div/div/div/div/div/div[1]/div[1]/div/div[1]/div/div/table/tbody/tr[5]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[18]/div[9]/div/div/div/div/div/div/div[1]/div[1]/div/div[1]/div/div/table/tbody/tr[7]"
+      ]
+    ]
+  },
+  {
+    "asin": "B082HGMQHB",
+    "label": "forma articulo",
+    "values": [
+      "Circular",
+      "Redonda"
+    ],
+    "source_sha256": "b510798c12b1be623539cfeb21b00a4b70d3f96a22a5b36f040950d79f9962fc",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B082HGMQHB.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[9]/div/div/div/div/div/div/div[1]/div[1]/div/div[1]/div/div/table/tbody/tr[4]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[9]/div/div/div/div/div/div/div[1]/div[1]/div/div[1]/div/div/table/tbody/tr[6]"
+      ]
+    ]
+  },
+  {
+    "asin": "B0FW549GC6",
+    "label": "dimensiones del paquete",
+    "values": [
+      "16.1 x 7.6 x 1.5 centímetros",
+      "16,1 x 7,6 x 1,5 cm; 80 g"
+    ],
+    "source_sha256": "15fa0b613e1fa1fcfd7e6260dadd4eb9df30a8ea5ea174395a41b19a05ea83d7",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0FW549GC6.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[27]/div/div/div/div/div/div[1]/div[1]/div/div[2]/div/div/table/tbody/tr[1]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[27]/div/div/div/div/div/div[1]/div[1]/div/div[2]/div/div/table/tbody/tr[4]",
+        "/html/body/div[1]/div[1]/div[2]/div[28]/div/div[1]/ul/li[1]"
+      ]
+    ]
+  },
+  {
+    "asin": "B0FX4T5PHZ",
+    "label": "dimensiones del paquete",
+    "values": [
+      "24.5 x 17.9 x 1.5 centímetros",
+      "24,5 x 17,9 x 1,5 cm; 120 g"
+    ],
+    "source_sha256": "8e6844f34f4c99d6de103250b52e574f476378ca41e4fd84c6d22cf9a46ea3ea",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0FX4T5PHZ.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[27]/div/div/div/div/div/div[1]/div[1]/div/div[2]/div/div/table/tbody/tr[1]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[27]/div/div/div/div/div/div[1]/div[1]/div/div[2]/div/div/table/tbody/tr[6]",
+        "/html/body/div[1]/div[1]/div[2]/div[28]/div/div[1]/ul/li[1]"
+      ]
+    ]
+  },
+  {
+    "asin": "B0HKW4JT2V",
+    "label": "peso del producto",
+    "values": [
+      "500 Gramos",
+      "500 g"
+    ],
+    "source_sha256": "7186148ed62cec87fbe1947c6cd6e31eaf51df50a3cc645cfc0865b34da84463",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0HKW4JT2V.html",
+    "dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[18]/div[8]/div/div/div/div/div/div/div[2]/div/div/div[2]/div/div/table/tbody/tr[2]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[18]/div[6]/div/div[1]/ul/li[1]"
+      ]
+    ]
+  }
+]

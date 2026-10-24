@@ -27,7 +27,8 @@ from .terminology import specification_is_deterministic
 CLEAN_SCHEMA_VERSION = "preclean-v1"
 FIELD_ALIASES = dict(PRODUCTION_FIELD_ALIASES)
 AUDIT_FIELDS = tuple(FIELD_ALIASES)
-NON_BLOCKING_ISSUES = frozenset({"SAFE_DUPLICATE", "DUPLICATE_BULLET", "CROSS_FIELD_OVERLAP"})
+NON_BLOCKING_ISSUES = frozenset({"SAFE_DUPLICATE", "DUPLICATE_BULLET", "CROSS_FIELD_OVERLAP",
+                                "EQUIVALENT_SOURCE_VALUES"})
 # Match actual identity/metadata syntax, not ordinary Spanish words beginning
 # with B or prose about sorting, product grades and customer appreciation.
 DESCRIPTION_METADATA_RE = re.compile(
@@ -148,6 +149,51 @@ def clean_text(value: Any, *, field: str = "") -> dict[str, Any]:
             "html_detected": html_detected}
 
 
+_FACT_NUMBER = r"\d+(?:[.,]\d+)?"
+_FACT_MASS = r"(?P<mass>" + _FACT_NUMBER + r")\s*(?P<mass_unit>kilogramos?|gramos?|kg|g)"
+_FACT_AXIS = r"\s*(?:l\.?|f\.?|an\.?|al\.?|p\.?|largo|ancho|alto|fondo|profundidad)?\s*"
+_DIMENSION_FACT_RE = re.compile(
+    r"(?P<a>" + _FACT_NUMBER + r")" + _FACT_AXIS + r"[x×]\s*(?P<b>" + _FACT_NUMBER + r")" +
+    _FACT_AXIS + r"(?:[x×]\s*(?P<c>" + _FACT_NUMBER + r")" + _FACT_AXIS + r")?"
+    r"(?P<unit>milimetros?|centimetros?|metros?|mm|cm|m)(?:\s*;\s*" + _FACT_MASS + r")?")
+
+
+def _equivalent_detail_facts(label: str, values: list[str]) -> bool:
+    """Compare explicit typed facts exactly, keeping every source row/value."""
+    texts = [normalize_key(value) for value in values]
+    # A nonzero integer followed by exactly three decimal/grouping digits
+    # can mean a decimal or a thousands separator. Do not guess its locale.
+    if any(re.search(r"[1-9]\d*[.,]\d{3}(?!\d)", text) for text in texts):
+        return False
+    def number(text: str) -> Decimal:
+        return Decimal(text.replace(",", "."))
+    def mass(match: Any) -> Decimal | None:
+        if not match or not match.group("mass"):
+            return None
+        unit = match.group("mass_unit")
+        return number(match.group("mass")) * (1000 if unit.startswith("k") else 1)
+    if label == "numero de unidades":
+        matches = [re.fullmatch(r"(\d+(?:[.,]0{1,2})?)(?:\s*(?:conteo|unidades?))?", t) for t in texts]
+        return all(matches) and len({number(m.group(1)) for m in matches}) == 1
+    if label == "forma articulo":
+        return set(texts) <= {"circular", "redonda", "redondo"}
+    if label == "peso del producto":
+        matches = [re.fullmatch(_FACT_MASS, t) for t in texts]
+        return all(matches) and len({mass(m) for m in matches}) == 1
+    if label in {"dimensiones del producto", "dimensiones del paquete"}:
+        matches = [_DIMENSION_FACT_RE.fullmatch(t) for t in texts]
+        if not all(matches):
+            return False
+        dimensions = []
+        for m in matches:
+            unit = m.group("unit")
+            factor = Decimal("0.001") if unit.startswith("mili") or unit == "mm" else (
+                Decimal("0.01") if unit.startswith("centi") or unit == "cm" else Decimal(1))
+            dimensions.append(tuple(number(m.group(axis)) * factor for axis in ("a", "b", "c") if m.group(axis)))
+        return len(set(dimensions)) == 1 and len({mass(m) for m in matches if m.group("mass")}) <= 1
+    return False
+
+
 def parse_details(value: Any, *, source_attributes: Any = None) -> dict[str, Any]:
     """Parse details without discarding malformed source rows."""
     source = _text(value)
@@ -206,8 +252,9 @@ def parse_details(value: Any, *, source_attributes: Any = None) -> dict[str, Any
     raw_rows = list(rows)
     # Deduplicate only exact label/value pairs in the derived input.  The
     # original source remains intact in source_text and raw_fields.  A safe
-    # duplicate is informational; only the same label with different values
-    # is a conflicting duplicate that blocks admission.
+    # duplicate is informational. Explicit, exactly equivalent typed values
+    # are also informational, but both literal rows remain in the derived
+    # detail list so additional evidence such as an appended mass is retained.
     exact_seen: set[tuple[str, str]] = set()
     deduped_rows: list[dict[str, Any]] = []
     exact_duplicates = 0
@@ -219,20 +266,31 @@ def parse_details(value: Any, *, source_attributes: Any = None) -> dict[str, Any
         exact_seen.add(pair)
         deduped_rows.append(row)
     rows = deduped_rows
-    counts = Counter(normalize_key(row["label"]) for row in rows)
-    conflicting_duplicate_labels = sum(max(0, count - 1) for count in counts.values())
+    groups: dict[str, list[str]] = defaultdict(list)
+    for row in rows:
+        groups[normalize_key(row["label"])].append(row["value"])
+    conflicting_duplicate_labels = equivalent_source_groups = 0
+    for label, values in groups.items():
+        if len(values) < 2:
+            continue
+        if _equivalent_detail_facts(label, values):
+            equivalent_source_groups += 1
+        else:
+            conflicting_duplicate_labels += len(values) - 1
     safe_duplicate_rows = exact_duplicates
     if safe_duplicate_rows:
         issues.append("SAFE_DUPLICATE")
     if conflicting_duplicate_labels:
         issues.append("CONFLICTING_DUPLICATE")
+    if equivalent_source_groups:
+        issues.append("EQUIVALENT_SOURCE_VALUES")
     if not source.strip():
         status = "SOURCE_MISSING"
     elif not rows:
         status = "BLOCKED" if issues else "SUSPICIOUS"
-    elif conflicting_duplicate_labels or any(issue != "SAFE_DUPLICATE" for issue in issues):
+    elif conflicting_duplicate_labels or any(issue not in NON_BLOCKING_ISSUES for issue in issues):
         status = "NEEDS_REVIEW"
-    elif safe_duplicate_rows:
+    elif safe_duplicate_rows or equivalent_source_groups:
         status = "NORMALIZED"
     else:
         status = "CLEAN"
@@ -240,10 +298,11 @@ def parse_details(value: Any, *, source_attributes: Any = None) -> dict[str, Any
             "duplicate_labels": conflicting_duplicate_labels,
             "safe_duplicate_rows": safe_duplicate_rows,
             "conflicting_duplicate_labels": conflicting_duplicate_labels,
+            "equivalent_source_groups": equivalent_source_groups,
             "actions": ["DEDUPLICATE_DETAIL_ROW"] if safe_duplicate_rows else [],
             "status": status,
-            "fully_structured": bool(rows) and not any(issue != "SAFE_DUPLICATE" for issue in issues),
-            "partially_structured": bool(rows) and any(issue != "SAFE_DUPLICATE" for issue in issues),
+            "fully_structured": bool(rows) and not any(issue not in NON_BLOCKING_ISSUES for issue in issues),
+            "partially_structured": bool(rows) and any(issue not in NON_BLOCKING_ISSUES for issue in issues),
             "unstructured": bool(source.strip()) and not rows}
 
 
@@ -316,6 +375,73 @@ def _explicit_capacity_total(value: str, capacities: list[tuple[Any, Decimal]]) 
     return False
 
 
+def _capacity_scope(value: str, match: Any) -> str:
+    """Use literal object qualifiers only; an unqualified value stays unknown."""
+    prefix = re.split(r"[\n;]|(?<!\d)\.\s+", value[:match.start()])[-1][-120:]
+    candidates = []
+    for pattern, scope in (
+        (r"(?:compatibles?\s+con|ideales?\s+para|capacidad\s+para)\s+(?:una\s+)?bolsas?\b", "accessory_bag"),
+        (r"\bescala\b", "graduation_scale"),
+        (r"\bcapacidad\s+de\s+filtrado\b", "filtered_water"),
+        (r"\b(?:recipiente|envase|vaso|compartimento)\s+inferior\b", "lower_container"),
+        (r"\b(?:recipiente|envase|vaso|compartimento)\s+superior\b", "upper_container"),
+        (r"\bjarra\b", "jug"),
+    ):
+        candidates.extend((m.start(), scope) for m in re.finditer(pattern, prefix, re.I))
+    component = re.compile(r"\b\d+\s*[x×]\s*(cuenco|recipiente|vaso|taza|copa|molde|botella)\s+"
+                           r"(\d+(?:[.,]\d+)?)\s*(cm|mm)\b", re.I)
+    for m in component.finditer(prefix):
+        size = Decimal(m.group(2).replace(",", ".")) * (Decimal("0.01") if m.group(3).lower() == "cm" else Decimal("0.001"))
+        candidates.append((m.start(), "component:" + m.group(1).lower() + ":" + str(size.normalize())))
+    if re.match(r"\s+de\s+capacidad\s+de\s+filtrado\b", value[match.end():], re.I):
+        return "filtered_water"
+    return max(candidates, default=(-1, "unknown"))[1]
+
+
+def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, structured_label: bool) -> bool:
+    scopes = [(m, amount, "unknown" if structured_label else _capacity_scope(value, m))
+              for m, amount in capacities]
+    # Accessory compatibility and graduation marks do not assert the vessel's
+    # scalar capacity. All numeric/unit evidence remains in the profile.
+    scopes = [x for x in scopes if x[2] not in {"accessory_bag", "graduation_scale"}]
+    unknown = any(scope == "unknown" for _, _, scope in scopes)
+    groups: dict[str, list] = defaultdict(list)
+    for match, amount, scope in scopes:
+        # An unassigned value might belong to any stated object. Keep the
+        # conservative comparison instead of assuming a new separate object.
+        groups["unknown" if unknown else scope].append((match, amount))
+    for group in groups.values():
+        if _explicit_capacity_total(value, group):
+            continue
+        intervals = []
+        index = 0
+        while index < len(group):
+            match, amount = group[index]
+            low = high = amount
+            if index + 1 < len(group):
+                following, next_amount = group[index + 1]
+                if re.fullmatch(r"\s*(?:-|–|a|hasta)\s*", value[match.end():following.start()], re.I):
+                    low, high = amount, next_amount
+                    index += 1
+            if low == high:
+                bare = re.search(r"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:-|–|a|hasta)\s*$",
+                                 value[max(0, match.start() - 30):match.start()], re.I)
+                if bare:
+                    factor = {"ml": Decimal(1), "cl": Decimal(10), "L": Decimal(1000)}[
+                        UNIT_CANONICAL[match.group("unit").casefold()]]
+                    low = Decimal(bare.group(1).replace(",", ".")) * factor
+            if low > high:
+                return True
+            intervals.append((float(low), float(high)))
+            index += 1
+        if intervals:
+            lower, upper = max(x[0] for x in intervals), min(x[1] for x in intervals)
+            tolerance = max(0.01, max(x[1] for x in intervals) * 0.001)
+            if lower - upper > tolerance:
+                return True
+    return False
+
+
 def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     matches = []
     for match in NUMERIC_UNIT_RE.finditer(value):
@@ -352,11 +478,20 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     # weight and voltage). Mixed units alone are not an anomaly; duplicate or
     # malformed unit syntax is actionable without guessing product facts.
     values = []
+    rate_positions = set()
     for match in matches:
         number, unit = match.group("number"), match.group("unit")
         try:
-            values.append({"numeric_value": float(number.replace(",", ".")), "unit_raw": unit,
-                           "canonical_unit": UNIT_CANONICAL.get(unit.strip().casefold(), unit.strip())})
+            canonical = UNIT_CANONICAL.get(unit.strip().casefold(), unit.strip())
+            rate = re.match(r"\s*/\s*(min(?:uto)?s?|s|segundos?|h|horas?)\b", value[match.end():], re.I)
+            raw_unit = unit
+            if canonical in {"ml", "cl", "L"} and rate:
+                rate_positions.add(match.start())
+                suffix = rate.group(1).casefold()
+                canonical += "/" + ("min" if suffix.startswith("min") else ("h" if suffix.startswith("h") else "s"))
+                raw_unit += rate.group(0).strip()
+            values.append({"numeric_value": float(number.replace(",", ".")), "unit_raw": raw_unit,
+                           "canonical_unit": canonical})
         except ValueError:
             issues.append("INVALID_NUMBER")
     # Capacity values can be written in mixed units, but contradictory values
@@ -367,13 +502,10 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
         re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", str(label), re.I))
     capacities = [(match, Decimal(match.group("number").replace(",", ".")) *
                    Decimal(str(capacity_factors[UNIT_CANONICAL[match.group("unit").casefold()]])))
-                  for match in matches if UNIT_CANONICAL.get(match.group("unit").casefold()) in capacity_factors]
-    capacity_values = [float(amount) for _, amount in capacities] if capacity_context else []
-    if len(capacity_values) > 1:
-        baseline = max(capacity_values)
-        if (baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001)
-                and not _explicit_capacity_total(value, capacities)):
-            issues.append("CONTRADICTORY_CAPACITY")
+                  for match in matches if UNIT_CANONICAL.get(match.group("unit").casefold()) in capacity_factors
+                  and match.start() not in rate_positions]
+    if capacity_context and _capacity_conflict(value, capacities, structured_label=label is not None):
+        issues.append("CONTRADICTORY_CAPACITY")
     return {"values": values, "issues": sorted(set(issues))}
 
 
@@ -589,6 +721,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                                   "detail_unstructured": detail["unstructured"],
                                   "detail_safe_duplicate_rows": detail["safe_duplicate_rows"],
                                   "detail_conflicting_duplicate_labels": detail["conflicting_duplicate_labels"],
+                                  "detail_equivalent_source_groups": detail["equivalent_source_groups"],
                                   "duplicate_bullet_occurrences": bullets["duplicate_bullets"],
                                   "identity": record_identity,
                                   "record_status": status})
@@ -637,6 +770,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "safe_duplicate_skus": sum(item["detail_safe_duplicate_rows"] > 0 for item in translation_input),
         "conflicting_duplicate_labels": sum(item["detail_conflicting_duplicate_labels"] for item in translation_input),
         "conflicting_duplicate_skus": sum(item["detail_conflicting_duplicate_labels"] > 0 for item in translation_input),
+        "equivalent_source_groups": sum(item["detail_equivalent_source_groups"] for item in translation_input),
         "duplicate_labels": sum(item["detail_conflicting_duplicate_labels"] for item in translation_input),
     }
     bullet_summary = {
