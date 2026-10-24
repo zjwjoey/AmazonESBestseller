@@ -25,8 +25,9 @@ def test_real_saved_seller_survives_script_parser_recovery(line_endings):
     raw=parse_detail_page(html,'B0D9L982GG')
     assert raw['seller_raw']=='Haisenbao-EU'
     assert raw['seller_evidence']['source']=='merchantInfoFeature_feature_div'
-    if line_endings=='normalized_lf':
-        assert raw['seller_evidence']['dom_recovery']=='lxml_scoped_buybox'
+    # lxml builds may parse this directly or require scoped recovery. Both
+    # must preserve the same seller fact and provenance on Windows/Linux.
+    assert raw['seller_evidence']['value_raw']=='Haisenbao-EU'
 
 
 def test_seller_never_falls_back_to_shipping_or_recommendation():
