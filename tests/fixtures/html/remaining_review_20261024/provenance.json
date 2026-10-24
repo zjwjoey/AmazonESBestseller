@@ -1,0 +1,90 @@
+[
+  {
+    "asin": "B00006JSUA",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B00006JSUA.html",
+    "source_sha256": "7a34730637d94db82736aa0bff0350d82c44ee71e46a70efd91a3a0f884d6cdb",
+    "fixture": "B00006JSUA_variant_prices.html",
+    "fixture_sha256": "2136ae14015aed40f4a2a8aef6b793b13944008b804a6dac4401de6227a79ae0",
+    "extraction": "Unmodified public product title, identity input, primary BuyBox price roots and variant apex-price blocks; HTML wrapper only",
+    "source_dom_paths": [
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[1]/div[7]/div/div[1]/div/div/div/form/input[11]",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[1]/div[7]/div/div[1]/div/div/div/form/div/div/div/div/div[3]/div/div[1]",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[2]/div[2]/div/h1/span[1]",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[4]/div/div/div[5]",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[1]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[2]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[3]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[4]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[5]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[6]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[7]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[8]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[9]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div/div[2]/div/div/ul/li[10]/span/span/span/span/div/div[2]/div[1]/div/div",
+      "/html/body/div[1]/div[1]/div[2]/div[17]/div[7]/div/div/div/div/div/div/div[1]/div[2]/div[1]/div/div/div[2]/input[10]"
+    ]
+  },
+  {
+    "asin": "B00K7Y1BPM",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B00K7Y1BPM.html",
+    "source_sha256": "a3b4c03c6ca6168bb73e8e48609742c4555e0e1c7d622399428818db4dff652a",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B01KCEVQBK",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B01KCEVQBK.html",
+    "source_sha256": "93350580b1084db57f0e4bfe95f8814e1601e8288245d8d28297683ca06dfd24",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B01MS3PKWM",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B01MS3PKWM.html",
+    "source_sha256": "5f1c99b51f0f2ed78aab5c4937356a6624d2bb241ee778b4d211ddfed63b8f0d",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B0B87TJHHM",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0B87TJHHM.html",
+    "source_sha256": "c62581f33487a09e11b465ae1a2aa84e62aff154e414a6ebd00d32c2e3ce0466",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B0CG9N8R8L",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0CG9N8R8L.html",
+    "source_sha256": "c049a7a0e2acd9095931ff07ba939ae84178cc527dfb0a2dc941d3b2d6a23b6d",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B0CN8XHNJB",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0CN8XHNJB.html",
+    "source_sha256": "6ada099096bbc69906073d3307b01214de701cb8ff8e33952874330bc011ffb0",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B0CWMT62DP",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0CWMT62DP.html",
+    "source_sha256": "dd4f9c79235b809ca488abe7e352853a7f7984f989be9252de6f4a5d77db4ff5",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B0FBKT9DV9",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0FBKT9DV9.html",
+    "source_sha256": "6e281bab66ab70a49be52157f07acb06257f5f72887f41fd444bbfe1d73d9681",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  },
+  {
+    "asin": "B0HKJH3C3F",
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0HKJH3C3F.html",
+    "source_sha256": "4c6ae097f441a640cf400417050babcc081ffd5a99c687f0beea5b82909187e6",
+    "fixture": "spec_source_cases.json",
+    "extraction": "Exact existing raw title, selected variation and ordered attribute evidence; no facts rewritten"
+  }
+]

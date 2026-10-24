@@ -1,0 +1,2054 @@
+[
+  {
+    "asin": "B00K7Y1BPM",
+    "title_es_raw": "Ceys Cola Blanca Rápida para Madera Acabado Transparente 500 g",
+    "selected_variation_raw": "",
+    "attributes": [
+      {
+        "label_raw": "Fabricante",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎CEYS"
+      },
+      {
+        "label_raw": "Identificador de producto del fabricante",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎CE501604"
+      },
+      {
+        "label_raw": "Dimensiones del producto",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎1 x 1 x 1 cm; 550 g"
+      },
+      {
+        "label_raw": "Número de modelo del producto",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎M48566"
+      },
+      {
+        "label_raw": "Color",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Neutro"
+      },
+      {
+        "label_raw": "Estilo",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Casual"
+      },
+      {
+        "label_raw": "Material",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Cerámica,Papel"
+      },
+      {
+        "label_raw": "Fuente de alimentación",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎CA"
+      },
+      {
+        "label_raw": "Número de productos",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎1"
+      },
+      {
+        "label_raw": "Características especiales",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Acabado Transparente"
+      },
+      {
+        "label_raw": "Uso",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Bricolaje"
+      },
+      {
+        "label_raw": "Componentes incluidos",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎CEYS COLA BLANCA RAPIDA BIBERÓN 500G 501604"
+      },
+      {
+        "label_raw": "Incluye baterías",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎No"
+      },
+      {
+        "label_raw": "Necesita baterías",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎No"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎550 g"
+      },
+      {
+        "label_raw": "Actualizaciones de software garantizadas hasta",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎desconocido"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 0,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "B00K7Y1BPM"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 1,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "4,6 4,6 de 5 estrellas (1.055) 4,6 de 5 estrellas"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 2,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "nº74 en Bricolaje y herramientas ( Ver el Top 100 en Bricolaje y herramientas ) nº1 en Colas para madera"
+      },
+      {
+        "label_raw": "Producto en Amazon.es desde",
+        "position": 3,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "9 mayo 2014"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_SUSPICIOUS_VALUE"
+    ],
+    "previous_specification_es": "Peso del producto: 550 g / Dimensiones del producto: 1 x 1 x 1 cm; 550 g"
+  },
+  {
+    "asin": "B01KCEVQBK",
+    "title_es_raw": "Pattex No Más Clavos Para Todo HighTack, adhesivo de montaje resistente a temperaturas extremas, pegamento fuerte en superficies húmedas, adhesivo blanco, 1 tubo x 142 g",
+    "selected_variation_raw": "142",
+    "attributes": [
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Pattex"
+      },
+      {
+        "label_raw": "Usos específicos del producto",
+        "position": 1,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Reparación general, proyectos de bricolaje, pegado en húmedo"
+      },
+      {
+        "label_raw": "Material",
+        "position": 2,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "0"
+      },
+      {
+        "label_raw": "Forma del producto",
+        "position": 3,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Pasta"
+      },
+      {
+        "label_raw": "Función especial",
+        "position": 4,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Fuerte"
+      },
+      {
+        "label_raw": "Color",
+        "position": 5,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "White"
+      },
+      {
+        "label_raw": "Cantidad de productos por paquete",
+        "position": 6,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Información del paquete",
+        "position": 7,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Tubo"
+      },
+      {
+        "label_raw": "Volumen del producto",
+        "position": 8,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "110 Mililitros"
+      },
+      {
+        "label_raw": "Nivel de viscosidad",
+        "position": 9,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Bajo"
+      },
+      {
+        "label_raw": "Usos Específicos Para Producto",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Reparación general, proyectos de bricolaje, pegado en húmedo"
+      },
+      {
+        "label_raw": "Forma Artículo",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Pasta"
+      },
+      {
+        "label_raw": "Característica especial",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Fuerte"
+      },
+      {
+        "label_raw": "Tipo Envase",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Tubo"
+      },
+      {
+        "label_raw": "Nivel de viscosidad",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Bajo"
+      },
+      {
+        "label_raw": "Nivel de resistencia al agua",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Resistente al agua"
+      },
+      {
+        "label_raw": "Material compatible",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Madera"
+      },
+      {
+        "label_raw": "Unidades de embalaje",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Capacidad de la piscina",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "110 Mililitros"
+      },
+      {
+        "label_raw": "Material",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "0"
+      },
+      {
+        "label_raw": "Color",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "White"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Pattex"
+      },
+      {
+        "label_raw": "País de origen",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "España"
+      },
+      {
+        "label_raw": "Número de modelo",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "2501909"
+      },
+      {
+        "label_raw": "Total del paquete según la medida elegida para referenciar precio",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "142.0 Gramos"
+      },
+      {
+        "label_raw": "Número de Piezas",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Número de paquetes",
+        "position": 16,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Núm. de identificación comercial global",
+        "position": 17,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "08410436278065, 08410436291286"
+      },
+      {
+        "label_raw": "Fabricante",
+        "position": 18,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Henkel"
+      },
+      {
+        "label_raw": "Componentes incluidos",
+        "position": 19,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Nural Pattex No Mas Clavos Para Todo (Tubo 142gr)"
+      },
+      {
+        "label_raw": "Nombre Tipo Artículo",
+        "position": 20,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Nural Pattex No Mas Clavos Para Todo (Tubo 142gr)"
+      },
+      {
+        "label_raw": "Número de pieza",
+        "position": 21,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "2501909"
+      },
+      {
+        "label_raw": "Garantía Producto",
+        "position": 22,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "La que ofrece el fabricante, Sin garantía"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 23,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "nº19 en Bricolaje y herramientas ( Ver el Top 100 en Bricolaje y herramientas ) nº1 en Cola de montaje"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 24,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "B01KCEVQBK"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 25,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4,2 4,2 de 5 estrellas (7.744) 4,2 de 5 estrellas"
+      },
+      {
+        "label_raw": "Descatalogado por el fabricante ‏",
+        "position": 36,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ No"
+      },
+      {
+        "label_raw": "Dimensiones del producto ‏",
+        "position": 37,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ 1 x 1 x 1 cm; 160 g"
+      },
+      {
+        "label_raw": "Producto en Amazon.es desde ‏",
+        "position": 38,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ 13 agosto 2016"
+      },
+      {
+        "label_raw": "Fabricante ‏",
+        "position": 39,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ Henkel"
+      },
+      {
+        "label_raw": "ASIN ‏",
+        "position": 40,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ B01KCEVQBK"
+      },
+      {
+        "label_raw": "Número de modelo del producto ‏",
+        "position": 41,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ 2501909"
+      },
+      {
+        "label_raw": "País de origen ‏",
+        "position": 42,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ España"
+      },
+      {
+        "label_raw": "Actualizaciones de software garantizadas hasta ‏",
+        "position": 43,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ desconocido"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 44,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "nº19 en Bricolaje y herramientas ( Ver el Top 100 en Bricolaje y herramientas ) nº1 en Cola de montaje"
+      },
+      {
+        "label_raw": "Opiniones de los clientes",
+        "position": 45,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "4,2 4,2 de 5 estrellas (7.744)"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_SUSPICIOUS_VALUE"
+    ],
+    "previous_specification_es": "Dimensiones del producto ‏: 1 x 1 x 1 cm; 160 g"
+  },
+  {
+    "asin": "B01MS3PKWM",
+    "title_es_raw": "ALLUFLON Tradition Italy Molde Redondo para Horno 32 cm - Bandeja de Horno para Tartas, Pizza y Quiche de Aluminio, Antiadherente Efecto Piedra, Negro, Tortera, Apto Lavavajillas - Made in Italy",
+    "selected_variation_raw": "32cm / Rotondo",
+    "attributes": [
+      {
+        "label_raw": "Material",
+        "position": 0,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Aluminio"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 1,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "ALLUFLON"
+      },
+      {
+        "label_raw": "Color",
+        "position": 2,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Negro"
+      },
+      {
+        "label_raw": "Forma",
+        "position": 3,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Rotonda"
+      },
+      {
+        "label_raw": "Función especial",
+        "position": 4,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Apto para lavavajillas"
+      },
+      {
+        "label_raw": "Dimensiones del producto",
+        "position": 5,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "33f. x 33,5an. x 7al. centímetros"
+      },
+      {
+        "label_raw": "Capacidad",
+        "position": 6,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "32 centímetros"
+      },
+      {
+        "label_raw": "Usos específicos del producto",
+        "position": 7,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Ideal para el horno"
+      },
+      {
+        "label_raw": "Componentes incluidos",
+        "position": 8,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Bandeja de horno"
+      },
+      {
+        "label_raw": "Cuidado del producto",
+        "position": 9,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Apto para lavavajillas"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "ALLUFLON"
+      },
+      {
+        "label_raw": "Componentes incluidos",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Bandeja de horno"
+      },
+      {
+        "label_raw": "País de origen",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Italia"
+      },
+      {
+        "label_raw": "Núm. de identificación comercial global",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "08003703160646"
+      },
+      {
+        "label_raw": "Número de paquetes",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Fabricante",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "alluflon"
+      },
+      {
+        "label_raw": "Número de Artículos",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Total del paquete según la medida elegida para referenciar precio",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1.0 Conteo"
+      },
+      {
+        "label_raw": "Nombre del tipo de artículo",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Molde para tartas"
+      },
+      {
+        "label_raw": "Número de modelo",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "0008021032"
+      },
+      {
+        "label_raw": "Número de pieza del fabricante",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "0008021032"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "nº2.861 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº33 en Recipientes para horno"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "B01MS3PKWM"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4,6 4,6 de 5 estrellas (4.350) 4,6 de 5 estrellas"
+      },
+      {
+        "label_raw": "Características especiales",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Apto para lavavajillas"
+      },
+      {
+        "label_raw": "Usos específicos para el producto",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Ideal para el horno"
+      },
+      {
+        "label_raw": "Dimensiones del artículo (profundidad x ancho x alto)",
+        "position": 16,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "33f. x 33,5an. x 7al. centímetros"
+      },
+      {
+        "label_raw": "Capacidad de salida",
+        "position": 17,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "32 centímetros"
+      },
+      {
+        "label_raw": "Peso Artículo",
+        "position": 18,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1,04 Libras"
+      },
+      {
+        "label_raw": "Diámetro del artículo",
+        "position": 19,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "32 Centímetros"
+      },
+      {
+        "label_raw": "número_de_tazas",
+        "position": 20,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "10"
+      },
+      {
+        "label_raw": "Tamaño",
+        "position": 21,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "32cm"
+      },
+      {
+        "label_raw": "Color",
+        "position": 22,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Negro"
+      },
+      {
+        "label_raw": "Forma",
+        "position": 23,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Rotonda"
+      },
+      {
+        "label_raw": "Proporcionar la ocasión",
+        "position": 24,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Cumpleaños"
+      },
+      {
+        "label_raw": "Ocasión",
+        "position": 25,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Birthday"
+      },
+      {
+        "label_raw": "Material o tela",
+        "position": 26,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Aluminio"
+      },
+      {
+        "label_raw": "Instrucciones de cuidado del producto",
+        "position": 27,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Apto para lavavajillas"
+      },
+      {
+        "label_raw": "¿El artículo es apto para lavavajillas?",
+        "position": 28,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Sí"
+      },
+      {
+        "label_raw": "¿Es seguro para el horno?",
+        "position": 29,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Sí"
+      },
+      {
+        "label_raw": "Rango superior de temperaturas",
+        "position": 30,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "250 Grados Celsius"
+      },
+      {
+        "label_raw": "Duración de la disponibilidad de piezas de recambio en la UE",
+        "position": 31,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "2 Años"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_UNIT_MISMATCH"
+    ],
+    "previous_specification_es": "Capacidad: 32 centímetros / Peso Artículo: 1,04 Libras / Dimensiones del producto: 33f. x 33,5an. x 7al. centímetros / Tamaño: 32cm"
+  },
+  {
+    "asin": "B0B87TJHHM",
+    "title_es_raw": "Termómetro cocina Termómetro Digital de Cocina,termometro agua bebe 3S Lectura Instantáne Pantalla LCD Retroiluminada&Calibration Termometro Alimentospara BBQ Comida Leche Agua Caramelo Líquido",
+    "selected_variation_raw": "",
+    "attributes": [
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Vinmooog"
+      },
+      {
+        "label_raw": "Función especial",
+        "position": 1,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Digital"
+      },
+      {
+        "label_raw": "Color",
+        "position": 2,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Rango de edad (descripción)",
+        "position": 3,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Neonato"
+      },
+      {
+        "label_raw": "Componentes incluidos",
+        "position": 4,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Termómetro y una pila AG13 (también conocido como LR44), 1,5 V"
+      },
+      {
+        "label_raw": "Material para exteriores",
+        "position": 5,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Plástico"
+      },
+      {
+        "label_raw": "Especificación cumplida",
+        "position": 6,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Especificaciones culinarias y amas de casa"
+      },
+      {
+        "label_raw": "Tipo de pantalla",
+        "position": 7,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Digital"
+      },
+      {
+        "label_raw": "Cuidado del producto",
+        "position": 8,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Limpiar con un paño húmedo"
+      },
+      {
+        "label_raw": "Número de unidades",
+        "position": 9,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "1.0 Conteo"
+      },
+      {
+        "label_raw": "Característica especial",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Digital"
+      },
+      {
+        "label_raw": "Tipo Pantalla",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Digital"
+      },
+      {
+        "label_raw": "Fuente Alimentación",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Funciona con batería"
+      },
+      {
+        "label_raw": "Temperatura superior de servicio",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "120 Grados Celsius"
+      },
+      {
+        "label_raw": "Tiempo Respuesta",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "3 Segundos"
+      },
+      {
+        "label_raw": "Reutilizable",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Recargable"
+      },
+      {
+        "label_raw": "Profundidad de inmersión",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "15 Centímetros"
+      },
+      {
+        "label_raw": "Uso interior y exterior",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Interior"
+      },
+      {
+        "label_raw": "Resolución",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "0.1 degree celsius"
+      },
+      {
+        "label_raw": "Material Exterior",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Plástico"
+      },
+      {
+        "label_raw": "Instrucciones de cuidado del producto",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Limpiar con un paño húmedo"
+      },
+      {
+        "label_raw": "Material Interior",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "plástico"
+      },
+      {
+        "label_raw": "Color",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Tipo de pulverizador y esparcidor",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Versión normal"
+      },
+      {
+        "label_raw": "Total del paquete según la medida elegida para referenciar precio",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1.0 Conteo"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Vinmooog"
+      },
+      {
+        "label_raw": "Descripción del rango de edad",
+        "position": 16,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Neonato"
+      },
+      {
+        "label_raw": "Componentes Incluidos",
+        "position": 17,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Termómetro y una pila AG13 (también conocido como LR44), 1,5 V"
+      },
+      {
+        "label_raw": "Nombre Modelo",
+        "position": 18,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Vinmooog SCOT0927OD"
+      },
+      {
+        "label_raw": "Número de modelo",
+        "position": 19,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Vinmooog SCOT0927OD"
+      },
+      {
+        "label_raw": "UPC",
+        "position": 20,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "745551748024"
+      },
+      {
+        "label_raw": "Fabricante",
+        "position": 21,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Vinmooog"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 22,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1 Gramos"
+      },
+      {
+        "label_raw": "Número de pieza",
+        "position": 23,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 24,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "nº1.090 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº3 en Termómetros para carne"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 25,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "B0B87TJHHM"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 26,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4,3 4,3 de 5 estrellas (5.148) 4,3 de 5 estrellas"
+      },
+      {
+        "label_raw": "Especificaciones de monjado",
+        "position": 27,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Especificaciones culinarias y amas de casa"
+      },
+      {
+        "label_raw": "Dimensiones del producto ‏",
+        "position": 38,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ 1 x 1 x 1 cm; 1 g"
+      },
+      {
+        "label_raw": "Producto en Amazon.es desde ‏",
+        "position": 39,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ 1 agosto 2022"
+      },
+      {
+        "label_raw": "Fabricante ‏",
+        "position": 40,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ Vinmooog"
+      },
+      {
+        "label_raw": "ASIN ‏",
+        "position": 41,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ B0B87TJHHM"
+      },
+      {
+        "label_raw": "Número de modelo del producto ‏",
+        "position": 42,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ Vinmooog SCOT0927OD"
+      },
+      {
+        "label_raw": "Actualizaciones de software garantizadas hasta ‏",
+        "position": 43,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "‎ desconocido"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 44,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "nº1.090 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº3 en Termómetros para carne"
+      },
+      {
+        "label_raw": "Opiniones de los clientes",
+        "position": 45,
+        "section": "detail_bullets",
+        "source": "detailBulletsWrapper",
+        "value_raw": "4,3 4,3 de 5 estrellas (5.148)"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_SUSPICIOUS_VALUE"
+    ],
+    "previous_specification_es": "Peso del producto: 1 Gramos / Dimensiones del producto ‏: 1 x 1 x 1 cm; 1 g"
+  },
+  {
+    "asin": "B0CG9N8R8L",
+    "title_es_raw": "Estante Ducha Sin Taladro Cesta Colgante Organizador Acero Inoxidable SS304",
+    "selected_variation_raw": "Plateado",
+    "attributes": [
+      {
+        "label_raw": "Usos específicos del producto",
+        "position": 0,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Duchas"
+      },
+      {
+        "label_raw": "Material",
+        "position": 1,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Acero inoxidable"
+      },
+      {
+        "label_raw": "Función especial",
+        "position": 2,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Resistente al óxido"
+      },
+      {
+        "label_raw": "Color",
+        "position": 3,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Plateado"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 4,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "pickpiff"
+      },
+      {
+        "label_raw": "Tipo de montaje",
+        "position": 5,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Montaje colgante"
+      },
+      {
+        "label_raw": "Dimensiones del producto",
+        "position": 6,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "30f. x 13an. x 37,5al. centímetros"
+      },
+      {
+        "label_raw": "Número de compartimentos",
+        "position": 7,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Forma",
+        "position": 8,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Irregular."
+      },
+      {
+        "label_raw": "Capacidad",
+        "position": 9,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "30 centímetros"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "pickpiff"
+      },
+      {
+        "label_raw": "Tipo de embalaje",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "[YES]"
+      },
+      {
+        "label_raw": "Número de artículos",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Número de paquetes",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Destacado del artículo",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Estantería de ducha sin taladrar, soporte para champú para ducha, estante de baño, soporte para jabón, 30 x 13 x 8,5 cm"
+      },
+      {
+        "label_raw": "Fabricante",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "pickpiff"
+      },
+      {
+        "label_raw": "País de origen",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "China"
+      },
+      {
+        "label_raw": "Elementos incluidos",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Tornillos x 4"
+      },
+      {
+        "label_raw": "Nombre Tipo Artículo",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Estante de ducha para colgar"
+      },
+      {
+        "label_raw": "Número Modelo",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Silber-30x13cm"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "nº699 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº2 en Estantes para ducha"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "B0CG9N8R8L"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4,4 4,4 de 5 estrellas (1.718) 4,4 de 5 estrellas"
+      },
+      {
+        "label_raw": "Uso",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Duchas"
+      },
+      {
+        "label_raw": "Carecterísticas especiales",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Resistente al óxido"
+      },
+      {
+        "label_raw": "Perfil del enchufe",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Montaje colgante"
+      },
+      {
+        "label_raw": "Cantidad de compartimentos",
+        "position": 16,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Capacidad",
+        "position": 17,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "30 centímetros"
+      },
+      {
+        "label_raw": "Dimensiones del artículo (profundidad x ancho x alto)",
+        "position": 18,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "30f. x 13an. x 37,5al. centímetros"
+      },
+      {
+        "label_raw": "Tipo de material",
+        "position": 19,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Acero inoxidable"
+      },
+      {
+        "label_raw": "Acabado",
+        "position": 20,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Lacado"
+      },
+      {
+        "label_raw": "Color",
+        "position": 21,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Plateado"
+      },
+      {
+        "label_raw": "Tipo de cadena o collar",
+        "position": 22,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Irregular."
+      }
+    ],
+    "issue_codes": [
+      "SPEC_UNIT_MISMATCH"
+    ],
+    "previous_specification_es": "Capacidad: 30 centímetros / Dimensiones del producto: 30f. x 13an. x 37,5al. centímetros / Cantidad de compartimentos: 1"
+  },
+  {
+    "asin": "B0CN8XHNJB",
+    "title_es_raw": "4 Piezas Organizador Cajones Cocina Baño Transparente, 30CM Organizadores de Cajones Plastico Grande, Organizador Cajon Escritorio para Cubiertos, Maquillaje, Tocador Armario Joyas Bandejas de Cajones",
+    "selected_variation_raw": "1 Tamaños / 4 Piezas- 30cm",
+    "attributes": [
+      {
+        "label_raw": "Usos específicos del producto",
+        "position": 0,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Organización y almacenamiento de artículos en diferentes espacios"
+      },
+      {
+        "label_raw": "Material",
+        "position": 1,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Plástico"
+      },
+      {
+        "label_raw": "Función especial",
+        "position": 2,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Ligero"
+      },
+      {
+        "label_raw": "Color",
+        "position": 3,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "4 Piezas- 30cm"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 4,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Giklux"
+      },
+      {
+        "label_raw": "Tipo de montaje",
+        "position": 5,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Montaje de inserto"
+      },
+      {
+        "label_raw": "Dimensiones del producto",
+        "position": 6,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "15f. x 30an. x 5al. centímetros"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 7,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "82 Gramos"
+      },
+      {
+        "label_raw": "Número de compartimentos",
+        "position": 8,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "4"
+      },
+      {
+        "label_raw": "Forma",
+        "position": 9,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Irregular"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Giklux"
+      },
+      {
+        "label_raw": "Tipo de embalaje",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "FFP"
+      },
+      {
+        "label_raw": "Número de artículos",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4"
+      },
+      {
+        "label_raw": "Fabricante",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Giklux"
+      },
+      {
+        "label_raw": "País de origen",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "China"
+      },
+      {
+        "label_raw": "Elementos incluidos",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Large Talla Mediano"
+      },
+      {
+        "label_raw": "Nombre Tipo Artículo",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Organizador Drawer"
+      },
+      {
+        "label_raw": "Número Modelo",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "DOB-4-30"
+      },
+      {
+        "label_raw": "Número de pieza del fabricante",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "schubladen organizer"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "nº11.263 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº12 en Unidades de cajones de almacenaje"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "B0CN8XHNJB"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4,4 4,4 de 5 estrellas (315) 4,4 de 5 estrellas"
+      },
+      {
+        "label_raw": "Uso",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Organización y almacenamiento de artículos en diferentes espacios"
+      },
+      {
+        "label_raw": "Carecterísticas especiales",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Ligero"
+      },
+      {
+        "label_raw": "Perfil del enchufe",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Montaje de inserto"
+      },
+      {
+        "label_raw": "Cantidad de compartimentos",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4"
+      },
+      {
+        "label_raw": "Capacidad",
+        "position": 16,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "30 centímetros"
+      },
+      {
+        "label_raw": "Dimensiones del artículo (profundidad x ancho x alto)",
+        "position": 17,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "15f. x 30an. x 5al. centímetros"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 18,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "82 Gramos"
+      },
+      {
+        "label_raw": "Total del paquete según la medida elegida para referenciar precio",
+        "position": 19,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4.0 Conteo"
+      },
+      {
+        "label_raw": "Tipo de material",
+        "position": 20,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Plástico"
+      },
+      {
+        "label_raw": "Acabado",
+        "position": 21,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Pulido"
+      },
+      {
+        "label_raw": "Color",
+        "position": 22,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4 Piezas- 30cm"
+      },
+      {
+        "label_raw": "Tipo de cadena o collar",
+        "position": 23,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Irregular"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_UNIT_MISMATCH"
+    ],
+    "previous_specification_es": "Capacidad: 30 centímetros / Peso del producto: 82 Gramos / Dimensiones del producto: 15f. x 30an. x 5al. centímetros / Cantidad de compartimentos: 4 / Cantidad seleccionada: 4 Piezas- 30cm"
+  },
+  {
+    "asin": "B0CWMT62DP",
+    "title_es_raw": "VFANDV Timbre Inalámbrico Exterior Impermeable, IP44 Impermeable Doorbell 300M, Kit de Timbre Inalambrico, 5 Niveles de Volumen y 60 Melodías, Indicador LED para Hogar, Salón, Oficina (Negro)",
+    "selected_variation_raw": "",
+    "attributes": [
+      {
+        "label_raw": "Fabricante",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎VFANDV"
+      },
+      {
+        "label_raw": "Identificador de producto del fabricante",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Funkklingel"
+      },
+      {
+        "label_raw": "Dimensiones del producto",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎1 x 1 x 1 cm; 130 g"
+      },
+      {
+        "label_raw": "Número de modelo del producto",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Funkklingel"
+      },
+      {
+        "label_raw": "Color",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Negro"
+      },
+      {
+        "label_raw": "Componentes incluidos",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Timbre inalámbrico"
+      },
+      {
+        "label_raw": "Incluye baterías",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎No"
+      },
+      {
+        "label_raw": "Necesita baterías",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎No"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎130 g"
+      },
+      {
+        "label_raw": "Actualizaciones de software garantizadas hasta",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎desconocido"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 0,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "B0CWMT62DP"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 1,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "4,5 4,5 de 5 estrellas (485) 4,5 de 5 estrellas"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 2,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "nº809 en Bricolaje y herramientas ( Ver el Top 100 en Bricolaje y herramientas ) nº4 en Juegos de timbre"
+      },
+      {
+        "label_raw": "Producto en Amazon.es desde",
+        "position": 3,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "28 febrero 2024"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_SUSPICIOUS_VALUE"
+    ],
+    "previous_specification_es": "Peso del producto: 130 g / Dimensiones del producto: 1 x 1 x 1 cm; 130 g"
+  },
+  {
+    "asin": "B0FBKT9DV9",
+    "title_es_raw": "Lifewit Organizador Cubiertos Cajón Cocina, Bandeja para Menaje Extensible",
+    "selected_variation_raw": "34cm (Ancho 24-41cm) / Negro",
+    "attributes": [
+      {
+        "label_raw": "Usos específicos del producto",
+        "position": 0,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Interior; Profesional"
+      },
+      {
+        "label_raw": "Material",
+        "position": 1,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Plástico"
+      },
+      {
+        "label_raw": "Función especial",
+        "position": 2,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Ajustable, Expandible"
+      },
+      {
+        "label_raw": "Color",
+        "position": 3,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Negro"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 4,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Lifewit"
+      },
+      {
+        "label_raw": "Tipo de montaje",
+        "position": 5,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "No"
+      },
+      {
+        "label_raw": "Dimensiones del producto",
+        "position": 6,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "34,8f. x 40,9an. x 3,8al. centímetros"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 7,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "410 Gramos"
+      },
+      {
+        "label_raw": "Número de compartimentos",
+        "position": 8,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "7"
+      },
+      {
+        "label_raw": "Forma",
+        "position": 9,
+        "section": "product_overview",
+        "source": "productOverview",
+        "value_raw": "Rectangular"
+      },
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Lifewit"
+      },
+      {
+        "label_raw": "Número de artículos",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Número de paquetes",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1"
+      },
+      {
+        "label_raw": "Destacado del artículo",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Cubertero Compacto para Almacenar Cucharas, Tenedores y Cuchillos, Ancho 24-41 x Fondo 34 cm, Lote 1, Negro"
+      },
+      {
+        "label_raw": "Fabricante",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Lifewit"
+      },
+      {
+        "label_raw": "País de origen",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "China"
+      },
+      {
+        "label_raw": "Elementos incluidos",
+        "position": 6,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Organizador de cubiertos"
+      },
+      {
+        "label_raw": "Nombre Tipo Artículo",
+        "position": 7,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Bandeja para cubiertos"
+      },
+      {
+        "label_raw": "Número Modelo",
+        "position": 8,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "22063"
+      },
+      {
+        "label_raw": "Número de pieza del fabricante",
+        "position": 9,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "22063"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 10,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "nº288 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº1 en Bandejas para cubertería"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 11,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "B0FBKT9DV9"
+      },
+      {
+        "label_raw": "Valoración media de los clientes",
+        "position": 12,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "4,7 4,7 de 5 estrellas (26.024) 4,7 de 5 estrellas"
+      },
+      {
+        "label_raw": "Uso",
+        "position": 13,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Interior; Profesional"
+      },
+      {
+        "label_raw": "Carecterísticas especiales",
+        "position": 14,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Ajustable, Expandible"
+      },
+      {
+        "label_raw": "Perfil del enchufe",
+        "position": 15,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "No"
+      },
+      {
+        "label_raw": "Cantidad de compartimentos",
+        "position": 16,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "7"
+      },
+      {
+        "label_raw": "Capacidad",
+        "position": 17,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "35 centímetros"
+      },
+      {
+        "label_raw": "Dimensiones del artículo (profundidad x ancho x alto)",
+        "position": 18,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "34,8f. x 40,9an. x 3,8al. centímetros"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 19,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "410 Gramos"
+      },
+      {
+        "label_raw": "Total del paquete según la medida elegida para referenciar precio",
+        "position": 20,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "1.0 Conteo"
+      },
+      {
+        "label_raw": "Tipo de material",
+        "position": 21,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Plástico"
+      },
+      {
+        "label_raw": "Acabado",
+        "position": 22,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Sin revestimiento"
+      },
+      {
+        "label_raw": "Color",
+        "position": 23,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Negro"
+      },
+      {
+        "label_raw": "Tipo de cadena o collar",
+        "position": 24,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "Rectangular"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_UNIT_MISMATCH"
+    ],
+    "previous_specification_es": "Capacidad: 35 centímetros / Peso del producto: 410 Gramos / Dimensiones del producto: 34,8f. x 40,9an. x 3,8al. centímetros / Cantidad de compartimentos: 7"
+  },
+  {
+    "asin": "B0HKJH3C3F",
+    "title_es_raw": "Mini Mopa Multifunción Con Clip, Mopas De Limpieza Suelos Con Clip",
+    "selected_variation_raw": "",
+    "attributes": [
+      {
+        "label_raw": "Marca",
+        "position": 0,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Bizhubmat"
+      },
+      {
+        "label_raw": "Número de modelo",
+        "position": 1,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎RPM9Y8KO6AQ3AQ85FO3B"
+      },
+      {
+        "label_raw": "Color",
+        "position": 2,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎Single Attribute"
+      },
+      {
+        "label_raw": "Dimensiones del paquete",
+        "position": 3,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎1 x 1 x 1 cm; 280 g"
+      },
+      {
+        "label_raw": "Peso del producto",
+        "position": 4,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎280 g"
+      },
+      {
+        "label_raw": "Actualizaciones de software garantizadas hasta",
+        "position": 5,
+        "section": "technical_details",
+        "source": "prodDetails",
+        "value_raw": "‎desconocido"
+      },
+      {
+        "label_raw": "ASIN",
+        "position": 0,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "B0HKJH3C3F"
+      },
+      {
+        "label_raw": "Clasificación en los más vendidos de Amazon",
+        "position": 1,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "nº147.490 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº7 en Mopas para alfombras"
+      },
+      {
+        "label_raw": "Producto en Amazon.es desde",
+        "position": 2,
+        "section": "additional_information",
+        "source": "detailBulletsSections",
+        "value_raw": "21 septiembre 2026"
+      }
+    ],
+    "issue_codes": [
+      "SPEC_SUSPICIOUS_VALUE"
+    ],
+    "previous_specification_es": "Peso del producto: 280 g / Dimensiones del paquete: 1 x 1 x 1 cm; 280 g"
+  }
+]

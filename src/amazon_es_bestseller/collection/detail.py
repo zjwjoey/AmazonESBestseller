@@ -298,12 +298,27 @@ def _monthly_bought_raw(soup) -> str:
     return ""
 
 
+def _current_product_price_candidate(node) -> bool:
+    """A variation's price is evidence for that option, not the main BuyBox."""
+    if _hidden(node) or _secondary_product(node):
+        return False
+    for element in [node, *node.parents]:
+        if not hasattr(element, 'get'):
+            continue
+        identifier = str(element.get('id') or '').casefold()
+        classes = set(element.get('class') or [])
+        if (identifier.startswith('variation_') or 'twister' in identifier
+                or {'apex_on_twister_price', 'dimension-slot-info'} & classes):
+            return False
+    return True
+
+
 def _current_price(soup) -> str:
     # Restrict fallbacks to explicit current-product price containers.
     for node in soup.select("#corePrice_feature_div .a-price, "
                             "#corePriceDisplay_desktop_feature_div .a-price, "
                             ".apex-pricetopay-value, .priceToPay"):
-        if _hidden(node) or _secondary_product(node):
+        if not _current_product_price_candidate(node):
             continue
         if any(hasattr(a, "get") and (
                 "a-text-price" in (a.get("class") or [])
@@ -328,7 +343,7 @@ def _struck_price(soup) -> str:
                              "#corePriceDisplay_desktop_feature_div .a-text-price, "
                              "#apex_price .a-text-price")
     for container in containers:
-        if _hidden(container) or _secondary_product(container):
+        if not _current_product_price_candidate(container):
             continue
         classes = " ".join(container.get("class") or [])
         parent_classes = " ".join(container.parent.get("class") or []) if container.parent else ""
