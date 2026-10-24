@@ -14,6 +14,7 @@ import re
 import statistics
 import unicodedata
 from collections import Counter, defaultdict
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -26,8 +27,21 @@ from .terminology import specification_is_deterministic
 CLEAN_SCHEMA_VERSION = "preclean-v1"
 FIELD_ALIASES = dict(PRODUCTION_FIELD_ALIASES)
 AUDIT_FIELDS = tuple(FIELD_ALIASES)
+NON_BLOCKING_ISSUES = frozenset({"SAFE_DUPLICATE", "DUPLICATE_BULLET", "CROSS_FIELD_OVERLAP"})
+# Match actual identity/metadata syntax, not ordinary Spanish words beginning
+# with B or prose about sorting, product grades and customer appreciation.
+DESCRIPTION_METADATA_RE = re.compile(
+    r"\bASIN\b|商品编号|\bclasificaci[oó]n\s+(?:en\s+)?(?:los\s+)?m[aá]s\s+vendidos\b|"
+    r"\bclasificaci[oó]n\s*:\s*#?\d|\b(?:valoraci[oó]n|opiniones|reviews?)\s*:\s*\d|"
+    r"\b\d+(?:[.,]\d+)?\s+(?:de|out of)\s+5\s+(?:estrellas?|stars?)\b", re.I)
+DESCRIPTION_ASIN_RE = re.compile(r"\bB(?=[A-Z0-9]{0,8}[0-9])[A-Z0-9]{9}\b")
 ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]")
-HTML_TAG_RE = re.compile(r"<[^>]+>")
+# Only known HTML element names are removable syntax. Angle-bracketed
+# comparisons and product identifiers are source facts, not arbitrary tags.
+HTML_TAG_RE = re.compile(
+    r"</?(?:a|abbr|article|b|blockquote|br|code|dd|div|dl|dt|em|h[1-6]|hr|i|img|li|"
+    r"ol|p|pre|section|small|span|strong|sub|sup|table|tbody|td|th|thead|tr|u|ul)"
+    r"(?:\s[^<>]*?)?\s*/?>", re.I)
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 UI_RE = re.compile(r"(?:…|\.\.\.)?\s*(?:Ver\s+(?:m[aá]s|menos)|查看更多|展开|收起)\b", re.I)
 PROTECTED_TOKEN_RE = re.compile(
@@ -134,7 +148,7 @@ def clean_text(value: Any, *, field: str = "") -> dict[str, Any]:
             "html_detected": html_detected}
 
 
-def parse_details(value: Any) -> dict[str, Any]:
+def parse_details(value: Any, *, source_attributes: Any = None) -> dict[str, Any]:
     """Parse details without discarding malformed source rows."""
     source = _text(value)
     rows: list[dict[str, Any]] = []
@@ -152,6 +166,18 @@ def parse_details(value: Any) -> dict[str, Any]:
                 iterable.append((None, item))
     else:
         iterable = []
+        # A flattened label may itself contain ':'. Recover its boundary
+        # only when both its full label and value agree with a raw attribute.
+        # Keep the selected source text/hash; do not replace it with stale RAW.
+        hints: dict[str, set[str]] = defaultdict(set)
+        if isinstance(source_attributes, list):
+            for attribute in source_attributes:
+                if not isinstance(attribute, Mapping):
+                    continue
+                label = clean_text(attribute.get("label_raw") or attribute.get("label"))["clean_text"]
+                raw_value = attribute.get("value_raw") or attribute.get("value")
+                if ":" in label or "：" in label:
+                    hints[label].add(normalize_key(clean_text(raw_value)["clean_text"]))
         for line in source.splitlines():
             if not line.strip():
                 continue
@@ -159,6 +185,11 @@ def parse_details(value: Any) -> dict[str, Any]:
                 issues.append("VALUE_WITHOUT_LABEL")
                 continue
             label, raw_value = re.split(r"[:：]", line, maxsplit=1)
+            for candidate in sorted(hints, key=len, reverse=True):
+                match = re.match(r"^\s*" + re.escape(candidate) + r"\s*[:：]", line, re.I)
+                if match and normalize_key(clean_text(line[match.end():])["clean_text"]) in hints[candidate]:
+                    label, raw_value = candidate, line[match.end():]
+                    break
             iterable.append((label, raw_value))
     for position, (label, raw_value) in enumerate(iterable):
         label_clean = clean_text(label, field="detail_label") if label is not None else None
@@ -238,11 +269,14 @@ def parse_bullets(value: Any) -> dict[str, Any]:
         items.append({"source_text": _text(item), "clean_text": text, "clean": cleaned})
     if not source.strip():
         status = "SOURCE_MISSING"
-    elif issues:
+    elif any(issue != "DUPLICATE_BULLET" for issue in issues):
         status = "NEEDS_REVIEW"
+    elif issues or any(item["clean"]["clean_status"] == "NORMALIZED" for item in items):
+        status = "NORMALIZED"
     else:
         status = "CLEAN"
     return {"source_text": source, "items": items, "issues": sorted(set(issues)), "status": status,
+            "actions": ["DEDUPLICATE_BULLET"] if "DUPLICATE_BULLET" in issues else [],
             "duplicate_bullets": sum(1 for issue in issues if issue == "DUPLICATE_BULLET"),
             "empty_bullets": sum(1 for issue in issues if issue == "EMPTY_BULLET")}
 
@@ -264,9 +298,35 @@ def language_label(value: str) -> str:
     return ranked[0][0]
 
 
+def _explicit_capacity_total(value: str, capacities: list[tuple[Any, Decimal]]) -> bool:
+    """Recognize only literal component/total arithmetic; never fill a fact."""
+    amounts = {amount for _, amount in capacities}
+    for match, amount in capacities:
+        count = re.search(r"(?<!\w)([1-9]\d*)\s*[x×]\s*$",
+                          value[max(0, match.start() - 20):match.start()], re.I)
+        if count:
+            total = Decimal(count.group(1)) * amount
+            if total in amounts and amounts == {amount, total}:
+                return True
+    for (left, first), (right, second) in zip(capacities, capacities[1:]):
+        if value[left.end():right.start()].strip() == "+":
+            total = first + second
+            if total in amounts and amounts == {first, second, total}:
+                return True
+    return False
+
+
 def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
-    matches = NUMERIC_UNIT_RE.findall(value)
-    units = [match[1].strip().casefold() for match in matches]
+    matches = []
+    for match in NUMERIC_UNIT_RE.finditer(value):
+        tail = value[match.end():]
+        # l. is Amazon's largo axis abbreviation. L/A/A followed by cm is
+        # another explicit dimension spelling, not a capacity declaration.
+        axis = re.match(r"\.\s*[x×]|\s*[x×]\s*\d+(?:[.,]\d+)?\s*A\s*[x×]\s*"
+                        r"\d+(?:[.,]\d+)?\s*A\s*cm\b", tail, re.I)
+        if match.group("unit").casefold() == "l" and axis:
+            continue
+        matches.append(match)
     issues = []
     if re.search(r"\b\d+(?:[.,]\d+)?\s*mAhmAh\b", value, re.I):
         issues.append("DUPLICATE_UNIT")
@@ -292,7 +352,8 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     # weight and voltage). Mixed units alone are not an anomaly; duplicate or
     # malformed unit syntax is actionable without guessing product facts.
     values = []
-    for number, unit in matches:
+    for match in matches:
+        number, unit = match.group("number"), match.group("unit")
         try:
             values.append({"numeric_value": float(number.replace(",", ".")), "unit_raw": unit,
                            "canonical_unit": UNIT_CANONICAL.get(unit.strip().casefold(), unit.strip())})
@@ -304,11 +365,14 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     capacity_factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
     capacity_context = bool(re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", value, re.I)) if label is None else bool(
         re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", str(label), re.I))
-    capacity_values = [item["numeric_value"] * capacity_factors[item["canonical_unit"]]
-                       for item in values if item["canonical_unit"] in capacity_factors] if capacity_context else []
+    capacities = [(match, Decimal(match.group("number").replace(",", ".")) *
+                   Decimal(str(capacity_factors[UNIT_CANONICAL[match.group("unit").casefold()]])))
+                  for match in matches if UNIT_CANONICAL.get(match.group("unit").casefold()) in capacity_factors]
+    capacity_values = [float(amount) for _, amount in capacities] if capacity_context else []
     if len(capacity_values) > 1:
         baseline = max(capacity_values)
-        if baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001):
+        if (baseline and (max(capacity_values) - min(capacity_values)) > max(0.01, baseline * 0.001)
+                and not _explicit_capacity_total(value, capacities)):
             issues.append("CONTRADICTORY_CAPACITY")
     return {"values": values, "issues": sorted(set(issues))}
 
@@ -346,7 +410,8 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             missing_asin += 1
         clean_fields: dict[str, dict[str, Any]] = {}
         raw_fields: dict[str, dict[str, Any]] = {}
-        detail = parse_details(_source_value(record, "product_details"))
+        detail = parse_details(_source_value(record, "product_details"),
+                               source_attributes=record.get("detail_attributes_raw", record.get("attributes")))
         bullets = parse_bullets(_source_value(record, "feature_bullets"))
         record_issues: list[str] = []
         record_identity: list[dict[str, Any]] = []
@@ -379,9 +444,11 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(bullets["source_text"])), key=str.casefold)}
             else:
                 result = clean_text(raw, field=field)
-            if field == "product_description" and re.search(
-                    r"\b(?:ASIN|商品编号|clasificaci[oó]n|valoraci[oó]n|opiniones|reviews?)\b|\bB[0-9A-Z]{8,10}\b",
-                    result.get("clean_text", ""), re.I):
+            if field == "feature_bullets":
+                result["actions"] = bullets["actions"]
+            if field == "product_description" and (
+                    DESCRIPTION_METADATA_RE.search(result.get("clean_text", "")) or
+                    DESCRIPTION_ASIN_RE.search(result.get("clean_text", ""))):
                 result["issues"].append("POSSIBLE_METADATA_IN_DESCRIPTION")
                 result["clean_status"] = "NEEDS_REVIEW"
                 result["translate_allowed"] = False
@@ -399,7 +466,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             else:
                 result["numeric"] = numeric_profile(result.get("clean_text", ""))
             result["issues"] = sorted(set(result.get("issues", []) + result["numeric"].get("issues", [])))
-            blocking_issues = [issue for issue in result["issues"] if issue != "SAFE_DUPLICATE"]
+            blocking_issues = [issue for issue in result["issues"] if issue not in NON_BLOCKING_ISSUES]
             if blocking_issues and result["clean_status"] in {"CLEAN", "NORMALIZED"}:
                 result["clean_status"] = "NEEDS_REVIEW"
                 result["translate_allowed"] = False
@@ -501,7 +568,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         if status not in {"CLEAN", "NORMALIZED"}:
             for field, result in clean_fields.items():
                 blocking = [issue for issue in result.get("issues", [])
-                            if issue not in {"SAFE_DUPLICATE", "CROSS_FIELD_OVERLAP"}]
+                            if issue not in NON_BLOCKING_ISSUES]
                 if result["clean_status"] not in {"CLEAN", "NORMALIZED", "SOURCE_MISSING"} or blocking:
                     review_queue.append({"asin": asin, "field": field, "source_text": result["source_text"],
                                          "clean_text": result["clean_text"], "clean_status": result["clean_status"],
@@ -520,6 +587,9 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                                   "detail_fully_structured": detail["fully_structured"],
                                   "detail_partially_structured": detail["partially_structured"],
                                   "detail_unstructured": detail["unstructured"],
+                                  "detail_safe_duplicate_rows": detail["safe_duplicate_rows"],
+                                  "detail_conflicting_duplicate_labels": detail["conflicting_duplicate_labels"],
+                                  "duplicate_bullet_occurrences": bullets["duplicate_bullets"],
                                   "identity": record_identity,
                                   "record_status": status})
         sku_quality.append({"asin": asin, "status": status, "issue_codes": ";".join(sorted(set(record_issues))),
@@ -563,13 +633,16 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                              if item["detail_unstructured"]),
         "source_missing": sum(1 for item in translation_input
                                if item["detail_parser_status"] == "SOURCE_MISSING"),
-        "safe_duplicate_rows": sum(1 for issue in structure_issues if issue["issue_code"] == "SAFE_DUPLICATE"),
-        "conflicting_duplicate_labels": sum(1 for issue in structure_issues if issue["issue_code"] == "CONFLICTING_DUPLICATE"),
-        "duplicate_labels": sum(1 for issue in structure_issues if issue["issue_code"] == "CONFLICTING_DUPLICATE"),
+        "safe_duplicate_rows": sum(item["detail_safe_duplicate_rows"] for item in translation_input),
+        "safe_duplicate_skus": sum(item["detail_safe_duplicate_rows"] > 0 for item in translation_input),
+        "conflicting_duplicate_labels": sum(item["detail_conflicting_duplicate_labels"] for item in translation_input),
+        "conflicting_duplicate_skus": sum(item["detail_conflicting_duplicate_labels"] > 0 for item in translation_input),
+        "duplicate_labels": sum(item["detail_conflicting_duplicate_labels"] for item in translation_input),
     }
     bullet_summary = {
         "total_bullets": sum(len(item["bullet_items"]) for item in translation_input),
-        "duplicate_bullets": sum(1 for issue in structure_issues if issue["issue_code"] == "DUPLICATE_BULLET"),
+        "duplicate_bullets": sum(item["duplicate_bullet_occurrences"] for item in translation_input),
+        "duplicate_bullet_skus": sum(item["duplicate_bullet_occurrences"] > 0 for item in translation_input),
         "long_bullets": sum(1 for issue in structure_issues if issue["issue_code"] == "LONG_BULLET"),
     }
     allowed_fields = sum(1 for item in translation_input for field in AUDIT_FIELDS
