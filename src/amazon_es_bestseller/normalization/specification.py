@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from decimal import Decimal
 from typing import Optional
 
 from .text import dec_comma, strip_zero_width
@@ -636,6 +637,13 @@ def _explicit_model_spec_es(attributes) -> str:
     return '%s: %s' % (label, value)
 
 
+def _numeric_selection_matches_title(variant: str, title_spec: str) -> bool:
+    """Corroborate one selected scalar; do not infer units or match one axis."""
+    numbers = re.findall(r'\d+(?:[.,]\d+)?', title_spec)
+    return (len(numbers) == 1
+            and Decimal(dec_comma(variant)) == Decimal(dec_comma(numbers[0])))
+
+
 def build_spec_es(attributes=None, details=None, variant=None, title_es=None) -> str:
     """Build a compact Spanish core-spec display from explicit page evidence.
 
@@ -649,6 +657,8 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
     seen = set()
     seen_groups = set()
     preferred = {}
+    variant_text = _valid_spec_text(variant)
+    numeric_variant = bool(re.fullmatch(r'\d+(?:[.,]\d+)?', variant_text))
     capacity = _pick_capacity({}, variant)
     if capacity:
         preferred['capacity'] = 'Capacidad seleccionada: ' + capacity
@@ -656,7 +666,11 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
     count_source = variant if selected_count is not None else title_es
     # Preserve the actual selected/count text, including 1 x 12 packaging,
     # instead of replacing it with a guessed total or a lower-priority field.
-    if selected_count is not None or (_count_from_text(title_es) or 0) > 1:
+    title_count = _count_from_text(title_es)
+    if (numeric_variant and selected_count is None and title_count is not None
+            and not _numeric_selection_matches_title(variant_text, str(title_count))):
+        title_count = None
+    if selected_count is not None or (title_count or 0) > 1:
         count_parts = [part.strip() for part in re.split(r'\s*/\s*', str(count_source or ''))
                        if _count_from_text(part) is not None]
         if count_parts:
@@ -729,13 +743,13 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             parts.append(preferred['count'])
     if parts:
         return ' / '.join(parts)
-    variant_text = _valid_spec_text(variant)
-    # A bare selected number lacks a unit. Prefer the literal title measure
-    # when available, without inventing a unit for that selected number.
-    if variant_text and not re.fullmatch(r'\d+(?:[.,]\d+)?', variant_text):
+    if variant_text and not numeric_variant:
         return variant_text
     title_text = _valid_spec_text(_title_core_spec_es(title_es))
-    if title_text:
+    # A title can supply literal units only for the same selected scalar.
+    # Different values, dimensions and ranges cannot replace the selection.
+    if title_text and (not numeric_variant
+                       or _numeric_selection_matches_title(variant_text, title_text)):
         return title_text
     if variant_text:
         return variant_text

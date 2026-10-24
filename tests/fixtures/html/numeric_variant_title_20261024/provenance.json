@@ -1,0 +1,11 @@
+{
+  "asin": "B01KCEVQBK",
+  "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B01KCEVQBK.html",
+  "source_sha256": "93350580b1084db57f0e4bfe95f8814e1601e8288245d8d28297683ca06dfd24",
+  "fixture_sha256": "643fb458187bb322f4e19a0c7f997f1967e4675c1c81d8d45894960a008097d7",
+  "extraction": "Unmodified public title and selected swatch/dropdown DOM; HTML/twister wrappers only. Conflict titles are explicit TEST_ONLY in-memory mutations in tests, never source facts.",
+  "dom_paths": [
+    "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[2]/div[2]/div/h1/span",
+    "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[22]/div[1]/div[3]/div/div/div[1]/div[2]/div/div/ul/li[1]/span/span"
+  ]
+}

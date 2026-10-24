@@ -26,6 +26,12 @@ remain eligible. A numeric selected value such as `142` uses an exact `142 g`
 title span when available, rather than inventing a unit or hiding the title
 measure. Numeric selected sizes without better title evidence remain intact.
 
+Numeric selection follow-up: a title fallback may supply its literal unit only
+when its single numeric value matches the selected scalar (decimal comma/dot
+forms are compared exactly). A different value, a range or a multi-axis measure
+must not replace that selection. Conflicting title-only piece counts are also
+excluded from the summary; raw values and structured evidence are retained.
+
 ## Evidence and regression
 
 `tests/fixtures/html/remaining_review_20261024/` contains unmodified public price
