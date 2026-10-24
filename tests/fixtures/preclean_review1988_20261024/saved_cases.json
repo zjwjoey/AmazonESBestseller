@@ -1,0 +1,278 @@
+[
+  {
+    "asin": "B0001IW56S",
+    "field": "specification_es",
+    "record": {
+      "asin": "B0001IW56S",
+      "specification_es": "Capacidad seleccionada: 0,75 L / Peso del producto: 1,26 Libras / Dimensiones del producto: 8,5l. x 8,5an. x 14,5al. centímetros / Cantidad explícita: pack de 6"
+    },
+    "expected_status": "CLEAN",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0001IW56S.html",
+    "source_sha256": "29aa3909a8a92f38983307651ed2f5d0326721e72bc8213a3010c58cd275528c",
+    "fixture_sha256": "9a0e4b98ac854ba323c483bea12652dd2d7bdc2615f848d5165d94baea5c1c5e",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B0012F245G",
+    "field": "product_description",
+    "record": {
+      "asin": "B0012F245G",
+      "product_description_raw": "Descripción del producto Pintura acrílica brillante y luminosa, alto grado de opacidad y alta pigmentación. Advertencia de seguridad Solo para uso externo. Evitar el contacto con los ojos. Mantener alejado del fuego o de fuentes de calor directas."
+    },
+    "expected_status": "CLEAN",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0012F245G.html",
+    "source_sha256": "c1070cbccdb6f96b754ac85cee2977c650e0309f5089ce295c487f4b7b4a94fe",
+    "fixture_sha256": "48a6a3ac866e202691a63a9bd954257c7901ba9c017458aa33876d9d95125d48",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B00004OCLC",
+    "field": "feature_bullets",
+    "record": {
+      "asin": "B00004OCLC",
+      "feature_bullets_raw": [
+        "La punta de la cuchilla doblada entra fácilmente en las conchas de las ostras para abrirlas rápidamente",
+        "El diseño ergonómico reduce el esfuerzo de la mano al abrir docenas de ostras",
+        "Cuchilla fabricada en acero inoxidable duradero",
+        "Cuchilla fabricada en acero inoxidable duradero",
+        "CONFORME A LA POLITICA DE OXO: Si ha tenido algun problema con su producto, contacte con nosotros para repararlo o sustituirlo. Le agradecemos su confianza y que nos dé la oportunidad de mejorar día a día"
+      ]
+    },
+    "expected_status": "NORMALIZED",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B00004OCLC.html",
+    "source_sha256": "b543da2b15a036b4da48e2bdb66735a8c4a57db0dc6ba35bb6b6966bc5eace03",
+    "fixture_sha256": "be8d4d3e8181e137a1f647215d61a3b56a5acbd1aed93913443540323cc1ec96",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B0BF4KS8WC",
+    "field": "product_description",
+    "record": {
+      "asin": "B0BF4KS8WC",
+      "product_description_raw": "Si nos permites, nos gustaría ofrecerte unas maravillosas toallas de baño. Las hemos diseñado expresamente para ti, para que puedas disfrutar de toallas de la CALIDAD PROPIA DE UN SPA, pero en tu casa. Con un tacto SUPERSUAVE Y SUNTUOSO para tu piel, pero sin pesar ni abultar demasiado. Las hemos dotado de propiedades SUPERABSORBENTES para que sequen tu piel y tu pelo de manera efectiva. Tan solo tienes que humedecer las toallas para la cara con agua para disfrutar de su PODER EXFOLIANTE, ideal para eliminar células muertas con suavidad. Crea una ESPUMA PERFECTA con cualquier pastilla de jabón o gel de ducha. Las mismas toallas son de SECADO RÁPIDO para prevenir la formación de MALOS OLORES. Permítenos compartir contigo los secretos de CUIDADO FÁCIL de estas maravillosas toallas. Se recomienda lavarlas por separado para prevenir la acumulación de pelusas o residuos de otras prendas y tejidos. Lávalas a mano o a máquina con colores similares y en agua templada. Sécalas al aire o en la secadora con un programa para prendas delicadas. Se recomienda usar bolas de lana para la secadora, para reducir la electricidad estática durante el secado. Te rogamos que no uses suavizante, lejía ni toallitas para la secadora; de lo contrario, las toallas perderán todo su encanto. También puedes meterlas en una bolsa para la colada para separarlas del resto de la ropa y cualquier residuo. Usa estas toallas para secarte con toquecitos en lugar de arrastrarlas sobre el cuerpo. Características principales del producto Tamaño: toalla de baño - 76,2 x 152 cm, toalla de mano - 40,64 x 76,2 cm, toalla para la cara - 33 x 33 cm Punto: gofrado Bordes: satén con esquinas redondeadas Incluye: 2 toallas de baño, 2 toallas de mano y 2 toallas para la cara Clasificación: élite Clasificación de la microfibra Polyte: Estándar <300 g/m² Premium = 300-349 g/m² Profesional = 350-399 g/m² Élite > 399 g/m²"
+    },
+    "expected_status": "CLEAN",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0BF4KS8WC.html",
+    "source_sha256": "0c539b6b12f8c3bd10dcbf52ebef7e4199bd641b07d96af07c0c721c13024eca",
+    "fixture_sha256": "f1530c008e6dc25d61b325827b026ba1f8afe74fa309e4429c2c423274e0ad8f",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B0H8CXXJTQ",
+    "field": "product_description",
+    "record": {
+      "asin": "B0H8CXXJTQ",
+      "product_description_raw": "Características del producto: Diámetro de rosca M8, longitud de rosca de 60 milímetros, apto para la mayoría de superficies de madera Fabricado en acero inoxidable 304, de alta dureza, buena capacidad de carga, resistente al desgaste, a la humedad y a la oxidación Diseño de anillo cerrado de una sola pieza; en comparación con los tornillos de ojo para madera habituales, los nuestros son más resistentes y duraderos Diseño de rosca autorroscante, fácil de instalar, sin necesidad de taladrar previamente, instalación con rosca autorroscante Ampliamente utilizado en jardines y oficinas, adecuado para colgar y fijar artículos Características del producto: - Nombre del producto: Tornillo de ojo con rosca para madera - Material: acero inoxidable 304 - Color: plateado - Dimensiones de la rosca: M8 x 60 mm Conjunto: 5 cáncamos de tornillo Notas: Antes de realizar la compra, compruebe que las dimensiones de la rosca se ajustan a sus necesidades. Servicio: Gracias por su apoyo y su valoración de nuestros productos. Si no queda satisfecho, póngase en contacto con nosotros por correo electrónico. Resolveremos su problema de forma satisfactoria en un plazo de 24 horas."
+    },
+    "expected_status": "CLEAN",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0H8CXXJTQ.html",
+    "source_sha256": "c61ea185abc8186ea37b830297007df6a2d010e3b82959007d18294868f3366a",
+    "fixture_sha256": "c3a426a4d32e536c2a51223058f67244c1c0d41d7a35655ee93b0bd41e752b6d",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B0754HFH1M",
+    "field": "product_description",
+    "record": {
+      "asin": "B0754HFH1M",
+      "product_description_raw": "Disfrute de su vino tinto favorito con este juego de copas de vino de alpina compuesto por 6 piezas. Como verdadero amante del vino, usted sabe que la copa de vino perfecta contribuye al sabor y a la experiencia de su vino. Por lo tanto, es esencial que beba vino tinto, de hecho, de copas de vino específicamente pensadas para el vino tinto. Este juego de copas de vino de alpina incluye 6 copas de vino con una capacidad máxima de 53 centilitros por copa. Además, las copas son anchas, lo que permite que entre más oxígeno en el vaso. Este es un componente esencial para que el vino tinto desarrolle los mejores aromas de sabor. Ventajas del juego de copas de vino tinto alpina de 6 piezas Juego de copas de vino tinto de 6 piezas - suficientes copas para poner la mesa de una vez Copa ancha con una capacidad de 35 centilitros por copa de vino para una experiencia de sabor óptima Después de su uso, puede meter las copas de vino en el lavavajillas Regalos originales para mujer, hombre, novio, novia, madre y padre Regalo perfecto de inauguración de la casa Utilice este juego de copas de vino tinto alpina como regalo para su esposa, novia o madre, pero también como el regalo de inauguración perfecto. Con su forma ancha y elegante, este juego de copas de vino es extremadamente elegante, se adapta muy bien a la mano y también queda muy bien en la mesa. Disfrute al máximo del vino tinto con este juego de 6 copas de vino tinto de alpina. Especificaciones alpina juego de copas de vino tinto 6 piezas Marca: alpina Material: cristal Juego de copas de vino tinto 6 piezas Capacidad de 53cl por copa Destinado a beber vino tinto Con base robusta y elegante"
+    },
+    "expected_status": "NEEDS_REVIEW",
+    "expected_allowed": false,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0754HFH1M.html",
+    "source_sha256": "6b8e2608dadd2ed2f7082b97324320601e2c101b258602d3134b563cb432cbf6",
+    "fixture_sha256": "fc5b5a2a3b385a5c9ac524839a1e14ec563254972ef7b93db4a69dc96e0f51ae",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B0CXDYXXCV",
+    "field": "title_es_raw",
+    "record": {
+      "asin": "B0CXDYXXCV",
+      "title_es_raw": "T-LOVENDO.ES Cubo basura o reciclaje 3 de compartimentos Grande | 3 X 8L Total 24 Litros | Contenedores de reciclaje separados por color | Papeleras con pedal | Acero | Gran capacidad"
+    },
+    "expected_status": "CLEAN",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B0CXDYXXCV.html",
+    "source_sha256": "f5c635b3df359c55bb8171747245f27a6285b094164ab34a42407e10b09b3b75",
+    "fixture_sha256": "7ec6949558c5fb58fb5cbb851911468f90807247b43a9b186154f1ae5188a6b0",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B004MALMT2",
+    "field": "specification_es",
+    "record": {
+      "asin": "B004MALMT2",
+      "specification_es": "Capacidad: 60 ml / Peso Artículo: 2 Onzas / Dimensiones del artículo (ancho x alto): 6,4an. x 6,4al. centímetros / Tamaño: 2 x Café solo (90ml) / Cantidad explícita: 2 piezas"
+    },
+    "expected_status": "NEEDS_REVIEW",
+    "expected_allowed": false,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B004MALMT2.html",
+    "source_sha256": "a4e1042229d1a9d678d073527a896305f2659f1d7b13922d5aea413f52fd8d3f",
+    "fixture_sha256": "ddd9cd0d2b7a1e52d3d42ba7cd22f46e87233aebab86d30f3100431dbafefc51",
+    "provenance": "Unmodified public DOM sections and existing source/derived field; specification derives from saved attributes, never fabricated source facts.",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  },
+  {
+    "asin": "B00H52GC2G",
+    "field": "product_details",
+    "record": {
+      "asin": "B00H52GC2G",
+      "attributes": [
+        {
+          "label_raw": "Color",
+          "position": 0,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "Negro"
+        },
+        {
+          "label_raw": "Marca",
+          "position": 1,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "RB RENBERG"
+        },
+        {
+          "label_raw": "Material de la cuchilla",
+          "position": 2,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "Acero inoxidable"
+        },
+        {
+          "label_raw": "Filo de la cuchilla",
+          "position": 3,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "Curvo"
+        },
+        {
+          "label_raw": "Dimensiones del producto: largo x ancho x alto",
+          "position": 4,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "10 x 33,3 x 15,3 centímetros"
+        },
+        {
+          "label_raw": "Estilo",
+          "position": 5,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "Clásico"
+        },
+        {
+          "label_raw": "Peso del producto",
+          "position": 6,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "1,4 Kilogramos"
+        },
+        {
+          "label_raw": "Material del asa",
+          "position": 7,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "Acero inoxidable"
+        },
+        {
+          "label_raw": "Tipo de construcción",
+          "position": 8,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "Estampado"
+        },
+        {
+          "label_raw": "Número de productos",
+          "position": 9,
+          "section": "product_overview",
+          "source": "productOverview",
+          "value_raw": "1"
+        },
+        {
+          "label_raw": "Descatalogado por el fabricante ‏",
+          "position": 10,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ No"
+        },
+        {
+          "label_raw": "Dimensiones del producto ‏",
+          "position": 11,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ 10 x 33,3 x 15,3 cm; 1,4 kg"
+        },
+        {
+          "label_raw": "Producto en Amazon.es desde ‏",
+          "position": 12,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ 10 diciembre 2013"
+        },
+        {
+          "label_raw": "Fabricante ‏",
+          "position": 13,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ RB RENBERG"
+        },
+        {
+          "label_raw": "ASIN ‏",
+          "position": 14,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ B00H52GC2G"
+        },
+        {
+          "label_raw": "Número de modelo del producto ‏",
+          "position": 15,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ RB-2528"
+        },
+        {
+          "label_raw": "Actualizaciones de software garantizadas hasta ‏",
+          "position": 16,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "‎ desconocido"
+        },
+        {
+          "label_raw": "Clasificación en los más vendidos de Amazon",
+          "position": 17,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "nº30.509 en Hogar y cocina ( Ver el Top 100 en Hogar y cocina ) nº46 en Juegos de cuchillos de cocina"
+        },
+        {
+          "label_raw": "Opiniones de los clientes",
+          "position": 18,
+          "section": "detail_bullets",
+          "source": "detailBulletsWrapper",
+          "value_raw": "4,4 4,4 de 5 estrellas (1.665)"
+        }
+      ],
+      "product_details_es": "Color: Negro\nMarca: RB RENBERG\nMaterial de la cuchilla: Acero inoxidable\nFilo de la cuchilla: Curvo\nDimensiones del producto: largo x ancho x alto: 10 x 33,3 x 15,3 centímetros\nEstilo: Clásico\nPeso del producto: 1,4 Kilogramos\nMaterial del asa: Acero inoxidable\nTipo de construcción: Estampado\nNúmero de productos: 1\nDescatalogado por el fabricante: No\nDimensiones del producto: 10 x 33,3 x 15,3 cm; 1,4 kg\nProducto en Amazon.es desde: 10 diciembre 2013\nFabricante: RB RENBERG\nAsin: B00H52GC2G\nNúmero de modelo del producto: RB-2528"
+    },
+    "expected_status": "CLEAN",
+    "expected_allowed": true,
+    "source_html": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B00H52GC2G.html",
+    "source_sha256": "4d9cdfa1e3891c645d6fa711ad3dccbd3f953dad8ba9a58694a16599c2bdcf91",
+    "provenance": "Full original labels/values retain colon boundaries; source dimensions are not asserted numerically equivalent.",
+    "fixture_sha256": "b7c38fb2d077356aa9dba8524c54758b83d0ecf81dacd6ca2ee1b579de20b98f",
+    "fixture_extraction": "Public visible text nodes retained; script/form/input and non-content attributes removed in fixture copies only; source HTML and source SHA remain unchanged."
+  }
+]
