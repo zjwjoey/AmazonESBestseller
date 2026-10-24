@@ -437,6 +437,8 @@ def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, str
         if intervals:
             lower, upper = max(x[0] for x in intervals), min(x[1] for x in intervals)
             tolerance = max(0.01, max(x[1] for x in intervals) * 0.001)
+            if any(low != high for low, high in intervals):
+                tolerance = 0.0  # A stated range boundary must not be rounded away.
             if lower - upper > tolerance:
                 return True
     return False

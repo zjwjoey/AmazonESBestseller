@@ -30,7 +30,7 @@ saved-source fixture cases include a heat gun's flow rates and actual
 container/range assertions. Synthetic negatives retain unexplained scalar
 conflicts, wrong masses, incomplete dimensions and ambiguous number formats.
 
-The 49 added regressions and related tests total 202 passes, no failures or
+The 50 added regressions and related tests total 203 passes, no failures or
 skips. Full 5,412-record replay preserves every ASIN and source text. It routes
 4,296 products as Pre-Clean usable and 1,116 for review, clearing 227 of the
 previous 1,343. Field slots are 51,591 retained, 1,163 under review and 6,778

@@ -97,6 +97,7 @@ def test_explicit_ranges_and_distinct_object_roles_are_not_scalar_conflicts(text
 
 @pytest.mark.parametrize('text', [
     'Capacidad 500 ml / Tamaño 250-350ml',
+    'Capacidad 260 ml / Tamaño 250-259,9 ml',
     'Capacidad 9 L / 25,4 L. Compatible con bolsas de 30 L',
     'Capacidad de filtrado: 1,4 L / 1,9 L',
     'Recipiente inferior capacidad 500 ml y capacidad 600 ml. Envase superior 200 ml',
