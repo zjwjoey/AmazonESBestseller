@@ -139,7 +139,11 @@ def is_suspicious_dimension(v) -> bool:
     if not v:
         return False
     s = strip_zero_width(dec_comma(str(v).strip())).replace(' ', '').replace('×', 'x').lower()
-    return bool(re.match(r'^1x1x1(?:cm|centímetros|centimetros|mm|m)?$', s))
+    # Amazon combines product dimensions and weight in the same source value.
+    # A trailing explicit weight must not make 1 x 1 x 1 stop being a placeholder.
+    one = r'1(?:\.0+)?'
+    return bool(re.match(r'^' + one + 'x' + one + 'x' + one
+                        + r'(?:cm|centímetros?|centimetros?|mm|milímetros?|milimetros?|m)?(?=$|[;；])', s))
 
 
 # ---------- 单位类别 ----------
@@ -516,6 +520,20 @@ def _es_core_group(key: str) -> str | None:
     return _ES_CORE_GROUPS.get(key)
 
 
+def _valid_es_core_measure(key: str, value: str, group: str) -> bool:
+    """Reject source anomalies from summaries while retaining raw attributes."""
+    actual = classify_value_unit(value)
+    if group == 'capacity' and actual in {'dimension', 'weight'}:
+        # Generic capacity can explicitly mean mass (e.g. coffee beans).
+        return actual == 'weight' and key in {'capacidad', 'capacidad_de_salida'}
+    if group == 'dimension' and (actual in {'capacity', 'weight'}
+                                 or is_suspicious_dimension(value)):
+        return False
+    if group == 'size' and is_suspicious_dimension(value):
+        return False
+    return True
+
+
 def _is_generic_one_count(key: str, value: str) -> bool:
     if not (key.startswith('numero_de_') or key.startswith('total_del_paquete')):
         return False
@@ -658,6 +676,8 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         group = _es_core_group(key)
         if not label or not value or not _is_es_core_key(key) or group is None:
             continue
+        if not _valid_es_core_measure(key, value, group):
+            continue
         if group in preferred:
             continue
         # Amazon's overloaded "Número de unidades" may describe volume or
@@ -689,6 +709,8 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
             if (not value or not _is_es_core_key(key_norm) or group is None
                     or group in seen_groups or _is_generic_one_count(key_norm, value)):
                 continue
+            if not _valid_es_core_measure(key_norm, value, group):
+                continue
             if group in preferred:
                 continue
             # 与 attributes 路径同一守卫：Amazon 的 "Número de unidades" 可能装
@@ -708,11 +730,15 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
     if parts:
         return ' / '.join(parts)
     variant_text = _valid_spec_text(variant)
-    if variant_text:
+    # A bare selected number lacks a unit. Prefer the literal title measure
+    # when available, without inventing a unit for that selected number.
+    if variant_text and not re.fullmatch(r'\d+(?:[.,]\d+)?', variant_text):
         return variant_text
     title_text = _valid_spec_text(_title_core_spec_es(title_es))
     if title_text:
         return title_text
+    if variant_text:
+        return variant_text
     model_text = _valid_spec_text(_explicit_model_spec_es(attributes))
     if model_text:
         return model_text
