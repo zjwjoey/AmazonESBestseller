@@ -1,0 +1,223 @@
+[
+  {
+    "index": 58,
+    "asin": "B0CZPJ1HFP",
+    "field": "feature_bullets",
+    "original_candidate_category": "SCENARIO_QUANTITY_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "COMPARISON_OVEN_AND_EXACT_DRAWERS",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "本机9.5L=2篮各4.75L；68L和71L明确是能耗对照烤箱。须同时绑定对照对象与总/分量，不可删除对照文本或以最大值替换主容量。",
+    "literal_roles_ml": {
+      "selected_airfryer_total_ml": [
+        "9500"
+      ],
+      "each_basket_ml": [
+        "4750"
+      ],
+      "comparison_ovens_ml": [
+        "68000",
+        "71000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*4750=9500",
+    "title_from_saved_html": "Ninja Double Stack XL, Freidora de Aire de Doble Cajón, 9,5L, Gris",
+    "source_text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.º 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025\nAHORRA ESPACIO EN TU COCINA: 30% más delgada (comparado con el modelo AF400). Gran capacidad de 9,5 litros para alimentar hasta 8 personas. Cocina hasta un 55% más rápido que los hornos eléctricos (probado con palitos de pescado y salchichas)\nCOCINA EN 4 NIVELES SIMULTÁNEAMENTE: Incluye 2 cestas y 2 rejillas de base para comida, brindando 4 niveles para cocinar el doble de alimentos. Gracias a los ventiladores traseros, la comida se cocina y dora de forma uniforme en todos los niveles\nEFICIENCIA ENERGÉTICA: Cocina con hasta un 55% menos de energía que un horno* (*Pruebas y cálculos basados en el tiempo de cocción recomendado para salchichas, utilizando la función de freír con aire vs. un horno de 68 L con clasificación “A” y 71 L con clasificación “A+\")\n6 FUNCIONES DE COCCIÓN: Max Crisp, Freír con aire, Asar, Hornear, Recalentar y Deshidratar. Hasta un 75% menos de grasa* utilizando la función Freír con aire (*Probado con patatas fritas cortadas a mano). Funciones SYNC y MATCH para las 2 cestas\nINCLUYE: Ninja Double Stack XL Freidora de aire 9,5 L (enchufe UE), 2 cestas de 4,75 l, 2 rejillas base antiadherentes, 2 rejillas. Piezas aptas para lavavajillas. Dimensiones: 38,5 cm x 28 cm x 47 cm. Peso: 10,3 kg. Color: Gris",
+    "source_hash": "f11e3f4ce6e75667a16cd68939595843b1cd8b46a784e9df7225b73d16539538",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0CZPJ1HFP.html",
+      "sha256": "bc61bdd52cef708c28de7fbe14c0019a7e33479b2371e08527dc373ab4de29bb",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CZPJ1HFP"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.o 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "AHORRA ESPACIO EN TU COCINA: 30% más delgada (comparado con el modelo AF400). Gran capacidad de 9,5 litros para alimentar hasta 8 personas. Cocina hasta un 55% más rápido que los hornos eléctricos (probado con palitos de pescado y salchichas)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "COCINA EN 4 NIVELES SIMULTÁNEAMENTE: Incluye 2 cestas y 2 rejillas de base para comida, brindando 4 niveles para cocinar el doble de alimentos. Gracias a los ventiladores traseros, la comida se cocina y dora de forma uniforme en todos los niveles",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "EFICIENCIA ENERGÉTICA: Cocina con hasta un 55% menos de energía que un horno* (*Pruebas y cálculos basados en el tiempo de cocción recomendado para salchichas, utilizando la función de freír con aire vs. un horno de 68 L con clasificación “A” y 71 L con clasificación “A+\")",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "6 FUNCIONES DE COCCIÓN: Max Crisp, Freír con aire, Asar, Hornear, Recalentar y Deshidratar. Hasta un 75% menos de grasa* utilizando la función Freír con aire (*Probado con patatas fritas cortadas a mano). Funciones SYNC y MATCH para las 2 cestas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "INCLUYE: Ninja Double Stack XL Freidora de aire 9,5 L (enchufe UE), 2 cestas de 4,75 l, 2 rejillas base antiadherentes, 2 rejillas. Piezas aptas para lavavajillas. Dimensiones: 38,5 cm x 28 cm x 47 cm. Peso: 10,3 kg. Color: Gris",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "9,5 litros",
+        "start": 336,
+        "end": 346,
+        "quote": "A: 30% más delgada (comparado con el modelo AF400). Gran capacidad de 9,5 litros para alimentar hasta 8 personas. Cocina hasta un 55% más rápido que l",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]"
+        ]
+      },
+      {
+        "literal": "68 L",
+        "start": 946,
+        "end": 950,
+        "quote": "a salchichas, utilizando la función de freír con aire vs. un horno de 68 L con clasificación “A” y 71 L con clasificación “A+\")\n6 FUNCIONES DE C",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "71 L",
+        "start": 975,
+        "end": 979,
+        "quote": "unción de freír con aire vs. un horno de 68 L con clasificación “A” y 71 L con clasificación “A+\")\n6 FUNCIONES DE COCCIÓN: Max Crisp, Freír con ",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "9,5 L",
+        "start": 1298,
+        "end": 1303,
+        "quote": "TCH para las 2 cestas\nINCLUYE: Ninja Double Stack XL Freidora de aire 9,5 L (enchufe UE), 2 cestas de 4,75 l, 2 rejillas base antiadherentes, 2 r",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "4,75 l",
+        "start": 1330,
+        "end": 1336,
+        "quote": "inja Double Stack XL Freidora de aire 9,5 L (enchufe UE), 2 cestas de 4,75 l, 2 rejillas base antiadherentes, 2 rejillas. Piezas aptas para lavava",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0
+  },
+  {
+    "index": 59,
+    "asin": "B0CZY23DYB",
+    "field": "feature_bullets",
+    "original_candidate_category": "SCENARIO_QUANTITY_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "COMPARISON_OVEN_AND_EXACT_DRAWERS",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "本机9.5L=2篮各4.75L；68L和71L明确为对照烤箱。所有字面值保留、角色隔离，不能仅出现vs就忽略整字段异常。",
+    "literal_roles_ml": {
+      "selected_airfryer_total_ml": [
+        "9500"
+      ],
+      "each_basket_ml": [
+        "4750"
+      ],
+      "comparison_ovens_ml": [
+        "68000",
+        "71000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*4750=9500",
+    "title_from_saved_html": "Ninja Double Stack XL, Freidora de Aire de Doble Cajón, 9,5L, Negro/Cobre",
+    "source_text": "EXCLUSIVA EN AMAZON: freidora de aire con pinzas de silicona. Un 30% más compacta (vs. AF400), con capacidad de 9,5 L para hasta 8 personas y hasta un 55% más rápida que un horno eléctrico.\nCOCINA EN 4 NIVELES A LA VEZ: incluye 2 cajones y 2 rejillas para cocinar el doble de alimentos. Los ventiladores traseros garantizan una cocción uniforme y resultados crujientes.\nEFICIENCIA ENERGÉTICA: cocina con menos energía que un horno* (*Pruebas basadas en el tiempo de cocción de salchichas usando Air Fry frente a hornos de 68 L de clase A y 71 L de clase A+).\n6 FUNCIONES DE COCCIÓN: Max Crisp, freír con aire, asar, hornear, recalentar y deshidratar. Hasta un 75% menos de grasa y funciones SYNC y MATCH para ambos cajones.\nINCLUYE: freidora Ninja Double Stack XL 9,5 L (enchufe UE), 2 cestas de 4,75 L, 2 rejillas base antiadherentes, 2 rejillas y pinzas. Apta para lavavajillas. 28 x 38,5 x 47 cm. 10,3 kg.",
+    "source_hash": "2e481851e8a5b30a962975e54cf208919537b6b9e139c9dfddc9fbf560d22fd2",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0CZY23DYB.html",
+      "sha256": "2eb805ea6510e24445aa8ad6de0ca61fe6d540345df2277635536e09da9c85f7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CZY23DYB"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "EXCLUSIVA EN AMAZON: freidora de aire con pinzas de silicona. Un 30% más compacta (vs. AF400), con capacidad de 9,5 L para hasta 8 personas y hasta un 55% más rápida que un horno eléctrico.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "COCINA EN 4 NIVELES A LA VEZ: incluye 2 cajones y 2 rejillas para cocinar el doble de alimentos. Los ventiladores traseros garantizan una cocción uniforme y resultados crujientes.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "EFICIENCIA ENERGÉTICA: cocina con menos energía que un horno* (*Pruebas basadas en el tiempo de cocción de salchichas usando Air Fry frente a hornos de 68 L de clase A y 71 L de clase A+).",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "6 FUNCIONES DE COCCIÓN: Max Crisp, freír con aire, asar, hornear, recalentar y deshidratar. Hasta un 75% menos de grasa y funciones SYNC y MATCH para ambos cajones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "INCLUYE: freidora Ninja Double Stack XL 9,5 L (enchufe UE), 2 cestas de 4,75 L, 2 rejillas base antiadherentes, 2 rejillas y pinzas. Apta para lavavajillas. 28 x 38,5 x 47 cm. 10,3 kg.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "9,5 L",
+        "start": 112,
+        "end": 117,
+        "quote": "pinzas de silicona. Un 30% más compacta (vs. AF400), con capacidad de 9,5 L para hasta 8 personas y hasta un 55% más rápida que un horno eléctric",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "68 L",
+        "start": 522,
+        "end": 526,
+        "quote": " el tiempo de cocción de salchichas usando Air Fry frente a hornos de 68 L de clase A y 71 L de clase A+).\n6 FUNCIONES DE COCCIÓN: Max Crisp, fr",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "71 L",
+        "start": 540,
+        "end": 544,
+        "quote": "ión de salchichas usando Air Fry frente a hornos de 68 L de clase A y 71 L de clase A+).\n6 FUNCIONES DE COCCIÓN: Max Crisp, freír con aire, asar",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "9,5 L",
+        "start": 764,
+        "end": 769,
+        "quote": "C y MATCH para ambos cajones.\nINCLUYE: freidora Ninja Double Stack XL 9,5 L (enchufe UE), 2 cestas de 4,75 L, 2 rejillas base antiadherentes, 2 r",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "4,75 L",
+        "start": 796,
+        "end": 802,
+        "quote": "CLUYE: freidora Ninja Double Stack XL 9,5 L (enchufe UE), 2 cestas de 4,75 L, 2 rejillas base antiadherentes, 2 rejillas y pinzas. Apta para lavav",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0
+  }
+]

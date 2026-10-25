@@ -22,6 +22,8 @@ from .dictionary_only import load_records
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
 from .production_contract import PRODUCTION_FIELD_ALIASES
 from .terminology import specification_is_deterministic
+from .capacity_scenarios import compatible_reservoir_modes, scenario_exclusions, title_bound_components
+from .capacity_sets import compatible_explicit_sets
 
 
 CLEAN_SCHEMA_VERSION = "preclean-v1"
@@ -54,14 +56,14 @@ NUMERIC_UNIT_RE = re.compile(
     r"miliamperios?\s*hora|amperios?\s*hora|mil[ií]metros?|cent[ií]metros?|kil[oó]metros?|"
     r"kilogramos?|miligramos?|mililitros?|centilitros?|litros?|gramos?|metros?|"
     r"megahercios?|gigahercios?|kilohercios?|hercios?|kilovatios?|vatios?|voltios?|amperios?|"
-    r"mAh|Ah|MHz|GHz|kHz|Hz|kW|W|V|PSI|bar|°C|kg|mg|ml|cl|L|g|km|cm|mm|m|A|%)"
+    r"mAh|Ah|MHz|GHz|kHz|Hz|kW|W|V|PSI|bar|°C|kg|mg|ml|cl|cc|L|g|km|cm|mm|m|A|%)"
     r"(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ])",
     re.I,
 )
 UNIT_CANONICAL = {
     "gramo": "g", "gramos": "g", "kg": "kg", "kilogramo": "kg", "kilogramos": "kg",
     "mg": "mg", "miligramo": "mg", "miligramos": "mg", "ml": "ml", "mililitro": "ml", "mililitros": "ml",
-    "cl": "cl", "centilitro": "cl", "centilitros": "cl", "l": "L", "litro": "L", "litros": "L",
+    "cl": "cl", "centilitro": "cl", "centilitros": "cl", "cc": "ml", "l": "L", "litro": "L", "litros": "L",
     "mm": "mm", "milímetro": "mm", "milímetros": "mm", "cm": "cm", "centímetro": "cm", "centímetros": "cm",
     "m": "m", "metro": "m", "metros": "m", "km": "km", "kilómetro": "km", "kilómetros": "km",
     "v": "V", "voltio": "V", "voltios": "V", "w": "W", "vatio": "W", "vatios": "W",
@@ -363,26 +365,330 @@ def language_label(value: str) -> str:
     return ranked[0][0]
 
 
-def _explicit_capacity_total(value: str, capacities: list[tuple[Any, Decimal]]) -> bool:
-    """Recognize only literal component/total arithmetic; never fill a fact."""
-    amounts = {amount for _, amount in capacities}
-    for match, amount in capacities:
-        count = re.search(r"(?<!\w)([1-9]\d*)\s*[x×]\s*$",
-                          value[max(0, match.start() - 20):match.start()], re.I)
-        if count:
-            total = Decimal(count.group(1)) * amount
-            if total in amounts and amounts == {amount, total}:
-                return True
-    for (left, first), (right, second) in zip(capacities, capacities[1:]):
-        if value[left.end():right.start()].strip() == "+":
-            total = first + second
-            if total in amounts and amounts == {first, second, total}:
-                return True
-    return False
+def _explicit_capacity_total(value: str, capacities: list[tuple[Any, Decimal]], *, conflict_only: bool = False) -> bool:
+    """Validate a completely bound, exact component/total statement.
+
+    Keep occurrences, not just distinct amounts: one correct equation must
+    never exempt a stray quantity or a second, incompatible count/total.
+    No result of this calculation is written back as a source fact.
+    ``conflict_only`` requires a literal total declaration. A completely
+    bound equation may contradict it, as may an independently bound positive
+    subtotal already exceeding it; unknown quantities cannot subtract volume.
+    """
+    if len(capacities) < 2:
+        return False
+    count_words = {"un": 1, "uno": 1, "una": 1, "dos": 2, "tres": 3,
+                   "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7,
+                   "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12}
+    number = r"(?:[1-9]\d*|" + "|".join(count_words) + r")"
+    noun = r"(?:contenedor(?:es)?|recipientes?|compartimentos?|bolsas?|cajas?|capas?|tazas?|cestas?|cubos?|botellas?|vasos?|cuencos?|frascos?)"
+    counted = re.compile(r"(?<![\w.,])(?P<count>" + number + r")\s+(?P<noun>" + noun + r")\b", re.I)
+
+    def positive_claim(text: str) -> bool:
+        return not re.search(r"\b(?:no\s+(?:incluye|contiene|tiene|ofrece)|sin\s+incluir|"
+                             r"por\s+ejemplo|ejemplo\s+de\s+otro\s+producto|"
+                             r"proporci[oó]n|relaci[oó]n|diluci[oó]n)\b", text, re.I)
+
+    def count_number(text: str) -> int:
+        return int(text) if text.isdigit() else count_words[text.casefold()]
+
+    def noun_key(text: str) -> str:
+        text = text.casefold()
+        return "contenedor" if text == "contenedores" else text.removesuffix("s")
+
+    declarations: dict[str, set[int]] = defaultdict(set)
+    for declaration in counted.finditer(value):
+        statement = re.split(r"[\n;]|(?<!\d)\.\s+", value[:declaration.start()])[-1]
+        if not positive_claim(statement):
+            continue
+        declarations[noun_key(declaration.group("noun"))].add(count_number(declaration.group("count")))
+
+    def prefix(index: int) -> str:
+        start = capacities[index - 1][0].end() if index else 0
+        # Decimal points are not sentence boundaries.
+        return re.split(r"[\n;]|(?<!\d)\.\s+", value[start:capacities[index][0].start()])[-1]
+
+    def explicit_total(index: int) -> bool:
+        before, after = prefix(index), value[capacities[index][0].end():]
+        return bool(re.search(r"\btotal(?:\s+(?:de|del)\s+(?:juego|set|pack|cesto|cubo|recipiente))?\s*(?:de|:)?\s*$",
+                              before, re.I)
+                    or re.match(r"\s*(?:de\s+capacidad\s+total|total(?!\s*(?:(?:de|:)\s*)?\d))\b", after, re.I))
+
+    def nominal_total(index: int) -> bool:
+        before, after = prefix(index), value[capacities[index][0].end():]
+        if re.search(r"\b(?:otro\s+volumen|otra\s+capacidad|volumen\s+desconocido|capacidad\s+desconocida)\b", before, re.I):
+            return False
+        return bool(re.search(r"\b(?:capacidad|volumen)(?:\s+(?:generosa|mega))?\s*(?:es\s*)?(?:de|:)?\s*$", before, re.I)
+                    or re.match(r"\s+de\s+capacidad\b", after, re.I)
+                    or re.search(r"\bincluye\s*:\s*[^\d\n.;:]{0,60}\bfreidora\b[^\d\n.;:]{0,50}$", before, re.I)
+                    or (index == 0 and re.match(r"\s*cubo\b", before, re.I)
+                        and not re.search(r"[\n.;]", before)))
+
+    def counted_component(index: int) -> tuple[str, int] | None:
+        before = prefix(index)
+        literal = re.search(r"(?<![\w.,])([1-9]\d*)\s*[x×]\s*$", before, re.I)
+        if literal:
+            # A dilution ratio is not a count of containers.
+            if re.search(r"\b(?:proporci[oó]n|relaci[oó]n|diluci[oó]n|escala)\b", before, re.I):
+                return None
+            return "literal:" + str(capacities[index][0].start()), int(literal.group(1))
+        hits = list(counted.finditer(before))
+        if len(hits) == 1:
+            hit = hits[0]
+            tail = before[hit.end():]
+            # Allow an explicit intervening height, but never borrow another
+            # bare number such as a model/count or an unrelated mixing ratio.
+            untyped = re.sub(r"\d+(?:[.,]\d+)?\s*(?:mm|cm)\b", "", tail, flags=re.I)
+            if not re.search(r"\d|[:/]", untyped) and not re.search(r"\b" + noun + r"\b", tail, re.I):
+                return "counted:" + str(capacities[index][0].start()), count_number(hit.group("count"))
+        after = value[capacities[index][0].end():]
+        each = re.search(r"\bcada\s+(?P<noun>" + noun + r")\b[^\d\n.;]{0,45}$", before, re.I)
+        following = re.match(r"\s+(?:para\s+)?cada\s+(?P<noun>" + noun + r"|una|uno)\b", after, re.I)
+        reference = each or following
+        if reference:
+            name = reference.group("noun").casefold()
+            if name in {"una", "uno"}:
+                pack = re.match(r"\s+cada\s+(?:una|uno),\s*(?:este\s+|el\s+)?(?:pack|juego|set)\s+de\s+(?P<count>" +
+                                number + r")\s+(?P<noun>" + noun + r")\b", after, re.I)
+                if pack:
+                    return "each:" + str(capacities[index][0].start()), count_number(pack.group("count"))
+                return None
+            counts = declarations.get(noun_key(name), set())
+            if len(counts) == 1:
+                return "each:" + str(capacities[index][0].start()), next(iter(counts))
+        return None
+
+    def named_component(index: int) -> str | None:
+        before, after = prefix(index), value[capacities[index][0].end():]
+        for pattern, role in (
+            (r"\bcesta\s+superior\s+de\s*$", "upper_basket"),
+            (r"\bcesta\s+inferior\s+de\s*$", "lower_basket"),
+            (r"\brecipiente\s+de\s*$", "main_container"),
+            (r"\baccesorio\s+de\s*$", "accessory"),
+        ):
+            if re.search(pattern, before, re.I):
+                return role
+        for pattern, role in ((r"\s+para\s+los\s+encurtidos\b", "pickles"),
+                              (r"\s+para\s+el\s+caldo\b", "brine")):
+            if re.match(pattern, after, re.I):
+                return role
+        return None
+
+    # A literal '+' is an additive component list. A comma/and list needs
+    # an explicit matching compartment count, not a list of available sizes.
+    chained: dict[int, tuple[str, int]] = {}
+    additive_lists: list[range] = []
+    start = 0
+    while start < len(capacities):
+        end = start
+        links = []
+        while end + 1 < len(capacities):
+            link = value[capacities[end][0].end():capacities[end + 1][0].start()].strip().casefold()
+            if link not in {"+", ",", "y"}:
+                break
+            links.append(link)
+            end += 1
+        compartment_counts = declarations.get("compartimento", set())
+        if end > start and (all(link == "+" for link in links)
+                            or compartment_counts == {end - start + 1}):
+            for index in range(start, end + 1):
+                chained[index] = ("list:" + str(index), 1)
+            if all(link == "+" for link in links):
+                additive_lists.append(range(start, end + 1))
+        start = end + 1
+
+    totals: set[Decimal] = set()
+    stated_totals: set[Decimal] = set()
+    components: dict[str, tuple[Decimal, int]] = {}
+    independently_bound_subtotals: list[Decimal] = []
+    bound_positions: set[int] = set()
+    incomplete = False
+    for index, (_, amount) in enumerate(capacities):
+        if not positive_claim(prefix(index)):
+            if not conflict_only:
+                return False
+            incomplete = True
+            continue
+        if explicit_total(index):
+            totals.add(amount)
+            stated_totals.add(amount)
+            continue
+        component = counted_component(index)
+        if index in chained:
+            component = (chained[index][0], component[1] if component else 1)
+        if not component:
+            name = named_component(index)
+            component = ("named:" + name, 1) if name else None
+        if component:
+            role, count = component
+            bound_positions.add(index)
+            if index not in chained:
+                independently_bound_subtotals.append(amount * count)
+            if role in components and components[role] != (amount, count):
+                if not conflict_only:
+                    return False
+                incomplete = True
+                continue
+            components[role] = (amount, count)
+        elif nominal_total(index):
+            totals.add(amount)
+            # Plain 'Capacidad 500 ml' can be the capacity of each cup in
+            # a pack; it is insufficient evidence of the pack's total.
+            if conflict_only:
+                incomplete = True
+        else:
+            if not conflict_only:
+                return False
+            incomplete = True
+    if conflict_only:
+        if not stated_totals:
+            return False
+        for sequence in additive_lists:
+            if all(index in bound_positions for index in sequence):
+                # Literal '+' terms give a positive lower bound without
+                # borrowing a count or assigning any unknown quantity.
+                independently_bound_subtotals.append(sum(
+                    (capacities[index][1] for index in sequence), Decimal(0)))
+        if any(subtotal > total for subtotal in independently_bound_subtotals for total in stated_totals):
+            return True
+        if incomplete:
+            return False
+    if not totals or not components:
+        return False
+    computed = sum((amount * count for amount, count in components.values()), Decimal(0))
+    if conflict_only:
+        return any(total != computed for total in stated_totals)
+    return totals == {computed}
+
+
+def _named_capacity_scopes(value: str) -> tuple[dict[int, str], bool]:
+    """Bind literal named parts, and only complete repetitions of those parts."""
+    matches = [m for m in NUMERIC_UNIT_RE.finditer(value)
+               if UNIT_CANONICAL.get(m.group("unit").casefold()) in {"ml", "cl", "L"}]
+    factors = {"ml": Decimal(1), "cl": Decimal(10), "L": Decimal(1000)}
+    def amount(m: Any) -> Decimal:
+        return _numeric_amount(value, m) * factors[UNIT_CANONICAL[m.group("unit").casefold()]]
+
+    scopes: dict[int, str] = {}
+    context = bool(re.search(
+        r"\b(?:tanque|dep[oó]sito)\s+de\s+(?:agua|leche)\b|"
+        r"\b(?:primer|segundo)\s+compartimento\b|"
+        r"\b(?:capa|parte|compartimento|recipiente|envase|vaso)\s+(?:superior|inferior)\b|"
+        r"\brecipiente\s+(?:grande|pequeño|principal)\b|\bcaj[oó]n\s+(?:XXL|est[aá]ndar)\b",
+        value, re.I))
+    layered = bool(re.search(r"\b(?:capa|parte|compartimento)\s+superior\b", value, re.I)
+                   and re.search(r"\b(?:capa|parte|compartimento)\s+inferior\b", value, re.I))
+    for i, m in enumerate(matches):
+        start = max(matches[i - 1].end() if i else 0, m.start() - 160)
+        prefix = value[start:m.start()]
+        tank = re.search(r"\b(?:tanque|dep[oó]sito)\s+de\s+(agua(?:\s+(?:limpia|sucia))?|leche)"
+                         r"(?:\s+extra[ií]ble)?\s*:?\s*(?:gran\s+)?(?:capacidad\s+)?(?:de\s*)?$", prefix, re.I)
+        ordinal = re.search(r"\b(primer|segundo)\s+compartimento\s*(?:tiene\s+una\s+capacidad\s+)?de\s*$", prefix, re.I)
+        direct = re.search(r"\b(?:capa|parte|compartimento|recipiente|envase|vaso)\s+(superior|inferior)"
+                           r"(?:\s+independiente)?\s*(?:(?:tiene\s+(?:una\s+)?capacidad|es)\s+)?de\s*$", prefix, re.I)
+        inverted = re.search(r"\bcapacidad\s+de\s+la\s+capa\s+(superior|inferior)\s+es\s+de\s*$", prefix, re.I)
+        capacity_side = re.search(r"\bcapacidad\s+(superior|inferior)\s+de\s*$", prefix, re.I) if layered else None
+        ellipsis = re.search(r"\b(?:la\s+de\s+la|la|el)\s+(superior|inferior)\s*,?\s*"
+                             r"de\s*(?:gran\s+capacidad\s*\(\s*)?$", prefix, re.I)
+        drawer = re.search(r"\bcaj[oó]n\s+(XXL|est[aá]ndar)\s+de\s*$", prefix, re.I)
+        vessel = re.search(r"\brecipiente\s+(grande|pequeño|principal)\s+de\s*$", prefix, re.I)
+        if tank:
+            scopes[m.start()] = "tank:" + tank.group(1).lower()
+        elif ordinal:
+            scopes[m.start()] = "compartment:" + ordinal.group(1).lower()
+        elif direct or inverted or capacity_side:
+            direction = (direct or inverted or capacity_side).group(1).lower()
+            scopes[m.start()] = "upper_container" if direction == "superior" else "lower_container"
+        elif (ellipsis and i and scopes.get(matches[i - 1].start()) in {"upper_container", "lower_container"}
+              and not re.search(r"[\n;]|(?<!\d)\.\s+", prefix)):
+            scopes[m.start()] = "upper_container" if ellipsis.group(1).lower() == "superior" else "lower_container"
+        elif drawer:
+            scopes[m.start()] = "drawer:" + ("xxl" if drawer.group(1).lower() == "xxl" else "standard")
+        elif vessel:
+            scopes[m.start()] = "vessel:" + vessel.group(1).lower()
+        # A replacement clause gives both container antecedents explicitly;
+        # the included-parts list below must independently confirm the pair.
+        elif i and re.fullmatch(r"\s+o\s+c[aá]mbialo\s+por\s+el\s+de\s*", prefix, re.I):
+            previous = matches[i - 1]
+            if re.search(r"\brecipiente\s+de\s+cristal\s+de\s*$", value[max(0, previous.start()-60):previous.start()], re.I):
+                scopes[previous.start()] = "vessel:primary"
+                scopes[m.start()] = "vessel:alternate"
+                context = True
+
+    # A complete two-drawer contrast names the second object as "the other"
+    # without guessing that its capacity belongs to the standard drawer.
+    if re.search(r"\bcaj[oó]n\s+XXL\s+y\s+caj[oó]n\s+est[aá]ndar\b", value, re.I):
+        for previous, current in zip(matches, matches[1:]):
+            if scopes.get(previous.start()) != "drawer:xxl" or current.start() in scopes:
+                continue
+            lead = value[value.rfind("\n", 0, previous.start())+1:previous.start()]
+            bridge = value[previous.end():current.start()]
+            if (re.search(r"\butiliza\s+el\s+caj[oó]n\s+XXL\s+de\s*$", lead, re.I)
+                    and re.fullmatch(r"\s+para\s+cocinar[^.\n;]{0,110}\b(?:ambos|los\s+dos)\s+cajones\b"
+                                     r"[^.\n;]{0,110}\bo\s+el\s+caj[oó]n\s+de\s*", bridge, re.I)
+                    and not re.search(r"\b(?:no|sin|ejemplo|hipot[eé]tico|otro\s+modelo)\b", lead+bridge, re.I)):
+                scopes[current.start()] = "drawer:explicit_other"
+
+    # An unqualified water tank may be the clean or dirty one; never create
+    # an additional independent object merely because its adjective is absent.
+    if any(s in {"tank:agua limpia", "tank:agua sucia"} for s in scopes.values()):
+        scopes = {pos: s for pos, s in scopes.items() if s != "tank:agua"}
+
+    number = r"\d+(?:[.,]\d+)?"
+    unit = r"(?:mililitros?|centilitros?|litros?|ml|cl|L)"
+    pair = rf"(?P<a>{number})\s*(?P<ua>{unit})?\s*(?:\+|y)\s*(?P<b>{number})\s*(?P<ub>{unit})"
+    lists = []
+    for pattern, requires_included_parts in (
+        (r"\b(?:2|dos)\s+recipientes\s+de\s+(?:vidrio|cristal)[^()\n;]{0,90}\((?P<body>[^()]+)\)", True),
+        (rf"\b(?:2|dos)\s+recipientes\s+de\s+(?:vidrio|cristal)(?:\s+[A-Za-z]+){{0,2}}?\s+de\s+(?P<body>{pair})", True),
+        (rf"\bCapacidad\s*:\s*(?P<body>{pair})", False),
+        (rf"(?P<body>{pair})\s*:\s*capacidad\b", False),
+    ):
+        for item in re.finditer(pattern, value, re.I):
+            body = re.fullmatch(pair, item.group("body").strip(), re.I)
+            if not body or re.match(rf"\s*(?:[+]\s*\d|y\s+\d|,\s*{number}\s*{unit}\b)", value[item.end():], re.I):
+                continue
+            if requires_included_parts:
+                line_prefix = value[:item.start()].rsplit("\n", 1)[-1]
+                if not re.match(r"\s*INCLUYE(?:\s*:|\s+)", line_prefix, re.I):
+                    continue
+            listed = [Decimal(body.group(k).replace(",", ".")) *
+                      factors[UNIT_CANONICAL[(body.group("ua") if k == "a" and body.group("ua") else body.group("ub")).casefold()]]
+                      for k in ("a", "b")]
+            prior = {s: {amount(m) for m in matches if m.start() < item.start() and scopes.get(m.start()) == s}
+                     for s in set(scopes.values())}
+            prior = {s: values for s, values in prior.items() if values}
+            if len(prior) != 2 or any(len(values) != 1 for values in prior.values()):
+                continue
+            unique = {next(iter(values)): s for s, values in prior.items()}
+            if len(unique) != 2 or sorted(listed) != sorted(unique):
+                continue
+            for m in matches:
+                if item.start("body") <= m.start() < item.end("body"):
+                    scopes[m.start()] = unique[amount(m)]
+            lists.append(set(prior))
+
+    vessel_pair = {"vessel:grande", "vessel:pequeño"}
+    replacement_pair = {"vessel:primary", "vessel:alternate"}
+    for required in (vessel_pair, replacement_pair):
+        if not any(required == found for found in lists):
+            scopes = {pos: s for pos, s in scopes.items() if s not in required}
+    if any(replacement_pair == found for found in lists):
+        primary = {amount(m) for m in matches if scopes.get(m.start()) == "vessel:primary"}
+        for m in matches:
+            if (amount(m) in primary
+                    and re.search(r"\b(?:air\s+fryer|freidora\s+de\s+aire)\s+de\s+cristal\s+extragrande\s*$",
+                                  value[max(0,m.start()-90):m.start()], re.I)
+                    and re.match(r"\s+DE\s+CAPACIDAD\b", value[m.end():], re.I)):
+                scopes[m.start()] = "vessel:primary"
+    return scopes, context
 
 
 def _capacity_scope(value: str, match: Any) -> str:
     """Use literal object qualifiers only; an unqualified value stays unknown."""
+    named, named_context = _named_capacity_scopes(value)
+    if named_context:
+        return named.get(match.start(), "unknown")
     prefix = re.split(r"[\n;]|(?<!\d)\.\s+", value[:match.start()])[-1][-120:]
     candidates = []
     for pattern, scope in (
@@ -480,7 +786,25 @@ def _numeric_amount(value: str, match: Any) -> Decimal:
     return amount
 
 
+def _numeric_unit_matches(value: str) -> list[Any]:
+    matches = {m.start(): m for m in NUMERIC_UNIT_RE.finditer(value)}
+    # The regular word boundary deliberately rejects model strings such as
+    # AX320ml. Supplement only an explicit integer-count × volume expression.
+    at_position = re.compile(NUMERIC_UNIT_RE.pattern.removeprefix(r"(?<!\w)"), NUMERIC_UNIT_RE.flags)
+    for prefix in re.finditer(r"(?<![\w.,])\d+(?:[.,]\d+)?\s*[x×]\s*(?=\d)", value, re.I):
+        match = at_position.match(value, prefix.end())
+        if match and UNIT_CANONICAL.get(match.group('unit').casefold()) in {'ml', 'cl', 'L'}:
+            matches.setdefault(match.start(), match)
+    return [matches[pos] for pos in sorted(matches)]
+
+
 def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, structured_label: bool) -> bool:
+    if _explicit_capacity_total(value, capacities, conflict_only=True):
+        return True
+    if not structured_label and compatible_reservoir_modes(value, capacities):
+        return False
+    if not structured_label and compatible_explicit_sets(value, capacities):
+        return False
     def explicit_hyphen_range(start: int) -> bool:
         prefix = value[max(0, start - 60):start]
         return bool(re.search(r"\b(?:rango|entre|desde|intervalo)\b[^;\n]{0,35}$|"
@@ -498,6 +822,8 @@ def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, str
         # conservative comparison instead of assuming a new separate object.
         groups["unknown" if unknown else scope].append((match, amount))
     for group in groups.values():
+        if _explicit_capacity_total(value, group, conflict_only=True):
+            return True
         if _explicit_capacity_total(value, group):
             continue
         if not structured_label and _compatible_capacity_limits(value, group):
@@ -535,9 +861,9 @@ def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, str
     return False
 
 
-def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
+def numeric_profile(value: str, *, label: str | None = None, source_title: str = '') -> dict[str, Any]:
     matches = []
-    for match in NUMERIC_UNIT_RE.finditer(value):
+    for match in _numeric_unit_matches(value):
         tail = value[match.end():]
         # l. is Amazon's largo axis abbreviation. L/A/A followed by cm is
         # another explicit dimension spelling, not a capacity declaration.
@@ -593,13 +919,26 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     capacity_factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
     capacity_context = bool(re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", value, re.I)) if label is None else bool(
         re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", str(label), re.I))
+    if label is None and re.search(r"\btotal\s*:?\s*\d+(?:[.,]\d+)?\s*(?:mililitros?|centilitros?|litros?|ml|cl|l)\b", value, re.I):
+        capacity_context = True
     capacities = [(match, _numeric_amount(value, match) *
                    Decimal(str(capacity_factors[UNIT_CANONICAL[match.group("unit").casefold()]])))
                   for match in matches if UNIT_CANONICAL.get(match.group("unit").casefold()) in capacity_factors
                   and match.start() not in rate_positions]
-    if capacity_context and _capacity_conflict(value, capacities, structured_label=label is not None):
+    if capacity_context:
+        volume_positions = {m.start() for m, _ in capacities}
+        if any((prefix.group('count').startswith('0') or re.search(r'[.,]', prefix.group('count')))
+               and prefix.end() in volume_positions
+               for prefix in re.finditer(r"(?<![\w.,])(?P<count>\d+(?:[.,]\d+)?)\s*[x×]\s*(?=\d)", value, re.I)):
+            issues.append('INVALID_VOLUME_MULTIPLIER')
+    contexts = scenario_exclusions(value, capacities) if label is None else []
+    excluded = {item['start'] for item in contexts}
+    checked_capacities = [(m, amount) for m, amount in capacities if m.start() not in excluded]
+    title_binding = title_bound_components(value, capacities, source_title) if label is None else None
+    if capacity_context and not title_binding and _capacity_conflict(value, checked_capacities, structured_label=label is not None):
         issues.append("CONTRADICTORY_CAPACITY")
-    return {"values": values, "issues": sorted(set(issues))}
+    return {"values": values, "issues": sorted(set(issues)), "capacity_contexts": contexts,
+            "capacity_title_binding": title_binding}
 
 
 def _tokens(value: str) -> set[str]:
@@ -689,7 +1028,8 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     "issues": sorted({issue for profile in row_profiles for issue in profile["issues"]}),
                 }
             else:
-                result["numeric"] = numeric_profile(result.get("clean_text", ""))
+                result["numeric"] = numeric_profile(result.get("clean_text", ""),
+                                                    source_title=_text(_source_value(record, 'title_es_raw')))
             result["issues"] = sorted(set(result.get("issues", []) + result["numeric"].get("issues", [])))
             blocking_issues = [issue for issue in result["issues"] if issue not in NON_BLOCKING_ISSUES]
             if blocking_issues and result["clean_status"] in {"CLEAN", "NORMALIZED"}:

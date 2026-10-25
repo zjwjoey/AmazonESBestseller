@@ -1,0 +1,1556 @@
+[
+  {
+    "index": 21,
+    "asin": "B08BCS9L3J",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "两只容器各15L与总30L字面齐备，2×15=30精确，标题也是2×15L。",
+    "literal_roles_ml": {
+      "each_container_ml": [
+        "15000"
+      ],
+      "set_total_ml": [
+        "30000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*15000=30000",
+    "title_from_saved_html": "EMUCA - Cubo de Basura, Gris, H 266 mm (2 x 15 L)",
+    "source_text": "Juego de 2 contenedores de 266mm de altura y capacidad 15 litros (capacidad total del juego 30 litros).\nDisponen de un asa de color tanto para facilitar la identificación de los desechos como para facilitar su extracción, y por consiguiente su vaciado y limpieza. Incluyen tapa de apertura manual.\nPara ajustar la bolsa al diseño cuadrado del contenedor, se recomienda usar una bolsa de mayor capacidad que el volumen indicado para el contenedor\nFabricados en plástico color gris antracita.\nPara evitar su desplazamiento durante la apertura y cierre del cajón se recomienda su uso junto con una base recortable (no incluida).",
+    "source_hash": "cbf33f397e76771751845c5b797cf57d4cfaa931507ac9c37be7a36c6ba6c8ca",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B08BCS9L3J.html",
+      "sha256": "6a8232555f5325c6f5b8b8b86e9a394d7f0b21a737e80d9e97e3a3f4a4eef9fc",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B08BCS9L3J"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Juego de 2 contenedores de 266mm de altura y capacidad 15 litros (capacidad total del juego 30 litros).",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Disponen de un asa de color tanto para facilitar la identificación de los desechos como para facilitar su extracción, y por consiguiente su vaciado y limpieza. Incluyen tapa de apertura manual.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Para ajustar la bolsa al diseño cuadrado del contenedor, se recomienda usar una bolsa de mayor capacidad que el volumen indicado para el contenedor",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Fabricados en plástico color gris antracita.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Para evitar su desplazamiento durante la apertura y cierre del cajón se recomienda su uso junto con una base recortable (no incluida).",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "15 litros",
+        "start": 55,
+        "end": 64,
+        "quote": "Juego de 2 contenedores de 266mm de altura y capacidad 15 litros (capacidad total del juego 30 litros).\nDisponen de un asa de color ta",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "30 litros",
+        "start": 92,
+        "end": 101,
+        "quote": "s de 266mm de altura y capacidad 15 litros (capacidad total del juego 30 litros).\nDisponen de un asa de color tanto para facilitar la identificación ",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 22,
+    "asin": "B08JTBVCRN",
+    "field": "product_description",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "壶1.2L与8杯每杯150ml字面齐备，8×150=1200ml。容量与饮用份数角色必须分开，即使算术相等也不能改写单杯或壶角色。",
+    "literal_roles_ml": {
+      "teapot_ml": [
+        "1200"
+      ],
+      "cup_serving_ml": [
+        "150"
+      ]
+    },
+    "arithmetic_or_constraint": "8*150=1200",
+    "title_from_saved_html": "Tetera Clásica De Uso Diario Teabloom - Tetera de Cristal Apta para Fogones - 1200 ml de Capacidad - Infusor Extraíble de Acero Inoxidable",
+    "source_text": "En la ciencia, una solución elegante es una solución que resuelve un problema de manera simple y eficiente, sin adornos ni esfuerzos innecesarios. Una solución elegante encarna la belleza, trayendo alegría a la persona que realizará la tarea. La tetera Classica es una solución elegante para la ceremonia del té. Al combinar belleza, funcionalidad y accesibilidad, hemos reunido todo lo que sabemos sobre el diseño excepcional para presentar una tetera útil, espléndida y duradera. Las características de alta calidad de la tetera Classica incluyen una construcción de vidrio borosilicato extra grueso pero ligero, un infusor de acero inoxidable extraíble y una tapa que permanece fijada para el servicio. La capacidad de 1,2 L permite preparar hasta ocho tazas de té de 150 ml cada una, perfecta para el placer solitario o recepciones. Gracias a su diseño cristalino, la tetera Classica es ideal para hacer té de hojas o té tallado Teabloom. También puede usar su tetera Classica para crear aguas de frutas deliciosas y saludables. La tetera Classica es el regalo perfecto para todos los que aparecen en tu lista de regalos.",
+    "source_hash": "14d83f1a2102864b26a4bc5f46c49e323b8613f55e416c2309b9b4b75bf2c6f2",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B08JTBVCRN.html",
+      "sha256": "be129c680b52d5f21c8e3ff7a7bfea93dd26250210662d9a131cf07b8bb07d51",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B08JTBVCRN"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[17]/div[8]/div/div/div[2]",
+        "text": "En la ciencia, una solución elegante es una solución que resuelve un problema de manera simple y eficiente, sin adornos ni esfuerzos innecesarios. Una solución elegante encarna la belleza, trayendo alegría a la persona que realizará la tarea. La tetera Classica es una solución elegante para la ceremonia del té. Al combinar belleza, funcionalidad y accesibilidad, hemos reunido todo lo que sabemos sobre el diseño excepcional para presentar una tetera útil, espléndida y duradera. Las características de alta calidad de la tetera Classica incluyen una construcción de vidrio borosilicato extra grueso pero ligero, un infusor de acero inoxidable extraíble y una tapa que permanece fijada para el servicio. La capacidad de 1,2 L permite preparar hasta ocho tazas de té de 150 ml cada una, perfecta para el placer solitario o recepciones. Gracias a su diseño cristalino, la tetera Classica es ideal para hacer té de hojas o té tallado Teabloom. También puede usar su tetera Classica para crear aguas de frutas deliciosas y saludables. La tetera Classica es el regalo perfecto para todos los que aparecen en tu lista de regalos.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "1,2 L",
+        "start": 722,
+        "end": 727,
+        "quote": "ble y una tapa que permanece fijada para el servicio. La capacidad de 1,2 L permite preparar hasta ocho tazas de té de 150 ml cada una, perfecta ",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[17]/div[8]/div/div/div[2]"
+        ]
+      },
+      {
+        "literal": "150 ml",
+        "start": 771,
+        "end": 777,
+        "quote": "cio. La capacidad de 1,2 L permite preparar hasta ocho tazas de té de 150 ml cada una, perfecta para el placer solitario o recepciones. Gracias a ",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[17]/div[8]/div/div/div[2]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 50,
+    "asin": "B0CG6CK5FZ",
+    "field": "feature_bullets",
+    "original_candidate_category": "DISTINCT_VESSELS_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "NAMED_DRAWERS",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "XXL抽屉5.2L和标准抽屉3.1L，标题总8.3L；两个角色有来源，且5.2+3.1=8.3精确。",
+    "literal_roles_ml": {
+      "xxl_drawer_ml": [
+        "5200"
+      ],
+      "standard_drawer_ml": [
+        "3100"
+      ],
+      "title_total_ml": [
+        "8300"
+      ]
+    },
+    "arithmetic_or_constraint": "5200+3100=8300",
+    "title_from_saved_html": "Moulinex Dual Easy Fry 8,3L, Freidora de aire con doble cesta",
+    "source_text": "Comidas completas en minutos: freidora de aire con cajón XXL y cajón estándar para cocinar dos platos diferentes al mismo tiempo, para una comida completa preparada en un solo electrodoméstico\nCapacidad generosa: utiliza el cajón XXL de 5,2 L para cocinar piezas voluminosas como un asado, los dos cajones para porciones generosas de patatas fritas o el cajón de 3,1 L más eficiente de energía para porciones individuales\nDELEGACIÓN: 7 programas preestablecidos (papas fritas, pollo, verduras, pescado, postre, deshidratación y modo manual) para asar, hornear, asar y cocinar una multitud de platos sin supervisión\nAhorra tiempo y energía: consume hasta un 70% menos de energía y cocina hasta un 40% más rápido que un horno tradicional (probado en 2023 con patatas fritas congeladas)\nReparación de 15 años al precio correcto: compromiso de reparación de 15 años al precio correcto gracias a nuestra red de 6.200 reparadores en todo el mundo, para contribuir a la protección del medio ambiente y la reducción de residuos\nTecnología extra crujiente: resultados dorados y crujientes con poco o ningún aceite, para hasta un 99% menos de grasa añadida (pruebas realizadas en 2023 con papas fritas congeladas)\nAplicación gratuita: aplicación gratuita con servicios exclusivos y una amplia variedad de recetas diarias listas en menos de 15 minutos\nFácil limpieza: cajones y estante aptos para lavavajillas para una limpieza sin esfuerzo\nContenido: freidora de aire dual Easy Fry, 2 estantes de cocción de aire caliente extraíbles, guía de inicio rápido, manual de instrucciones (idioma español no garantizado), aplicación gratuita",
+    "source_hash": "789aac3602a3c3b100402df9777024260e009502093f8652d6e92a009a0b73a5",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0CG6CK5FZ.html",
+      "sha256": "923e824b51de0b2504e4d2c3510afe536698aa985794682f647a0810c88b835c",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CG6CK5FZ"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Comidas completas en minutos: freidora de aire con cajón XXL y cajón estándar para cocinar dos platos diferentes al mismo tiempo, para una comida completa preparada en un solo electrodoméstico",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Capacidad generosa: utiliza el cajón XXL de 5,2 L para cocinar piezas voluminosas como un asado, los dos cajones para porciones generosas de patatas fritas o el cajón de 3,1 L más eficiente de energía para porciones individuales",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "DELEGACIÓN: 7 programas preestablecidos (papas fritas, pollo, verduras, pescado, postre, deshidratación y modo manual) para asar, hornear, asar y cocinar una multitud de platos sin supervisión",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Ahorra tiempo y energía: consume hasta un 70% menos de energía y cocina hasta un 40% más rápido que un horno tradicional (probado en 2023 con patatas fritas congeladas)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Reparación de 15 años al precio correcto: compromiso de reparación de 15 años al precio correcto gracias a nuestra red de 6.200 reparadores en todo el mundo, para contribuir a la protección del medio ambiente y la reducción de residuos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "Tecnología extra crujiente: resultados dorados y crujientes con poco o ningún aceite, para hasta un 99% menos de grasa añadida (pruebas realizadas en 2023 con papas fritas congeladas)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[7]",
+        "text": "Aplicación gratuita: aplicación gratuita con servicios exclusivos y una amplia variedad de recetas diarias listas en menos de 15 minutos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[1]",
+        "text": "Fácil limpieza: cajones y estante aptos para lavavajillas para una limpieza sin esfuerzo",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[2]",
+        "text": "Contenido: freidora de aire dual Easy Fry, 2 estantes de cocción de aire caliente extraíbles, guía de inicio rápido, manual de instrucciones (idioma español no garantizado), aplicación gratuita",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "5,2 L",
+        "start": 237,
+        "end": 242,
+        "quote": " un solo electrodoméstico\nCapacidad generosa: utiliza el cajón XXL de 5,2 L para cocinar piezas voluminosas como un asado, los dos cajones para p",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "3,1 L",
+        "start": 363,
+        "end": 368,
+        "quote": " dos cajones para porciones generosas de patatas fritas o el cajón de 3,1 L más eficiente de energía para porciones individuales\nDELEGACIÓN: 7 pr",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": false,
+    "expected_total_decision": "OTHER_AGENT_SCOPING_NEEDED_NO_TOTAL_IN_FIELD"
+  },
+  {
+    "index": 54,
+    "asin": "B0CPYH8RY4",
+    "field": "product_description",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "6箱各8L、总48L在同段明示；6×8=48精确，标题也为6箱8L。",
+    "literal_roles_ml": {
+      "each_box_ml": [
+        "8000"
+      ],
+      "set_total_ml": [
+        "48000"
+      ]
+    },
+    "arithmetic_or_constraint": "6*8000=48000",
+    "title_from_saved_html": "Acan Tradineur - Pack de 6 Cajas de Almacenamiento - Fabricado en plástico - Contenedor para almacenar Libros, ropa, mantas - N.º 26-15,5 x 34 x 22,5 cm - 8 Litros",
+    "source_text": "El Pack de 6 Cajas de Almacenamiento Acan Tradineur es la solución perfecta para organizar y mantener tus pertenencias en orden. Fabricadas con plástico resistente y duradero, estas cajas son ideales para uso doméstico y comercial. Con una capacidad de 8 litros cada una, este pack de 6 cajas ofrece un total de 48 litros de espacio de almacenamiento. Las cajas tienen un diseño semitransparente que te permite ver el contenido sin tener que abrirlas, lo que las hace ideales para mantener tu espacio limpio y organizado. Además, son fáciles de limpiar y mantener, lo que las hace ideales para aquellos que buscan una solución de almacenamiento de bajo mantenimiento. Las cajas tienen un tamaño de 15.5 x 34 x 22.5 cm y son de forma rectangular, lo que las hace fáciles de apilar y guardar. ¡Ordena ya tu pack de 6 cajas de almacenamiento Acan Tradineur y manten tus pertenencias organizadas y protegidas!",
+    "source_hash": "3474f4bd330a7a92548b958dd0419438db3049a110f91a88378a697cfab5e842",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0CPYH8RY4.html",
+      "sha256": "2e047e2264567d508c72067d09765c2878f6ce6636aa799021e08685236fef70",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CPYH8RY4"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[17]/div[9]/div/div/div[2]",
+        "text": "El Pack de 6 Cajas de Almacenamiento Acan Tradineur es la solución perfecta para organizar y mantener tus pertenencias en orden. Fabricadas con plástico resistente y duradero, estas cajas son ideales para uso doméstico y comercial. Con una capacidad de 8 litros cada una, este pack de 6 cajas ofrece un total de 48 litros de espacio de almacenamiento. Las cajas tienen un diseño semitransparente que te permite ver el contenido sin tener que abrirlas, lo que las hace ideales para mantener tu espacio limpio y organizado. Además, son fáciles de limpiar y mantener, lo que las hace ideales para aquellos que buscan una solución de almacenamiento de bajo mantenimiento. Las cajas tienen un tamaño de 15.5 x 34 x 22.5 cm y son de forma rectangular, lo que las hace fáciles de apilar y guardar. ¡Ordena ya tu pack de 6 cajas de almacenamiento Acan Tradineur y manten tus pertenencias organizadas y protegidas!",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "8 litros",
+        "start": 253,
+        "end": 261,
+        "quote": "ajas son ideales para uso doméstico y comercial. Con una capacidad de 8 litros cada una, este pack de 6 cajas ofrece un total de 48 litros de espaci",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[17]/div[9]/div/div/div[2]"
+        ]
+      },
+      {
+        "literal": "48 litros",
+        "start": 312,
+        "end": 321,
+        "quote": "pacidad de 8 litros cada una, este pack de 6 cajas ofrece un total de 48 litros de espacio de almacenamiento. Las cajas tienen un diseño semitranspar",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[17]/div[9]/div/div/div[2]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 64,
+    "asin": "B0DF7TY352",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "两隔间各50L、总100L直接明示；2×50=100精确，标题100L。",
+    "literal_roles_ml": {
+      "each_bag_ml": [
+        "50000"
+      ],
+      "total_ml": [
+        "100000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*50000=100000",
+    "title_from_saved_html": "SONGMICS Cesto para Ropa Sucia, 2 Compartimentos, con Estante, 100 L, Bambú",
+    "source_text": "Cesto doble, organización por tipos: Este cesto para la colada ofrece una capacidad total de 100 L (50 L para cada bolsa); el diseño de 2 compartimentos ayuda a organizar los artículos por tipos o a dividir lo claro de lo oscuro\nCon bandeja y pequeños bolsillos laterales: Puedes almacenar detergente, malla de lavandería, etc. en el estante superior. Los pequeños bolsillos laterales todavía ofrecen espacio para artículos pequeños\nEstructura práctica: Hecho de bambú, el cesto de lavandería cuenta con un diseño funcional (estante de hasta 18 kg). El estante con protección lateral evita que los artículos se caigan\nSaco de ropa extraíble y desmontable: El saco se sujeta con un panel de plástico en la parte inferior para evitar que se hunda; gracias al cierre de gancho y bucle, puede sacarlo o quitarlo fácilmente para llevarlo a la lavadora\nBambú natural: Hecho de bambú, el marco de esta cesta de lavandería crea un ambiente natural y armonioso en tu hogar y se adapta a diferentes estilos de interior; incluye un kit antivuelco para un uso seguro",
+    "source_hash": "cf5d7b760483aed168286851787f00b04d556111b8e7ca0ba39c1010108e9d4c",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0DF7TY352.html",
+      "sha256": "3f4aba64fd46cdeae0032b60da67699e28b930bc8269bf0a620fcd44c6f9cd99",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DF7TY352"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Cesto doble, organización por tipos: Este cesto para la colada ofrece una capacidad total de 100 L (50 L para cada bolsa); el diseño de 2 compartimentos ayuda a organizar los artículos por tipos o a dividir lo claro de lo oscuro",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Con bandeja y pequeños bolsillos laterales: Puedes almacenar detergente, malla de lavandería, etc. en el estante superior. Los pequeños bolsillos laterales todavía ofrecen espacio para artículos pequeños",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Estructura práctica: Hecho de bambú, el cesto de lavandería cuenta con un diseño funcional (estante de hasta 18 kg). El estante con protección lateral evita que los artículos se caigan",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Saco de ropa extraíble y desmontable: El saco se sujeta con un panel de plástico en la parte inferior para evitar que se hunda; gracias al cierre de gancho y bucle, puede sacarlo o quitarlo fácilmente para llevarlo a la lavadora",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Bambú natural: Hecho de bambú, el marco de esta cesta de lavandería crea un ambiente natural y armonioso en tu hogar y se adapta a diferentes estilos de interior; incluye un kit antivuelco para un uso seguro",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "100 L",
+        "start": 93,
+        "end": 98,
+        "quote": "ón por tipos: Este cesto para la colada ofrece una capacidad total de 100 L (50 L para cada bolsa); el diseño de 2 compartimentos ayuda a organiz",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "50 L",
+        "start": 100,
+        "end": 104,
+        "quote": "tipos: Este cesto para la colada ofrece una capacidad total de 100 L (50 L para cada bolsa); el diseño de 2 compartimentos ayuda a organizar los",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": false,
+    "expected_total_decision": "COUNT_BAG_RELATION_NOT_EXPLICIT"
+  },
+  {
+    "index": 66,
+    "asin": "B0DJDSR393",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_PARTS_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "三隔间20L+20L+20L与总60L直接明示且精确相等；每个值保留为独立隔间或整机总量。",
+    "literal_roles_ml": {
+      "three_compartments_ml": [
+        "20000",
+        "20000",
+        "20000"
+      ],
+      "total_ml": [
+        "60000"
+      ]
+    },
+    "arithmetic_or_constraint": "20000+20000+20000=60000",
+    "title_from_saved_html": "EKO Essential Cubo de Basura Reciclaje Cocina 20 L + 20 L + 20 L con Pedal",
+    "source_text": "Triple compartimento 20 L + 20 L + 20 L: Permite separar residuos en tres compartimentos independientes, con una capacidad total de 60 litros para una gestión más organizada del reciclaje.\nApertura con pedales independientes: Cada compartimento dispone de su propio pedal para abrir la tapa sin usar las manos, ofreciendo un uso cómodo, higiénico y sin contacto.\nCierre suave y silencioso: Las tapas se cierran lentamente para evitar golpes y ruidos, aportando mayor comodidad durante el uso diario en cocinas, oficinas y espacios profesionales.\nAcero inoxidable antihuellas: Su estructura resistente y fácil de limpiar mantiene una apariencia elegante e incorpora un diseño rectangular que optimiza el espacio disponible.\nCubos interiores extraíbles: Los tres cubos incluyen asa y estabilizador de bolsas para facilitar el vaciado, la limpieza y mantener las bolsas fijas sin deslizamientos.",
+    "source_hash": "b68bb704944e7dd8314b66c08b5aad958e50869923216e2a53fd87228fad978f",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\detail500_live_20261022_192705_0564\\run\\html\\B0DJDSR393.html",
+      "sha256": "dbed14441daeae10accb0de8b47da6b8c8f35a7988236ab6d0e61d79fe366667",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DJDSR393"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Triple compartimento 20 L + 20 L + 20 L: Permite separar residuos en tres compartimentos independientes, con una capacidad total de 60 litros para una gestión más organizada del reciclaje.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Apertura con pedales independientes: Cada compartimento dispone de su propio pedal para abrir la tapa sin usar las manos, ofreciendo un uso cómodo, higiénico y sin contacto.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Cierre suave y silencioso: Las tapas se cierran lentamente para evitar golpes y ruidos, aportando mayor comodidad durante el uso diario en cocinas, oficinas y espacios profesionales.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Acero inoxidable antihuellas: Su estructura resistente y fácil de limpiar mantiene una apariencia elegante e incorpora un diseño rectangular que optimiza el espacio disponible.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Cubos interiores extraíbles: Los tres cubos incluyen asa y estabilizador de bolsas para facilitar el vaciado, la limpieza y mantener las bolsas fijas sin deslizamientos.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "20 L",
+        "start": 21,
+        "end": 25,
+        "quote": "Triple compartimento 20 L + 20 L + 20 L: Permite separar residuos en tres compartimentos indepe",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "20 L",
+        "start": 28,
+        "end": 32,
+        "quote": "Triple compartimento 20 L + 20 L + 20 L: Permite separar residuos en tres compartimentos independiente",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "20 L",
+        "start": 35,
+        "end": 39,
+        "quote": "Triple compartimento 20 L + 20 L + 20 L: Permite separar residuos en tres compartimentos independientes, con ",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "60 litros",
+        "start": 132,
+        "end": 141,
+        "quote": "uos en tres compartimentos independientes, con una capacidad total de 60 litros para una gestión más organizada del reciclaje.\nApertura con pedales i",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 70,
+    "asin": "B0DPPWN31X",
+    "field": "feature_bullets",
+    "original_candidate_category": "DISTINCT_VESSELS_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_NAMED_PARTS_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "上篮4.3L、下篮6.5L、整机10.8L三种角色直接明示，4.3+6.5=10.8精确。",
+    "literal_roles_ml": {
+      "upper_basket_ml": [
+        "4300"
+      ],
+      "lower_basket_ml": [
+        "6500"
+      ],
+      "total_ml": [
+        "10800"
+      ]
+    },
+    "arithmetic_or_constraint": "4300+6500=10800",
+    "title_from_saved_html": "Cosori Freidora de Aire 10,8 L Turbo Tower Pro, Doble Cesta Vertical",
+    "source_text": "【𝐂𝐞𝐬𝐭𝐚 𝐦𝐞𝐣𝐨𝐫𝐚𝐝𝐚 𝐜𝐨𝐧 𝐫𝐞𝐯𝐞𝐬𝐭𝐢𝐦𝐢𝐞𝐧𝐭𝐨 𝟏𝟎𝟎 % 𝐜𝐞𝐫á𝐦𝐢𝐜𝐨】Revestimiento cerámico sin PFAS para cocinar con tranquilidad, con excelente resistencia al desgaste y a los arañazos. El revestimiento antiadherente facilita aún más la limpieza\n【𝐂𝐚𝐥𝐨𝐫 𝐔𝐧𝐢𝐟𝐨𝐫𝐦𝐞, 𝐁𝐨𝐜𝐚𝐝𝐨 𝐏𝐞𝐫𝐟𝐞𝐜𝐭𝐨】La tecnología definitiva de Dual Blaze con 3 calentadores garantiza una cocción uniforme, sin necesidad de agitar. Crujiente y dorado por fuera, jugoso y tierno por dentro\n【𝟔8% 𝐝𝐞 𝐀𝐡𝐨𝐫𝐫𝐨, 𝟓𝟓% 𝐝𝐞 𝐀𝐮𝐦𝐞𝐧𝐭𝐨 𝐝𝐞 𝐕𝐞𝐥𝐨𝐜𝐢𝐝𝐚𝐝】Los 2 motores DC superan a los AC con un 33% más de velocidad, ofreciendo una cocción más rápida, mayor eficiencia energética y ahorro en costos. ¡Un rendimiento más eficiente para su cocina\n【𝐌𝐞𝐧𝐨𝐬 𝐄𝐬𝐩𝐚𝐜𝐢𝐨 𝐞𝐧 𝐥𝐚 𝐄𝐧𝐜𝐢𝐦𝐞𝐫𝐚, 𝐌á𝐬 𝐁𝐚𝐧𝐪𝐮𝐞𝐭𝐞】Capacidad mega de 10.8L: suficiente para toda la familia, sin ocupar el espacio en la cocina. Cocina una vez, alimenta a todos. Cesta superior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm x A: 23,5cm x F: 12,4cm)\n【𝐍𝐮𝐭𝐫𝐢𝐜𝐢ó𝐧 𝐄𝐪𝐮𝐢𝐥𝐢𝐛𝐫𝐚𝐝𝐚, 𝐌𝐢𝐬𝐢ó𝐧 𝐌á𝐬 𝐒𝐚𝐧𝐚】Diseño de cocción en 3 niveles, que aporta comidas equilibradas con triple nutriente: proteínas, verduras y carbohidratos en una sola vez. Comidas con un 95% menos de aceite, vive una vida de bienestar\n【𝟕 𝐅𝐮𝐧𝐜𝐢𝐨𝐧𝐞𝐬 𝐞𝐧 𝟏, 𝐃𝐞𝐬𝐛𝐥𝐨𝐪𝐮𝐞𝐚 𝐈𝐧𝐟𝐢𝐧𝐢𝐭𝐨𝐬 𝐒𝐚𝐛𝐨𝐫𝐞𝐬】Uno hace el trabajo de siete, modernizando tu cocina. Cocina cualquier cosa en cualquier momento con una operación sin esfuerzo. Un solo dispositivo da vida a infinitos sabores\n【𝐂𝐨𝐦𝐢𝐝𝐚 𝐆𝐨𝐮𝐫𝐦𝐞𝐭, 𝐑𝐞𝐝𝐞𝐟𝐢𝐧𝐢𝐝𝐚 𝐞𝐧 𝐂𝐚𝐬𝐚】Domina un menú occidental completo con un solo clic: aperitivo, plato principal y postre. Eleva tu experiencia culinaria a nivel cinco estrellas sin esfuerzo. Descubre sabores gourmet en casa, ideal tanto para principiantes como para expertos\n【𝐑𝐞𝐝𝐞𝐟𝐢𝐧𝐢𝐞𝐧𝐝𝐨 𝐥𝐚 𝐜𝐨𝐦𝐨𝐝𝐢𝐝𝐚𝐝 𝐞𝐧 𝐥𝐚 𝐜𝐨𝐜𝐢𝐧𝐚】Ultrasilencioso (≤58 dB), sin humo, espacio fresco: una revolución en tu cocina\n【𝟏𝟎 𝐒𝐞𝐠𝐮𝐧𝐝𝐨𝐬, 𝐋𝐢𝐦𝐩𝐢𝐞𝐳𝐚 𝐏𝐞𝐫𝐟𝐞𝐜𝐭𝐚】Revestimiento cerámico avanzado, superficie lisa como un espejo, se limpia en segundos y las manchas desaparecen\n【𝟑 𝐀ñ𝐨𝐬 𝐝𝐞 𝐆𝐚𝐫𝐚𝐧𝐭í𝐚】Con nuestro compromiso con tu satisfacción, no dudes en contactar con el servicio de atención al cliente de Cosori para cualquier ayuda",
+    "source_hash": "0172a85496b4fd34165837197a649b54693f017b97a38d500e6c8c7340f1ae41",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0DPPWN31X.html",
+      "sha256": "ff61ba6145eac9ea1e2933e0a0b26b622105252d79911ad3621b52456d94d03a",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DPPWN31X"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "【Cesta mejorada con revestimiento 100 % cerámico】Revestimiento cerámico sin PFAS para cocinar con tranquilidad, con excelente resistencia al desgaste y a los arañazos. El revestimiento antiadherente facilita aún más la limpieza",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【Calor Uniforme, Bocado Perfecto】La tecnología definitiva de Dual Blaze con 3 calentadores garantiza una cocción uniforme, sin necesidad de agitar. Crujiente y dorado por fuera, jugoso y tierno por dentro",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【68% de Ahorro, 55% de Aumento de Velocidad】Los 2 motores DC superan a los AC con un 33% más de velocidad, ofreciendo una cocción más rápida, mayor eficiencia energética y ahorro en costos. ¡Un rendimiento más eficiente para su cocina",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "【Menos Espacio en la Encimera, Más Banquete】Capacidad mega de 10.8L: suficiente para toda la familia, sin ocupar el espacio en la cocina. Cocina una vez, alimenta a todos. Cesta superior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm x A: 23,5cm x F: 12,4cm)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【Nutrición Equilibrada, Misión Más Sana】Diseño de cocción en 3 niveles, que aporta comidas equilibradas con triple nutriente: proteínas, verduras y carbohidratos en una sola vez. Comidas con un 95% menos de aceite, vive una vida de bienestar",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "【7 Funciones en 1, Desbloquea Infinitos Sabores】Uno hace el trabajo de siete, modernizando tu cocina. Cocina cualquier cosa en cualquier momento con una operación sin esfuerzo. Un solo dispositivo da vida a infinitos sabores",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[7]",
+        "text": "【Comida Gourmet, Redefinida en Casa】Domina un menú occidental completo con un solo clic: aperitivo, plato principal y postre. Eleva tu experiencia culinaria a nivel cinco estrellas sin esfuerzo. Descubre sabores gourmet en casa, ideal tanto para principiantes como para expertos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[1]",
+        "text": "【Redefiniendo la comodidad en la cocina】Ultrasilencioso (≤58 dB), sin humo, espacio fresco: una revolución en tu cocina",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[2]",
+        "text": "【10 Segundos, Limpieza Perfecta】Revestimiento cerámico avanzado, superficie lisa como un espejo, se limpia en segundos y las manchas desaparecen",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[3]",
+        "text": "【3 Años de Garantía】Con nuestro compromiso con tu satisfacción, no dudes en contactar con el servicio de atención al cliente de Cosori para cualquier ayuda",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "10.8L",
+        "start": 730,
+        "end": 735,
+        "quote": " cocina\n【𝐌𝐞𝐧𝐨𝐬 𝐄𝐬𝐩𝐚𝐜𝐢𝐨 𝐞𝐧 𝐥𝐚 𝐄𝐧𝐜𝐢𝐦𝐞𝐫𝐚, 𝐌á𝐬 𝐁𝐚𝐧𝐪𝐮𝐞𝐭𝐞】Capacidad mega de 10.8L: suficiente para toda la familia, sin ocupar el espacio en la cocina.",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "4.3L",
+        "start": 858,
+        "end": 862,
+        "quote": "cio en la cocina. Cocina una vez, alimenta a todos. Cesta superior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]"
+        ]
+      },
+      {
+        "literal": "6.5L",
+        "start": 917,
+        "end": 921,
+        "quote": "uperior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm x A: 23,5cm x F: 12,4cm)\n【𝐍𝐮𝐭𝐫𝐢𝐜𝐢ó𝐧 𝐄𝐪𝐮𝐢𝐥𝐢𝐛𝐫𝐚𝐝𝐚, 𝐌𝐢𝐬𝐢ó𝐧 𝐌á",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 74,
+    "asin": "B0DQ5TPXNS",
+    "field": "feature_bullets",
+    "original_candidate_category": "DISTINCT_VESSELS_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_NAMED_PARTS_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "主杯500ml、附件150ml与总650ml来源齐备且精确相加；标题650ml。保留三个声明，不选大值覆盖部件。",
+    "literal_roles_ml": {
+      "main_cup_ml": [
+        "500"
+      ],
+      "accessory_ml": [
+        "150"
+      ],
+      "combined_total_ml": [
+        "650"
+      ]
+    },
+    "arithmetic_or_constraint": "500+150=650",
+    "title_from_saved_html": "LEBENLANG Vaso Yogures & cereales para llevar con cuchara - 650ml",
+    "source_text": "✅ SIN FUGAS I 100% SIN BPA I ACERO INOXIDABLE : Vaso Yogur & Cereal para llevar de dos piezas para muesli sobre la marcha con juntas mejoradas que evitan las molestas fugas de muesli yogur o similares - Tarros Yogurt Con Tapa 100% sin BPA y libre de sustancias nocivas\n✅ HIGIÉNICO & REUTILIZABLE : Vasos yogur para llevar fácil de limpiar con recipiente de 500 ml y accesorio de 150 ml para, por ejemplo, muesli evita la transferencia de olores a las piezas de plástico que puede ocurrir con otros Vaso Cristal Con Tapa gracias al recipiente de acero inoxidable\n✅ MULTIFUNCIONAL INCL. Cuchara : Ya sea Muesli Con Yogures de avena de la noche a la mañana, pequeñas ensaladas o parfaits, nuestra Cereal Cup para llevar es el compañero perfecto para la hora del almuerzo en el trabajo o la escuela - cuchara higiénica de acero inoxidable se puede fijar intuitivamente a la tapa\n✅ COMPACTA Y CON MUCHO ESPACIO : La Vaso Smoothie para llevar es fácil de transportar gracias a su peso en vacío de solo 300 g y sus dimensiones de 10x17 cm & fácil de guardar la taza de muesli para llevar en la mochila del colegio o en la bolsa del trabajo con un gran volumen de 650 ml para una pausa nutritiva para el almuerzo\n✅ SERVICIO AL CLIENTE FIABLE : ¿Todavía tiene preguntas sobre su Tarros Yogur o ha experimentado algún inconveniente? Nuestro soporte alemán está a tu disposición y te ayudará con todas tus dudas de la mejor manera posible",
+    "source_hash": "de1e64a7a6b49b593f0c4b800776f77f88e821511f7b1af48808baf1f559504b",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0DQ5TPXNS.html",
+      "sha256": "766ceb9f0dfb93666e6cf671f94710d44fa5a0ac3e7661284e825e11cf9048d7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DQ5TPXNS"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "✅ SIN FUGAS I 100% SIN BPA I ACERO INOXIDABLE : Vaso Yogur & Cereal para llevar de dos piezas para muesli sobre la marcha con juntas mejoradas que evitan las molestas fugas de muesli yogur o similares - Tarros Yogurt Con Tapa 100% sin BPA y libre de sustancias nocivas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "✅ HIGIÉNICO & REUTILIZABLE : Vasos yogur para llevar fácil de limpiar con recipiente de 500 ml y accesorio de 150 ml para, por ejemplo, muesli evita la transferencia de olores a las piezas de plástico que puede ocurrir con otros Vaso Cristal Con Tapa gracias al recipiente de acero inoxidable",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "✅ MULTIFUNCIONAL INCL. Cuchara : Ya sea Muesli Con Yogures de avena de la noche a la mañana, pequeñas ensaladas o parfaits, nuestra Cereal Cup para llevar es el compañero perfecto para la hora del almuerzo en el trabajo o la escuela - cuchara higiénica de acero inoxidable se puede fijar intuitivamente a la tapa",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "✅ COMPACTA Y CON MUCHO ESPACIO : La Vaso Smoothie para llevar es fácil de transportar gracias a su peso en vacío de solo 300 g y sus dimensiones de 10x17 cm & fácil de guardar la taza de muesli para llevar en la mochila del colegio o en la bolsa del trabajo con un gran volumen de 650 ml para una pausa nutritiva para el almuerzo",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "✅ SERVICIO AL CLIENTE FIABLE : ¿Todavía tiene preguntas sobre su Tarros Yogur o ha experimentado algún inconveniente? Nuestro soporte alemán está a tu disposición y te ayudará con todas tus dudas de la mejor manera posible",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "500 ml",
+        "start": 357,
+        "end": 363,
+        "quote": "ILIZABLE : Vasos yogur para llevar fácil de limpiar con recipiente de 500 ml y accesorio de 150 ml para, por ejemplo, muesli evita la transferenci",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]"
+        ]
+      },
+      {
+        "literal": "150 ml",
+        "start": 379,
+        "end": 385,
+        "quote": " para llevar fácil de limpiar con recipiente de 500 ml y accesorio de 150 ml para, por ejemplo, muesli evita la transferencia de olores a las piez",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]"
+        ]
+      },
+      {
+        "literal": "650 ml",
+        "start": 1156,
+        "end": 1162,
+        "quote": " mochila del colegio o en la bolsa del trabajo con un gran volumen de 650 ml para una pausa nutritiva para el almuerzo\n✅ SERVICIO AL CLIENTE FIABL",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 80,
+    "asin": "B0F32WWKMT",
+    "field": "feature_bullets",
+    "original_candidate_category": "DISTINCT_VESSELS_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_NAMED_PARTS_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "上篮4.3L、下篮6.5L、整机10.8L直接明示且精确相加。",
+    "literal_roles_ml": {
+      "upper_basket_ml": [
+        "4300"
+      ],
+      "lower_basket_ml": [
+        "6500"
+      ],
+      "total_ml": [
+        "10800"
+      ]
+    },
+    "arithmetic_or_constraint": "4300+6500=10800",
+    "title_from_saved_html": "Cosori Freidora de Aire 10,8 L Turbo Tower, Doble Cesta Vertical",
+    "source_text": "【𝐋𝐥𝐞𝐯𝐚 𝐭𝐮 𝐬𝐚𝐥𝐮𝐝 𝐚𝐥 𝐬𝐢𝐠𝐮𝐢𝐞𝐧𝐭𝐞 𝐧𝐢𝐯𝐞𝐥】Interior metálico. Disfruta de una cocina más saludable con hasta un 95 % menos de aceite, recetas inspiradas por chefs y una alimentación equilibrada\n【𝐌𝐞𝐧𝐨𝐬 𝐄𝐬𝐩𝐚𝐜𝐢𝐨 𝐞𝐧 𝐥𝐚 𝐄𝐧𝐜𝐢𝐦𝐞𝐫𝐚, 𝐌á𝐬 𝐁𝐚𝐧𝐪𝐮𝐞𝐭𝐞】Capacidad mega de 10.8L: suficiente para toda la familia, sin ocupar el espacio en la cocina. Cocina una vez, alimenta a todos. Cesta superior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm x A: 23,5cm x F: 12,4cm)\n【𝟔 𝐅𝐮𝐧𝐜𝐢𝐨𝐧𝐞𝐬 𝐞𝐧 𝟏, 𝐃𝐞𝐬𝐛𝐥𝐨𝐪𝐮𝐞𝐚 𝐈𝐧𝐟𝐢𝐧𝐢𝐭𝐨𝐬 𝐒𝐚𝐛𝐨𝐫𝐞𝐬】Uno hace el trabajo de seis, modernizando tu cocina. Cocina cualquier cosa en cualquier momento con una operación sin esfuerzo. Un solo dispositivo da vida a infinitos sabores\n【𝐂𝐚𝐥𝐨𝐫 𝐔𝐧𝐢𝐟𝐨𝐫𝐦𝐞, 𝐁𝐨𝐜𝐚𝐝𝐨 𝐏𝐞𝐫𝐟𝐞𝐜𝐭𝐨】La tecnología de circulación de calor 360° y el control térmico de precisión garantizan una cocción uniforme, sin necesidad de agitar. Crujiente y dorado por fuera, jugoso y tierno por dentro\n【𝟔𝟖% 𝐝𝐞 𝐀𝐡𝐨𝐫𝐫𝐨】Con una alta potencia de 2630W y 2 motores DC, supera a los motores AC con una velocidad 33% más rápida, cocción más ágil, mayor eficiencia energética y un ahorro del 68% en la zona 1\n【𝐍𝐮𝐭𝐫𝐢𝐜𝐢ó𝐧 𝐄𝐪𝐮𝐢𝐥𝐢𝐛𝐫𝐚𝐝𝐚, 𝐌𝐢𝐬𝐢ó𝐧 𝐌á𝐬 𝐒𝐚𝐧𝐚】Diseño de cocción en 3 niveles, que aporta comidas equilibradas con triple nutriente: proteínas, verduras y carbohidratos en una sola vez\n【𝐂𝐨𝐦𝐢𝐝𝐚 𝐆𝐨𝐮𝐫𝐦𝐞𝐭, 𝐑𝐞𝐝𝐞𝐟𝐢𝐧𝐢𝐝𝐚 𝐞𝐧 𝐂𝐚𝐬𝐚】Domina un menú occidental completo con un solo clic: entrada, plato principal y postre. Eleva tu experiencia culinaria al nivel de cinco estrellas sin esfuerzo. Descubre sabores gourmet en casa, ¡perfecto tanto para principiantes como para expertos\n【𝐑𝐞𝐝𝐞𝐟𝐢𝐧𝐢𝐞𝐧𝐝𝐨 𝐥𝐚 𝐜𝐨𝐦𝐨𝐝𝐢𝐝𝐚𝐝 𝐞𝐧 𝐥𝐚 𝐜𝐨𝐜𝐢𝐧𝐚】Ultrasilencioso (≤58 dB), sin humo, espacio fresco: una revolución en tu cocina\n【𝟏𝟎 𝐒𝐞𝐠𝐮𝐧𝐝𝐨𝐬, 𝐋𝐢𝐦𝐩𝐢𝐞𝐳𝐚 𝐏𝐞𝐫𝐟𝐞𝐜𝐭𝐚】¡Cocina perfecta, limpieza sin esfuerzo! Las manchas difíciles desaparecen como por arte de magia — ¡brilla de nuevo en solo 10 segundos\n【𝟑 𝐀ñ𝐨𝐬 𝐝𝐞 𝐆𝐚𝐫𝐚𝐧𝐭í𝐚】Con nuestro compromiso con tu satisfacción, no dudes en contactar con el servicio de atención al cliente de Cosori para cualquier ayuda",
+    "source_hash": "ed14485fab5189d4680503d0d3906b9511772d0005fe29fb24bdae592e0aa5f5",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0F32WWKMT.html",
+      "sha256": "0de1a6dd16bcf4131d9ad159c3c02408f52dfb1c86e84e32a46e7b7e9b0384cc",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0F32WWKMT"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "【Lleva tu salud al siguiente nivel】Interior metálico. Disfruta de una cocina más saludable con hasta un 95 % menos de aceite, recetas inspiradas por chefs y una alimentación equilibrada",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【Menos Espacio en la Encimera, Más Banquete】Capacidad mega de 10.8L: suficiente para toda la familia, sin ocupar el espacio en la cocina. Cocina una vez, alimenta a todos. Cesta superior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm x A: 23,5cm x F: 12,4cm)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【6 Funciones en 1, Desbloquea Infinitos Sabores】Uno hace el trabajo de seis, modernizando tu cocina. Cocina cualquier cosa en cualquier momento con una operación sin esfuerzo. Un solo dispositivo da vida a infinitos sabores",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "【Calor Uniforme, Bocado Perfecto】La tecnología de circulación de calor 360° y el control térmico de precisión garantizan una cocción uniforme, sin necesidad de agitar. Crujiente y dorado por fuera, jugoso y tierno por dentro",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【68% de Ahorro】Con una alta potencia de 2630W y 2 motores DC, supera a los motores AC con una velocidad 33% más rápida, cocción más ágil, mayor eficiencia energética y un ahorro del 68% en la zona 1",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "【Nutrición Equilibrada, Misión Más Sana】Diseño de cocción en 3 niveles, que aporta comidas equilibradas con triple nutriente: proteínas, verduras y carbohidratos en una sola vez",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[7]",
+        "text": "【Comida Gourmet, Redefinida en Casa】Domina un menú occidental completo con un solo clic: entrada, plato principal y postre. Eleva tu experiencia culinaria al nivel de cinco estrellas sin esfuerzo. Descubre sabores gourmet en casa, ¡perfecto tanto para principiantes como para expertos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[1]",
+        "text": "【Redefiniendo la comodidad en la cocina】Ultrasilencioso (≤58 dB), sin humo, espacio fresco: una revolución en tu cocina",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[2]",
+        "text": "【10 Segundos, Limpieza Perfecta】¡Cocina perfecta, limpieza sin esfuerzo! Las manchas difíciles desaparecen como por arte de magia — ¡brilla de nuevo en solo 10 segundos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/div[1]/div/ul/li[3]",
+        "text": "【3 Años de Garantía】Con nuestro compromiso con tu satisfacción, no dudes en contactar con el servicio de atención al cliente de Cosori para cualquier ayuda",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "10.8L",
+        "start": 248,
+        "end": 253,
+        "quote": "librada\n【𝐌𝐞𝐧𝐨𝐬 𝐄𝐬𝐩𝐚𝐜𝐢𝐨 𝐞𝐧 𝐥𝐚 𝐄𝐧𝐜𝐢𝐦𝐞𝐫𝐚, 𝐌á𝐬 𝐁𝐚𝐧𝐪𝐮𝐞𝐭𝐞】Capacidad mega de 10.8L: suficiente para toda la familia, sin ocupar el espacio en la cocina.",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "4.3L",
+        "start": 376,
+        "end": 380,
+        "quote": "cio en la cocina. Cocina una vez, alimenta a todos. Cesta superior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]"
+        ]
+      },
+      {
+        "literal": "6.5L",
+        "start": 435,
+        "end": 439,
+        "quote": "uperior de 4.3L (H: 23,5cm x A: 23,5cm x F: 8,4cm), cesta inferior de 6.5L (H: 23,5cm x A: 23,5cm x F: 12,4cm)\n【𝟔 𝐅𝐮𝐧𝐜𝐢𝐨𝐧𝐞𝐬 𝐞𝐧 𝟏, 𝐃𝐞𝐬𝐛𝐥𝐨𝐪𝐮𝐞𝐚 𝐈𝐧𝐟",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 89,
+    "asin": "B0FSGN7142",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "3箱各66L，总198L；标题同样明示3件198L，3×66=198精确。",
+    "literal_roles_ml": {
+      "each_box_ml": [
+        "66000"
+      ],
+      "set_total_ml": [
+        "198000"
+      ]
+    },
+    "arithmetic_or_constraint": "3*66000=198000",
+    "title_from_saved_html": "Cajas Almacenaje Ropa 66L Pack 3 (198L) 50x40x33 cm Rígida Ventana",
+    "source_text": "📦 PACK 3 CAJAS ALMACENAJE ROPA 66L PARA ARMARIO (50×40×33 cm cada caja · 198L total): organiza ropa de temporada, edredones, jerséis, mantas, sábanas y toallas sin ocupar todo el armario. Ideal si tienes poco espacio — ganas sitio sin comprar otro mueble.\n⚡ MARCO METÁLICO INTERNO — NO SE DEFORMAN AL APILAR: a diferencia de las fundas blandas, el esqueleto de varillas metálicas mantiene la forma aunque las llenes hasta arriba, y se apilan firmes. Cuando no las usas, se pliegan planas y ocupan poquísimo.\n🔓 DOBLE ACCESO — CREMALLERA FRONTAL + APERTURA SUPERIOR: coge lo que necesitas sin sacar la caja de la balda, incluso apiladas. La apertura de arriba es con cremallera y la frontal con ventana para ver el contenido sin abrir.\n👀 VENTANA TRANSPARENTE + ASAS REFORZADAS: identifica el contenido de un vistazo sin abrir la caja. La ventana lisa mantiene una línea limpia y elegante en la estantería. Asas laterales reforzadas para moverlas incluso llenas.\n🛡️ PROTEGE TU ROPA DE TEMPORADA + QUITAPELUSAS INCLUIDO: la tela Oxford 600D resistente al polvo y la humedad mantiene edredones y jerséis listos para la próxima temporada. No son estancas: no son para un trastero húmedo. Pack de 3 cajas + 1 quitapelusas portátil. Buena idea de regalo para un hogar ordenado.",
+    "source_hash": "1239c662f1bce18f9d789b8d8e30089f50a7c49d726350ba0de2f17e0c0aa11a",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0FSGN7142.html",
+      "sha256": "01c8b67d111755015c5cd6a9a1379e636b49019e705e8e98eb468900236c33de",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0FSGN7142"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "📦 PACK 3 CAJAS ALMACENAJE ROPA 66L PARA ARMARIO (50×40×33 cm cada caja · 198L total): organiza ropa de temporada, edredones, jerséis, mantas, sábanas y toallas sin ocupar todo el armario. Ideal si tienes poco espacio — ganas sitio sin comprar otro mueble.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "⚡ MARCO METÁLICO INTERNO — NO SE DEFORMAN AL APILAR: a diferencia de las fundas blandas, el esqueleto de varillas metálicas mantiene la forma aunque las llenes hasta arriba, y se apilan firmes. Cuando no las usas, se pliegan planas y ocupan poquísimo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "🔓 DOBLE ACCESO — CREMALLERA FRONTAL + APERTURA SUPERIOR: coge lo que necesitas sin sacar la caja de la balda, incluso apiladas. La apertura de arriba es con cremallera y la frontal con ventana para ver el contenido sin abrir.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "👀 VENTANA TRANSPARENTE + ASAS REFORZADAS: identifica el contenido de un vistazo sin abrir la caja. La ventana lisa mantiene una línea limpia y elegante en la estantería. Asas laterales reforzadas para moverlas incluso llenas.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "🛡️ PROTEGE TU ROPA DE TEMPORADA + QUITAPELUSAS INCLUIDO: la tela Oxford 600D resistente al polvo y la humedad mantiene edredones y jerséis listos para la próxima temporada. No son estancas: no son para un trastero húmedo. Pack de 3 cajas + 1 quitapelusas portátil. Buena idea de regalo para un hogar ordenado.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "66L",
+        "start": 31,
+        "end": 34,
+        "quote": "📦 PACK 3 CAJAS ALMACENAJE ROPA 66L PARA ARMARIO (50×40×33 cm cada caja · 198L total): organiza ropa de t",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "198L",
+        "start": 73,
+        "end": 77,
+        "quote": "ACK 3 CAJAS ALMACENAJE ROPA 66L PARA ARMARIO (50×40×33 cm cada caja · 198L total): organiza ropa de temporada, edredones, jerséis, mantas, sában",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 101,
+    "asin": "B0GYWX85CQ",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "2隔间、每隔间68L与整篮136L在来源中明示；2×68=136精确。外形尺寸不用于重算或替代额定容量。",
+    "literal_roles_ml": {
+      "each_compartment_ml": [
+        "68000"
+      ],
+      "basket_total_ml": [
+        "136000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*68000=136000",
+    "title_from_saved_html": "Lifewit Cesto Ropa Sucia 2 Compartimentos con Tapa y Bolsas Extraíbles, Cubo Ropa Sucia Plegable, Laundry Basket con Asas para Dormitorio, Baño y Lavandería, 136L, Beige",
+    "source_text": "Tapa superior resistente: Este cesto de ropa sucia con tapa abatible mantiene la ropa sucia discretamente oculta, para que su dormitorio, habitación infantil o cuarto de bebé luzca siempre ordenado. Además, la amplia variedad de colores neutros disponibles armonizará con cualquier estilo de decoración.\nFirme y estable: Fabricado en tela de poliéster, este cesto para ropa sucia incorpora insertos de cartón de 2 mm en la parte superior e inferior para mayor estabilidad estructural. Con una varilla de acero y 6 varillas de soporte de fibra de vidrio, el cesto resulta sólido y resistente durante el uso.\nFácil de instalar: Solo tiene que introducir las 6 varillas de soporte en los tubos de inserción correspondientes, sujetar las 8 hebillas oliva en los lazos de suspensión y la cesta estará lista para usar. Se monta en minutos y se pliega completamente plano para un almacenamiento cómodo cuando no esté en uso.\nDos compartimentos amplios: Gracias a sus 2 secciones separadas, este cesto de ropa sucia con 2 compartimentos le permitirá clasificar fácilmente ropa oscura y clara, prendas de ropa de cama, ropa de él y de ella, o prendas de adultos y niños. Las dos bolsas de lavandería con asas incluidas se ajustan de forma firme y segura al cesto doble mediante topes de cordón. Utilice las asas para extraer cómodamente las bolsas desmontables con la ropa sucia y llevarlas directamente al lavado.\nCapacidad generosa: Las dimensiones totales del cesto de ropa son 60 cm x 35 cm x 65 cm y su capacidad es de 136 L, lo que permite almacenar hasta 3-4 cargas de ropa. Cada compartimento tiene una capacidad de 68 L y puede contener 1,5-2 cargas respectivamente.",
+    "source_hash": "245da5d0eac95a8cb8b6bd6ccde12c9cd41f2053503bfb06ac60925dbeb154f2",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0GYWX85CQ.html",
+      "sha256": "25533021442a5c5056169b4f7630a4e85f503296a63ff149404692e5299ffa1d",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0GYWX85CQ"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Tapa superior resistente: Este cesto de ropa sucia con tapa abatible mantiene la ropa sucia discretamente oculta, para que su dormitorio, habitación infantil o cuarto de bebé luzca siempre ordenado. Además, la amplia variedad de colores neutros disponibles armonizará con cualquier estilo de decoración.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Firme y estable: Fabricado en tela de poliéster, este cesto para ropa sucia incorpora insertos de cartón de 2 mm en la parte superior e inferior para mayor estabilidad estructural. Con una varilla de acero y 6 varillas de soporte de fibra de vidrio, el cesto resulta sólido y resistente durante el uso.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Fácil de instalar: Solo tiene que introducir las 6 varillas de soporte en los tubos de inserción correspondientes, sujetar las 8 hebillas oliva en los lazos de suspensión y la cesta estará lista para usar. Se monta en minutos y se pliega completamente plano para un almacenamiento cómodo cuando no esté en uso.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Dos compartimentos amplios: Gracias a sus 2 secciones separadas, este cesto de ropa sucia con 2 compartimentos le permitirá clasificar fácilmente ropa oscura y clara, prendas de ropa de cama, ropa de él y de ella, o prendas de adultos y niños. Las dos bolsas de lavandería con asas incluidas se ajustan de forma firme y segura al cesto doble mediante topes de cordón. Utilice las asas para extraer cómodamente las bolsas desmontables con la ropa sucia y llevarlas directamente al lavado.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Capacidad generosa: Las dimensiones totales del cesto de ropa son 60 cm x 35 cm x 65 cm y su capacidad es de 136 L, lo que permite almacenar hasta 3-4 cargas de ropa. Cada compartimento tiene una capacidad de 68 L y puede contener 1,5-2 cargas respectivamente.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "136 L",
+        "start": 1515,
+        "end": 1520,
+        "quote": "ales del cesto de ropa son 60 cm x 35 cm x 65 cm y su capacidad es de 136 L, lo que permite almacenar hasta 3-4 cargas de ropa. Cada compartiment",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]"
+        ]
+      },
+      {
+        "literal": "68 L",
+        "start": 1615,
+        "end": 1619,
+        "quote": "r hasta 3-4 cargas de ropa. Cada compartimento tiene una capacidad de 68 L y puede contener 1,5-2 cargas respectivamente.",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 102,
+    "asin": "B0H1HD26JG",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_NAMED_PARTS_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "标题60L，卖点列3隔间30/17/13L，三数精确和60L；应保持整机及隔间层级。",
+    "literal_roles_ml": {
+      "three_compartments_ml": [
+        "30000",
+        "17000",
+        "13000"
+      ],
+      "total_ml": [
+        "60000"
+      ]
+    },
+    "arithmetic_or_constraint": "30000+17000+13000=60000",
+    "title_from_saved_html": "SONGMICS Cubo de Basura Cocina, 3 Compartimentos, 60 L",
+    "source_text": "Cubo Basura Reciclaje 60L: Simplifica la clasificación de residuos con este sistema de gran capacidad de 30L, 17L y 13L que centraliza toda tu basura en un solo lugar para mantener el orden diario sin esfuerzo\nContenedor Basura 3 Compartimentos: Optimiza tu espacio con un diseño vertical de 46,7x39x71,9 cm que incluye apertura a presión izquierda y pedal derecho para separar envases y orgánicos de forma muy eficiente\nPapelera Cocina Vertical: Ideal para preparar alimentos en casa, su tapa con cierre suave y apertura de 90° permite desechar restos mientras cocinas y organizar el cartón o vidrio al instante, manteniendo tu zona impecable\nMueble Reciclaje Basura Práctico: Pensado para familias, este set incluye cubos interiores extraíbles con orificio para bolsas, 15 bolsas a medida y pegatinas identificativas que eliminan el miedo a mezclar los desechos diarios\nEstación Clasificadora Acero Inoxidable Plateado: Fabricada con una estructura de acero inoxidable y plásticos, ofreciendo un acabado elegante para el hogar",
+    "source_hash": "b14494d49367e34fe11cf0a2cc7519bc6285af29905870b9274ff54e8a3c07ef",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0H1HD26JG.html",
+      "sha256": "827e7f059d1203a2050ec6bb9ef9e3f71d54e321e5100f2ea493840004252ae8",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0H1HD26JG"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Cubo Basura Reciclaje 60L: Simplifica la clasificación de residuos con este sistema de gran capacidad de 30L, 17L y 13L que centraliza toda tu basura en un solo lugar para mantener el orden diario sin esfuerzo",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Contenedor Basura 3 Compartimentos: Optimiza tu espacio con un diseño vertical de 46,7x39x71,9 cm que incluye apertura a presión izquierda y pedal derecho para separar envases y orgánicos de forma muy eficiente",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Papelera Cocina Vertical: Ideal para preparar alimentos en casa, su tapa con cierre suave y apertura de 90° permite desechar restos mientras cocinas y organizar el cartón o vidrio al instante, manteniendo tu zona impecable",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Mueble Reciclaje Basura Práctico: Pensado para familias, este set incluye cubos interiores extraíbles con orificio para bolsas, 15 bolsas a medida y pegatinas identificativas que eliminan el miedo a mezclar los desechos diarios",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Estación Clasificadora Acero Inoxidable Plateado: Fabricada con una estructura de acero inoxidable y plásticos, ofreciendo un acabado elegante para el hogar",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "60L",
+        "start": 22,
+        "end": 25,
+        "quote": "Cubo Basura Reciclaje 60L: Simplifica la clasificación de residuos con este sistema de gran cap",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "30L",
+        "start": 105,
+        "end": 108,
+        "quote": "ca la clasificación de residuos con este sistema de gran capacidad de 30L, 17L y 13L que centraliza toda tu basura en un solo lugar para manten",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "17L",
+        "start": 110,
+        "end": 113,
+        "quote": " clasificación de residuos con este sistema de gran capacidad de 30L, 17L y 13L que centraliza toda tu basura en un solo lugar para mantener el",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "13L",
+        "start": 116,
+        "end": 119,
+        "quote": "ficación de residuos con este sistema de gran capacidad de 30L, 17L y 13L que centraliza toda tu basura en un solo lugar para mantener el orden",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 115,
+    "asin": "B0H9WXSBLG",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "两隔间各15L、总30L字面齐备，标题2×15L确认。2×15=30精确。",
+    "literal_roles_ml": {
+      "each_compartment_ml": [
+        "15000"
+      ],
+      "total_ml": [
+        "30000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*15000=30000",
+    "title_from_saved_html": "Clevich Cubo de basura para cocina, 2 x 15 l, sistema de separación de",
+    "source_text": "Cubo de basura de doble compartimento de 30 l: perfecto para uso doméstico: con dos compartimentos separados de 15 litros para basura seca y húmeda, este cubo de basura simplifica la clasificación y eliminación y se adapta perfectamente a las necesidades diarias del hogar. Con una capacidad total de 30 l, es suficiente para el desperdicio diario de una familia de tres – se elimina el vaciado frecuente.\nFuncionamiento del pie y cierre silencioso: higiénico y silencioso: el pedal del pie permite una apertura sin contacto, minimiza el contacto con los gérmenes y garantiza una cocina limpia. Equipado con un sistema de amortiguación suave, la tapa se cierra silenciosa y gradualmente, sin ruidos molestos en el hogar.\nCesta interior extraíble: fácil de limpiar y mantener: incluye una resistente cesta interior de plástico negro con mango de metal reforzado. Se puede sacar fácilmente para tirar la basura rápidamente o limpiar la cesta. El mantenimiento será fácil y eficiente.\nAcero inoxidable resistente a las huellas dactilares, elegante y duradero: fabricada en acero inoxidable de alta calidad con revestimiento especial, la cesta exterior resiste las huellas dactilares, las manchas de agua y el óxido. Su elegante acabado plateado añade elegancia moderna a cualquier cocina.\nDiseño pensado: ideal para diferentes diseños de cocina: compacto y ahorra espacio, el cubo de basura cabe fácilmente en cualquier esquina o superficie de trabajo. Fuerte mango de metal y base antideslizante que garantizan la estabilidad, incluso en cocinas agitadas.",
+    "source_hash": "58ddbfb39b6695e80880e6f2caf2129d79f4747263487121cfe779a4293f2ba6",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0H9WXSBLG.html",
+      "sha256": "090c723b17f1fc9e2d5cc40d8566be9f44848e6c8581f6ab6ae1375a60bcc991",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0H9WXSBLG"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Cubo de basura de doble compartimento de 30 l: perfecto para uso doméstico: con dos compartimentos separados de 15 litros para basura seca y húmeda, este cubo de basura simplifica la clasificación y eliminación y se adapta perfectamente a las necesidades diarias del hogar. Con una capacidad total de 30 l, es suficiente para el desperdicio diario de una familia de tres – se elimina el vaciado frecuente.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Funcionamiento del pie y cierre silencioso: higiénico y silencioso: el pedal del pie permite una apertura sin contacto, minimiza el contacto con los gérmenes y garantiza una cocina limpia. Equipado con un sistema de amortiguación suave, la tapa se cierra silenciosa y gradualmente, sin ruidos molestos en el hogar.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Cesta interior extraíble: fácil de limpiar y mantener: incluye una resistente cesta interior de plástico negro con mango de metal reforzado. Se puede sacar fácilmente para tirar la basura rápidamente o limpiar la cesta. El mantenimiento será fácil y eficiente.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Acero inoxidable resistente a las huellas dactilares, elegante y duradero: fabricada en acero inoxidable de alta calidad con revestimiento especial, la cesta exterior resiste las huellas dactilares, las manchas de agua y el óxido. Su elegante acabado plateado añade elegancia moderna a cualquier cocina.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Diseño pensado: ideal para diferentes diseños de cocina: compacto y ahorra espacio, el cubo de basura cabe fácilmente en cualquier esquina o superficie de trabajo. Fuerte mango de metal y base antideslizante que garantizan la estabilidad, incluso en cocinas agitadas.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "30 l",
+        "start": 41,
+        "end": 45,
+        "quote": "Cubo de basura de doble compartimento de 30 l: perfecto para uso doméstico: con dos compartimentos separados de 15 ",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "15 litros",
+        "start": 112,
+        "end": 121,
+        "quote": "0 l: perfecto para uso doméstico: con dos compartimentos separados de 15 litros para basura seca y húmeda, este cubo de basura simplifica la clasific",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "30 l",
+        "start": 301,
+        "end": 305,
+        "quote": "mente a las necesidades diarias del hogar. Con una capacidad total de 30 l, es suficiente para el desperdicio diario de una familia de tres – se",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 123,
+    "asin": "B0HFW5JMBL",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "3只独立12L容器，总36L，与标题36L一致；3×12=36精确。",
+    "literal_roles_ml": {
+      "each_compartment_ml": [
+        "12000"
+      ],
+      "total_ml": [
+        "36000"
+      ]
+    },
+    "arithmetic_or_constraint": "3*12000=36000",
+    "title_from_saved_html": "Cubo de basura de cocina con 3 compartimentos (36 L, con ruedas y tapa a presión)",
+    "source_text": "Diseño de 3 compartimentos de 36 litros de capacidad total: tres contenedores individuales de 12 litros permiten una fácil separación de residuos de residuos, orgánicos y reciclables. Perfecto para cocina, hogar y oficina.\nPráctica tapa de presión y protección contra olores: apertura de presión simple, construcción cubierta bloquea los olores desagradables. Cada contenedor tiene su propia tapa.\nMovible gracias a 4 ruedas universales: las ruedas estables hacen que el cubo de basura sea fácil de mover, ideal debajo de la isla de la cocina o entre armarios.\nFácil limpieza y cubos extraíbles: los recipientes interiores se pueden extraer completamente, cómodos para vaciar y limpiar. Plástico resistente para un uso duradero.\nDimensiones que ahorran espacio: el diseño compacto rectangular cabe en espacios estrechos, ideal para cocinas domésticas alemanas.",
+    "source_hash": "b9effd194ce1c54e78d54a77a6a4372dd41799ad1df40cc813dd4f6857e68ca9",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0HFW5JMBL.html",
+      "sha256": "b00b0d87d973317263a501ce7c79b2cb4faa9b6bfcdc5f48f55641b79c049c45",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0HFW5JMBL"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Diseño de 3 compartimentos de 36 litros de capacidad total: tres contenedores individuales de 12 litros permiten una fácil separación de residuos de residuos, orgánicos y reciclables. Perfecto para cocina, hogar y oficina.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Práctica tapa de presión y protección contra olores: apertura de presión simple, construcción cubierta bloquea los olores desagradables. Cada contenedor tiene su propia tapa.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Movible gracias a 4 ruedas universales: las ruedas estables hacen que el cubo de basura sea fácil de mover, ideal debajo de la isla de la cocina o entre armarios.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Fácil limpieza y cubos extraíbles: los recipientes interiores se pueden extraer completamente, cómodos para vaciar y limpiar. Plástico resistente para un uso duradero.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Dimensiones que ahorran espacio: el diseño compacto rectangular cabe en espacios estrechos, ideal para cocinas domésticas alemanas.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "36 litros",
+        "start": 30,
+        "end": 39,
+        "quote": "Diseño de 3 compartimentos de 36 litros de capacidad total: tres contenedores individuales de 12 litros permi",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "12 litros",
+        "start": 94,
+        "end": 103,
+        "quote": "os de 36 litros de capacidad total: tres contenedores individuales de 12 litros permiten una fácil separación de residuos de residuos, orgánicos y re",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 128,
+    "asin": "B0HH38NV24",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "两隔间各40L，整篮80L，标题80L一致；2×40=80精确。",
+    "literal_roles_ml": {
+      "each_compartment_ml": [
+        "40000"
+      ],
+      "total_ml": [
+        "80000"
+      ]
+    },
+    "arithmetic_or_constraint": "2*40000=80000",
+    "title_from_saved_html": "HOMCOM Cesto de Ropa Sucia con Tapa 80L Plegable 54x34x58,5 cm Negro",
+    "source_text": "ALMACENAMIENTO ESPACIOSO: El cesto para ropa sucia con tapa ayuda a ocultar el desorden y a reducir los olores, con una amplia capacidad de 80 L repartida en 2 compartimentos independientes de 40 L para separar la ropa sucia y limpia de manera práctica\nPORTÁTIL Y PLEGABLE: Gracias a sus 2 asas con ranura, este cesto de ropa negro resulta ligero, fácil de transportar y plegable. Cuando no lo necesites, retira las varillas y dóblalo para ahorrar espacio al guardarlo\nMATERIALES DE CALIDAD: Confeccionado en tela no tejida y con estructura de bambú, este cesto para ropa con tapa incorpora 4 varillas de bambú que aportan una sujeción firme para un uso estable y duradero\nFÁCIL LIMPIEZA: Se limpia fácilmente con agua tibia a 40 °C, para mantener el cesto de ropa higiénico y en buen estado con el mínimo esfuerzo\nINFORMACIÓN DEL PRODUCTO: Medidas totales: 54x34x58,5 cm (LxANxAL). Capacidad: 80 L. Requiere montaje sencillo",
+    "source_hash": "03a740b6f216a0ff578614172bd3ecc5d71b3fef71a42ed0408089259a8c3e6c",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0HH38NV24.html",
+      "sha256": "e3cae0036e873680cb9ed53eadc64d3e19a412619ab579f7a73a659e7d92c3e7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0HH38NV24"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "ALMACENAMIENTO ESPACIOSO: El cesto para ropa sucia con tapa ayuda a ocultar el desorden y a reducir los olores, con una amplia capacidad de 80 L repartida en 2 compartimentos independientes de 40 L para separar la ropa sucia y limpia de manera práctica",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "PORTÁTIL Y PLEGABLE: Gracias a sus 2 asas con ranura, este cesto de ropa negro resulta ligero, fácil de transportar y plegable. Cuando no lo necesites, retira las varillas y dóblalo para ahorrar espacio al guardarlo",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "MATERIALES DE CALIDAD: Confeccionado en tela no tejida y con estructura de bambú, este cesto para ropa con tapa incorpora 4 varillas de bambú que aportan una sujeción firme para un uso estable y duradero",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "FÁCIL LIMPIEZA: Se limpia fácilmente con agua tibia a 40 °C, para mantener el cesto de ropa higiénico y en buen estado con el mínimo esfuerzo",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "INFORMACIÓN DEL PRODUCTO: Medidas totales: 54x34x58,5 cm (LxANxAL). Capacidad: 80 L. Requiere montaje sencillo",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "80 L",
+        "start": 140,
+        "end": 144,
+        "quote": "ultar el desorden y a reducir los olores, con una amplia capacidad de 80 L repartida en 2 compartimentos independientes de 40 L para separar la ",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]"
+        ]
+      },
+      {
+        "literal": "40 L",
+        "start": 193,
+        "end": 197,
+        "quote": "lia capacidad de 80 L repartida en 2 compartimentos independientes de 40 L para separar la ropa sucia y limpia de manera práctica\nPORTÁTIL Y PLE",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "80 L",
+        "start": 894,
+        "end": 898,
+        "quote": "ÓN DEL PRODUCTO: Medidas totales: 54x34x58,5 cm (LxANxAL). Capacidad: 80 L. Requiere montaje sencillo",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 131,
+    "asin": "B0HHFQBLF7",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_COUNT_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "两只3.8L玻璃容器，总7.6L在同条卖点明示；2×3.8=7.6精确。",
+    "literal_roles_ml": {
+      "each_container_ml": [
+        "3800"
+      ],
+      "total_ml": [
+        "7600"
+      ]
+    },
+    "arithmetic_or_constraint": "2*3800=7600",
+    "title_from_saved_html": "Ninja CRISPi DualZone Freidora de aire de cristal de doble cajón, 8 funciones de cocción, dos alimentos a la vez, recipientes de vidrio sin PFAS, tapas de almacenamiento, piedra/dorado DD103EUSD1",
+    "source_text": "FREIDORA DE AIRE DE CRISTAL DE DOBLE CAJÓN CON PINZAS: cocina con varias funciones en dos recipientes de cristal aptos para el lavavajillas con esta freidora de aire con recipiente de cristal.\n8 FUNCIONES: Air Fry (Freír con aire), Bake (Hornear), Max Crisp (Gratinar), Roast (Asar), Dehydrate (Deshidratar) y Recrisp (Recuperar el crujiente), Keep Warm (Mantener la temperatura) y Prove (Fermentar)\n7,6 L DE CAPACIDAD TOTAL EN DOS RECIPIENTES DE 3,8 L: Air fryer doble ideal para raciones familiares, recibir invitados y cocinar por lotes.\nCOCINA, SIRVE Y GUARDA CON TOTAL LIMPIEZA: disfruta de la tranquilidad de los recipientes de cristal sin PFAS, con tapas de almacenamiento, además de las rejillas base antiadherentes, que elevan los alimentos para un mejor flujo de aire y gratinado.\nTECNOLOGÍAS DUALZONE, MATCH COOK Y SMART FINISH: La air fryer de cristal prepara una porción doble en dos recipientes para cocinar con la función DualZone o sincronizar dos platos, cocinados de dos formas diferentes, para que estén listos simultáneamente.",
+    "source_hash": "173c6d96c4b1852449938d1b9baf3cb359608d772b96ea40ab4cabd7348aab5e",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0HHFQBLF7.html",
+      "sha256": "50eeb42e02e36c2e721e7a9e331fd701180292e43c1ae25ab3bddac35d8dc5c8",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0HHFQBLF7"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "FREIDORA DE AIRE DE CRISTAL DE DOBLE CAJÓN CON PINZAS: cocina con varias funciones en dos recipientes de cristal aptos para el lavavajillas con esta freidora de aire con recipiente de cristal.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "8 FUNCIONES: Air Fry (Freír con aire), Bake (Hornear), Max Crisp (Gratinar), Roast (Asar), Dehydrate (Deshidratar) y Recrisp (Recuperar el crujiente), Keep Warm (Mantener la temperatura) y Prove (Fermentar)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "7,6 L DE CAPACIDAD TOTAL EN DOS RECIPIENTES DE 3,8 L: Air fryer doble ideal para raciones familiares, recibir invitados y cocinar por lotes.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "COCINA, SIRVE Y GUARDA CON TOTAL LIMPIEZA: disfruta de la tranquilidad de los recipientes de cristal sin PFAS, con tapas de almacenamiento, además de las rejillas base antiadherentes, que elevan los alimentos para un mejor flujo de aire y gratinado.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "TECNOLOGÍAS DUALZONE, MATCH COOK Y SMART FINISH: La air fryer de cristal prepara una porción doble en dos recipientes para cocinar con la función DualZone o sincronizar dos platos, cocinados de dos formas diferentes, para que estén listos simultáneamente.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "7,6 L",
+        "start": 400,
+        "end": 405,
+        "quote": "l crujiente), Keep Warm (Mantener la temperatura) y Prove (Fermentar)\n7,6 L DE CAPACIDAD TOTAL EN DOS RECIPIENTES DE 3,8 L: Air fryer doble ideal",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "3,8 L",
+        "start": 447,
+        "end": 452,
+        "quote": "a) y Prove (Fermentar)\n7,6 L DE CAPACIDAD TOTAL EN DOS RECIPIENTES DE 3,8 L: Air fryer doble ideal para raciones familiares, recibir invitados y ",
+        "matching_dom_paths": []
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  },
+  {
+    "index": 133,
+    "asin": "B0HM46GCXW",
+    "field": "feature_bullets",
+    "original_candidate_category": "COMPONENT_TOTAL_ARITHMETIC_FALSE_POSITIVE_CANDIDATE",
+    "manual_classification": "EXACT_NAMED_PARTS_TOTAL",
+    "evidence_assessment": "SOURCE_SUPPORTS_NARROW_TEST_CANDIDATE",
+    "manual_reason": "腌菜700ml与汤汁300ml是两个明示部位/用途，整瓶1L；700+300=1000ml精确。不可把700和300都当整瓶容量。",
+    "literal_roles_ml": {
+      "pickles_compartment_ml": [
+        "700"
+      ],
+      "brine_compartment_ml": [
+        "300"
+      ],
+      "total_jar_ml": [
+        "1000"
+      ]
+    },
+    "arithmetic_or_constraint": "700+300=1000",
+    "title_from_saved_html": "edihome, Bote Aceitunas con Escurridor, 1 Litro, Aceitunero de Cristal Hermético, Tarro para Encurtidos y Pepinillos Reversible, Separa el Líquido, Azul Marino",
+    "source_text": "ESCURRE LAS ACEITUNAS GIRANDO EL BOTE – Dale la vuelta y el caldo baja al compartimento inferior a través del escurridor de silicona: aceitunas, pepinillos y banderillas listos para servir, sin tenedores ni dedos mojados. Vuelve a girarlo y quedan otra vez sumergidos en su líquido, jugosos como el primer día.\nCIERRE HERMÉTICO QUE NO GOTEA – La tapa de rosca lleva una junta de silicona que sella el bote por completo, para que puedas girarlo y guardarlo en la nevera sin charcos ni olores. Su borde con relieve antideslizante te da un buen agarre para abrirlo y cerrarlo sin esfuerzo.\nACEITUNERO DE CRISTAL TRANSPARENTE – El vidrio no absorbe olores ni sabores, no se estropea con el vinagre ni la salmuera y te deja ver de un vistazo cuánto te queda. La tapa está libre de BPA y la base antideslizante mantiene el bote firme en la encimera y en la mesa.\n1 LITRO DE CAPACIDAD Y BOCA ANCHA DE 8 CM – 700 ml para los encurtidos y 300 ml para el caldo: pasa las aceitunas de la lata nada más abrirla. Mide 10 x 10 x 18 cm y cabe en la nevera, y su boca ancha facilita rellenarlo y limpiarlo por dentro.\nFÁCIL DE LIMPIAR Y PARA TODO TIPO DE ENCURTIDOS – El escurridor de silicona y la junta se desmontan, y todas las piezas van al lavavajillas. Úsalo para aceitunas, pepinillos, banderillas, cebolletas, guindillas, altramuces o alcaparras: el tarro para encurtidos perfecto para el aperitivo.",
+    "source_hash": "7e8e978b944641c7103d704564cb8bd38b4e5a5a16ae0b15f7249399d8b0bd57",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0HM46GCXW.html",
+      "sha256": "5695e10714c0545d4ff7c8f2c1726507ffd5af1483dfbf4404b0a7df6bb224b4",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0HM46GCXW"
+      ]
+    },
+    "html_sha256_independently_verified": true,
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "ESCURRE LAS ACEITUNAS GIRANDO EL BOTE – Dale la vuelta y el caldo baja al compartimento inferior a través del escurridor de silicona: aceitunas, pepinillos y banderillas listos para servir, sin tenedores ni dedos mojados. Vuelve a girarlo y quedan otra vez sumergidos en su líquido, jugosos como el primer día.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "CIERRE HERMÉTICO QUE NO GOTEA – La tapa de rosca lleva una junta de silicona que sella el bote por completo, para que puedas girarlo y guardarlo en la nevera sin charcos ni olores. Su borde con relieve antideslizante te da un buen agarre para abrirlo y cerrarlo sin esfuerzo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "ACEITUNERO DE CRISTAL TRANSPARENTE – El vidrio no absorbe olores ni sabores, no se estropea con el vinagre ni la salmuera y te deja ver de un vistazo cuánto te queda. La tapa está libre de BPA y la base antideslizante mantiene el bote firme en la encimera y en la mesa.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "1 LITRO DE CAPACIDAD Y BOCA ANCHA DE 8 CM – 700 ml para los encurtidos y 300 ml para el caldo: pasa las aceitunas de la lata nada más abrirla. Mide 10 x 10 x 18 cm y cabe en la nevera, y su boca ancha facilita rellenarlo y limpiarlo por dentro.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "FÁCIL DE LIMPIAR Y PARA TODO TIPO DE ENCURTIDOS – El escurridor de silicona y la junta se desmontan, y todas las piezas van al lavavajillas. Úsalo para aceitunas, pepinillos, banderillas, cebolletas, guindillas, altramuces o alcaparras: el tarro para encurtidos perfecto para el aperitivo.",
+        "independently_verified": true
+      }
+    ],
+    "capacity_excerpts": [
+      {
+        "literal": "1 LITRO",
+        "start": 857,
+        "end": 864,
+        "quote": "se antideslizante mantiene el bote firme en la encimera y en la mesa.\n1 LITRO DE CAPACIDAD Y BOCA ANCHA DE 8 CM – 700 ml para los encurtidos y 300 ",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "700 ml",
+        "start": 901,
+        "end": 907,
+        "quote": "la encimera y en la mesa.\n1 LITRO DE CAPACIDAD Y BOCA ANCHA DE 8 CM – 700 ml para los encurtidos y 300 ml para el caldo: pasa las aceitunas de la ",
+        "matching_dom_paths": []
+      },
+      {
+        "literal": "300 ml",
+        "start": 930,
+        "end": 936,
+        "quote": "ITRO DE CAPACIDAD Y BOCA ANCHA DE 8 CM – 700 ml para los encurtidos y 300 ml para el caldo: pasa las aceitunas de la lata nada más abrirla. Mide 1",
+        "matching_dom_paths": [
+          "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]"
+        ]
+      }
+    ],
+    "release_allowed_now": false,
+    "confirmed_implementation_bug": false,
+    "needs_tested_fix_and_complete_quantity_role_binding": true,
+    "raw_source_changed": false,
+    "status_fields_modified": false,
+    "network_requests": 0,
+    "expected_total_supported": true,
+    "expected_total_decision": "EXACT_BOUND_ARITHMETIC_CANDIDATE"
+  }
+]

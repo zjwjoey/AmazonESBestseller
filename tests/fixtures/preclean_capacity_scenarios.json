@@ -1,0 +1,768 @@
+[
+  {
+    "index": 2,
+    "asin": "B01MYB5W0Y",
+    "field": "feature_bullets",
+    "source_text": "Función de ebullición rápida para 1.2 o 3 tazas; hierve un vaso de agua (235 ml) en 50 segundos y ahorra hasta un 70 % de energía [al hervir un vaso de agua (235 ml) en comparación a 1 litro]\nBoquilla de vertido óptimo: permite verter sin gotear\nResistencia oculta; tapa de seguridad con cierre; filtro antical extraíble; sin cable, base de 360°, óptima para personas zurdas y diestras; protección contra funcionamiento en seco/sobrecalentamiento\nFunción de cese automático de la ebullición y opción de apagado manual; indicador externo del nivel de agua con marca de nivel de llenado; interruptor de encendido/apagado con luz indicadora roja\nCon una capacidad de 1.7 litros, el hervidor Colours es capaz de preparar hasta seis tazas simultáneamente, lo que lo hace óptima para los hogares; también incluye un excelente boquilla de vertido diseñada para minimizar los derrames",
+    "source_hash": "763bdc282f91a5354a581d32497db766f619d7897da20f95678444d2615fe30c",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B01MYB5W0Y.html",
+      "sha256": "39465d590b57154e8d667e2ad9e84bdf44ba837040c7d7a8aa910d0594665dfe",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B01MYB5W0Y"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Función de ebullición rápida para 1.2 o 3 tazas; hierve un vaso de agua (235 ml) en 50 segundos y ahorra hasta un 70 % de energía [al hervir un vaso de agua (235 ml) en comparación a 1 litro]",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Boquilla de vertido óptimo: permite verter sin gotear",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Resistencia oculta; tapa de seguridad con cierre; filtro antical extraíble; sin cable, base de 360°, óptima para personas zurdas y diestras; protección contra funcionamiento en seco/sobrecalentamiento",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Función de cese automático de la ebullición y opción de apagado manual; indicador externo del nivel de agua con marca de nivel de llenado; interruptor de encendido/apagado con luz indicadora roja",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Con una capacidad de 1.7 litros, el hervidor Colours es capaz de preparar hasta seis tazas simultáneamente, lo que lo hace óptima para los hogares; también incluye un excelente boquilla de vertido diseñada para minimizar los derrames",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "asin": "B071YYLZS6",
+    "field": "feature_bullets",
+    "source_text": "Cola Papeles Pintados de Bostik con indicador de color especialmente indicada para encolar todo tipo de papeles pintados (ligero, pesado, papel vinílico, tejido, dúplex, etc.)\nAdhesivo resistente a la humedad, transparente cuando se seca, de color rosa durante la aplicación, Apto para muebles, puertas y para ambientes húmedos (cocina, baños…)\nDiluir la cola en polvo en agua en función de la cantidad de rollos (1 Rollo - 0,75 l; 2 rollos - 1,5 l; 4 rollos - 3l, etc.) Aplicar sobre soportes sanos, secos, sólidos y limpios de carácter absorbente, con un rodillo (para pared) o con una brocha (sobre el papel)\nFabricado en Francia, y fácil de limpiar con agua tibia inmediatamente después de su uso, Fórmula sin isocianatos ni disolventes\nContenido: 1x Bostik, Adhesivo en polvo para empapelar, Todo tipo de papeles pintados, Cola Papeles Pintados, Rosa, Caja 300 g, Código: 30608967",
+    "source_hash": "0355da2137df90d84c2feef7886a4ce5df4f41880e8694b00c69aaf8d2654275",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B071YYLZS6.html",
+      "sha256": "ec187c8a0037a86ece43b26db041fad1b0036804e5456ed772a6bd5f1c777444",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B071YYLZS6"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Cola Papeles Pintados de Bostik con indicador de color especialmente indicada para encolar todo tipo de papeles pintados (ligero, pesado, papel vinílico, tejido, dúplex, etc.)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Adhesivo resistente a la humedad, transparente cuando se seca, de color rosa durante la aplicación, Apto para muebles, puertas y para ambientes húmedos (cocina, baños...)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Diluir la cola en polvo en agua en función de la cantidad de rollos (1 Rollo - 0,75 l; 2 rollos - 1,5 l; 4 rollos - 3l, etc.) Aplicar sobre soportes sanos, secos, sólidos y limpios de carácter absorbente, con un rodillo (para pared) o con una brocha (sobre el papel)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Fabricado en Francia, y fácil de limpiar con agua tibia inmediatamente después de su uso, Fórmula sin isocianatos ni disolventes",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Contenido: 1x Bostik, Adhesivo en polvo para empapelar, Todo tipo de papeles pintados, Cola Papeles Pintados, Rosa, Caja 300 g, Código: 30608967",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "asin": "B0734ZHGXK",
+    "field": "feature_bullets",
+    "source_text": "Jarra de vidrio borosilicato y diseño moderno, para la preparación manual de café, usar en combinación con los porta filtros pour over melitta, capacidad: 5 tazas grandes (125ml) o 8 pequeñas (85ml)\nMantiene el café caliente durante 30 minutos para conservar todo su aroma, apta para microondas\nSirve el café con una sola mano de forma sencilla gracias a la boquilla de vertido y el asa ergonómica resistente al calor\nFácil de limpiar a mano o en el lavavajillas\nContenido: 1 jarra de cristal melitta, pour over, transparente, 1 l, dimensiones embalaje (an x al x p): 15,2 x 14,5 x 15,2 cm, peso: 383 g",
+    "source_hash": "7fdac31d0eb286e0acb1b9b47013293fbf6721f1079483da998e34f232e67293",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0734ZHGXK.html",
+      "sha256": "fd76bdb749b112cb7e0e18b4e4ed57ba142ef8c33fc3b715e1f924b0568722e7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0734ZHGXK"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Jarra de vidrio borosilicato y diseño moderno, para la preparación manual de café, usar en combinación con los porta filtros pour over melitta, capacidad: 5 tazas grandes (125ml) o 8 pequeñas (85ml)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Mantiene el café caliente durante 30 minutos para conservar todo su aroma, apta para microondas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Sirve el café con una sola mano de forma sencilla gracias a la boquilla de vertido y el asa ergonómica resistente al calor",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Fácil de limpiar a mano o en el lavavajillas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Contenido: 1 jarra de cristal melitta, pour over, transparente, 1 l, dimensiones embalaje (an x al x p): 15,2 x 14,5 x 15,2 cm, peso: 383 g",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 8,
+    "asin": "B07DLBVT2L",
+    "field": "product_description",
+    "source_text": "Empieza a disfrutar de todas tus infusiones de la forma más rápida y divertida. El hervidor eléctrico thermosense 390 clear calienta hasta 8 tazas de 200 ml en unos instantes. Ajuste electrónico de temperatura, 2200 w de potencia y una capacidad de 1,7 litros son más que suficientes para que disfrutes de las mejores infusiones.",
+    "source_hash": "d5f2012ec20a5d69e6e6394a09e7ceb05545598491bd9e14e09bee8351fc62fa",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B07DLBVT2L.html",
+      "sha256": "333366b2ea16a61e10c9a0ae2bcb9ccd59233ca205ac8fcc8f5c306924b0ccdf",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B07DLBVT2L"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[17]/div[11]/div/div/div[2]",
+        "text": "Empieza a disfrutar de todas tus infusiones de la forma más rápida y divertida. El hervidor eléctrico thermosense 390 clear calienta hasta 8 tazas de 200 ml en unos instantes. Ajuste electrónico de temperatura, 2200 w de potencia y una capacidad de 1,7 litros son más que suficientes para que disfrutes de las mejores infusiones.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 11,
+    "asin": "B07PGKT35J",
+    "field": "feature_bullets",
+    "source_text": "Hervidor de agua y té de vidrio y acero inoxidable, capacidad: 1 litro de agua y 0,75 L de té, 2200 W de potencia. Temperatura y tiempo de preparación personalizables\nTemperatura ajustable entre 40 °C y 100 °C en pasos de 5 °C. Función «Hierve rápidamente y té» para empezar a hervir directamente a 100 °C\nSensor ultrasensible integrado para una máxima precisión de temperatura. Hervidor de vidrio muy resistente a las variaciones de temperatura\nFunción «Easy Tea Select» con 5 programas de preparación preestablecidos para adaptar la temperatura y el tiempo de preparación según el tipo de té.\nTiempo de preparación: ajustable entre 1 y 15 minutos con una señal sonora que avisa cuando finaliza el tiempo de preparación.\nIncluye un fino filtro de té de acero inoxidable para infundir el té directamente en la tetera. Mango de filtro de té integrado para un manejo seguro",
+    "source_hash": "667e9ead40274bb8a1cf8a4ad072546266eac642d45bb72cc3801fbb8f92eec2",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B07PGKT35J.html",
+      "sha256": "f394575ae5e9f70e7e37840d8727fbfd4b2f78a7d2b2b6ae4e96a4f7363c8704",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B07PGKT35J"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Hervidor de agua y té de vidrio y acero inoxidable, capacidad: 1 litro de agua y 0,75 L de té, 2200 W de potencia. Temperatura y tiempo de preparación personalizables",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Temperatura ajustable entre 40 °C y 100 °C en pasos de 5 °C. Función «Hierve rápidamente y té» para empezar a hervir directamente a 100 °C",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Sensor ultrasensible integrado para una máxima precisión de temperatura. Hervidor de vidrio muy resistente a las variaciones de temperatura",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Función «Easy Tea Select» con 5 programas de preparación preestablecidos para adaptar la temperatura y el tiempo de preparación según el tipo de té.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Tiempo de preparación: ajustable entre 1 y 15 minutos con una señal sonora que avisa cuando finaliza el tiempo de preparación.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "Incluye un fino filtro de té de acero inoxidable para infundir el té directamente en la tetera. Mango de filtro de té integrado para un manejo seguro",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 14,
+    "asin": "B07TLYRVYC",
+    "field": "feature_bullets",
+    "source_text": "100% SIN BPA. Cinco niveles de temperatura regulables: 60 °C, 70 °C, 80 °C, 90 °C y 100 °C para un óptimo disfrute del té o la preparación de alimentos para bebés. A cada temperatura seleccionada le está asignada un color LED diferente.\nHierve 0,5 litros de agua en tan sólo 90 segundos gracias a sus potentes 2200 vatios. Se puede colocar sin peligro directamente sobre la mesa u otras superficies después de hervir gracias su base aislante.\nCapacidad total de 1,8 litros. Con sistema de protección contra la ebullición en seco y el sobrecalentamiento. La función de retención de calor recalienta el agua a 100 °C tan pronto como se alcanzan los 85 °C. Para activarla hay que mantener presionado el botón de encendido/apagado durante 3 segundos.\nTanto el filtro de té como el filtro de agua pueden utilizarse opcionalmente, es decir, los puede retirar si no los necesita. Asimismo, ambos son perfectamente aptos para lavar en el lavavajillas. El hervidor, con su asa con aislamiento térmico, se puede retirar de la base de forma inalámbrica y es apto para diestros y zurdos.\nEl hervidor de agua puede girar 360°. El cable de conexión tiene una longitud de 70 cm.",
+    "source_hash": "43d8baf6be7774946c36196de69f6397ed43267d40a25308486aa08a21b6d8be",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B07TLYRVYC.html",
+      "sha256": "515d843ae4bb235024ae16737bf3fe9a060aeb7bce492b6d906beaf7b5fec992",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B07TLYRVYC"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "100% SIN BPA. Cinco niveles de temperatura regulables: 60 °C, 70 °C, 80 °C, 90 °C y 100 °C para un óptimo disfrute del té o la preparación de alimentos para bebés. A cada temperatura seleccionada le está asignada un color LED diferente.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Hierve 0,5 litros de agua en tan sólo 90 segundos gracias a sus potentes 2200 vatios. Se puede colocar sin peligro directamente sobre la mesa u otras superficies después de hervir gracias su base aislante.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Capacidad total de 1,8 litros. Con sistema de protección contra la ebullición en seco y el sobrecalentamiento. La función de retención de calor recalienta el agua a 100 °C tan pronto como se alcanzan los 85 °C. Para activarla hay que mantener presionado el botón de encendido/apagado durante 3 segundos.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Tanto el filtro de té como el filtro de agua pueden utilizarse opcionalmente, es decir, los puede retirar si no los necesita. Asimismo, ambos son perfectamente aptos para lavar en el lavavajillas. El hervidor, con su asa con aislamiento térmico, se puede retirar de la base de forma inalámbrica y es apto para diestros y zurdos.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "El hervidor de agua puede girar 360°. El cable de conexión tiene una longitud de 70 cm.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 20,
+    "asin": "B089ZSG474",
+    "field": "feature_bullets",
+    "source_text": "Contenido del juego: 6 tazas de café de 90 ml 6 platillos de café. Medida del diámetro de la boca: 5 cm. Altura: 5 cm. Diámetro del plato: 12 cm\nDisfruta de tu café en cada sorbo con las tazas de Karaca. Elige el tamaño correcto para la taza que buscas: las tazas de 75 a 90 ml para café turco clásico, las de 90 a 120 ml para café de filtro y las de 140 a 160 ml para café turco doble, son las adecuadas para que puedas disfrutar\nMaterial: porcelana. Se recomienda lavar a mano\nEl juego de tazas de café de porcelana Karaca Saturn para 6 personas integra meticulosamente la cultura del café, llevada desde el pasado hasta el presente, en tus conversaciones, con su forma curva que hace que beber café sea mucho más agradable\nEste juego de café de porcelana, que se ve exquisito con sus detalles dorados, es muy elegante y ergonómico gracias a sus asas cuadradas. No dejes escapar el juego de tazas de café de porcelana Saturn, que es indispensable para los amantes del café por su elegancia y calidad, su diseño intemporal y su elegante embalaje",
+    "source_hash": "c5011d74432be44e71f435c57256778f5dc8a22f2674ebc0ce0054173b4a5d64",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B089ZSG474.html",
+      "sha256": "2a328985608ec6eaa839525cf3af13b03fd333d14473c646f4c76276327263b1",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B089ZSG474"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Contenido del juego: 6 tazas de café de 90 ml 6 platillos de café. Medida del diámetro de la boca: 5 cm. Altura: 5 cm. Diámetro del plato: 12 cm",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Disfruta de tu café en cada sorbo con las tazas de Karaca. Elige el tamaño correcto para la taza que buscas: las tazas de 75 a 90 ml para café turco clásico, las de 90 a 120 ml para café de filtro y las de 140 a 160 ml para café turco doble, son las adecuadas para que puedas disfrutar",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Material: porcelana. Se recomienda lavar a mano",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "El juego de tazas de café de porcelana Karaca Saturn para 6 personas integra meticulosamente la cultura del café, llevada desde el pasado hasta el presente, en tus conversaciones, con su forma curva que hace que beber café sea mucho más agradable",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Este juego de café de porcelana, que se ve exquisito con sus detalles dorados, es muy elegante y ergonómico gracias a sus asas cuadradas. No dejes escapar el juego de tazas de café de porcelana Saturn, que es indispensable para los amantes del café por su elegancia y calidad, su diseño intemporal y su elegante embalaje",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 36,
+    "asin": "B0B56CHMSC",
+    "field": "feature_bullets",
+    "source_text": "Aislamiento Térmico: Esta lonchera cuenta con un aislamiento cuádruple que mantiene la comida fría, caliente o fresca hasta 4,5 horas. Está equipada con un forro de PEVA, aislamiento de espuma perlada de 2 mm de grosor y tela Oxford resistente al desgarro con revestimiento de PU para una protección óptima\nGran Capacidad: Dimensiones 25.4 cm x 17 cm x 20.3 cm. 9 L con capacidad para 12 latas de bebidas de 330 ml, sándwiches, ensaladas, bebidas, frutas, etc. Los Compartimientos frontales y laterales permiten guardar otros artículos pequeños\nA prueba de fugas e impermeable: La capa exterior está hecha de tela Oxford 600D resistente al agua y a las manchas, duradera, impermeable y fácil de limpiar, manteniendo la fruta y las bebidas frescas y a prueba de fugas, incluso con agua y una hielera\nMaterial Duradero: El forro interior está hecho de película de PEVA de grado alimenticio, resistente a las manchas y al desgaste, y no se derrite fácilmente, incluso con alimentos calientes. Puede guardar la comida directamente en la bolsa sin preocupaciones\nAltamente Portátil: Su diseño de cremallera bidireccional facilita su transporte. Sus resistentes asas y correas para el hombro la hacen fácil de llevar, ideal para la oficina, el trabajo, picnics, la playa y viajes",
+    "source_hash": "f7431f69aadf94c094bcd935d7223a2fa4e047432d04d692111f58fa881c2ad1",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0B56CHMSC.html",
+      "sha256": "3a813b234c443b77b9c6053977a2286753280e3ce2e31784c4deb5db27545a28",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0B56CHMSC"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Aislamiento Térmico: Esta lonchera cuenta con un aislamiento cuádruple que mantiene la comida fría, caliente o fresca hasta 4,5 horas. Está equipada con un forro de PEVA, aislamiento de espuma perlada de 2 mm de grosor y tela Oxford resistente al desgarro con revestimiento de PU para una protección óptima",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Gran Capacidad: Dimensiones 25.4 cm x 17 cm x 20.3 cm. 9 L con capacidad para 12 latas de bebidas de 330 ml, sándwiches, ensaladas, bebidas, frutas, etc. Los Compartimientos frontales y laterales permiten guardar otros artículos pequeños",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "A prueba de fugas e impermeable: La capa exterior está hecha de tela Oxford 600D resistente al agua y a las manchas, duradera, impermeable y fácil de limpiar, manteniendo la fruta y las bebidas frescas y a prueba de fugas, incluso con agua y una hielera",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Material Duradero: El forro interior está hecho de película de PEVA de grado alimenticio, resistente a las manchas y al desgaste, y no se derrite fácilmente, incluso con alimentos calientes. Puede guardar la comida directamente en la bolsa sin preocupaciones",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Altamente Portátil: Su diseño de cremallera bidireccional facilita su transporte. Sus resistentes asas y correas para el hombro la hacen fácil de llevar, ideal para la oficina, el trabajo, picnics, la playa y viajes",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 39,
+    "asin": "B0BSXDN3TK",
+    "field": "feature_bullets",
+    "source_text": "Filtra hasta 150L en 4 semanas con cada cartucho, y ahorra hasta 150 botellas de plástico. Adaptable a puertas de frigoríficos estándar, sin BPA.\nEl indicador digital de duración BRITA Memo mide el tiempo para recordar el cambio de filtro; la tapa del pico protege el agua filtrada del polvo.\nConfía en la innovadora filtración de 4 etapas MAXTRA PRO con carbón activado natural y perlas intercambiadoras de iones.\nRendimiento de filtrado mejorado: la innovadora micro-malla bloquea micropartículas ( 30 μm)\nBueno para ti: ayuda a ahorrar cientos de botellas de plástico.\nCapacidad total de 2,4L para 1,4L de agua filtrada. Necesitas aún más agua filtrada Descubre BRITA Marella XL, BRITA Style XL y BRITA Flow.\nBRITA es el número 1 del mundo en filtros de agua. Calidad y diseño alemán desde 1966.\nIncluye: 1x jarra de filtro de agua BRITA Aluna blanca, 1x cartucho de filtro MAXTRA PRO ALL-IN-1.",
+    "source_hash": "80c8a805130cad1fbd880e950d4dc06c2efcea8100d82056cffc3abe0aab3b60",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0BSXDN3TK.html",
+      "sha256": "3adc5f2f3fb5b29e061fd53d86772eb9ade08753b2f17d5392e433c08289bd32",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0BSXDN3TK"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Filtra hasta 150L en 4 semanas con cada cartucho, y ahorra hasta 150 botellas de plástico. Adaptable a puertas de frigoríficos estándar, sin BPA.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "El indicador digital de duración BRITA Memo mide el tiempo para recordar el cambio de filtro; la tapa del pico protege el agua filtrada del polvo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Confía en la innovadora filtración de 4 etapas MAXTRA PRO con carbón activado natural y perlas intercambiadoras de iones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Rendimiento de filtrado mejorado: la innovadora micro-malla bloquea micropartículas ( 30 μm)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Bueno para ti: ayuda a ahorrar cientos de botellas de plástico.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "Capacidad total de 2,4L para 1,4L de agua filtrada. Necesitas aún más agua filtrada Descubre BRITA Marella XL, BRITA Style XL y BRITA Flow.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[7]",
+        "text": "BRITA es el número 1 del mundo en filtros de agua. Calidad y diseño alemán desde 1966.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[8]",
+        "text": "Incluye: 1x jarra de filtro de agua BRITA Aluna blanca, 1x cartucho de filtro MAXTRA PRO ALL-IN-1.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 45,
+    "asin": "B0C732XC52",
+    "field": "feature_bullets",
+    "source_text": "PACK DE 100 VASOS DESECHABLES DE CARTÓN KRAFT 210 ML (7 OZ): vasos café desechables de papel para café con leche, té, chocolate, agua y refrescos, con 8 cm de alto y 210 ml de capacidad; 100 vasos papel kraft para la oficina, la cafetería, el catering o las fiestas en casa, listos para servir y tirar sin fregar.\nROBUSTOS, NO SE ABLANDAN Y NO GOTEAN: cartón kraft firme con interior impermeabilizado que aguanta el líquido caliente o frío sin deformarse ni filtrar; vasos desechables antigoteo que se sujetan bien con el café recién hecho, mantienen la bebida caliente y no transmiten olor ni sabor a cartón.\nPARA CAFÉ, TÉ, CHOCOLATE, AGUA Y REFRESCOS: vasos cartón café para máquinas de vending y cafeteras de oficina, vasos de papel desechables para agua en dispensadores y fuentes, vasos desechables café con leche y té para cafeterías, panaderías, food trucks, catering, cumpleaños y fiestas; aptos para bebidas calientes y frías, sin tapa, de un solo uso.\nMEDIDAS 210 ML / 7 OZ, 8 CM DE ALTO, Ø 7,5 CM ARRIBA Y 5,2 CM EN LA BASE: el tamaño del café con leche, el americano corto y el té; para café solo elige los vasos GoBeTree de 110 ml (4 oz) y para bebidas grandes los de 240 ml (8 oz). Apilables y ligeros: la caja de 100 vasos desechables ocupa poco en el almacén y en la barra.\nACABADO KRAFT MATE EN EL QUE SE PUEDE ESCRIBIR: superficie de cartón kraft en marrón que admite rotulador para poner el nombre en eventos, oficinas y clases; vasos kraft con look artesanal que combinan con paletinas de madera y azucarillos en la barra o el buffet de desayuno, y también valen para helados, snacks y manualidades.",
+    "source_hash": "61883d6deaf907877558ab766f7d656e0a626a14a5fc1aea2f90ee6bf65d0942",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0C732XC52.html",
+      "sha256": "16e7bce2f3dd32861eafb9096ef12ea8ee578e879eb3500be9b3bc95b95bc027",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0C732XC52"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "PACK DE 100 VASOS DESECHABLES DE CARTÓN KRAFT 210 ML (7 OZ): vasos café desechables de papel para café con leche, té, chocolate, agua y refrescos, con 8 cm de alto y 210 ml de capacidad; 100 vasos papel kraft para la oficina, la cafetería, el catering o las fiestas en casa, listos para servir y tirar sin fregar.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "ROBUSTOS, NO SE ABLANDAN Y NO GOTEAN: cartón kraft firme con interior impermeabilizado que aguanta el líquido caliente o frío sin deformarse ni filtrar; vasos desechables antigoteo que se sujetan bien con el café recién hecho, mantienen la bebida caliente y no transmiten olor ni sabor a cartón.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "PARA CAFÉ, TÉ, CHOCOLATE, AGUA Y REFRESCOS: vasos cartón café para máquinas de vending y cafeteras de oficina, vasos de papel desechables para agua en dispensadores y fuentes, vasos desechables café con leche y té para cafeterías, panaderías, food trucks, catering, cumpleaños y fiestas; aptos para bebidas calientes y frías, sin tapa, de un solo uso.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "MEDIDAS 210 ML / 7 OZ, 8 CM DE ALTO, Ø 7,5 CM ARRIBA Y 5,2 CM EN LA BASE: el tamaño del café con leche, el americano corto y el té; para café solo elige los vasos GoBeTree de 110 ml (4 oz) y para bebidas grandes los de 240 ml (8 oz). Apilables y ligeros: la caja de 100 vasos desechables ocupa poco en el almacén y en la barra.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "ACABADO KRAFT MATE EN EL QUE SE PUEDE ESCRIBIR: superficie de cartón kraft en marrón que admite rotulador para poner el nombre en eventos, oficinas y clases; vasos kraft con look artesanal que combinan con paletinas de madera y azucarillos en la barra o el buffet de desayuno, y también valen para helados, snacks y manualidades.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 52,
+    "asin": "B0CJS1F1NF",
+    "field": "feature_bullets",
+    "source_text": "【APTA PARA TODO TIPO DE PAPELES PINTADOS】: ligeros, papeles vinílicos, no tejidos, dúplex, fotográficos, murales fotográficos, etc. Para la colocación en paredes pintadas, de pladur o enyesadas.\n【CALIDAD PROFESIONAL】: Cola en polvos con Metilcelulosa y resina reforzada para una instalación correcta, y gran rendimiento de uso de 4 a 6 rollos (25 m² a 30 m²) aproximados teniendo en cuenta la mezcla.\n【ALTA ADHERENCIA】: adherencia inicial acompañada de una gran facilidad de corrección. Se extiende con gran rapidez en soporte del papel pintado o pared.\n【LIMPIA, SIN OLORES Y TRANSPARENTE】: Se seca de forma totalmente transparente casi con apenas residuos una vez seca, recomendando siempre pasar un trapo húmedo para quitar los restos de cola en dibujo del papel pintado. Dispone del sello de emisiones A+, pudiendo ser más recomendable frente otros pegamentos de características parecidas a persona con problemas respiratorios.\n【CAPACIDAD PARA ADAPTARSE】: Posibilidad inicial de prepararse más liquida, mezclando (6 litros de agua aproximadamente) para la colocación de papeles pintados normales, ligeros o dúplex con soporte de papel pintado, o más densa (4 litros de agua aproximadamente) para la colocación de papeles pintados pesados, vinílicos o no tejido. También tiene la capacidad de mezclarse con otros pegamentos o aditivos de dispersión plástica para dar un mayor fuerza y resistencia.",
+    "source_hash": "5f8b46175c4aa6761b56e9f92247352de33b9d0dbf17dab8769bccdbb14770f1",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0CJS1F1NF.html",
+      "sha256": "4445176fcde0f73faa4ea0b5c53ecc587fc1cc598930a89027d724e2c3eadd49",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CJS1F1NF"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "【APTA PARA TODO TIPO DE PAPELES PINTADOS】: ligeros, papeles vinílicos, no tejidos, dúplex, fotográficos, murales fotográficos, etc. Para la colocación en paredes pintadas, de pladur o enyesadas.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【CALIDAD PROFESIONAL】: Cola en polvos con Metilcelulosa y resina reforzada para una instalación correcta, y gran rendimiento de uso de 4 a 6 rollos (25 m2 a 30 m2) aproximados teniendo en cuenta la mezcla.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【ALTA ADHERENCIA】: adherencia inicial acompañada de una gran facilidad de corrección. Se extiende con gran rapidez en soporte del papel pintado o pared.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "【LIMPIA, SIN OLORES Y TRANSPARENTE】: Se seca de forma totalmente transparente casi con apenas residuos una vez seca, recomendando siempre pasar un trapo húmedo para quitar los restos de cola en dibujo del papel pintado. Dispone del sello de emisiones A+, pudiendo ser más recomendable frente otros pegamentos de características parecidas a persona con problemas respiratorios.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【CAPACIDAD PARA ADAPTARSE】: Posibilidad inicial de prepararse más liquida, mezclando (6 litros de agua aproximadamente) para la colocación de papeles pintados normales, ligeros o dúplex con soporte de papel pintado, o más densa (4 litros de agua aproximadamente) para la colocación de papeles pintados pesados, vinílicos o no tejido. También tiene la capacidad de mezclarse con otros pegamentos o aditivos de dispersión plástica para dar un mayor fuerza y resistencia.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 58,
+    "asin": "B0CZPJ1HFP",
+    "field": "feature_bullets",
+    "source_text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.º 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025\nAHORRA ESPACIO EN TU COCINA: 30% más delgada (comparado con el modelo AF400). Gran capacidad de 9,5 litros para alimentar hasta 8 personas. Cocina hasta un 55% más rápido que los hornos eléctricos (probado con palitos de pescado y salchichas)\nCOCINA EN 4 NIVELES SIMULTÁNEAMENTE: Incluye 2 cestas y 2 rejillas de base para comida, brindando 4 niveles para cocinar el doble de alimentos. Gracias a los ventiladores traseros, la comida se cocina y dora de forma uniforme en todos los niveles\nEFICIENCIA ENERGÉTICA: Cocina con hasta un 55% menos de energía que un horno* (*Pruebas y cálculos basados en el tiempo de cocción recomendado para salchichas, utilizando la función de freír con aire vs. un horno de 68 L con clasificación “A” y 71 L con clasificación “A+\")\n6 FUNCIONES DE COCCIÓN: Max Crisp, Freír con aire, Asar, Hornear, Recalentar y Deshidratar. Hasta un 75% menos de grasa* utilizando la función Freír con aire (*Probado con patatas fritas cortadas a mano). Funciones SYNC y MATCH para las 2 cestas\nINCLUYE: Ninja Double Stack XL Freidora de aire 9,5 L (enchufe UE), 2 cestas de 4,75 l, 2 rejillas base antiadherentes, 2 rejillas. Piezas aptas para lavavajillas. Dimensiones: 38,5 cm x 28 cm x 47 cm. Peso: 10,3 kg. Color: Gris",
+    "source_hash": "f11e3f4ce6e75667a16cd68939595843b1cd8b46a784e9df7225b73d16539538",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0CZPJ1HFP.html",
+      "sha256": "bc61bdd52cef708c28de7fbe14c0019a7e33479b2371e08527dc373ab4de29bb",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CZPJ1HFP"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.o 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "AHORRA ESPACIO EN TU COCINA: 30% más delgada (comparado con el modelo AF400). Gran capacidad de 9,5 litros para alimentar hasta 8 personas. Cocina hasta un 55% más rápido que los hornos eléctricos (probado con palitos de pescado y salchichas)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "COCINA EN 4 NIVELES SIMULTÁNEAMENTE: Incluye 2 cestas y 2 rejillas de base para comida, brindando 4 niveles para cocinar el doble de alimentos. Gracias a los ventiladores traseros, la comida se cocina y dora de forma uniforme en todos los niveles",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "EFICIENCIA ENERGÉTICA: Cocina con hasta un 55% menos de energía que un horno* (*Pruebas y cálculos basados en el tiempo de cocción recomendado para salchichas, utilizando la función de freír con aire vs. un horno de 68 L con clasificación “A” y 71 L con clasificación “A+\")",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "6 FUNCIONES DE COCCIÓN: Max Crisp, Freír con aire, Asar, Hornear, Recalentar y Deshidratar. Hasta un 75% menos de grasa* utilizando la función Freír con aire (*Probado con patatas fritas cortadas a mano). Funciones SYNC y MATCH para las 2 cestas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[2]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "INCLUYE: Ninja Double Stack XL Freidora de aire 9,5 L (enchufe UE), 2 cestas de 4,75 l, 2 rejillas base antiadherentes, 2 rejillas. Piezas aptas para lavavajillas. Dimensiones: 38,5 cm x 28 cm x 47 cm. Peso: 10,3 kg. Color: Gris",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 59,
+    "asin": "B0CZY23DYB",
+    "field": "feature_bullets",
+    "source_text": "EXCLUSIVA EN AMAZON: freidora de aire con pinzas de silicona. Un 30% más compacta (vs. AF400), con capacidad de 9,5 L para hasta 8 personas y hasta un 55% más rápida que un horno eléctrico.\nCOCINA EN 4 NIVELES A LA VEZ: incluye 2 cajones y 2 rejillas para cocinar el doble de alimentos. Los ventiladores traseros garantizan una cocción uniforme y resultados crujientes.\nEFICIENCIA ENERGÉTICA: cocina con menos energía que un horno* (*Pruebas basadas en el tiempo de cocción de salchichas usando Air Fry frente a hornos de 68 L de clase A y 71 L de clase A+).\n6 FUNCIONES DE COCCIÓN: Max Crisp, freír con aire, asar, hornear, recalentar y deshidratar. Hasta un 75% menos de grasa y funciones SYNC y MATCH para ambos cajones.\nINCLUYE: freidora Ninja Double Stack XL 9,5 L (enchufe UE), 2 cestas de 4,75 L, 2 rejillas base antiadherentes, 2 rejillas y pinzas. Apta para lavavajillas. 28 x 38,5 x 47 cm. 10,3 kg.",
+    "source_hash": "2e481851e8a5b30a962975e54cf208919537b6b9e139c9dfddc9fbf560d22fd2",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0CZY23DYB.html",
+      "sha256": "2eb805ea6510e24445aa8ad6de0ca61fe6d540345df2277635536e09da9c85f7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CZY23DYB"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "EXCLUSIVA EN AMAZON: freidora de aire con pinzas de silicona. Un 30% más compacta (vs. AF400), con capacidad de 9,5 L para hasta 8 personas y hasta un 55% más rápida que un horno eléctrico.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "COCINA EN 4 NIVELES A LA VEZ: incluye 2 cajones y 2 rejillas para cocinar el doble de alimentos. Los ventiladores traseros garantizan una cocción uniforme y resultados crujientes.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "EFICIENCIA ENERGÉTICA: cocina con menos energía que un horno* (*Pruebas basadas en el tiempo de cocción de salchichas usando Air Fry frente a hornos de 68 L de clase A y 71 L de clase A+).",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "6 FUNCIONES DE COCCIÓN: Max Crisp, freír con aire, asar, hornear, recalentar y deshidratar. Hasta un 75% menos de grasa y funciones SYNC y MATCH para ambos cajones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "INCLUYE: freidora Ninja Double Stack XL 9,5 L (enchufe UE), 2 cestas de 4,75 L, 2 rejillas base antiadherentes, 2 rejillas y pinzas. Apta para lavavajillas. 28 x 38,5 x 47 cm. 10,3 kg.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 68,
+    "asin": "B0DM25QGBV",
+    "field": "feature_bullets",
+    "source_text": "4 TARROS Y CÓDIGO DE COLOR PARA TODA LA SEMANA – Cada tarro combina un recipiente principal de 480 ml para yogur o leche con un compartimento superior de 120 ml para muesli, frutos secos o fruta fresca: los ingredientes permanecen separados para que el muesli se mantenga crujiente cada mañana. ¡Se acabaron los desayunos aguados! Rosa para cuencos dulces de frutos rojos, verde para variantes saladas con frutos secos. Cuatro tarros, cuatro días de meal prep de una sola vez: cubre casi toda la semana laboral.\nPORCIÓN PERFECTA PARA TODA LA FAMILIA – 480 ml + 120 ml: capacidad de sobra para 50 g de copos de avena, 120 ml de leche y todos los toppings. Cada tarro mide 9 × 9 × 16,2 cm y cabe en la mayoría de los portavasos del coche, en los compartimentos de la puerta de la nevera y en los bolsillos laterales de la mochila. Cómodo de llevar: ideal para toda la familia, en la oficina, en la escuela o en el gimnasio.\nVIDRIO GRUESO, SIN BPA Y FÁCIL DE LIMPIAR – Los tarros están fabricados en vidrio sodocálcico de paredes gruesas, apto para contacto con alimentos y sin BPA: no absorben olores, no se manchan y no se vuelven opacos con el tiempo. Se pueden lavar en el lavavajillas, mientras que las tapas se recomienda lavarlas a mano. Aptos para microondas sin la tapa. Importante: usar solo con alimentos fríos o tibios (máx. 60 °C) y no verter nunca agua hirviendo para evitar choques térmicos.\nHERMÉTICO AL 100% CON CONSEJOS DE USO – Doble cierre con junta de silicona extraíble: hermético incluso boca abajo, sin fugas. Consejos: no apretar demasiado. ¿La tapa se queda atascada tras el frío? ① Dejarla 5 minutos a temperatura ambiente: el vacío se libera solo. ② ¿Sigue atascada? Envolverla con un paño seco para mejor agarre y abrirla sin esfuerzo. Cuatro tarros para la oficina, la universidad y el gimnasio: cada día un sabor distinto, y el bolso se mantiene seco.\nSET DE 4 PARA FAMILIAS Y MEAL PREP – No solo para muesli: también es perfecto para yogur, ensalada o pudin de chía. Verde y rosa: cada uno su tarro y su sabor. También sirven como tarros de yogur para llevar. Preparar el domingo y disfrutar de lunes a jueves sin preocupaciones. También es un regalo perfecto para familias preocupadas por su salud.",
+    "source_hash": "a6430895816c9cad8cf20b2e0808f56a760fbaf6cf9609726327561f895544f4",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0DM25QGBV.html",
+      "sha256": "936d3f5d0a6cb26ac7044abd2e9897500f6b01c157c5ca161e8fc44206e48c47",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DM25QGBV"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "4 TARROS Y CÓDIGO DE COLOR PARA TODA LA SEMANA – Cada tarro combina un recipiente principal de 480 ml para yogur o leche con un compartimento superior de 120 ml para muesli, frutos secos o fruta fresca: los ingredientes permanecen separados para que el muesli se mantenga crujiente cada mañana. ¡Se acabaron los desayunos aguados! Rosa para cuencos dulces de frutos rojos, verde para variantes saladas con frutos secos. Cuatro tarros, cuatro días de meal prep de una sola vez: cubre casi toda la semana laboral.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "PORCIÓN PERFECTA PARA TODA LA FAMILIA – 480 ml + 120 ml: capacidad de sobra para 50 g de copos de avena, 120 ml de leche y todos los toppings. Cada tarro mide 9 × 9 × 16,2 cm y cabe en la mayoría de los portavasos del coche, en los compartimentos de la puerta de la nevera y en los bolsillos laterales de la mochila. Cómodo de llevar: ideal para toda la familia, en la oficina, en la escuela o en el gimnasio.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "VIDRIO GRUESO, SIN BPA Y FÁCIL DE LIMPIAR – Los tarros están fabricados en vidrio sodocálcico de paredes gruesas, apto para contacto con alimentos y sin BPA: no absorben olores, no se manchan y no se vuelven opacos con el tiempo. Se pueden lavar en el lavavajillas, mientras que las tapas se recomienda lavarlas a mano. Aptos para microondas sin la tapa. Importante: usar solo con alimentos fríos o tibios (máx. 60 °C) y no verter nunca agua hirviendo para evitar choques térmicos.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "HERMÉTICO AL 100% CON CONSEJOS DE USO – Doble cierre con junta de silicona extraíble: hermético incluso boca abajo, sin fugas. Consejos: no apretar demasiado. ¿La tapa se queda atascada tras el frío? 1 Dejarla 5 minutos a temperatura ambiente: el vacío se libera solo. 2 ¿Sigue atascada? Envolverla con un paño seco para mejor agarre y abrirla sin esfuerzo. Cuatro tarros para la oficina, la universidad y el gimnasio: cada día un sabor distinto, y el bolso se mantiene seco.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "SET DE 4 PARA FAMILIAS Y MEAL PREP – No solo para muesli: también es perfecto para yogur, ensalada o pudin de chía. Verde y rosa: cada uno su tarro y su sabor. También sirven como tarros de yogur para llevar. Preparar el domingo y disfrutar de lunes a jueves sin preocupaciones. También es un regalo perfecto para familias preocupadas por su salud.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 71,
+    "asin": "B0DPRFH6X6",
+    "field": "feature_bullets",
+    "source_text": "TAPA CON CIERRE CLIC A PRESIÓN: se abre con una mano y cierra firme con un clic audible que confirma el cierre correcto, sin clips frágiles que se rompan con el uso. La tapa se mantiene en su sitio incluso apilando varias cajas llenas, y protege el contenido del polvo y la humedad ambiental en la cocina, la despensa, el garaje o la oficina. Pensada para abrirse y cerrarse a diario sin desgaste.\n100% TRANSPARENTES, NADA DE TRASLÚCIDAS: localiza lo que buscas sin abrir cajas ni mover pilas enteras. El plástico transparente muestra el contenido de un vistazo: la caja de almacenaje ideal para cocina y despensa, para herramientas en el garaje o para el armario de la colada. El polipropileno natural mantiene la visibilidad cristalina sin amarillear con los años.\n5 CAJAS DE 8 LITROS, MEDIDAS EXACTAS 33x24x15,5 cm: el tamaño mediano y más versátil de la familia AHIOVA. Ropa doblada y básicos de temporada en el armario; herramientas, tornillería y brochas en el garaje; utensilios en la cocina; juegos de mesa y material escolar en el salón o el despacho. Su capacidad se adapta a la mayoría de muebles y estanterías: comprueba las medidas para acertar a la primera.\nAPILABLES LLENAS, ENCAJABLES VACÍAS: diseño 2 en 1 que ahorra espacio siempre. Cerradas se apilan estables en columna aunque estén llenas, aprovechando la altura del armario o el garaje; sin la tapa se encajan entre sí como vasos y se guardan ocupando un mínimo. Compatibles con los tamaños de 4L y 15L de la familia AHIOVA para montar un sistema de organización completo.\nFABRICADAS EN EUROPA POR UNA EMPRESA FAMILIAR: polipropileno natural sin BPA, ligeras pero resistentes al uso diario intensivo, y fáciles de limpiar. Perfectas para cocina, despensa, garaje, despacho o colada. En AHIOVA nuestra promesa es sencilla: la mejor calidad al mejor precio con el mejor servicio. MAKE LIFE EASIER: invierte en orden y gana tranquilidad.",
+    "source_hash": "cce3acf75260a3736d5f1d8e0fe99fb048220f533b8179b0e74eb7978e84290f",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0DPRFH6X6.html",
+      "sha256": "6816ec59e949151577633a31041dd71c9d412a5f5683c3387f09e773863c31d7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DPRFH6X6"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "TAPA CON CIERRE CLIC A PRESIÓN: se abre con una mano y cierra firme con un clic audible que confirma el cierre correcto, sin clips frágiles que se rompan con el uso. La tapa se mantiene en su sitio incluso apilando varias cajas llenas, y protege el contenido del polvo y la humedad ambiental en la cocina, la despensa, el garaje o la oficina. Pensada para abrirse y cerrarse a diario sin desgaste.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "100% TRANSPARENTES, NADA DE TRASLÚCIDAS: localiza lo que buscas sin abrir cajas ni mover pilas enteras. El plástico transparente muestra el contenido de un vistazo: la caja de almacenaje ideal para cocina y despensa, para herramientas en el garaje o para el armario de la colada. El polipropileno natural mantiene la visibilidad cristalina sin amarillear con los años.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "5 CAJAS DE 8 LITROS, MEDIDAS EXACTAS 33x24x15,5 cm: el tamaño mediano y más versátil de la familia AHIOVA. Ropa doblada y básicos de temporada en el armario; herramientas, tornillería y brochas en el garaje; utensilios en la cocina; juegos de mesa y material escolar en el salón o el despacho. Su capacidad se adapta a la mayoría de muebles y estanterías: comprueba las medidas para acertar a la primera.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "APILABLES LLENAS, ENCAJABLES VACÍAS: diseño 2 en 1 que ahorra espacio siempre. Cerradas se apilan estables en columna aunque estén llenas, aprovechando la altura del armario o el garaje; sin la tapa se encajan entre sí como vasos y se guardan ocupando un mínimo. Compatibles con los tamaños de 4L y 15L de la familia AHIOVA para montar un sistema de organización completo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "FABRICADAS EN EUROPA POR UNA EMPRESA FAMILIAR: polipropileno natural sin BPA, ligeras pero resistentes al uso diario intensivo, y fáciles de limpiar. Perfectas para cocina, despensa, garaje, despacho o colada. En AHIOVA nuestra promesa es sencilla: la mejor calidad al mejor precio con el mejor servicio. MAKE LIFE EASIER: invierte en orden y gana tranquilidad.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 72,
+    "asin": "B0DPV9SH3W",
+    "field": "feature_bullets",
+    "source_text": "Mango ergonómico extralargo de 137 cm: En comparación con las fregonas estándar de 124 cm, el mango 13 cm más largo proporciona un mayor alcance y te ayuda a mantener una postura más natural y erguida, con menos necesidad de agacharte. Ligero y fácil de manejar para una limpieza diaria más cómoda.\nIncluye solución de limpieza de muestra de 30 ml: Fórmula altamente concentrada en proporción 1:50 con diseño de baja espuma para una limpieza eficaz. También disponible para la venta el formato de 1 litro.\nDepósito de agua XXL de 530 ml: Una sola carga es suficiente para 1 o 2 sesiones de limpieza de toda la casa. El depósito de gran capacidad reduce la frecuencia de recarga y te permite limpiar sin interrupciones.\nTecnología de pulverización de precisión: Pulverización ultrafina con solo tocar un botón, que dirige la suciedad sin salpicaduras. Seguro para suelos de madera, baldosas, vinilo y laminados.\nLimpieza ligera y sin esfuerzo: Diseño de deslizamiento suave con mango ergonómico que reduce la fatiga. Limpia más rápido con el mínimo esfuerzo.\nSuelo listo en poco tiempo: La niebla fina asegura un secado rápido. Puedes caminar sobre los suelos limpios inmediatamente después de usarlo.",
+    "source_hash": "a5714e299851cdcb99e6067fccabf4ed6aded27cec7ac4ab3a4120cb4e51497c",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0DPV9SH3W.html",
+      "sha256": "286ca19033d79074a7d76702c22d4fe5e981dfeabb7aa3eacb9a0938eb8128c2",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0DPV9SH3W"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Mango ergonómico extralargo de 137 cm: En comparación con las fregonas estándar de 124 cm, el mango 13 cm más largo proporciona un mayor alcance y te ayuda a mantener una postura más natural y erguida, con menos necesidad de agacharte. Ligero y fácil de manejar para una limpieza diaria más cómoda.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Incluye solución de limpieza de muestra de 30 ml: Fórmula altamente concentrada en proporción 1:50 con diseño de baja espuma para una limpieza eficaz. También disponible para la venta el formato de 1 litro.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Depósito de agua XXL de 530 ml: Una sola carga es suficiente para 1 o 2 sesiones de limpieza de toda la casa. El depósito de gran capacidad reduce la frecuencia de recarga y te permite limpiar sin interrupciones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Tecnología de pulverización de precisión: Pulverización ultrafina con solo tocar un botón, que dirige la suciedad sin salpicaduras. Seguro para suelos de madera, baldosas, vinilo y laminados.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Limpieza ligera y sin esfuerzo: Diseño de deslizamiento suave con mango ergonómico que reduce la fatiga. Limpia más rápido con el mínimo esfuerzo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "Suelo listo en poco tiempo: La niebla fina asegura un secado rápido. Puedes caminar sobre los suelos limpios inmediatamente después de usarlo.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 88,
+    "asin": "B0FM6KNJKV",
+    "field": "feature_bullets",
+    "source_text": "DISEÑO RETRO - Acabado blanco satinado mate con acentos cromados en estilo vintage. Capacidad de 1,7 L y ventana de nivel de agua para hervir la cantidad correcta, ahorrando tiempo y energía.\nVERTIDO PERFECTO – Diseñado para la precisión, el pico vertedor Perfecto permite reducir las salpicaduras y derrames para un vertido más suave y seguro.\nBOTÓN PARA ABRIR LA TAPA - Hervidor de agua fácil de llenar con tapa de pulsador para usar con una sola mano. Ábrela directamente desde el mango para un llenado rápido y sin salpicaduras.\nHAGA HERVIR SOLO LO QUE NECESITA – Hervir una taza en cuestión de minutos y ahorrar hasta un 66% de energía en comparación con un hervidor lleno (1 taza = 236 ml frente a 1 litro).\nBASE DE 360 GRADOS CON ALMACENAMIENTO PARA CABLE – La base giratoria permite un uso fácil con la mano izquierda o derecha, con almacenamiento integrado para el cable para mantener tu encimera limpia y ordenada.",
+    "source_hash": "00f186ada51b903aaf2ea28b524c18ed2b0f2a3a8a4e6c19282a304586aae358",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0FM6KNJKV.html",
+      "sha256": "63342f1243e9701fba660bdea06562f9d03efeb53e3f18e3d92a08fa2cbb0b24",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0FM6KNJKV"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "DISEÑO RETRO - Acabado blanco satinado mate con acentos cromados en estilo vintage. Capacidad de 1,7 L y ventana de nivel de agua para hervir la cantidad correcta, ahorrando tiempo y energía.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "VERTIDO PERFECTO – Diseñado para la precisión, el pico vertedor Perfecto permite reducir las salpicaduras y derrames para un vertido más suave y seguro.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "BOTÓN PARA ABRIR LA TAPA - Hervidor de agua fácil de llenar con tapa de pulsador para usar con una sola mano. Ábrela directamente desde el mango para un llenado rápido y sin salpicaduras.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "HAGA HERVIR SOLO LO QUE NECESITA – Hervir una taza en cuestión de minutos y ahorrar hasta un 66% de energía en comparación con un hervidor lleno (1 taza = 236 ml frente a 1 litro).",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "BASE DE 360 GRADOS CON ALMACENAMIENTO PARA CABLE – La base giratoria permite un uso fácil con la mano izquierda o derecha, con almacenamiento integrado para el cable para mantener tu encimera limpia y ordenada.",
+        "independently_verified": true
+      }
+    ]
+  },
+  {
+    "index": 122,
+    "asin": "B0HFJJ55BD",
+    "field": "feature_bullets",
+    "source_text": "【Cafetera portátil 3 en 1】Esta cafetera espresso portátil de Gubbett ofrece tres funciones en un solo aparato y es compatible tanto con café molido fresco como con las cápsulas de café más habituales (como NS y DG). Gracias a su diseño portátil, podrás disfrutar fácilmente de un espresso de calidad profesional, ya sea de viaje, de acampada, en un viaje de negocios, o incluso en casa o en la oficina durante tus momentos de descanso.\n【Uso muy sencillo y un espresso listo en 2 segundos】Despídete de los complicados procedimientos y da la bienvenida a la máxima comodidad. Gracias a un control intuitivo de un solo botón: pulsa dos veces para iniciar el proceso inteligente de calentamiento y extracción, o mantén pulsado el botón para una extracción rápida con agua caliente. Compatible con agua caliente y fría, te permite preparar un espresso en solo 2 segundos. Ya sea en una mañana ajetreada o mientras te desplazas, te aporta sabor y energía en todo momento.\n【Calentamiento rápido y presión de 20 bares】 Equipada con un excelente sistema de calentamiento rápido, puede calentar 60 ml de agua de 25 °C hasta la temperatura de extracción ideal de 85 °C en 300 segundos a una temperatura ambiente de entre 20 y 30 °C (el consumo de energía aumenta considerablemente al calentar agua fría; una carga completa permite realizar entre 4 y 5 calentamientos). Combinado con una presión estable de 20 bares de calidad profesional, su rendimiento básico rivaliza con el de una cafetera profesional.\n【Gran autonomía y capacidad para unas 50 tazas de espresso】La cafetera espresso portátil Gubbett incorpora una batería recargable de alta capacidad de 7500 mAh, lo que te libera de las limitaciones de la red eléctrica y te permite utilizarla realmente en cualquier lugar y en cualquier momento. Una sola carga completa permite preparar unas 50 tazas (60 ml) o 40 tazas (80 ml) de café espresso, una autonomía claramente superior a la de productos similares. Además, el uso de agua caliente para la extracción permite reducir considerablemente el tiempo de espera para el calentamiento, mejorando así la eficiencia de la preparación.\n【Fácil mantenimiento y elegancia portátil】La cafetera portátil Gubbett cuenta con un diseño totalmente modular y desmontable, lo que hace que su limpieza sea extremadamente sencilla. Componentes como la taza de café y el adaptador para cápsulas se pueden extraer fácilmente sin necesidad de herramientas para un lavado a fondo. También está equipada con una función de autolimpieza inteligente: basta con añadir agua e iniciar el ciclo sin cápsula para que la máquina enjuague automáticamente los conductos internos, eliminando así los residuos de café y la cal.",
+    "source_hash": "f59b654c1321be1a467593a7528cd45eb4fd1deb35b666fa6411bdc327a50ad5",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0HFJJ55BD.html",
+      "sha256": "f985e31018228928d1ebdb44de5c1cf5ed1ff82ac1c831f580ee8c566a6f8071",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0HFJJ55BD"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "【Cafetera portátil 3 en 1】Esta cafetera espresso portátil de Gubbett ofrece tres funciones en un solo aparato y es compatible tanto con café molido fresco como con las cápsulas de café más habituales (como NS y DG). Gracias a su diseño portátil, podrás disfrutar fácilmente de un espresso de calidad profesional, ya sea de viaje, de acampada, en un viaje de negocios, o incluso en casa o en la oficina durante tus momentos de descanso.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【Uso muy sencillo y un espresso listo en 2 segundos】Despídete de los complicados procedimientos y da la bienvenida a la máxima comodidad. Gracias a un control intuitivo de un solo botón: pulsa dos veces para iniciar el proceso inteligente de calentamiento y extracción, o mantén pulsado el botón para una extracción rápida con agua caliente. Compatible con agua caliente y fría, te permite preparar un espresso en solo 2 segundos. Ya sea en una mañana ajetreada o mientras te desplazas, te aporta sabor y energía en todo momento.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【Calentamiento rápido y presión de 20 bares】 Equipada con un excelente sistema de calentamiento rápido, puede calentar 60 ml de agua de 25 °C hasta la temperatura de extracción ideal de 85 °C en 300 segundos a una temperatura ambiente de entre 20 y 30 °C (el consumo de energía aumenta considerablemente al calentar agua fría; una carga completa permite realizar entre 4 y 5 calentamientos). Combinado con una presión estable de 20 bares de calidad profesional, su rendimiento básico rivaliza con el de una cafetera profesional.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "【Gran autonomía y capacidad para unas 50 tazas de espresso】La cafetera espresso portátil Gubbett incorpora una batería recargable de alta capacidad de 7500 mAh, lo que te libera de las limitaciones de la red eléctrica y te permite utilizarla realmente en cualquier lugar y en cualquier momento. Una sola carga completa permite preparar unas 50 tazas (60 ml) o 40 tazas (80 ml) de café espresso, una autonomía claramente superior a la de productos similares. Además, el uso de agua caliente para la extracción permite reducir considerablemente el tiempo de espera para el calentamiento, mejorando así la eficiencia de la preparación.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【Fácil mantenimiento y elegancia portátil】La cafetera portátil Gubbett cuenta con un diseño totalmente modular y desmontable, lo que hace que su limpieza sea extremadamente sencilla. Componentes como la taza de café y el adaptador para cápsulas se pueden extraer fácilmente sin necesidad de herramientas para un lavado a fondo. También está equipada con una función de autolimpieza inteligente: basta con añadir agua e iniciar el ciclo sin cápsula para que la máquina enjuague automáticamente los conductos internos, eliminando así los residuos de café y la cal.",
+        "independently_verified": true
+      }
+    ]
+  }
+]

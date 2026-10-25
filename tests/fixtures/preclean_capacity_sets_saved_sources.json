@@ -1,0 +1,1059 @@
+[
+  {
+    "index": 1,
+    "asin": "B009AEC04G",
+    "field": "feature_bullets",
+    "source_text": "Conjunto completo de 18 vasos: Set de luminarc formado por seis vasos de sidra de 53 cl, seis vasos de pinta de 36 cl y seis vasos de chiquito de 23 cl\nMaterial de calidad: Fabricados en vidrio por luminarc\nVersatilidad de uso: Tres capacidades diferentes para distintos usos y ocasiones\nSeguridad alimentaria: 100% higiénicos y seguros para contener bebidas o alimentos\nTransparencia superior: Alta transparencia para apreciar el contenido de las bebidas\nFácil mantenimiento: Aptos para lavar en lavavajillas, facilitando su limpieza y cuidado\nUsos múltiples: Adecuados para servir bebidas, postres, combinados, yogures, sangría o helados",
+    "source_hash": "f8799a90bed745d439564361e92e38e5d6eff77b0aad5600ee3ccc4cc39672c8",
+    "title_from_saved_html": "Luminarc Set de 18 vasos altos y bajos Gorbea de vidrio 23, 36 y 53 cl",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B009AEC04G.html",
+      "sha256": "90bc94cdf4f54c9d333c9169332a2400f3abbb8bc2c01627fda8ea7f8f1a7c8f",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B009AEC04G"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Conjunto completo de 18 vasos: Set de luminarc formado por seis vasos de sidra de 53 cl, seis vasos de pinta de 36 cl y seis vasos de chiquito de 23 cl",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Material de calidad: Fabricados en vidrio por luminarc",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Versatilidad de uso: Tres capacidades diferentes para distintos usos y ocasiones",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Seguridad alimentaria: 100% higiénicos y seguros para contener bebidas o alimentos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Transparencia superior: Alta transparencia para apreciar el contenido de las bebidas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "Fácil mantenimiento: Aptos para lavar en lavavajillas, facilitando su limpieza y cuidado",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[7]",
+        "text": "Usos múltiples: Adecuados para servir bebidas, postres, combinados, yogures, sangría o helados",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "套装18只杯明确为6只53cl、6只36cl、6只23cl；18件数量闭合。不同杯型独立容量，不将任一值代表全部18只。",
+    "selected_variation_raw": "",
+    "expected_supported": true
+  },
+  {
+    "index": 5,
+    "asin": "B073M1299J",
+    "field": "feature_bullets",
+    "source_text": "MULTIFUNCIONAL: El contenedor de alimentos Cirqula es un bol de cocina multifuncional. Puede utilizarse como caja de almacenamiento de cocina y vajilla\nCOMPONENTES: Las cajas de transporte y almacenamiento tienen una tapa totalmente desmontable. Los recipientes de plástico facilitan ver lo que hay en los recipientes cuando usa el refrigerador\nINFORMACIÓN SOBRE PRODUCTO: Las bandejas pueden utilizarse como bandejas de almacenamiento para congelar alimentos y, sin tapa, para recalentar en el microondas. Los envases son estancos y herméticos\nDISEÑO: El set de iniciación a la cocina contiene cajas funcionales y elegantes para guardar alimentos. Las cajas son apilables unas sobre otras o unas dentro de otras. En resumen, ahorran espacio\nCAPACIDAD Y DIMENSIONES: El set de cocina consta de tres cuencos, con capacidad de 350 ml, 750 ml y 1250 ml. Debido a los diferentes tamaños, se puede almacenar una amplia variedad de alimentos\nSOSTENIBLE Y LIBRE DE BPA: Los recipientes de almacenamiento Cirqula son, como todos los productos Mepal, duraderos y libres de BPA. Puede reutilizar fácilmente las bandejas después de enjuagar",
+    "source_hash": "fb3ac117226ee0bb34b4d0815ae304410fadb935d1af86054f89e1a7d8747228",
+    "title_from_saved_html": "Mepal - Multi Bowl Cirqula Redondo 3-Partes - Caja de Almacenamiento de Alimentos con Tapa - Caja de Almacenamiento Hermética para Nevera y Microondas - 350 ml, 750 ml & 1250 ml - Nordic blue",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B073M1299J.html",
+      "sha256": "e5f59eec9211a4ad6baf58d66387e8a5316440b878925f025e09a3fd7351264d",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B073M1299J"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "MULTIFUNCIONAL: El contenedor de alimentos Cirqula es un bol de cocina multifuncional. Puede utilizarse como caja de almacenamiento de cocina y vajilla",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "COMPONENTES: Las cajas de transporte y almacenamiento tienen una tapa totalmente desmontable. Los recipientes de plástico facilitan ver lo que hay en los recipientes cuando usa el refrigerador",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "INFORMACIÓN SOBRE PRODUCTO: Las bandejas pueden utilizarse como bandejas de almacenamiento para congelar alimentos y, sin tapa, para recalentar en el microondas. Los envases son estancos y herméticos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "DISEÑO: El set de iniciación a la cocina contiene cajas funcionales y elegantes para guardar alimentos. Las cajas son apilables unas sobre otras o unas dentro de otras. En resumen, ahorran espacio",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "CAPACIDAD Y DIMENSIONES: El set de cocina consta de tres cuencos, con capacidad de 350 ml, 750 ml y 1250 ml. Debido a los diferentes tamaños, se puede almacenar una amplia variedad de alimentos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "SOSTENIBLE Y LIBRE DE BPA: Los recipientes de almacenamiento Cirqula son, como todos los productos Mepal, duraderos y libres de BPA. Puede reutilizar fácilmente las bandejas después de enjuagar",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "三只碗的350/750/1250ml与标题及卖点三尺寸一致；3个容量对3只容器，不额外发明总容量。",
+    "selected_variation_raw": "Nordic Blue / Set 3 piezas (350, 750, 1250 ml)",
+    "expected_supported": true
+  },
+  {
+    "index": 13,
+    "asin": "B07RNQQMT3",
+    "field": "feature_bullets",
+    "source_text": "Latín De Vidrio - Este juego incluye 12 recipientes de vidrio con tapa de plástico. Los recipientes son de diferentes tamaños (3x320 ml, 3x520 ml, 3x 800 ml, 3x 1200 ml) y tienen forma cuadrada. Uso multifuncional: congelar, cocinar, calentar, almacenar y servir.\nSeguridad En El Microondas Y El Congelador - Los tarros de cristal pueden utilizarse con seguridad en el microondas y en el horno sin tapa (hasta 450℃) y también son seguros para el congelador. Esto los hace ideales para cocinar en el horno y lo mejor para el almacenamiento de alimentos a largo plazo, por lo que puede hacer y almacenar grandes cantidades de comida casera de una sola vez\nVidrio De Borosilicato De Primera Calidad Y Plástico Sin Bpa - Los recipientes de vidrio para alimentos están cuidadosamente diseñados y fabricados con vidrio de borosilicato muy resistente junto con tapas de plástico transparente de polipropileno (PP) sin BPA. El contenido de los envases puede verse fácilmente sin necesidad de abrir las tapas, conservando la frescura y el sabor de los alimentos durante mucho tiempo.\nTapas Aireadas - Las tapas son fáciles de abrir y cerrar. Tienen cuatro cierres con una junta de goma que crea un fuerte sello para mantener la humedad fuera. Los envases son herméticos, impermeables y a prueba de fugas, manteniendo los alimentos tan frescos como siempre. Son ideales para usar en la oficina, en el gimnasio, en la cocina y en los viajes\nFácil De Limpiar Y Almacenar - Los recipientes de vidrio son aptos para el lavavajillas para una limpieza sin complicaciones. Pueden almacenarse en cualquier lugar, ya que están diseñados para apilarse unos encima de otros",
+    "source_hash": "bc3a1e54ff3c674af16d2ed0b954b1a2ace3b7acd0f3de29fcf6b6cdfc5c2011",
+    "title_from_saved_html": "KICHLY - Recipientes De Vidrio Para Alimentos - Paquete De 12 Recipientes Herméticos Para Alimentos Con Tapas Transparentes - Aptos Para Lavavajillas Y Microondas, Sin BPA",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B07RNQQMT3.html",
+      "sha256": "d6bc324553dd29d695ee1cf853d41cee9390504e5c38cf166d0fe2599fa6b54e",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B07RNQQMT3"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Latín De Vidrio - Este juego incluye 12 recipientes de vidrio con tapa de plástico. Los recipientes son de diferentes tamaños (3x320 ml, 3x520 ml, 3x 800 ml, 3x 1200 ml) y tienen forma cuadrada. Uso multifuncional: congelar, cocinar, calentar, almacenar y servir.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Seguridad En El Microondas Y El Congelador - Los tarros de cristal pueden utilizarse con seguridad en el microondas y en el horno sin tapa (hasta 450°C) y también son seguros para el congelador. Esto los hace ideales para cocinar en el horno y lo mejor para el almacenamiento de alimentos a largo plazo, por lo que puede hacer y almacenar grandes cantidades de comida casera de una sola vez",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Vidrio De Borosilicato De Primera Calidad Y Plástico Sin Bpa - Los recipientes de vidrio para alimentos están cuidadosamente diseñados y fabricados con vidrio de borosilicato muy resistente junto con tapas de plástico transparente de polipropileno (PP) sin BPA. El contenido de los envases puede verse fácilmente sin necesidad de abrir las tapas, conservando la frescura y el sabor de los alimentos durante mucho tiempo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Tapas Aireadas - Las tapas son fáciles de abrir y cerrar. Tienen cuatro cierres con una junta de goma que crea un fuerte sello para mantener la humedad fuera. Los envases son herméticos, impermeables y a prueba de fugas, manteniendo los alimentos tan frescos como siempre. Son ideales para usar en la oficina, en el gimnasio, en la cocina y en los viajes",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Fácil De Limpiar Y Almacenar - Los recipientes de vidrio son aptos para el lavavajillas para una limpieza sin complicaciones. Pueden almacenarse en cualquier lugar, ya que están diseñados para apilarse unos encima de otros",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "12只容器为4组各3只，320/520/800/1200ml；数量3+3+3+3=12与标题一致，不把不同规格混成单容器容量冲突。",
+    "selected_variation_raw": "Pack de 12",
+    "expected_supported": true
+  },
+  {
+    "index": 16,
+    "asin": "B07WRD17ND",
+    "field": "feature_bullets",
+    "source_text": "El ligero carro de mano destaca por sus materiales de alta calidad y su tamaño plegado muy pequeño para un fácil almacenamiento cuando no está en uso\nLas robustas tres ruedas a ambos lados le permiten subir escaleras y bordillos con facilidad\nSe puede enganchar a un carro de supermercado, protectores para evitar salpicaduras en las ruedas, compartimento delantero con cremallera, soporte para paraguas, bolsa térmica aislado, bolsa de la compra extraíble\nMarco sólido de aluminio/plástico con asa de altura ajustable con revestimiento soft touch; material de poliéster impermeable con bandas reflectantes para mayor seguridad y visibilidad en la oscuridad\nCapacidad 44l + bolsa de refrigeración aislada de 5 litros, peso 2,5 kg, tamaño de embalaje 47x42x20 cm, carga máxima de 30 kg",
+    "source_hash": "4c83dded51bf3682bda122ffe3241e3ad052af19bc973ac5fe00a626daadb138",
+    "title_from_saved_html": "Rubberneck Carrito de la Compra Plegable con 6 Ruedas, Bolsa Isotérmica y Asa Ajustable, Negro",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B07WRD17ND.html",
+      "sha256": "d511ae8de56d99c51fa5d2c6c26a2f38bebeb4e3d274975c52cdfe88362683a9",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B07WRD17ND"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "El ligero carro de mano destaca por sus materiales de alta calidad y su tamaño plegado muy pequeño para un fácil almacenamiento cuando no está en uso",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Las robustas tres ruedas a ambos lados le permiten subir escaleras y bordillos con facilidad",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Se puede enganchar a un carro de supermercado, protectores para evitar salpicaduras en las ruedas, compartimento delantero con cremallera, soporte para paraguas, bolsa térmica aislado, bolsa de la compra extraíble",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Marco sólido de aluminio/plástico con asa de altura ajustable con revestimiento soft touch; material de poliéster impermeable con bandas reflectantes para mayor seguridad y visibilidad en la oscuridad",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Capacidad 44l + bolsa de refrigeración aislada de 5 litros, peso 2,5 kg, tamaño de embalaje 47x42x20 cm, carga máxima de 30 kg",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "原文44L与明确命名的5L隔热冷藏袋以加号连接；分别保留购物包声明与冷藏附件声明。未明说49L总量，不生成49L，也不猜44L是否包含附件。",
+    "selected_variation_raw": "Negro",
+    "expected_supported": true
+  },
+  {
+    "index": 23,
+    "asin": "B08K3GCTCM",
+    "field": "product_description",
+    "source_text": "Descripción del producto HG Desatascador Cabello es un desatascador de dos componentes de alta potencia para obstrucciones persistentes causadas por cabello en las tuberías del baño. Disuelve cúmulos de cabello, residuos de jabón, pasta de dientes y otros residuos orgánicos comunes que pueden ralentizar el flujo de agua en duchas, bañeras y lavabos. El tratamiento elimina la obstrucción del desagüe sin necesidad de extraer los residuos manualmente. Úselo como desatascador de desagües de ducha, lavabos o bañeras donde el cabello y los residuos obstruyan el drenaje. Su fórmula de dos componentes, reforzada con hidróxido de potasio, disuelve el cabello en los desagües, ayudando a descomponer los depósitos orgánicos. Es apto para tuberías de plástico y desagües metálicos si se usa según las instrucciones, pero no para aluminio ni zinc. Los envases de 200 ml y 250 ml contienen un tratamiento listo para usar y no requieren dilución. Modo de empleo: Si queda agua estancada en el lavabo, plato de ducha o bañera, retire primero la mayor cantidad posible. Vierta con cuidado todo el contenido del frasco 1 en el desagüe atascado, seguido del contenido completo del frasco 2. Deje actuar durante 1 hora y luego enjuague bien con abundante agua. Este desatascador de cabello está indicado para hogares con problemas de atascos en el desagüe del baño causados ​​por cabello, jabón y pasta de dientes. Use guantes de goma o plástico adecuados, evite el contacto con la piel y los ojos, y ventile bien la zona durante su uso. Manténgalo fuera del alcance de los niños y lea siempre la etiqueta y la información del producto antes de usarlo. Incluye un tratamiento monodosis desatascador de cabello HG Drain and Plug: frasco 1 de 200 ml y frasco 2 de 250 ml. Descubra la gama HG, que ofrece productos de limpieza especializados de calidad desde 1969 para baños y toda la casa, incluyendo HG Desatascador Potente, HG Desatascador Extreme y HG Elimina Malos Olores Desagüe. dirección Vierte ambos componentes, uno tras otro, por el desagüe, deja actuar y aclara.",
+    "source_hash": "2a355ee9dffade62e0c53538bc2c0ca9c7bb47f152820f1d0826315a1d9fc2d6",
+    "title_from_saved_html": "HG Desatascador Cabello, Tuberías de Ducha, Lavabo y Bañera, 200 + 250ml",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B08K3GCTCM.html",
+      "sha256": "b434a54d11a9512f179f12521ff901f6fbdcda9413443df698f06b5ad5233178",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B08K3GCTCM"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[18]/div/div/div[2]",
+        "text": "Descripción del producto HG Desatascador Cabello es un desatascador de dos componentes de alta potencia para obstrucciones persistentes causadas por cabello en las tuberías del baño. Disuelve cúmulos de cabello, residuos de jabón, pasta de dientes y otros residuos orgánicos comunes que pueden ralentizar el flujo de agua en duchas, bañeras y lavabos. El tratamiento elimina la obstrucción del desagüe sin necesidad de extraer los residuos manualmente. Úselo como desatascador de desagües de ducha, lavabos o bañeras donde el cabello y los residuos obstruyan el drenaje. Su fórmula de dos componentes, reforzada con hidróxido de potasio, disuelve el cabello en los desagües, ayudando a descomponer los depósitos orgánicos. Es apto para tuberías de plástico y desagües metálicos si se usa según las instrucciones, pero no para aluminio ni zinc. Los envases de 200 ml y 250 ml contienen un tratamiento listo para usar y no requieren dilución. Modo de empleo: Si queda agua estancada en el lavabo, plato de ducha o bañera, retire primero la mayor cantidad posible. Vierta con cuidado todo el contenido del frasco 1 en el desagüe atascado, seguido del contenido completo del frasco 2. Deje actuar durante 1 hora y luego enjuague bien con abundante agua. Este desatascador de cabello está indicado para hogares con problemas de atascos en el desagüe del baño causados ​​por cabello, jabón y pasta de dientes. Use guantes de goma o plástico adecuados, evite el contacto con la piel y los ojos, y ventile bien la zona durante su uso. Manténgalo fuera del alcance de los niños y lea siempre la etiqueta y la información del producto antes de usarlo. Incluye un tratamiento monodosis desatascador de cabello HG Drain and Plug: frasco 1 de 200 ml y frasco 2 de 250 ml. Descubra la gama HG, que ofrece productos de limpieza especializados de calidad desde 1969 para baños y toda la casa, incluyendo HG Desatascador Potente, HG Desatascador Extreme y HG Elimina Malos Olores Desagüe. dirección Vierte ambos componentes, uno tras otro, por el desagüe, deja actuar y aclara.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "两个化学组分瓶分别明确编号1=200ml、2=250ml；同段用法及包含物重复确认。不同组分不能互相覆盖。",
+    "selected_variation_raw": "Regular",
+    "expected_supported": true
+  },
+  {
+    "index": 24,
+    "asin": "B08KDMLC2W",
+    "field": "feature_bullets",
+    "source_text": "【Control de temperatura】Para lograr el mejor sabor y calidad del té y el café, el hervidor de agua Midea ofrece seis temperaturas diferentes de agua (40, 60, 70, 80, 90, 100 ℃). Simplemente ajusta la temperatura del agua a tus deseos.\n【2200 W de agua rápido】: con una potencia de 2200 W, se pueden hervir 1,7 l de agua en menos de 5 minutos. La gran ventana permite leer fácilmente el nivel de agua en cualquier momento.\n【Modo de mantenimiento del calor hasta 60 minutos】Con la función de mantenimiento en caliente, puedes mantener el agua hervida hasta 60 minutos. Cuando pulsas el botón de mantenimiento de calor, el agua hirviendo alcanza la temperatura deseada y luego entra en modo de calentamiento. Si presionas el botón de mantenimiento caliente dos veces, el agua hirviendo a 100 ℃, luego se mantiene a la temperatura deseada después de enfriar.\n【Funciones de seguridad】Con el control de temperatura Strix, el hervidor se apaga automáticamente cuando el agua alcanza la temperatura seleccionada. Cuando el agua está casi seca, el hervidor protege contra el sobrecalentamiento y se apaga automáticamente.\n【1,7 litros de volumen】: una gran capacidad de 1,7 l es suficiente para hasta 7 tazas de agua (250 ml). Ideal para toda la familia. El filtro mantiene la cal en el hervidor y protege el hervidor del polvo desde el exterior. N.º WEEE: DE 5703080",
+    "source_hash": "87f22049e7f31906f356e430c45a827b3d4da436cbe7ed07a61f30a5055d678b",
+    "title_from_saved_html": "Midea Hervidor de Agua Eléctrico con Control de Temperatura (40, 60, 70, 80, 90, 100℃), Acero Inoxidable 1,7L Kettle, Hervidor Agua 2200W con Indicador del Nivel de Agua, Mantener caliente 60 minutos",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B08KDMLC2W.html",
+      "sha256": "ddd5a998eb0506b8e276c8470ea2ff42152e489236e19abe88dc94665e5d010b",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B08KDMLC2W"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "【Control de temperatura】Para lograr el mejor sabor y calidad del té y el café, el hervidor de agua Midea ofrece seis temperaturas diferentes de agua (40, 60, 70, 80, 90, 100 °C). Simplemente ajusta la temperatura del agua a tus deseos.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【2200 W de agua rápido】: con una potencia de 2200 W, se pueden hervir 1,7 l de agua en menos de 5 minutos. La gran ventana permite leer fácilmente el nivel de agua en cualquier momento.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【Modo de mantenimiento del calor hasta 60 minutos】Con la función de mantenimiento en caliente, puedes mantener el agua hervida hasta 60 minutos. Cuando pulsas el botón de mantenimiento de calor, el agua hirviendo alcanza la temperatura deseada y luego entra en modo de calentamiento. Si presionas el botón de mantenimiento caliente dos veces, el agua hirviendo a 100 °C, luego se mantiene a la temperatura deseada después de enfriar.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "【Funciones de seguridad】Con el control de temperatura Strix, el hervidor se apaga automáticamente cuando el agua alcanza la temperatura seleccionada. Cuando el agua está casi seca, el hervidor protege contra el sobrecalentamiento y se apaga automáticamente.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【1,7 litros de volumen】: una gran capacidad de 1,7 l es suficiente para hasta 7 tazas de agua (250 ml). Ideal para toda la familia. El filtro mantiene la cal en el hervidor y protege el hervidor del polvo desde el exterior. N.o WEEE: DE 5703080",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "页面称壶1.7L又称可供7杯250ml；7×250=1750ml，大于1700ml。虽像杯份示例，仍有50ml算术/近似风险，不按tazas关键词自动放行。",
+    "selected_variation_raw": "Acero Inoxid Con Control de Temperatura / 1.7 Litros",
+    "expected_supported": false
+  },
+  {
+    "index": 31,
+    "asin": "B09SCXWZND",
+    "field": "feature_bullets",
+    "source_text": "💖【Material Premium】 La botella exprimible está hecha de excelente material PET, que es insípido, seguro, suave, duradero para uso a largo plazo, fácil de apretar, ideal para dispensar condimentos.\n💖【Fácil de usar】 Las botellas exprimibles están diseñadas con boquillas diseñadas para exportaciones de flujo pequeño, lo que facilita el control del flujo de líquido, y la tapa roscada se puede sellar herméticamente para evitar fugas de líquido.\n💖【Equipado con embudo】 Los embudos equipados son fáciles y convenientes de usar, puede transferir fácilmente varios líquidos, apretarlos fácilmente, lo que puede evitar el desperdicio causado por fugas.\n💖【Uso amplio】 Las botellas dispensadoras no solo son adecuadas para varios líquidos, cosméticos, lociones, champús, acondicionadores, especias, ketchup, mostaza, sino también para manualidades, pinturas, etc., ideales para viajes o la vida diaria.\n💖【El paquete incluye】Recibirás 5 botellas de salsa de 60 ml de capacidad, 5 botellas de condimento de 100 ml de capacidad, 2 embudos, 1 hoja de papel de etiquetas y 1 bolígrafo, que puede satisfacer tus necesidades diarias.",
+    "source_hash": "2e1ecc85e03e7186933af5dee76afed5f46749f589d64b84be591949a2aa18ee",
+    "title_from_saved_html": "Botellas Exprimir Set 10 Piezas 5x100ml Plástico",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B09SCXWZND.html",
+      "sha256": "c6f683ffe6b2215b4f93dbd69dde98c49b5e5ec85eef0b1da1fcd0b4cc7ea917",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B09SCXWZND"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "💖【Material Premium】 La botella exprimible está hecha de excelente material PET, que es insípido, seguro, suave, duradero para uso a largo plazo, fácil de apretar, ideal para dispensar condimentos.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "💖【Fácil de usar】 Las botellas exprimibles están diseñadas con boquillas diseñadas para exportaciones de flujo pequeño, lo que facilita el control del flujo de líquido, y la tapa roscada se puede sellar herméticamente para evitar fugas de líquido.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "💖【Equipado con embudo】 Los embudos equipados son fáciles y convenientes de usar, puede transferir fácilmente varios líquidos, apretarlos fácilmente, lo que puede evitar el desperdicio causado por fugas.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "💖【Uso amplio】 Las botellas dispensadoras no solo son adecuadas para varios líquidos, cosméticos, lociones, champús, acondicionadores, especias, ketchup, mostaza, sino también para manualidades, pinturas, etc., ideales para viajes o la vida diaria.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "💖【El paquete incluye】Recibirás 5 botellas de salsa de 60 ml de capacidad, 5 botellas de condimento de 100 ml de capacidad, 2 embudos, 1 hoja de papel de etiquetas y 1 bolígrafo, que puede satisfacer tus necesidades diarias.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "卖点清楚列5只60ml瓶与5只100ml瓶，共10只；标题只强调5×100ml并非断言全部10只都是100ml。不得将两组角色合并。",
+    "selected_variation_raw": "",
+    "expected_supported": true
+  },
+  {
+    "index": 33,
+    "asin": "B09XV6YCN2",
+    "field": "feature_bullets",
+    "source_text": "Gran capacidad y boca ancha: nuestros frascos de albañil cuentan con cámara doble, que puede separar el húmedo de seco. La parte grande es de 700 ml, la parte pequeña es de 310 ml. Con una gran apertura de 8,5 cm, puedes llenar, limpiar y marinar pepinos con especias fácilmente. El recipiente Kimchi no ocupa mucho espacio en el refrigerador y también se puede almacenar ordenadamente.\nMaterial de Grado Alimenticio: Bote para aceitunas El material de vidrio de borosilicato es seguro para envíos, refrigeradores y lavavajillas, y puede soportar temperaturas -20℃-560°℃ (-4℉-1040℉) extremas. A diferencia del plástico, tampoco se corroe cuando se cura en sal, vinagre u otros jugos. Las tapas hechas de plástico sin BPA son duraderas y seguras. El fondo de silicona y el filtro son desmontables, fáciles de lavar a mano y el fondo también es antideslizante.\n100% Recipiente Reversible de Reloj de Arena a Prueba de Fugas: La tapa hermética con sello de silicona mantiene la comida fresca y a prueba de fugas. Solo tiene que darle la vuelta para recogerlo y luego darle la vuelta para guardarlo. ¡Sin dedos pegajosos o malolientes, sin encurtidos húmedos en sándwiches o hamburguesas!\nSeparador de Jugo de Pepinillos Multiuso: Como conocedor de encurtidos y kimchi, necesita este frasco para conservas de cristal para ampliar sus opciones de almacenaje. Es perfecto para aceitunas, jalapeños, pepinillos para hamburguesas que deben conservarse en su propio jugo o salmuera. Ideal para almacenar frutas como cerezas negras, trozos de piña, zanahorias, manzanas y verduras como cebollas, gerkins, ajos, remolachas, quimbombó, aros de pimiento de plátano, pepperoncinis y champiñones.\nQué Servicio Brindamos: si tiene alguna pregunta sobre nuestros productos y servicios, no dude en contactarnos, le brindamos un servicio al cliente profesional en línea las 24 horas.",
+    "source_hash": "a8aaac1393b8df02f55d03fd8980275a9ff0b0a3ef1891d090f1876b03fea5b0",
+    "title_from_saved_html": "WhiteRhino Tarro de Vidrio Reversible para Encurtidos con Colador, 1L Recipiente de Reloj de Arena de Oliva, Soporte de Almacenaje de Pepinillos Boca Abajo, Tapa Hermética a Prueba de Fugas(Azul 1L)",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B09XV6YCN2.html",
+      "sha256": "773db39346e821bc571ebc2c05f3600745a5929d88846ccaf650021b9a9d0120",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B09XV6YCN2"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Gran capacidad y boca ancha: nuestros frascos de albañil cuentan con cámara doble, que puede separar el húmedo de seco. La parte grande es de 700 ml, la parte pequeña es de 310 ml. Con una gran apertura de 8,5 cm, puedes llenar, limpiar y marinar pepinos con especias fácilmente. El recipiente Kimchi no ocupa mucho espacio en el refrigerador y también se puede almacenar ordenadamente.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Material de Grado Alimenticio: Bote para aceitunas El material de vidrio de borosilicato es seguro para envíos, refrigeradores y lavavajillas, y puede soportar temperaturas -20°C-560°°C (-4°F-1040°F) extremas. A diferencia del plástico, tampoco se corroe cuando se cura en sal, vinagre u otros jugos. Las tapas hechas de plástico sin BPA son duraderas y seguras. El fondo de silicona y el filtro son desmontables, fáciles de lavar a mano y el fondo también es antideslizante.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "100% Recipiente Reversible de Reloj de Arena a Prueba de Fugas: La tapa hermética con sello de silicona mantiene la comida fresca y a prueba de fugas. Solo tiene que darle la vuelta para recogerlo y luego darle la vuelta para guardarlo. ¡Sin dedos pegajosos o malolientes, sin encurtidos húmedos en sándwiches o hamburguesas!",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Separador de Jugo de Pepinillos Multiuso: Como conocedor de encurtidos y kimchi, necesita este frasco para conservas de cristal para ampliar sus opciones de almacenaje. Es perfecto para aceitunas, jalapeños, pepinillos para hamburguesas que deben conservarse en su propio jugo o salmuera. Ideal para almacenar frutas como cerezas negras, trozos de piña, zanahorias, manzanas y verduras como cebollas, gerkins, ajos, remolachas, quimbombó, aros de pimiento de plátano, pepperoncinis y champiñones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Qué Servicio Brindamos: si tiene alguna pregunta sobre nuestros productos y servicios, no dude en contactarnos, le brindamos un servicio al cliente profesional en línea las 24 horas.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "卖点大仓700ml+小仓310ml=1010ml，保存页标题却明示1L。未提供名义/可用容积或近似说明，不取整为1000ml后宣称精确一致。",
+    "selected_variation_raw": "Azul 1l",
+    "expected_supported": false
+  },
+  {
+    "index": 35,
+    "asin": "B0B3JR8XK9",
+    "field": "feature_bullets",
+    "source_text": "Alta calidad y gran capacidad: la lonchera está hecha de material PP apto para uso alimentario que es seguro de usar. La capacidad total es de 2800 ml en 3 capas para envasar suficientes alimentos saludables para adultos. Mientras tanto, la capacidad de una sola capa de 933 ml es suficiente para que la usen los niños y es más liviana y fácil de transportar. Esta caja bento es perfecta para los almuerzos escolares de los niños y las comidas de los adultos mientras viajan, mientras trabajan, hacen ejercicio, acampan y viajan.\nCombinación libre de capas: la lonchera está diseñada para ser apilada y se puede combinar libremente para mayor comodidad. Puede optar por utilizar solo 1 capa, 2 capas o 3 capas según sus necesidades para envasar diferentes cantidades de alimentos. Cada capa está separada por tapas selladoras individuales para preservar mejor el sabor original de la comida.\nUtilizable en microondas, lavavajillas y congelador: la lonchera se puede colocar en el congelador para conservar los alimentos. Es fácil de limpiar a mano o en lavavajillas, pero se recomienda lavar la tapa a mano para evitar rayones. Los recipientes son seguros para recalentar alimentos en el microondas, rango apto para microondas (≤212°F durante 2-4 minutos). Nota: la tapa no se puede colocar en el microondas.\nA prueba de fugas y portátil: cada capa tiene una tapa sellada separada, que está especialmente diseñada para tener un buen sellado. Y las hebillas son seguras y efectivas, lo que puede evitar que la salsa se desborde o que la lonchera se rompa en su bolsa de almuerzo. Para Edad: Mayores de 7 años.\nDiseño elegante y práctico: la caja bento con un diseño y colores elegantes está diseñada para tener un buen apetito en el almuerzo con alimentos saludables y equilibrados. La lonchera es duradera y reutilizable, resistente a las manchas. Equipado con cubiertos de plástico y cajas de salsa, más cómodo de usar. El paquete incluye: 1 caja bento de 3 capas, 1 tenedor, 1 cuchara y 2 cajas de salsa.",
+    "source_hash": "f8df7b3fbda9252f84e44205473bcdfbfa6a46fb69392ac1ff4a468044fd11ea",
+    "title_from_saved_html": "RIKDOKEN Fiambrera, Contenedores Apilables de 3 Capas, Caja Bento a Prueba de Fugas de Gran Capacidad de 2800 ml con Cajas de Cuchara, Tenedor y Salsa, Apta para Microondas para Niños y Adultos",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0B3JR8XK9.html",
+      "sha256": "a3166ec77da821345f74cc0b44e36699e88a6340bb179a7e2626052365c8e816",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0B3JR8XK9"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Alta calidad y gran capacidad: la lonchera está hecha de material PP apto para uso alimentario que es seguro de usar. La capacidad total es de 2800 ml en 3 capas para envasar suficientes alimentos saludables para adultos. Mientras tanto, la capacidad de una sola capa de 933 ml es suficiente para que la usen los niños y es más liviana y fácil de transportar. Esta caja bento es perfecta para los almuerzos escolares de los niños y las comidas de los adultos mientras viajan, mientras trabajan, hacen ejercicio, acampan y viajan.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Combinación libre de capas: la lonchera está diseñada para ser apilada y se puede combinar libremente para mayor comodidad. Puede optar por utilizar solo 1 capa, 2 capas o 3 capas según sus necesidades para envasar diferentes cantidades de alimentos. Cada capa está separada por tapas selladoras individuales para preservar mejor el sabor original de la comida.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "Utilizable en microondas, lavavajillas y congelador: la lonchera se puede colocar en el congelador para conservar los alimentos. Es fácil de limpiar a mano o en lavavajillas, pero se recomienda lavar la tapa a mano para evitar rayones. Los recipientes son seguros para recalentar alimentos en el microondas, rango apto para microondas (≤212°F durante 2-4 minutos). Nota: la tapa no se puede colocar en el microondas.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "A prueba de fugas y portátil: cada capa tiene una tapa sellada separada, que está especialmente diseñada para tener un buen sellado. Y las hebillas son seguras y efectivas, lo que puede evitar que la salsa se desborde o que la lonchera se rompa en su bolsa de almuerzo. Para Edad: Mayores de 7 años.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Diseño elegante y práctico: la caja bento con un diseño y colores elegantes está diseñada para tener un buen apetito en el almuerzo con alimentos saludables y equilibrados. La lonchera es duradera y reutilizable, resistente a las manchas. Equipado con cubiertos de plástico y cajas de salsa, más cómodo de usar. El paquete incluye: 1 caja bento de 3 capas, 1 tenedor, 1 cuchara y 2 cajas de salsa.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "页面总2800ml、3层每层933ml；3×933=2799而非2800。不能自动四舍五入或将真实来源近似变成已验证等式。",
+    "selected_variation_raw": "Azúl",
+    "expected_supported": false
+  },
+  {
+    "index": 37,
+    "asin": "B0BGXY6B4X",
+    "field": "feature_bullets",
+    "source_text": "💼 Maletín compacto y resistente: Ideal para llevar en el coche, oficina, excursiones o centros de trabajo. Botiquin ideal para Viviendas Turisticas\nContenido incluido: Limpieza y desinfección 1 unidad de agua oxigenada 250 cc 1 unidad de alcohol 96º 250 ml 1 unidad de povidona yodada 50 ml 3 unidades de suero fisiológico monodosis 5 ml Material de cura y protección de heridas 10 unidades de tiritas sanitarias adhesivas 1 unidad de esparadrapo hipoalergénico 5 x 2,5 cm 15 unidades de compresas estériles 15 x 26,8 cm 2 unidades de venda de gasa 5 x 5 cm 1 unidad de venda de gasa 5 x 7 cm 1 unidad de algodón 25 g Instrumental sanitario y protección personal 1 unidad de tijera recta A/R 13 cm 1 unidad de pinza de disección S/D 13 cm 2 pares de guantes de látex\n🔒 Cierre seguro y transporte sencillo: Ligero pero robusto.\nFabricado en España: Calidad y confianza en cada detalle.\nSeguridad en todo momento: Este botiquín de emergencia contiene los productos que necesita en cualquier situación. Es perfecto para llevarlo como botiquín en el coche, durante una excursión en la montaña o simplemente para usarlo en casa ante una lesión, caída o accidente doméstico.\nLIGERO Y PORTATIL: el diseño liviano y compacto le permite colocar el kit en su hogar, cocina, lugar de trabajo, automóvil, escuela, caravana o remolque. Esto es muy adecuado para uso al aire libre durante campamentos, caminatas, mochileros y caminatas, viajes por carretera, excursiones, deportes y aventuras salvajes.\nMuy practico para llevar en el coche, furgoneta, Muy practico para llevar en el coche, furgoneta, camion, etc, etc\n✅ Máxima garantía y confianza: Certificaciones ISO en calidad, medio ambiente, productos sanitarios, huella de carbono, seguridad laboral, cadena de suministro y responsabilidad social. ISO 9001 SISTEMA DE GESTION DE LA CALIDAD ISO 14001 SISTEMA DE GESTION AMBIENTAL ISO 13485 SISTEMAS DE GESTION DE LA CALIDAD DE PRODUCTOS SANITARIOS ISO 14064 SISTEMAS DE MEDICION Y PLANES DE REDUCCION DE LA HUELLA DE CARBONO EMITIDA ISO 45001 SISTEMAS DE GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO ISO 28001 SISTEMAS DE GESTION DE LA SEGURIDAD PARA LA CADENA DE SUMINISTRO ISO 26000 RESPONSABILIDAD SOCIAL",
+    "source_hash": "57fb7efa05d657e7f95b2fee12328c665eb76c647e04658d3212232cd4d942e2",
+    "title_from_saved_html": "FERRETELIX® Botiquín Maletín Homologado con Dotación – 26 x 23 x 7 cm – Kit de Primeros Auxilios Portátil – Uso Profesional y Doméstico",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0BGXY6B4X.html",
+      "sha256": "bb404d5907ba8fc79bf3ba09e98e7309acdb305b037fe7a49b67ba8ea0eb99d3",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0BGXY6B4X"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[1]",
+        "text": "💼 Maletín compacto y resistente: Ideal para llevar en el coche, oficina, excursiones o centros de trabajo. Botiquin ideal para Viviendas Turisticas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[2]",
+        "text": "Contenido incluido: Limpieza y desinfección 1 unidad de agua oxigenada 250 cc 1 unidad de alcohol 96o 250 ml 1 unidad de povidona yodada 50 ml 3 unidades de suero fisiológico monodosis 5 ml Material de cura y protección de heridas 10 unidades de tiritas sanitarias adhesivas 1 unidad de esparadrapo hipoalergénico 5 x 2,5 cm 15 unidades de compresas estériles 15 x 26,8 cm 2 unidades de venda de gasa 5 x 5 cm 1 unidad de venda de gasa 5 x 7 cm 1 unidad de algodón 25 g Instrumental sanitario y protección personal 1 unidad de tijera recta A/R 13 cm 1 unidad de pinza de disección S/D 13 cm 2 pares de guantes de látex",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[3]",
+        "text": "🔒 Cierre seguro y transporte sencillo: Ligero pero robusto.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[4]",
+        "text": "Fabricado en España: Calidad y confianza en cada detalle.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[5]",
+        "text": "Seguridad en todo momento: Este botiquín de emergencia contiene los productos que necesita en cualquier situación. Es perfecto para llevarlo como botiquín en el coche, durante una excursión en la montaña o simplemente para usarlo en casa ante una lesión, caída o accidente doméstico.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[6]",
+        "text": "LIGERO Y PORTATIL: el diseño liviano y compacto le permite colocar el kit en su hogar, cocina, lugar de trabajo, automóvil, escuela, caravana o remolque. Esto es muy adecuado para uso al aire libre durante campamentos, caminatas, mochileros y caminatas, viajes por carretera, excursiones, deportes y aventuras salvajes.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[7]",
+        "text": "Muy practico para llevar en el coche, furgoneta, Muy practico para llevar en el coche, furgoneta, camion, etc, etc",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[38]/div/ul/li[8]",
+        "text": "✅ Máxima garantía y confianza: Certificaciones ISO en calidad, medio ambiente, productos sanitarios, huella de carbono, seguridad laboral, cadena de suministro y responsabilidad social. ISO 9001 SISTEMA DE GESTION DE LA CALIDAD ISO 14001 SISTEMA DE GESTION AMBIENTAL ISO 13485 SISTEMAS DE GESTION DE LA CALIDAD DE PRODUCTOS SANITARIOS ISO 14064 SISTEMAS DE MEDICION Y PLANES DE REDUCCION DE LA HUELLA DE CARBONO EMITIDA ISO 45001 SISTEMAS DE GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO ISO 28001 SISTEMAS DE GESTION DE LA SEGURIDAD PARA LA CADENA DE SUMINISTRO ISO 26000 RESPONSABILIDAD SOCIAL",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "急救箱清单中水氧250cc、酒精250ml、碘伏50ml、生理盐水3支各5ml均有不同明确物品名。不得映射为急救箱本体容量。",
+    "selected_variation_raw": "",
+    "expected_supported": true
+  },
+  {
+    "index": 47,
+    "asin": "B0CF22LPZR",
+    "field": "feature_bullets",
+    "source_text": "CARACTERÍSTICAS: el juego contiende 7 recipientes de vidrio de borosilicato de primera calidad (320 ml, 800ml, 240ml, 400 ml, 950 ml, 330 ml y 840ml), con varias formas (rectangulares, cuadrados y circulares), además de un diseño transparente para identificar fácilmente el contenido del interior.\nSEGUROS: 100% libres de BPA, pueden usarse con total seguridad en el congelador y el microondas (-20º a +450º).\nTAPAS DE GRAN AJUSTE: las tapas son fáciles de abrir y cerrar, tienen cuatro cierres con una junta de goma que crea un fuerte sellado para mantener lejos la humedad. Los envases son impermeables, herméticos y a prueba de fugas, manteniendo los alimentos totalmente frescos, resultan ideales para usar en viajes, oficina, gimnasio o cocina.\nFÁCIL DE ALMACENAR Y LIMPIAR: los recipientes de vidrio son aptos para el lavavajillas para una limpieza sin complicaciones. Pueden almacenarse en cualquier lugar, ya que están diseñados para apilarse unos encima de otros\nGARANTÍA: No se preocupe, los productos Edihome disponen de garantía europea, asegurando a los clientes que su compra es totalmente fiable y protegida. La garantía de fábrica sólo está disponible a través de vendedores autorizados.",
+    "source_hash": "a1d1b25c6e13915fc4ed9f9be1401d47b0cdf788c3dd5ab4071ad1b229b3083d",
+    "title_from_saved_html": "edihome, Recipientes de Cristal para alimentos, 14 Piezas (7 recipientes + 7 tapas), para Comida Hermetico, Apto para lavavajillas, congelador, microondas, sin BPA (7 Recipientes)",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0CF22LPZR.html",
+      "sha256": "75ca0d10feaf709faf12a73e7de84445f2426e0ec7ce769cd62d53203c94db1e",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CF22LPZR"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "CARACTERÍSTICAS: el juego contiende 7 recipientes de vidrio de borosilicato de primera calidad (320 ml, 800ml, 240ml, 400 ml, 950 ml, 330 ml y 840ml), con varias formas (rectangulares, cuadrados y circulares), además de un diseño transparente para identificar fácilmente el contenido del interior.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "SEGUROS: 100% libres de BPA, pueden usarse con total seguridad en el congelador y el microondas (-20o a +450o).",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "TAPAS DE GRAN AJUSTE: las tapas son fáciles de abrir y cerrar, tienen cuatro cierres con una junta de goma que crea un fuerte sellado para mantener lejos la humedad. Los envases son impermeables, herméticos y a prueba de fugas, manteniendo los alimentos totalmente frescos, resultan ideales para usar en viajes, oficina, gimnasio o cocina.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "FÁCIL DE ALMACENAR Y LIMPIAR: los recipientes de vidrio son aptos para el lavavajillas para una limpieza sin complicaciones. Pueden almacenarse en cualquier lugar, ya que están diseñados para apilarse unos encima de otros",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "GARANTÍA: No se preocupe, los productos Edihome disponen de garantía europea, asegurando a los clientes que su compra es totalmente fiable y protegida. La garantía de fábrica sólo está disponible a través de vendedores autorizados.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "7只玻璃容器后括号正好7个不同容量，与标题7容器+7盖一致；只保留集合字面顺序，不猜每个形状对应哪一容量。",
+    "selected_variation_raw": "7 Recipientes",
+    "expected_supported": true
+  },
+  {
+    "index": 48,
+    "asin": "B0CF9TPSH9",
+    "field": "feature_bullets",
+    "source_text": "Capacidad generosa: utiliza el cajón XXL de 5,2 L para cocinar piezas voluminosas como un asado, ambos cajones para generosas porciones de papas fritas, o el cajón de 3,1 L más eficiente en energía para porciones individuales\nComidas completas en pocos minutos: freidora de aire con cajón XXL y cajón estándar para cocinar dos platos diferentes al mismo tiempo, para una comida completa preparada en un solo dispositivo\nTECNOLOGÍA EXTRA-CRISP: resultados dorados y crujientes con poco o ningún aceite, hasta un 99% menos de grasa añadida (pruebas realizadas en 2023 con patatas fritas congeladas)\nREPARABILIDAD DE 15 AÑOS AL PRECIO SOAL: compromiso de reparabilidad 15 años al precio justo gracias a nuestra red de 6.200 reparadores en todo el mundo, para contribuir a la protección del medio ambiente y a la reducción de residuos\nAhorro de tiempo y energía: consume hasta un 70% menos de energía y se cocina hasta un 40% más rápido que un horno tradicional (pruebas realizadas en 2023 con papas fritas congeladas)",
+    "source_hash": "9ae2be34254170cb5b5343a6d5f8447c76260723515e5845b2fc8c90207f59c2",
+    "title_from_saved_html": "Tefal Dual Easy Fry EY9018 - Freidora de aire caliente de doble cámara (5,2/3,1 L, dos cajones independientes, 7 programas automáticos, ahorro de energía), color negro",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0CF9TPSH9.html",
+      "sha256": "24c82c13a3480d70a73f7fe85db4263e0ba5675319fcaf65305c68ff13e0c394",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0CF9TPSH9"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Capacidad generosa: utiliza el cajón XXL de 5,2 L para cocinar piezas voluminosas como un asado, ambos cajones para generosas porciones de papas fritas, o el cajón de 3,1 L más eficiente en energía para porciones individuales",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "Comidas completas en pocos minutos: freidora de aire con cajón XXL y cajón estándar para cocinar dos platos diferentes al mismo tiempo, para una comida completa preparada en un solo dispositivo",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "TECNOLOGÍA EXTRA-CRISP: resultados dorados y crujientes con poco o ningún aceite, hasta un 99% menos de grasa añadida (pruebas realizadas en 2023 con patatas fritas congeladas)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "REPARABILIDAD DE 15 AÑOS AL PRECIO SOAL: compromiso de reparabilidad 15 años al precio justo gracias a nuestra red de 6.200 reparadores en todo el mundo, para contribuir a la protección del medio ambiente y a la reducción de residuos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Ahorro de tiempo y energía: consume hasta un 70% menos de energía y se cocina hasta un 40% más rápido que un horno tradicional (pruebas realizadas en 2023 con papas fritas congeladas)",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "XXL抽屉5.2L与另一个抽屉3.1L明确指不同抽屉；标题也列5.2/3.1L。不要合并为同抽屉矛盾值。",
+    "selected_variation_raw": "",
+    "expected_supported": false
+  },
+  {
+    "index": 61,
+    "asin": "B0D2293PHG",
+    "field": "feature_bullets",
+    "source_text": "Gran capacidad y boca ancha: nuestros frascos de albañil cuentan con cámara doble, que puede separar el húmedo de seco. La parte grande es de 700 ml, la parte pequeña es de 310 ml. Con una gran apertura de 8,5 cm, puedes llenar, limpiar y marinar pepinos con especias fácilmente. El recipiente Kimchi no ocupa mucho espacio en el refrigerador y también se puede almacenar ordenadamente.\n【 Diseño de reloj de arena para los amantes de los pepinillos】El tarro separador de zumo de pepinillos está diseñado con 2 compartimentos para separar los líquidos de los alimentos. Ideal para aceitunas, pepinillos, pepinillos en rodajas, frutas como cerezas al marrasquino, trocitos de piña, manzanas, verduras como cebollas, pepinillos, ajos, remolachas, quingombó, plátanos y champiñones.\n【Material duradero y apto para uso alimentario】El cuerpo de vidrio transparente del tarro de encurtidos con colador flip está hecho de vidrio de borosilicato de alta sin plomo actualización(3. 3mm de espesor) para garantizar la seguridad y la máxima durabilidad;La tapa del recipiente de encurtidos y la parte inferior se hace a mano con plástico PP libre de BPA y silicona;El frasco de pepinillos reloj de arena puede tolerar -20℃-560°℃ (-4℉-1040℉) temperatura, por lo que todos los componentes es apto para lavavajillas, refrigerador seguro, reciclable y duradero, se puede utilizar en los próximos años.\n【Boca ancha y colador desmontable】El diseño de boca ancha y colador desmontable del frasco de vidrio para encurtidos hace que la limpieza y el uso sean más fáciles y convenientes;El soporte para encurtidos con colador flip tiene un diseño de boca ancha, que mide 8,5cm/3,4 pulgadas de diámetro ，que puede tomar y encurtir alimentos fácilmente, limpiar el frasco, incluso la parte inferior. Un frasco flip de encurtidos con un colador de silicona suave incorporado,que es desmontable y limpiable en cualquier momento,hace que todo sea rápido y fácil！\n【Gran idea de regalo】 Este es un gran regalo para cualquier amante de encurtidos en su vida. No más usar pequeños tenedores o manos para sacar los pepinillos del jugo, no más preocuparse por sacar unos pocos pepinillos de un frasco pequeño y ensuciar todo el líquido, no más preocuparse por el jugo de pepinillo desordenado en el mostrador. El tarro de cristal WhiteRhino hace que comer pepinillos sea muy fácil y es un divertido regalo de cumpleaños, Día de San Valentín, Día de la Madre, Día del Trabajo, Acción de Gracias, Navidad o boda.\n※Nota: Por favor, preste atención a si el anillo de goma en la tapa se coloca en una posición adecuada antes de su uso, apriete bien la tapa después de añadir encurtidos, para evitar fugas cuando el frasco de encurtidos está boca abajo.",
+    "source_hash": "99d4f005c91af11005e510a8311ec4265289712b2834199bc651829c8ee3010e",
+    "title_from_saved_html": "WhiteRhino Tarro de pepinillos con colador Flip,1L Recipiente de para pepinillos con doble a prueba de fugas,Tarro de cristal separador de jugo de pepinillos Flip Pickle y Olive Hourglass Jar(Gris 1L)",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0D2293PHG.html",
+      "sha256": "e787cd3ed35c9f7644a068cc7e8d8a4698b27ce54fc39ca37849f986a9e535c7",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0D2293PHG"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Gran capacidad y boca ancha: nuestros frascos de albañil cuentan con cámara doble, que puede separar el húmedo de seco. La parte grande es de 700 ml, la parte pequeña es de 310 ml. Con una gran apertura de 8,5 cm, puedes llenar, limpiar y marinar pepinos con especias fácilmente. El recipiente Kimchi no ocupa mucho espacio en el refrigerador y también se puede almacenar ordenadamente.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【 Diseño de reloj de arena para los amantes de los pepinillos】El tarro separador de zumo de pepinillos está diseñado con 2 compartimentos para separar los líquidos de los alimentos. Ideal para aceitunas, pepinillos, pepinillos en rodajas, frutas como cerezas al marrasquino, trocitos de piña, manzanas, verduras como cebollas, pepinillos, ajos, remolachas, quingombó, plátanos y champiñones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【Material duradero y apto para uso alimentario】El cuerpo de vidrio transparente del tarro de encurtidos con colador flip está hecho de vidrio de borosilicato de alta sin plomo actualización(3. 3mm de espesor) para garantizar la seguridad y la máxima durabilidad;La tapa del recipiente de encurtidos y la parte inferior se hace a mano con plástico PP libre de BPA y silicona;El frasco de pepinillos reloj de arena puede tolerar -20°C-560°°C (-4°F-1040°F) temperatura, por lo que todos los componentes es apto para lavavajillas, refrigerador seguro, reciclable y duradero, se puede utilizar en los próximos años.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "【Boca ancha y colador desmontable】El diseño de boca ancha y colador desmontable del frasco de vidrio para encurtidos hace que la limpieza y el uso sean más fáciles y convenientes;El soporte para encurtidos con colador flip tiene un diseño de boca ancha, que mide 8,5cm/3,4 pulgadas de diámetro ,que puede tomar y encurtir alimentos fácilmente, limpiar el frasco, incluso la parte inferior. Un frasco flip de encurtidos con un colador de silicona suave incorporado,que es desmontable y limpiable en cualquier momento,hace que todo sea rápido y fácil!",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【Gran idea de regalo】 Este es un gran regalo para cualquier amante de encurtidos en su vida. No más usar pequeños tenedores o manos para sacar los pepinillos del jugo, no más preocuparse por sacar unos pocos pepinillos de un frasco pequeño y ensuciar todo el líquido, no más preocuparse por el jugo de pepinillo desordenado en el mostrador. El tarro de cristal WhiteRhino hace que comer pepinillos sea muy fácil y es un divertido regalo de cumpleaños, Día de San Valentín, Día de la Madre, Día del Trabajo, Acción de Gracias, Navidad o boda.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "※Nota: Por favor, preste atención a si el anillo de goma en la tapa se coloca en una posición adecuada antes de su uso, apriete bien la tapa después de añadir encurtidos, para evitar fugas cuando el frasco de encurtidos está boca abajo.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "卖点大仓700ml+小仓310ml=1010ml，而标题明示1L。两仓可能为近似容量，但当前没有严格证据允许取整或伪造总量相等。",
+    "selected_variation_raw": "Gris 1l",
+    "expected_supported": false
+  },
+  {
+    "index": 83,
+    "asin": "B0F99KSRL5",
+    "field": "feature_bullets",
+    "source_text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.º 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025\nDISEÑO PORTÁTIL: La potencia de una freidora de aire de tamaño estándar, ahora en un sistema de cocina portátil. Cocina en encimeras y en cualquier lugar donde puedas enchufarla. Ideal para cocinas pequeñas y apartamentos de estudiantes\nSUPERFICIE DE COCCIÓN DE VIDRIO: Libre de PFAS*. Recipientes de vidrio resistentes a los cambios de temperatura. Se pueden lavar en el lavavajillas para mayor comodidad. (*Rejillas de cerámica antiadherentes)\nPORCIONES FAMILIARES O INDIVIDUALES. RECIPIENTES INTERCAMBIABLES: El recipiente grande de 3,8 l cocina un pollo entero de 1,2 kg con verduras. Cocina las porciones más pequeñas en el recipiente pequeño de 1,4 l\nUSA POCO O NADA DE ACEITE: Hasta un 75 % menos de grasa* con la función Freír con aire (*Probado con patatas cortadas a mano y cocinadas con la freidora tradicional)\nINCLUYE: Power Pod de 1700W (enchufe europeo), 2 recipientes de vidrio aptos para lavavajillas (1,4 l y 3,8 l), 2 rejillas base antiadherentes, 2 tapas de almacenamiento. Dimensiones: 30,4 x 34,5 x 34 cm. Color: piedra",
+    "source_hash": "4a76b5fe697b0b10b25c40caf4bfd3192612b91c5863eef41f14e4b8d234d49a",
+    "title_from_saved_html": "Ninja CRISPi, Freidora de Aire Portátil 4 en 1, 3,8L, Piedra",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0F99KSRL5.html",
+      "sha256": "bf2b9ed251bbca3a1a9621df3f66681d33b4b99fa69328007c2e07410867dc26",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0F99KSRL5"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.o 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "DISEÑO PORTÁTIL: La potencia de una freidora de aire de tamaño estándar, ahora en un sistema de cocina portátil. Cocina en encimeras y en cualquier lugar donde puedas enchufarla. Ideal para cocinas pequeñas y apartamentos de estudiantes",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "SUPERFICIE DE COCCIÓN DE VIDRIO: Libre de PFAS*. Recipientes de vidrio resistentes a los cambios de temperatura. Se pueden lavar en el lavavajillas para mayor comodidad. (*Rejillas de cerámica antiadherentes)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "PORCIONES FAMILIARES O INDIVIDUALES. RECIPIENTES INTERCAMBIABLES: El recipiente grande de 3,8 l cocina un pollo entero de 1,2 kg con verduras. Cocina las porciones más pequeñas en el recipiente pequeño de 1,4 l",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "USA POCO O NADA DE ACEITE: Hasta un 75 % menos de grasa* con la función Freír con aire (*Probado con patatas cortadas a mano y cocinadas con la freidora tradicional)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "INCLUYE: Power Pod de 1700W (enchufe europeo), 2 recipientes de vidrio aptos para lavavajillas (1,4 l y 3,8 l), 2 rejillas base antiadherentes, 2 tapas de almacenamiento. Dimensiones: 30,4 x 34,5 x 34 cm. Color: piedra",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "大玻璃容器3.8L、小玻璃容器1.4L，并在包含物清单重复确认有2个容器；明确同SKU随附两容器，不是未知型号变体。",
+    "selected_variation_raw": "Standard (Piedra)",
+    "expected_supported": true
+  },
+  {
+    "index": 84,
+    "asin": "B0F9PLL56G",
+    "field": "feature_bullets",
+    "source_text": "EL LIMPIADOR DE MANCHAS MÁS POTENTE DE VAX ELIMINA MÁS DEL 99 % DE LAS BACTERIAS: con un 30 % más de potencia de succión, combinado con la herramienta manual SpinScrub, ofrece los mejores resultados de limpieza en suciedad y manchas profundas en toda la casa y el coche, incluye una solución para eliminar más del 99 % de las bacterias y duplica la capacidad del depósito** para reducir el número de viajes al fregadero de la cocina\nVERSÁTIL KIT ANTIMICROBIANO AVANZADO PARA EL HOGAR Y LAS MASCOTAS CON HERRAMIENTA MANUAL SPINSCRUB : la herramienta manual SpinScrub con cerdas giratorias automáticas elimina eficazmente la suciedad y los restos de mascotas de las fibras más profundas de las alfombras y tapicerías sin necesidad de frotar; la herramienta para rincones intercambiable, la herramienta de amplio alcance y la herramienta específica para la limpieza de restos le permiten limpiar alfombras, suelos duros, felpudos, tapicerías, escaleras y moquetas en toda la casa sin riesgo de contaminación cruzada\nSOLUCIÓN DE PRETRATAMIENTO NEUTRALIZADORA DE OLORES Y FUNCIÓN DE AUTOLIMPIEZA: la solución incluida descompone la suciedad más difícil y maloliente, dejando su hogar fresco y limpio; la función de autolimpieza enjuaga eficazmente la manguera de 1,7 m de longitud, lo que ayuda a eliminar cualquier resto de suciedad y residuos y a mantener la higiene entre usos\nLIMPIADOR DE MANCHAS COMPACTO: el almacenamiento de herramientas integrado, el mango plegable y el diseño compacto facilitan su almacenamiento y lo hacen cómodo de usar\nSOLUCIÓN INCLUIDA: Empiece a limpiar de inmediato con la solución antibacteriana SpotWash Spot Cleaning incluida\nCONTENIDO DE LA CAJA: Limpiador de manchas VAX SpotWash Max Pet-Design, herramienta manual SpinScrub, herramienta de amplio alcance con accesorio multiusos y accesorio para suelos duros, herramienta para limpieza de suciedad con accesorio multiusos, herramienta para rincones, 500 ml de solución antibacteriana para limpieza de manchas VAX SpotWash, 250 ml de eliminador de manchas y olores de mascotas",
+    "source_hash": "8a0fa8fa95e267a811fec71c5b9a42e12897c8b4eadfbda9190765f8c81f6b5e",
+    "title_from_saved_html": "Limpiador quitamanchas Vax SpotWash Max Pet-Design, potente quitamanchas para alfombras y tapicerías con tecnología SpinScrub, depósito XL, limpieza profunda para mascotas, sofás",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0F9PLL56G.html",
+      "sha256": "d7c432cb5489778ce90398844480506a6eb2624f01adcb099149e07786aafb00",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0F9PLL56G"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "EL LIMPIADOR DE MANCHAS MÁS POTENTE DE VAX ELIMINA MÁS DEL 99 % DE LAS BACTERIAS: con un 30 % más de potencia de succión, combinado con la herramienta manual SpinScrub, ofrece los mejores resultados de limpieza en suciedad y manchas profundas en toda la casa y el coche, incluye una solución para eliminar más del 99 % de las bacterias y duplica la capacidad del depósito** para reducir el número de viajes al fregadero de la cocina",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "VERSÁTIL KIT ANTIMICROBIANO AVANZADO PARA EL HOGAR Y LAS MASCOTAS CON HERRAMIENTA MANUAL SPINSCRUB : la herramienta manual SpinScrub con cerdas giratorias automáticas elimina eficazmente la suciedad y los restos de mascotas de las fibras más profundas de las alfombras y tapicerías sin necesidad de frotar; la herramienta para rincones intercambiable, la herramienta de amplio alcance y la herramienta específica para la limpieza de restos le permiten limpiar alfombras, suelos duros, felpudos, tapicerías, escaleras y moquetas en toda la casa sin riesgo de contaminación cruzada",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "SOLUCIÓN DE PRETRATAMIENTO NEUTRALIZADORA DE OLORES Y FUNCIÓN DE AUTOLIMPIEZA: la solución incluida descompone la suciedad más difícil y maloliente, dejando su hogar fresco y limpio; la función de autolimpieza enjuaga eficazmente la manguera de 1,7 m de longitud, lo que ayuda a eliminar cualquier resto de suciedad y residuos y a mantener la higiene entre usos",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "LIMPIADOR DE MANCHAS COMPACTO: el almacenamiento de herramientas integrado, el mango plegable y el diseño compacto facilitan su almacenamiento y lo hacen cómodo de usar",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "SOLUCIÓN INCLUIDA: Empiece a limpiar de inmediato con la solución antibacteriana SpotWash Spot Cleaning incluida",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "CONTENIDO DE LA CAJA: Limpiador de manchas VAX SpotWash Max Pet-Design, herramienta manual SpinScrub, herramienta de amplio alcance con accesorio multiusos y accesorio para suelos duros, herramienta para limpieza de suciedad con accesorio multiusos, herramienta para rincones, 500 ml de solución antibacteriana para limpieza de manchas VAX SpotWash, 250 ml de eliminador de manchas y olores de mascotas",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "500ml是VAX清洁液、250ml是宠物污渍除味剂，都是包装中随附不同液体；不是机器水箱两个容量。",
+    "selected_variation_raw": "Max Duo Mascota EU",
+    "expected_supported": true
+  },
+  {
+    "index": 86,
+    "asin": "B0FF525C1H",
+    "field": "feature_bullets",
+    "source_text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.º 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025\nEXCLUSIVO DE AMAZON: Color piedra dorada. La potencia de una freidora de aire de tamaño estándar, ahora en un sistema de cocina portátil. Cocina en encimeras y en cualquier lugar donde puedas enchufarla. Ideal para cocinas pequeñas y apartamentos de estudiantes\nSUPERFICIE DE COCCIÓN DE VIDRIO: Libre de PFAS*. Recipientes de vidrio resistentes a los cambios de temperatura. Se pueden lavar en el lavavajillas para mayor comodidad. (*Rejillas de cerámica antiadherentes)\nPORCIONES FAMILIARES O INDIVIDUALES. RECIPIENTES INTERCAMBIABLES: El recipiente grande de 3,8 l cocina un pollo entero de 1,2 kg con verduras. Cocina las porciones más pequeñas en el recipiente pequeño de 1,4 l\nUSA POCO O NADA DE ACEITE: Hasta un 75 % menos de grasa* con la función Freír con aire (*Probado con patatas cortadas a mano y cocinadas con la freidora tradicional)\nINCLUYE: Power Pod de 1700W (enchufe europeo), 2 recipientes de vidrio aptos para lavavajillas (1,4 l y 3,8 l), 2 rejillas base antiadherentes, 2 tapas de almacenamiento. Dimensiones: 30,4 x 34,5 x 34 cm. Color: piedra dorada",
+    "source_hash": "7c9990531c68e608428b04d2ed36de113b42ae3926632ef247f8dd78e507bc9b",
+    "title_from_saved_html": "Ninja CRISPi, Freidora de Aire Portátil 4 en 1, 3,8L, Piedra/Dorado",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0FF525C1H.html",
+      "sha256": "00e105af706151a778ac3d901d0765f80bd6a59196f467763ecaeeb4ca8eb140",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0FF525C1H"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.o 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "EXCLUSIVO DE AMAZON: Color piedra dorada. La potencia de una freidora de aire de tamaño estándar, ahora en un sistema de cocina portátil. Cocina en encimeras y en cualquier lugar donde puedas enchufarla. Ideal para cocinas pequeñas y apartamentos de estudiantes",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "SUPERFICIE DE COCCIÓN DE VIDRIO: Libre de PFAS*. Recipientes de vidrio resistentes a los cambios de temperatura. Se pueden lavar en el lavavajillas para mayor comodidad. (*Rejillas de cerámica antiadherentes)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "PORCIONES FAMILIARES O INDIVIDUALES. RECIPIENTES INTERCAMBIABLES: El recipiente grande de 3,8 l cocina un pollo entero de 1,2 kg con verduras. Cocina las porciones más pequeñas en el recipiente pequeño de 1,4 l",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "USA POCO O NADA DE ACEITE: Hasta un 75 % menos de grasa* con la función Freír con aire (*Probado con patatas cortadas a mano y cocinadas con la freidora tradicional)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "INCLUYE: Power Pod de 1700W (enchufe europeo), 2 recipientes de vidrio aptos para lavavajillas (1,4 l y 3,8 l), 2 rejillas base antiadherentes, 2 tapas de almacenamiento. Dimensiones: 30,4 x 34,5 x 34 cm. Color: piedra dorada",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "大容器3.8L、小容器1.4L分别命名且包含物重复确认，不能将小容器误写整机容量。",
+    "selected_variation_raw": "Standard (Piedra Oro)",
+    "expected_supported": true
+  },
+  {
+    "index": 93,
+    "asin": "B0G2BSQGG1",
+    "field": "feature_bullets",
+    "source_text": "VARIOS TAMAÑOS PARA UNA DESPENSA COHERENTE: Este juego de 8 reúne tarros de 400 ml/750 ml. Reserva los formatos pequeños para café, semillas o frutos secos y los grandes para arroz, muesli, harina o pasta, según tus hábitos.\nVIDRIO BOROSILICATO PARA EL DÍA A DÍA: El cuerpo transparente de vidrio borosilicato, con 2,3 mm de grosor, soporta temperaturas de -20 a 150 °C. El tarro puede lavarse en el lavavajillas; lava la tapa a mano y déjala secar por completo antes de volver a colocarla.\nFORMATO REDONDO FÁCIL DE INTEGRAR: La silueta redonda se agarra con naturalidad y encaja en una balda, un armario o el rincón del café. Varios tarros iguales crean una fila clara y fácil de mover al limpiar.\nCONTENIDO Y NIVEL VISIBLES DE UN VISTAZO: El vidrio transparente permite identificar el arroz, el café o los cereales y saber cuándo reponerlos. La tapa de bambú aporta un acabado sencillo que encaja en cocinas actuales.\nTAPA DE BAMBÚ CON JUNTA DE SILICONA: La junta ayuda a limitar la exposición de los alimentos secos al aire y a la humedad del armario. Presiona la tapa en línea recta tras cada uso; está pensada para guardar productos secos en casa.",
+    "source_hash": "a4b020153e4e8ba0f697640dc67a1b1afe08f2b4afd9053634c1d8fbcaa8b7ba",
+    "title_from_saved_html": "ComSaf Tarros de cristal con tapa 600–1000 ml, pack de 12 para cocina",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0G2BSQGG1.html",
+      "sha256": "7d1573ef58e824a00c3376690c08850f66b4b94f58c1173f8adc3d533e9c5f30",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0G2BSQGG1"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "VARIOS TAMAÑOS PARA UNA DESPENSA COHERENTE: Este juego de 8 reúne tarros de 400 ml/750 ml. Reserva los formatos pequeños para café, semillas o frutos secos y los grandes para arroz, muesli, harina o pasta, según tus hábitos.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "VIDRIO BOROSILICATO PARA EL DÍA A DÍA: El cuerpo transparente de vidrio borosilicato, con 2,3 mm de grosor, soporta temperaturas de -20 a 150 °C. El tarro puede lavarse en el lavavajillas; lava la tapa a mano y déjala secar por completo antes de volver a colocarla.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "FORMATO REDONDO FÁCIL DE INTEGRAR: La silueta redonda se agarra con naturalidad y encaja en una balda, un armario o el rincón del café. Varios tarros iguales crean una fila clara y fácil de mover al limpiar.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "CONTENIDO Y NIVEL VISIBLES DE UN VISTAZO: El vidrio transparente permite identificar el arroz, el café o los cereales y saber cuándo reponerlos. La tapa de bambú aporta un acabado sencillo que encaja en cocinas actuales.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "TAPA DE BAMBÚ CON JUNTA DE SILICONA: La junta ayuda a limitar la exposición de los alimentos secos al aire y a la humedad del armario. Presiona la tapa en línea recta tras cada uso; está pensada para guardar productos secos en casa.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "保存页标题为600–1000ml、12件；卖点却称8件400/750ml。不是靠“tarros/varios tamaños”可解释的单纯套装不同杯；跨字段包装及规格冲突必须保留。",
+    "selected_variation_raw": "",
+    "expected_supported": false
+  },
+  {
+    "index": 94,
+    "asin": "B0G2XMH5L2",
+    "field": "feature_bullets",
+    "source_text": "【Juego de vajilla de porcelana moderno】vancasso KRVI juego de mesa de 24 piezas en estilo boho para 6 personas incluye 6 platos llanos, 6 platos de postre, 6 platos hondos (cada uno con capacidad de 1260 ml hasta el borde) y 6 cuencos multiusos (cada uno con capacidad de 840 ml hasta el borde). El juego de vajilla combinado cuenta con varios y hermosos patrones bohemios armoniosamente combinados. Así, cada comida se convierte en una experiencia estética, ya sea en el desayuno o en una cena festiva.\n【Porcelana de alta calidad: Hecha para el uso diario】Estos platos y cuencos de estilo boho están fabricados con cerámica de alta densidad y recubiertos con un esmalte reforzado resistente a las astillas, por lo que son resistentes a los arañazos, las manchas y el desgaste, y cumplen con los requisitos del uso diario. Con la vajilla vancasso puedes disfrutar de tus comidas con la familia sin preocupaciones.\n【Apto para lavavajillas y microondas】Este juego de vajilla para 6 personas ha sido diseñado para la comodidad moderna y es apto para microondas, lo que permite calentar rápidamente los alimentos. El esmaltado distribuye el calor uniformemente y evita así los puntos calientes. La vajilla es apta para lavavajillas, el esmalte es resistente a la decoloración y no se empaña, por lo que la limpieza es fácil y ahorra tiempo, y reconcilia la estética y la funcionalidad.\nFácil de limpiar y ahorra espacio: la superficie lisa y esmaltada permite una limpieza sin esfuerzo, simplemente métela en el lavavajillas y limpia rápidamente. Este juego de vajilla de cerámica para 6 personas se puede apilar ordenadamente, ayudando así a ahorrar un valioso espacio en el armario, mientras mantiene tu cocina organizada y con estilo.\nIdea de regalo ideal: único y práctico: con su atractivo artístico único y su uso diario, este juego de vajilla de cerámica de vancasso es un regalo bien pensado y distintivo para bodas, fiestas de inauguración de la casa o días festivos. Es un regalo que combina estilo atemporal con verdadera utilidad y es perfecto para todos los que aprecian tanto la belleza como la funcionalidad en su hogar.\n【Versátil para todo uso: desde comidas diarias hasta ocasiones festivas】Desde desayunos familiares y reuniones de fin de semana hasta mesas de postres en fiestas, estos modernos platos para servir se adaptan sin esfuerzo a cualquier ocasión. Su estilo bohemio se adapta tanto a un brunch informal como a una cena formal; los diferentes tamaños hacen que sea más fácil tomar porciones y servir de mesa creativa.",
+    "source_hash": "186b40056e60a3b44bb7e0c99bfe4ef1280de2dd44e2917697df243387b7b815",
+    "title_from_saved_html": "Juego de Vajilla para 6 Personas Cerámica, vancasso KRVI 24 Piezas Vajilla Moderna de Porcelana, Servicio de Mesa Estilo Bohémio, Juego de Platos y Cuencos, Servicio Combinado de Colores",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0G2XMH5L2.html",
+      "sha256": "10e2c4c725ee5c4b29f9949dd2d8ad08d24c240f45b7c17679f947625a56d5dd",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0G2XMH5L2"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "【Juego de vajilla de porcelana moderno】vancasso KRVI juego de mesa de 24 piezas en estilo boho para 6 personas incluye 6 platos llanos, 6 platos de postre, 6 platos hondos (cada uno con capacidad de 1260 ml hasta el borde) y 6 cuencos multiusos (cada uno con capacidad de 840 ml hasta el borde). El juego de vajilla combinado cuenta con varios y hermosos patrones bohemios armoniosamente combinados. Así, cada comida se convierte en una experiencia estética, ya sea en el desayuno o en una cena festiva.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【Porcelana de alta calidad: Hecha para el uso diario】Estos platos y cuencos de estilo boho están fabricados con cerámica de alta densidad y recubiertos con un esmalte reforzado resistente a las astillas, por lo que son resistentes a los arañazos, las manchas y el desgaste, y cumplen con los requisitos del uso diario. Con la vajilla vancasso puedes disfrutar de tus comidas con la familia sin preocupaciones.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【Apto para lavavajillas y microondas】Este juego de vajilla para 6 personas ha sido diseñado para la comodidad moderna y es apto para microondas, lo que permite calentar rápidamente los alimentos. El esmaltado distribuye el calor uniformemente y evita así los puntos calientes. La vajilla es apta para lavavajillas, el esmalte es resistente a la decoloración y no se empaña, por lo que la limpieza es fácil y ahorra tiempo, y reconcilia la estética y la funcionalidad.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Fácil de limpiar y ahorra espacio: la superficie lisa y esmaltada permite una limpieza sin esfuerzo, simplemente métela en el lavavajillas y limpia rápidamente. Este juego de vajilla de cerámica para 6 personas se puede apilar ordenadamente, ayudando así a ahorrar un valioso espacio en el armario, mientras mantiene tu cocina organizada y con estilo.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "Idea de regalo ideal: único y práctico: con su atractivo artístico único y su uso diario, este juego de vajilla de cerámica de vancasso es un regalo bien pensado y distintivo para bodas, fiestas de inauguración de la casa o días festivos. Es un regalo que combina estilo atemporal con verdadera utilidad y es perfecto para todos los que aprecian tanto la belleza como la funcionalidad en su hogar.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "【Versátil para todo uso: desde comidas diarias hasta ocasiones festivas】Desde desayunos familiares y reuniones de fin de semana hasta mesas de postres en fiestas, estos modernos platos para servir se adaptan sin esfuerzo a cualquier ocasión. Su estilo bohemio se adapta tanto a un brunch informal como a una cena formal; los diferentes tamaños hacen que sea más fácil tomar porciones y servir de mesa creativa.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "24件餐具=4类各6件；深盘每只1260ml，碗每只840ml，两种器皿名和每只限定都明确，不互相覆盖。",
+    "selected_variation_raw": "24 Piezas",
+    "expected_supported": true
+  },
+  {
+    "index": 97,
+    "asin": "B0GL27XFXV",
+    "field": "feature_bullets",
+    "source_text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.º 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025\n5 FUNCIONES DE COCCIÓN PREDEFINIDAS: Max Crisp (Gratinar), Air Fry (Freír con aire), Bake (Hornear), Prove (Fermentar), y Recrisp (Dorar)\nAIR FRYER DE CRISTAL EXTRAGRANDE 5,7 l DE CAPACIDAD: prepara platos de tamaño familiar en el recipiente de cristal de 5,7 l o cámbialo por el de 2,3 l para preparar aperitivos, guarniciones y mucho más\nCOCINA SALUDABLE: para tu tranquilidad, todos los recipientes de cristal CleanCrisp están fabricados sin PFAS, lo que te permite preparar, cocinar y guardar alimentos de forma segura con la freidora de aire multifunción\nACCESORIOS APTOS PARA LAVAVAJILLAS: la limpieza te resultará muy sencilla ya que tanto los recipientes de cristal como las tapas para almacenamiento se pueden meter en el lavavajillas\nINCLUYE: freidora de aire de cristal CRISPi PRO XL 2050 W, dos recipientes de cristal CleanCrisp de 5,7 y 2,3 l, una base modular extraíble, dos rejillas base antiadherentes, dos tapas para almacenamiento y guía de recetas. Color: Dorado piedra",
+    "source_hash": "62a8e85201f5d85ae7a2a989f661e4ccf9e50d85cfde332868e8bc806c815c32",
+    "title_from_saved_html": "Ninja CRISPi PRO XL, Freidora de Aire con 2 Recipientes, Dorado Piedra",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0GL27XFXV.html",
+      "sha256": "1740ed412b18440341228bfd032e3d82102d579c12be4567f9e37e13b40f0baf",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0GL27XFXV"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "NINJA ES LA MARCA DE FREIDORAS DE AIRE N.o 1 EN EL MUNDO: Fuente: Euromonitor International Ltd, Electrodomésticos, edición 2026, ventas minoristas en volumen (unidades), segue la definición de la categoría freidoras de aire, datos de 2025",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "5 FUNCIONES DE COCCIÓN PREDEFINIDAS: Max Crisp (Gratinar), Air Fry (Freír con aire), Bake (Hornear), Prove (Fermentar), y Recrisp (Dorar)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "AIR FRYER DE CRISTAL EXTRAGRANDE 5,7 l DE CAPACIDAD: prepara platos de tamaño familiar en el recipiente de cristal de 5,7 l o cámbialo por el de 2,3 l para preparar aperitivos, guarniciones y mucho más",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "COCINA SALUDABLE: para tu tranquilidad, todos los recipientes de cristal CleanCrisp están fabricados sin PFAS, lo que te permite preparar, cocinar y guardar alimentos de forma segura con la freidora de aire multifunción",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "ACCESORIOS APTOS PARA LAVAVAJILLAS: la limpieza te resultará muy sencilla ya que tanto los recipientes de cristal como las tapas para almacenamiento se pueden meter en el lavavajillas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "INCLUYE: freidora de aire de cristal CRISPi PRO XL 2050 W, dos recipientes de cristal CleanCrisp de 5,7 y 2,3 l, una base modular extraíble, dos rejillas base antiadherentes, dos tapas para almacenamiento y guía de recetas. Color: Dorado piedra",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "大容器5.7L、小容器2.3L；包含物明确两只CleanCrisp容器，非不同未知SKU的家族容量列表。",
+    "selected_variation_raw": "Piedra Dorada",
+    "expected_supported": false
+  },
+  {
+    "index": 99,
+    "asin": "B0GL2L4F2Q",
+    "field": "feature_bullets",
+    "source_text": "5 FUNCIONES DE COCCIÓN PREDEFINIDAS: Max Crisp (Gratinar), Air Fry (Freír con aire), Bake (Hornear), Prove (Fermentar), y Recrisp (Dorar)\nAIR FRYER DE CRISTAL EXTRAGRANDE 5,7 l DE CAPACIDAD: prepara platos de tamaño familiar en el recipiente de cristal de 5,7 l o cámbialo por el de 2,3 l para preparar aperitivos, guarniciones y mucho más\nCOCINA SALUDABLE: para tu tranquilidad, todos los recipientes de cristal CleanCrisp están fabricados sin PFAS, lo que te permite preparar, cocinar y guardar alimentos de forma segura con la freidora de aire multifunción\nACCESORIOS APTOS PARA LAVAVAJILLAS: la limpieza te resultará muy sencilla ya que tanto los recipientes de cristal como las tapas para almacenamiento se pueden meter en el lavavajillas\nINCLUYE: freidora de aire de cristal CRISPi PRO XL 2050 W, dos recipientes de cristal CleanCrisp de 5,7 y 2,3 l, una base modular extraíble, dos rejillas base antiadherentes, dos tapas para almacenamiento y guía de recetas. Color: Verde musgo",
+    "source_hash": "d675947de7b411696011f220f0fe3bee92f6bff4f68466ad782ef8ae7cb8a653",
+    "title_from_saved_html": "Ninja CRISPi PRO XL, Freidora de Aire con 2 Recipientes, Verde Musgo",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0GL2L4F2Q.html",
+      "sha256": "aa072ba9c52538c8aacf719fbf7cd6788463a07b4375a55fc9536558c49c84d4",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0GL2L4F2Q"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "5 FUNCIONES DE COCCIÓN PREDEFINIDAS: Max Crisp (Gratinar), Air Fry (Freír con aire), Bake (Hornear), Prove (Fermentar), y Recrisp (Dorar)",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "AIR FRYER DE CRISTAL EXTRAGRANDE 5,7 l DE CAPACIDAD: prepara platos de tamaño familiar en el recipiente de cristal de 5,7 l o cámbialo por el de 2,3 l para preparar aperitivos, guarniciones y mucho más",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "COCINA SALUDABLE: para tu tranquilidad, todos los recipientes de cristal CleanCrisp están fabricados sin PFAS, lo que te permite preparar, cocinar y guardar alimentos de forma segura con la freidora de aire multifunción",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "ACCESORIOS APTOS PARA LAVAVAJILLAS: la limpieza te resultará muy sencilla ya que tanto los recipientes de cristal como las tapas para almacenamiento se pueden meter en el lavavajillas",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "INCLUYE: freidora de aire de cristal CRISPi PRO XL 2050 W, dos recipientes de cristal CleanCrisp de 5,7 y 2,3 l, una base modular extraíble, dos rejillas base antiadherentes, dos tapas para almacenamiento y guía de recetas. Color: Verde musgo",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "当前同SKU随附5.7L和2.3L两容器；包含物原句提供实物数量，不能仅凭换用cámbialo词就放行其他型号。",
+    "selected_variation_raw": "Verde",
+    "expected_supported": false
+  },
+  {
+    "index": 107,
+    "asin": "B0H71WTBTZ",
+    "field": "feature_bullets",
+    "source_text": "Contenido del producto: este juego incluye 2 molinillos de especias (diámetro de 6,5 cm, altura: 18,8 cm y 13,3 cm, capacidad: 200 ml y 180 ml), 1 etiqueta adhesiva (12 pegatinas) y 1 cepillo de silicona, perfectamente coordinado para el uso diario.\n【Excelente diseño】Este molinillo de sal dispone de un mecanismo de molienda ajustable, el grado de molienda se puede ajustar mediante un regulador giratorio. La tapa protectora protege el condimento de forma fiable contra la humedad y el polvo, el regalo ideal para los amantes de la cocina.\n【Materiales de alta calidad】Este molinillo de pimienta está hecho de acero inoxidable 304 y vidrio de cal soda, resistente, duradero e inoxidable. El mecanismo de molienda de cerámica de alta calidad es más duro que el acero y convence por su excelente resistencia a la corrosión.\nAplicaciones del producto: este molinillo de sal y pimienta es ideal para pimienta, pimentón, sal, comino, pimienta de Jamaica y muchas otras especias, mientras que el recipiente transparente muestra el nivel de llenado de un vistazo en cualquier momento, perfecto para usar en la cocina y en la mesa.\n【Fácil de limpiar】La limpieza de estos molinillos de especias es muy sencilla: con el cepillo incluido se pueden eliminar fácilmente los residuos o simplemente meterlo en el lavavajillas para una limpieza duradera y una aplicación higiénica.",
+    "source_hash": "366de8152afc4ea4d8c5d5588a29a372b44c13b903d082138063657e426deb23",
+    "title_from_saved_html": "Juego de 2 molinillos de sal y pimienta, acero inoxidable y",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0H71WTBTZ.html",
+      "sha256": "755b8d8b32b43a8b90bec112f63a5703b8214ecc6188aa17d893f62dc0a5d527",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0H71WTBTZ"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "Contenido del producto: este juego incluye 2 molinillos de especias (diámetro de 6,5 cm, altura: 18,8 cm y 13,3 cm, capacidad: 200 ml y 180 ml), 1 etiqueta adhesiva (12 pegatinas) y 1 cepillo de silicona, perfectamente coordinado para el uso diario.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "【Excelente diseño】Este molinillo de sal dispone de un mecanismo de molienda ajustable, el grado de molienda se puede ajustar mediante un regulador giratorio. La tapa protectora protege el condimento de forma fiable contra la humedad y el polvo, el regalo ideal para los amantes de la cocina.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "【Materiales de alta calidad】Este molinillo de pimienta está hecho de acero inoxidable 304 y vidrio de cal soda, resistente, duradero e inoxidable. El mecanismo de molienda de cerámica de alta calidad es más duro que el acero y convence por su excelente resistencia a la corrosión.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "Aplicaciones del producto: este molinillo de sal y pimienta es ideal para pimienta, pimentón, sal, comino, pimienta de Jamaica y muchas otras especias, mientras que el recipiente transparente muestra el nivel de llenado de un vistazo en cualquier momento, perfecto para usar en la cocina y en la mesa.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "【Fácil de limpiar】La limpieza de estos molinillos de especias es muy sencilla: con el cepillo incluido se pueden eliminar fácilmente los residuos o simplemente meterlo en el lavavajillas para una limpieza duradera y una aplicación higiénica.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "清单明确2个研磨器，容量列200/180ml，数量与列表数一致；可保留两值列表，但原文未写respectivamente，不能把200或180擅自绑定某一高度或盐/胡椒身份。",
+    "selected_variation_raw": "",
+    "expected_supported": true
+  },
+  {
+    "index": 118,
+    "asin": "B0HCPFCQJ3",
+    "field": "feature_bullets",
+    "source_text": "CONSERVA LOS ALIMENTOS FRESCOS DURANTE MÁS TIEMPO: Cada recipiente incorpora tapa con junta de silicona y cierres laterales que ayudan a aislar la humedad y el aire. Ideal para almacenar pasta, arroz, cereales, harina, café, legumbres, frutos secos y mucho más.\nORDENA TU DESPENSA SIN RENUNCIAR AL DISEÑO: A diferencia de los recipientes lisos tradicionales, su elegante textura vertical aporta un aspecto moderno y decorativo que transforma armarios, cajones y encimeras en espacios más organizados y agradables.\nIDEAL PARA COCINAS PEQUEÑAS Y AMANTES DEL ORDEN: Sus cuatro tamaños permiten organizar alimentos de diferentes formatos aprovechando mejor cada rincón. Todos los recipientes comparten la misma base para apilarse fácilmente y mantener una distribución uniforme.\nAPERTURA AMPLIA Y ACCESO CÓMODO: La boca ancha facilita llenar los recipientes, servir directamente o introducir cucharas sin esfuerzo. El plástico transparente permite identificar el contenido de un vistazo sin necesidad de abrir cada envase.\n7 RECIPIENTES PARA TODA LA DESPENSA: Incluye 1 recipiente de 1,8 L; 2 de 1,3 L; 2 de 0,7 L y 2 de 0,46 L, ideales para organizar desde pasta y arroz hasta frutos secos, azúcar, café, especias o snacks.\nGARANTÍA: Si el producto no cumple tus expectativas o presenta cualquier problema, tienes 30 días para gestionarlo. Compra con tranquilidad.",
+    "source_hash": "0bb96e3263f2791c8fb3758914962b6d23e7b58c10b72bcd433a0fc05554336b",
+    "title_from_saved_html": "Botes Cocina Almacenaje Juego de 7 con Junta de Silicona | Recipientes Herméticos para Alimentos | Organizadores de Cocina con Diseño Decorativo Transparente Apilable",
+    "source_evidence": {
+      "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0HCPFCQJ3.html",
+      "sha256": "a1982d204af421a5ddd65cc003897e882f55afc0762a0a6efef8b4db01ef3f66",
+      "identity_status": "IDENTITY_MATCH",
+      "form_asins": [
+        "B0HCPFCQJ3"
+      ]
+    },
+    "evidence_dom": [
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+        "text": "CONSERVA LOS ALIMENTOS FRESCOS DURANTE MÁS TIEMPO: Cada recipiente incorpora tapa con junta de silicona y cierres laterales que ayudan a aislar la humedad y el aire. Ideal para almacenar pasta, arroz, cereales, harina, café, legumbres, frutos secos y mucho más.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+        "text": "ORDENA TU DESPENSA SIN RENUNCIAR AL DISEÑO: A diferencia de los recipientes lisos tradicionales, su elegante textura vertical aporta un aspecto moderno y decorativo que transforma armarios, cajones y encimeras en espacios más organizados y agradables.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+        "text": "IDEAL PARA COCINAS PEQUEÑAS Y AMANTES DEL ORDEN: Sus cuatro tamaños permiten organizar alimentos de diferentes formatos aprovechando mejor cada rincón. Todos los recipientes comparten la misma base para apilarse fácilmente y mantener una distribución uniforme.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+        "text": "APERTURA AMPLIA Y ACCESO CÓMODO: La boca ancha facilita llenar los recipientes, servir directamente o introducir cucharas sin esfuerzo. El plástico transparente permite identificar el contenido de un vistazo sin necesidad de abrir cada envase.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+        "text": "7 RECIPIENTES PARA TODA LA DESPENSA: Incluye 1 recipiente de 1,8 L; 2 de 1,3 L; 2 de 0,7 L y 2 de 0,46 L, ideales para organizar desde pasta y arroz hasta frutos secos, azúcar, café, especias o snacks.",
+        "independently_verified": true
+      },
+      {
+        "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[6]",
+        "text": "GARANTÍA: Si el producto no cumple tus expectativas o presenta cualquier problema, tienes 30 días para gestionarlo. Compra con tranquilidad.",
+        "independently_verified": true
+      }
+    ],
+    "manual_reason": "7容器=1只1.8L、2只1.3L、2只0.7L、2只0.46L；数量闭合，不生成未声明总容量。",
+    "selected_variation_raw": "",
+    "expected_supported": true
+  }
+]
