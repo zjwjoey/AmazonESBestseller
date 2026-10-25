@@ -1,0 +1,200 @@
+[
+  {
+    "asin": "B0015ZCSS6",
+    "label": "dimensiones del producto",
+    "values": [
+      "26l. x 20an. x 2Grosor centímetros",
+      "26 x 20 x 2 cm; 660 g"
+    ],
+    "html_sha256": "86bed730477cad006a6d973bb61fd35fedb732c8db314cb306a43d8761229365",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[3]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[9]/div/div[1]/ul/li[2]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0015ZCSS6.html"
+  },
+  {
+    "asin": "B075CZB28S",
+    "label": "dimensiones del producto",
+    "values": [
+      "99l. x 191an. x 25Grosor centímetros",
+      "99 x 191 x 25 cm; 2,3 kg"
+    ],
+    "html_sha256": "c75dd5db17d95e225b7e184237b0ee5bccfdc0bd918e63227acfd06db710dce9",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[5]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[7]/div/div[1]/ul/li[2]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B075CZB28S.html"
+  },
+  {
+    "asin": "B07PG3M4LH",
+    "label": "dimensiones del producto",
+    "values": [
+      "33l. x 25an. x 0,8Grosor centímetros",
+      "33 x 25 x 0,8 cm; 420 g"
+    ],
+    "html_sha256": "3d710c75aaba6bd7e4cd42614e3cfba86d92ba84bd967ba521e901a40b6b5dd8",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[3]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[9]/div/div[1]/ul/li[1]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B07PG3M4LH.html"
+  },
+  {
+    "asin": "B07TV8S14K",
+    "label": "dimensiones del producto",
+    "values": [
+      "40l. x 32an. x 4Grosor centímetros",
+      "40 x 32 x 4 cm; 2,37 kg"
+    ],
+    "html_sha256": "b6acf8e1e14c343bb28315468e5491e546fd0260dadfae75794209694002e703",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[3]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[8]/div/div[1]/ul/li[1]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B07TV8S14K.html"
+  },
+  {
+    "asin": "B07XQTRZZF",
+    "label": "dimensiones del producto",
+    "values": [
+      "137l. x 191an. x 25Grosor centímetros",
+      "137 x 191 x 25 cm; 3,24 kg"
+    ],
+    "html_sha256": "04985ad0c963b90f5958c4c4b3b49d5797b77fdd7de6694f23b7859fba0df924",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[5]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[8]/div/div[1]/ul/li[1]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B07XQTRZZF.html"
+  },
+  {
+    "asin": "B08NDTF5YN",
+    "label": "dimensiones del producto",
+    "values": [
+      "39l. x 27an. x 3Grosor centímetros",
+      "39 x 27 x 3 cm; 1,9 kg"
+    ],
+    "html_sha256": "e2089b695843fab18b65091ee53f57f43bd86b7aa538f377de8089e982598e80",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[3]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[7]/div/div[1]/ul/li[1]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B08NDTF5YN.html"
+  },
+  {
+    "asin": "B098D7MBJB",
+    "label": "edad recomendada por el fabricante",
+    "values": [
+      "3 años y más",
+      "3 año y más"
+    ],
+    "html_sha256": "640fb1aa084cf1732a249207fed203824ba634217b568923c9eea2c0cac5366b",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[7]/div/div/div/div/div/div/div[1]/div[1]/div/div/div/div/table/tbody/tr[14]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[2]/div/div[1]/ul/li[2]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B098D7MBJB.html"
+  },
+  {
+    "asin": "B0BFKJ3QY6",
+    "label": "dimensiones del producto",
+    "values": [
+      "20l. x 20an. x 20Grosor milímetros",
+      "2 x 2 x 2 cm; 210 g"
+    ],
+    "html_sha256": "f810cb97f99061cfb0a7b5f093fd363f97e6fd965b164f70fdfdc08b72b91700",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[37]/div/div/div[1]/div/table/tbody/tr[4]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[17]/div[4]/div/div[1]/ul/li[1]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0BFKJ3QY6.html"
+  },
+  {
+    "asin": "B0DYMS8PZL",
+    "label": "forma articulo",
+    "values": [
+      "Cuadrado",
+      "Cuadrada"
+    ],
+    "html_sha256": "33fed63277e7af5954db7dd7072f8cb341d4d9d5451e65fb86e9d2ab3b511f1c",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[2]/div[2]/div[18]/div[8]/div/div/div/div/div/div/div[1]/div[1]/div/div[1]/div/div/table/tbody/tr[5]"
+      ],
+      [
+        "/html/body/div[1]/div[2]/div[2]/div[18]/div[8]/div/div/div/div/div/div/div[1]/div[1]/div/div[1]/div/div/table/tbody/tr[7]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0DYMS8PZL.html"
+  },
+  {
+    "asin": "B0H99CKGTS",
+    "label": "edad recomendada por el fabricante",
+    "values": [
+      "14 años y más",
+      "14 año y más"
+    ],
+    "html_sha256": "fc37e3ec5872514f6c290d68d7ebc7d32df0d74fa00f8be3627a13209c4889ef",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[18]/div[5]/div/div/div/div/div/div/div[1]/div[1]/div/div/div/div/table/tbody/tr[16]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div[2]/div[18]/div[2]/div/div[1]/ul/li[3]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0H99CKGTS.html"
+  },
+  {
+    "asin": "B0HHHH8H1N",
+    "label": "edad recomendada por el fabricante",
+    "values": [
+      "15 años y más",
+      "15 año y más"
+    ],
+    "html_sha256": "21fca72d1401fd2728519a2e33a865ede93f87f90dcadaa708510765805056e4",
+    "source_dom_paths": [
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[5]/div/div/div/div/div/div/div[1]/div[1]/div/div/div/div/table/tbody/tr[14]"
+      ],
+      [
+        "/html/body/div[1]/div[1]/div/div[17]/div[6]/div/div[1]/ul/li[2]"
+      ]
+    ],
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0HHHH8H1N.html"
+  }
+]

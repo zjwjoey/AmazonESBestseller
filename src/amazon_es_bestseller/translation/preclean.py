@@ -151,7 +151,7 @@ def clean_text(value: Any, *, field: str = "") -> dict[str, Any]:
 
 _FACT_NUMBER = r"\d+(?:[.,]\d+)?"
 _FACT_MASS = r"(?P<mass>" + _FACT_NUMBER + r")\s*(?P<mass_unit>kilogramos?|gramos?|kg|g)"
-_FACT_AXIS = r"\s*(?:l\.?|f\.?|an\.?|al\.?|p\.?|largo|ancho|alto|fondo|profundidad)?\s*"
+_FACT_AXIS = r"\s*(?:l\.?|f\.?|an\.?|al\.?|p\.?|largo|ancho|alto|fondo|profundidad|grosor)?\s*"
 _DIMENSION_FACT_RE = re.compile(
     r"(?P<a>" + _FACT_NUMBER + r")" + _FACT_AXIS + r"[x×]\s*(?P<b>" + _FACT_NUMBER + r")" +
     _FACT_AXIS + r"(?:[x×]\s*(?P<c>" + _FACT_NUMBER + r")" + _FACT_AXIS + r")?"
@@ -176,7 +176,13 @@ def _equivalent_detail_facts(label: str, values: list[str]) -> bool:
         matches = [re.fullmatch(r"(\d+(?:[.,]0{1,2})?)(?:\s*(?:conteo|unidades?))?", t) for t in texts]
         return all(matches) and len({number(m.group(1)) for m in matches}) == 1
     if label == "forma articulo":
-        return set(texts) <= {"circular", "redonda", "redondo"}
+        return any(set(texts) <= synonyms for synonyms in (
+            {"circular", "redonda", "redondo"}, {"cuadrado", "cuadrada"}))
+    if label == "edad recomendada por el fabricante":
+        # Singular/plural spelling does not change an explicit lower bound.
+        # A finite age range or another unit must still be reviewed.
+        matches = [re.fullmatch(r"(\d+) anos? y mas", t) for t in texts]
+        return all(matches) and len({int(m.group(1)) for m in matches}) == 1
     if label == "peso del producto":
         matches = [re.fullmatch(_FACT_MASS, t) for t in texts]
         return all(matches) and len({mass(m) for m in matches}) == 1
@@ -398,6 +404,82 @@ def _capacity_scope(value: str, match: Any) -> str:
     return max(candidates, default=(-1, "unknown"))[1]
 
 
+def _capacity_limit_role(value: str, match: Any) -> str:
+    """Recognize literal fill limits; do not inherit a role past another number."""
+    prefix = value[max(0, match.start() - 140):match.start()]
+    # A recommended 220-250 ml interval keeps its explicit recommendation.
+    prefix = re.sub(r"(?<![\d.,])\d+(?:[.,]\d+)?\s*[-–]\s*$", "", prefix)
+    tail = r"\s*(?:es\s*)?(?:de|:)?\s*(?:aprox\.?\s*)?$"
+    patterns = (
+        (r"\b(?:capacidad|cantidad|nivel(?:\s+de\s+agua)?)\s+m[ií]nim[oa]"
+         r"(?:\s+de\s+llenado)?" + tail, "minimum"),
+        (r"\b(?:capacidad|cantidad|nivel(?:\s+de\s+agua)?)\s+m[aá]xim[oa]" + tail, "nominal"),
+        (r"\bm[aá]x\.\s*capacidad" + tail, "nominal"),
+        (r"\bcapacidad(?:\s+de\s+uso)?\s+[uú]til"
+         r"(?:\s+hasta\s+la\s+marca\s+de\s+llenado\s+m[aá]ximo)?" + tail, "useful"),
+        (r"\b(?:capacidad(?:\s+de\s+uso)?|cantidad\s+de\s+agua|nivel\s+de\s+agua)"
+         r"\s+recomendad[oa]" + tail, "recommended"),
+        (r"\brecomendad[oa]" + tail, "recommended"),
+        (r"\brecomendamos\s+llenar\s+(?:el\s+vaso|la\s+taza)\s+con\s*$", "recommended"),
+        (r"\bal\s+llenarlo\s+hasta\s+aproximadamente\s*$", "recommended"),
+        (r"\bprepara\s+hasta\s*$", "recommended"),
+        (r"\b(?:capacidad|volumen)(?:\s+total)?" + tail, "nominal"),
+        (r"\bcapacidad\s+hasta(?:\s+el\s+borde(?:\s+es\s+de)?)?\s*$", "nominal"),
+        (r"\b(?:vasos?|tazas?|copas?)\b[^\d\n.;]{0,70}\bde\s*$", "nominal"),
+    )
+    for pattern, role in patterns:
+        if re.search(pattern, prefix, re.I):
+            return role
+    return "unknown"
+
+
+def _compatible_capacity_limits(value: str, capacities: list[tuple[Any, Decimal]]) -> bool:
+    """Require one upper capacity and consistent, explicitly qualified limits."""
+    roles: dict[str, set[Decimal]] = defaultdict(set)
+    for match, amount in capacities:
+        roles[_capacity_limit_role(value, match)].add(amount)
+    # No role can silently choose between competing source assertions.
+    if any(len(amounts) > 1 for role, amounts in roles.items() if role != "unknown"):
+        return False
+    nominal = roles.get("nominal", set())
+    if len(nominal) != 1 or not any(roles.get(role) for role in ("minimum", "useful", "recommended")):
+        return False
+    upper = next(iter(nominal))
+    if roles.get("unknown", set()) - {upper}:
+        return False
+    minimum = next(iter(roles.get("minimum", {Decimal(0)})))
+    if minimum > upper:
+        return False
+    for match, amount in capacities:
+        prefix = value[max(0, match.start() - 100):match.start()]
+        bare = re.search(r"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*([-–]|a|hasta|y)\s*$", prefix, re.I)
+        if bare:
+            # A bare bound inherits the following unit only inside an explicit
+            # recommendation or stated interval. Validate both literal bounds.
+            stated_range = bool(re.search(r"\b(?:entre|rango|intervalo)\b[^;\n]{0,60}$", prefix, re.I))
+            role = _capacity_limit_role(value, match)
+            if role not in {"useful", "recommended"} and not stated_range:
+                return False
+            factor = {"ml": Decimal(1), "cl": Decimal(10), "L": Decimal(1000)}[
+                UNIT_CANONICAL[match.group("unit").casefold()]]
+            lower = Decimal(bare.group(1).replace(",", ".")) * factor
+            if not minimum <= lower <= amount <= upper:
+                return False
+    return all(minimum <= amount <= upper
+               for role in ("useful", "recommended") for amount in roles.get(role, set()))
+
+
+def _numeric_amount(value: str, match: Any) -> Decimal:
+    amount = Decimal(match.group("number").replace(",", "."))
+    # The Spanish phrase is an exact half-litre assertion. A following unit
+    # ("y medio litro") describes another quantity and must remain ambiguous.
+    if (amount == 1 and match.group("unit").casefold() == "litro"
+            and re.match(r"\s+y\s+medio\b(?=$|[,.;:)\n]|\s+(?:es|con|de|para|sin)\b)",
+                         value[match.end():], re.I)):
+        amount += Decimal("0.5")
+    return amount
+
+
 def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, structured_label: bool) -> bool:
     def explicit_hyphen_range(start: int) -> bool:
         prefix = value[max(0, start - 60):start]
@@ -417,6 +499,8 @@ def _capacity_conflict(value: str, capacities: list[tuple[Any, Decimal]], *, str
         groups["unknown" if unknown else scope].append((match, amount))
     for group in groups.values():
         if _explicit_capacity_total(value, group):
+            continue
+        if not structured_label and _compatible_capacity_limits(value, group):
             continue
         intervals = []
         index = 0
@@ -499,7 +583,7 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
                 suffix = rate.group(1).casefold()
                 canonical += "/" + ("min" if suffix.startswith("min") else ("h" if suffix.startswith("h") else "s"))
                 raw_unit += rate.group(0).strip()
-            values.append({"numeric_value": float(number.replace(",", ".")), "unit_raw": raw_unit,
+            values.append({"numeric_value": float(_numeric_amount(value, match)), "unit_raw": raw_unit,
                            "canonical_unit": canonical})
         except ValueError:
             issues.append("INVALID_NUMBER")
@@ -509,7 +593,7 @@ def numeric_profile(value: str, *, label: str | None = None) -> dict[str, Any]:
     capacity_factors = {"ml": 1.0, "cl": 10.0, "L": 1000.0}
     capacity_context = bool(re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", value, re.I)) if label is None else bool(
         re.search(r"\b(?:capacidad|volumen|contenido|capacity|volume)\b", str(label), re.I))
-    capacities = [(match, Decimal(match.group("number").replace(",", ".")) *
+    capacities = [(match, _numeric_amount(value, match) *
                    Decimal(str(capacity_factors[UNIT_CANONICAL[match.group("unit").casefold()]])))
                   for match in matches if UNIT_CANONICAL.get(match.group("unit").casefold()) in capacity_factors
                   and match.start() not in rate_positions]
