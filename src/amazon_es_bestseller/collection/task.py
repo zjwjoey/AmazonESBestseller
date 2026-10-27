@@ -20,6 +20,7 @@ from pathlib import Path
 import threading
 import time
 from typing import Callable, Mapping, Optional
+from .runtime_io import atomic_json, read_json
 from urllib.parse import urlsplit
 
 from .quota import (QuotaError, normalize_source_url, select_research_quota,
@@ -27,49 +28,11 @@ from .quota import (QuotaError, normalize_source_url, select_research_quota,
 
 
 def _read_json(path: Path, default):
-    if not path.exists():
-        return default
-    return json.loads(path.read_text(encoding="utf-8"))
+    return read_json(path, default)
 
 
 def _write_json_atomic(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(value, ensure_ascii=False, indent=2)
-    # A fixed ``.tmp`` name allowed stale files and antivirus/indexer locks to
-    # make Windows ``os.replace`` fail with WinError 5.  Keep each write's
-    # staging file unique so a previous interrupted write cannot collide with
-    # the current checkpoint.
-    tmp = path.with_name(
-        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-    )
-    tmp.write_text(payload, encoding="utf-8")
-    last_error: PermissionError | None = None
-    for delay in (0.0, 0.05, 0.15, 0.35, 0.75, 1.5):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError as exc:
-            last_error = exc
-            if delay:
-                time.sleep(delay)
-
-    # Some Windows readers deny delete/rename sharing but still allow a normal
-    # write.  Preserve the same JSON payload through that fallback instead of
-    # terminating the scheduler; the next successful checkpoint will restore
-    # atomic replacement.  If the target also denies writing, surface the
-    # original permission error and retain the staged file for recovery.
-    try:
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        tmp.unlink(missing_ok=True)
-        print(f"[任务] 检查点替换被占用，已使用直接写入回退：{path}")
-        return
-    except OSError:
-        if last_error is not None:
-            raise last_error
-        raise
+    atomic_json(path, value)
 
 
 def _normalize_url(url: object) -> str:

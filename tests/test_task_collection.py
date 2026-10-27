@@ -39,7 +39,7 @@ def _plan():
     }
 
 
-def test_checkpoint_write_falls_back_when_windows_replace_is_denied(monkeypatch, tmp_path):
+def test_checkpoint_write_preserves_old_when_windows_replace_is_denied(monkeypatch, tmp_path):
     target = tmp_path / "batch_state_v2.json"
     target.write_text(json.dumps({"old": True}), encoding="utf-8")
 
@@ -49,10 +49,10 @@ def test_checkpoint_write_falls_back_when_windows_replace_is_denied(monkeypatch,
     monkeypatch.setattr(task_module.os, "replace", deny_replace)
     monkeypatch.setattr(task_module.time, "sleep", lambda _seconds: None)
 
-    task_module._write_json_atomic(target, {"run_status": "RUNNING"})
-
-    assert json.loads(target.read_text(encoding="utf-8")) == {"run_status": "RUNNING"}
-    assert not list(tmp_path.glob(".*.tmp"))
+    with pytest.raises(PermissionError):
+        task_module._write_json_atomic(target, {"run_status": "RUNNING"})
+    assert json.loads(target.read_text(encoding="utf-8")) == {"old": True}
+    assert len(list(tmp_path.glob(".*.tmp"))) == 1
 
 
 def test_reviewed_task_plan_requires_real_sources_and_three_slots():

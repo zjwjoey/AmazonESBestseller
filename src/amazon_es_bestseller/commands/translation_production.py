@@ -1,8 +1,7 @@
 """Staged, source-hash-bound Translation V2 production workflow.
 
-Planning and tests default to the deterministic offline provider. Qwen calls
-require explicit ``provider_mode=qwen-mt``, credentials, a verified price card,
-an admitted budget, and ``--yes`` at the translate stage.
+The fake provider remains available for offline integration. Real translation
+API execution has been retired; saved caches and historical ledgers remain readable.
 """
 from __future__ import annotations
 
@@ -86,34 +85,7 @@ def _selected_records(records: list[dict[str, Any]], args: Any) -> tuple[list[di
 def _service(run_dir: Path, config: Mapping[str, Any], args: Any) -> TranslationService:
     provider_mode = str(config.get('provider_mode') or 'fake').strip().lower()
     if provider_mode == 'qwen-mt':
-        from ..translation.providers.qwen_mt import QwenMTProvider
-        from ..translation.budget import BudgetLedger, BudgetedProvider, VerifiedPriceCard
-        provider: TranslationProvider = QwenMTProvider(
-            model=args.model or str(config.get('model') or 'qwen-mt-flash'),
-            endpoint=config.get('endpoint'), protocol=config.get('protocol'),
-            rate=float(args.rate if args.rate is not None else config.get('rate', 0.5)),
-            # Retries must re-enter BudgetedProvider below so each transport
-            # attempt is separately reserved and charged.  Do not keep hidden
-            # provider-internal retry attempts beneath one reservation.
-            max_retries=0,
-        )
-        if not provider.api_key:
-            raise SystemExit('QWEN_CREDENTIAL_UNAVAILABLE: real translation not started')
-        # A real provider is never allowed to run on an unpriced or
-        # non-CNY configuration. The ledger survives resume and reserves the
-        # worst permitted request before Qwen transport is entered.
-        price_card = VerifiedPriceCard.from_mapping(
-            config.get('pricing_verification'), provider=provider.name, model=provider.model,
-        )
-        ledger = BudgetLedger(
-            run_dir / 'budget' / 'translation_budget_ledger.json',
-            limit_cny=config.get('budget_cny', '5.00'), price_card=price_card,
-            safety_buffer_cny=config.get('budget_safety_buffer_cny', '0.10'),
-            max_input_tokens=int(config.get('budget_max_input_tokens', 12000)),
-            max_output_tokens=int(config.get('budget_max_output_tokens', 2048)),
-            prompt_overhead_tokens=int(config.get('budget_prompt_overhead_tokens', 1024)),
-        )
-        provider = BudgetedProvider(provider, ledger)
+        raise SystemExit('TRANSLATION_API_REMOVED: Qwen network translation has been removed')
     elif provider_mode == 'fake':
         provider = FakeTranslationProvider()
     else:

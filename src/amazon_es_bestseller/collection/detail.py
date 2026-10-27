@@ -1457,11 +1457,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 session.wait_between_requests()
 
     if write_summary or details_output_path:
+        from .runtime_io import atomic_json
         target = details_output_path or os.path.join(str(out_dir), "details.json")
-        temporary = target + ".tmp"
-        with open(temporary, "w", encoding="utf-8") as f:
-            json.dump(details, f, ensure_ascii=False, indent=2)
-        os.replace(temporary, target)
+        atomic_json(target, details)
     if failed:
         print("详情采集完成：%d 成功 / %d 失败（重跑自动补齐缺失）"
               % (len(details), len(failed)))

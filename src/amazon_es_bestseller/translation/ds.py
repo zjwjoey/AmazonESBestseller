@@ -1,8 +1,8 @@
-"""DeepSeek-compatible translation client with an on-disk ASIN cache.
+"""Legacy offline-compatible cache/hash utilities; HTTP transport is removed.
 
 This module is intentionally independent from Playwright and the pipeline.  It
-uses one JSON-mode chat completion per ASIN, keeps raw Spanish input outside the
-Chinese overlay, and treats malformed/failed responses as explicit failures.
+keeps raw Spanish input outside the Chinese overlay. Injected offline test
+transports remain supported; the default transport always fails without HTTP.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import time
 import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
-from urllib import error, request
 
 
 ALLOWED_FIELDS = (
@@ -62,18 +61,9 @@ class TranslationError(RuntimeError):
 
 
 def _default_transport(url: str, headers: Mapping[str, str], payload: Mapping[str, Any], timeout: float) -> dict:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = request.Request(url, data=body, headers=dict(headers), method="POST")
-    try:
-        with request.urlopen(req, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        # Preserve status for retry classification without ever echoing headers
-        # (which may contain the bearer token).
-        raise TranslationError("HTTP %s" % exc.code,
-                               retryable=(exc.code == 429 or exc.code >= 500)) from exc
-    except (error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-        raise TranslationError(type(exc).__name__) from exc
+    # Keep pure cache/hash helpers and the offline-injected test interface.
+    # There is deliberately no implementation capable of HTTP requests.
+    raise TranslationError("TRANSLATION_API_REMOVED", retryable=False)
 
 
 def _endpoint(value: Optional[str]) -> str:

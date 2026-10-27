@@ -25,6 +25,7 @@ from typing import Dict, List, Optional
 
 from ..models import is_valid_asin, normalize_asin
 from .detail import CURRENT_DETAIL_SCHEMA_VERSION
+from .runtime_io import atomic_json, read_json
 
 #: 关键字段（缺失任一即视为"不完整"）与中文说明（QA_RULES §29 填充率字段）
 KEY_FIELDS = ("current_price_raw", "title_es_raw", "rating_raw", "review_count_raw")
@@ -59,7 +60,7 @@ class DetailState:
         self.load_error = ""
         if self.path.exists():
             try:
-                data = json.loads(self.path.read_text(encoding="utf-8"))
+                data = read_json(self.path)
                 if not isinstance(data, dict) or any(
                     not is_valid_asin(key) or not isinstance(record, dict)
                     or normalize_asin(record.get("asin")) != normalize_asin(key)
@@ -98,12 +99,7 @@ class DetailState:
 
     def save(self) -> None:
         self.ensure_valid()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
-        temporary.write_text(
-            json.dumps(self._data, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8")
-        os.replace(temporary, self.path)
+        atomic_json(self.path, self._data, sort_keys=True)
 
     def records(self) -> List[dict]:
         """全部状态记录（detail records，含 collected_at），按 ASIN 排序。

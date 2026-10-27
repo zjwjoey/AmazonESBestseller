@@ -1,0 +1,9 @@
+{
+  "source_task": "action_detail5500_live_20261023_161301_8b4e",
+  "source_plan_hash": "95bedfaaf1549194587be81e5eba9e58b18cf721d510fb4e602a6f4d000ba0af",
+  "observed_at": "2026-10-27",
+  "records": [
+    {"asin": "B07B8D8RC5", "detail_action": "REUSE_VALID_CACHE", "identity_status": "VARIATION_RELATED", "resolved_asin": "B09WMV88VY", "saved_html_exists": false},
+    {"asin": "B0G46PL7RN", "detail_action": "REUSE_VALID_CACHE", "identity_status": "VARIATION_RELATED", "resolved_asin": "B0G46N2ZLT", "saved_html_exists": false}
+  ]
+}

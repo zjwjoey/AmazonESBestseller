@@ -1,17 +1,13 @@
-"""Qwen-MT provider adapter.
+"""Retired Qwen compatibility adapter for offline-injected regression tests.
 
-The endpoint/protocol is explicit and injectable.  No credential or endpoint
-is hard-coded as a secret; the default endpoint is the public DashScope
-OpenAI-compatible endpoint and can be replaced by configuration.
+The built-in network transport is removed. Cache/provider identifiers remain
+stable so historical results can still be inspected without rewriting data.
 """
 from __future__ import annotations
 
-import json
 import os
 import time
 from typing import Any, Callable, Dict, Optional
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from .base import ProviderResponse, TranslationProvider
 
@@ -49,6 +45,7 @@ class QwenMTProvider(TranslationProvider):
         self._min_interval = 1.0 / self.rate if self.rate else 0.0
         self._last_request_at: Optional[float] = None
         self.transport = transport or self._http_transport
+        self.network_transport_removed = transport is None
 
     @property
     def model(self) -> str:
@@ -56,21 +53,9 @@ class QwenMTProvider(TranslationProvider):
 
     def _http_transport(self, url: str, headers: Dict[str, str],
                         payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        request = Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                          headers=headers, method="POST")
-        try:
-            with urlopen(request, timeout=timeout) as response:  # nosec B310 - configured endpoint
-                body = response.read().decode("utf-8")
-                return {"status_code": response.status, "body": json.loads(body)}
-        except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            try:
-                parsed = json.loads(body)
-            except ValueError:
-                parsed = {"error": body[:500]}
-            return {"status_code": exc.code, "body": parsed}
-        except (URLError, TimeoutError, OSError) as exc:
-            return {"status_code": 599, "error": str(exc)}
+        # Compatibility adapter for saved records and injected offline tests.
+        # The actual network transport was removed at the user's request.
+        return {"status_code": 410, "error": "TRANSLATION_API_REMOVED"}
 
     def _wait_for_rate_limit(self) -> None:
         """Keep serial attempts at or below the configured calls/second rate."""
@@ -132,6 +117,9 @@ class QwenMTProvider(TranslationProvider):
     def translate(self, text: str, *, asin: str, field: str,
                   source_language: str = "es", target_language: str = "zh-CN",
                   context: Optional[Dict[str, Any]] = None) -> ProviderResponse:
+        if self.network_transport_removed:
+            return ProviderResponse(provider=self.name, model=self._model,
+                                    status="failed", error="TRANSLATION_API_REMOVED", attempts=0)
         if not self.api_key:
             return ProviderResponse(provider=self.name, model=self._model,
                                     status="failed", error="missing QWEN_API_KEY/DASHSCOPE_API_KEY",

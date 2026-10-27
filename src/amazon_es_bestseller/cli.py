@@ -7,7 +7,7 @@
   - discover-tree：联网发现当前 Amazon.es Bestseller 类目树并保存快照。
   - task-collect：审核后的类目规模任务，支持 parallel3 主模式和 serial 备用模式。
   - enrich / qa / export：全离线（不联网）。
-  - translate-ds：联网且在首个请求前要求人工确认。
+  - translate-ds：已退出联网调用，保留命令返回明确停用原因。
   - ``--offline``：全局标记；联网采集/真实翻译拒绝离线，Translation V2 dry-run 可用。
 
 示例：
@@ -30,6 +30,7 @@ import sys
 import time
 from pathlib import Path
 from typing import List, Mapping, Optional
+from .collection.runtime_io import atomic_json, read_json
 
 #: 默认数据目录（仓库相对，避免硬编码绝对路径）
 OUTPUTS = Path("outputs")
@@ -53,11 +54,11 @@ def _safe_print(*parts) -> None:
 def _load_json(path: Optional[str]) -> list:
     if not path:
         return []
-    p = Path(path)
-    if not p.exists():
+    missing = object()
+    result = read_json(path, missing)
+    if result is missing:
         raise SystemExit("找不到输入文件: %s" % path)
-    with p.open(encoding="utf-8") as f:
-        return json.load(f)
+    return result
 
 
 TRANSLATION_RESEARCH_CSV_FIELDS = {
@@ -108,10 +109,7 @@ def _load_translation_products(path: Optional[str]) -> list:
 
 
 def _save_json(data, path: str) -> None:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    atomic_json(path, data)
 
 
 def _load_evidence_json(path: Optional[str], default_path: str):
@@ -1017,56 +1015,16 @@ def cmd_reconcile_task(args) -> None:
 # ---------- translate-ds（联网 API） ----------
 
 def cmd_translate_ds(args) -> None:
-    """按 ASIN 顺序调用 DS，输出 ASIN → 翻译结果映射。"""
-    if args.offline:
-        raise SystemExit("translate-ds 需要联网，不能与 --offline 同用")
-    products = _load_json(args.products)
-    if not isinstance(products, list):
-        raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
-
-    endpoint = args.endpoint or os.getenv("DEEPSEEK_ENDPOINT") or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/chat/completions"
-    model = args.model or os.getenv("DEEPSEEK_MODEL") or os.getenv("DS_MODEL") or "deepseek-chat"
-    print("translate-ds 即将调用 DeepSeek API：%d 个 ASIN，endpoint=%s，model=%s"
-          % (len(products), endpoint, model))
-    try:
-        confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
-    except (EOFError, KeyboardInterrupt):
-        raise SystemExit("未确认，已取消 DS API 调用")
-    if confirmation.strip().upper() != "YES":
-        raise SystemExit("未确认，已取消 DS API 调用")
-
-    from .translation.ds import DeepSeekTranslator
-
-    translator = DeepSeekTranslator(
-        endpoint=args.endpoint or None,
-        model=args.model or None,
-        cache_path=args.cache or args.out,
-        max_retries=args.max_retries,
-        backoff_seconds=args.backoff_seconds,
-        timeout=args.timeout,
-    )
-    output: dict[str, dict] = {}
-    for product in products:
-        if args.repair_partial:
-            result = translator.translate_record(product, repair_partial=True)
-        else:
-            result = translator.translate_record(product)
-        asin = str(result.get("asin") or product.get("asin") or "").strip().upper()
-        if asin:
-            output[asin] = result
-        translator.save_cache()
-    _save_json(output, args.out)
-    success = sum(1 for r in output.values() if r.get("translation_status") == "success")
-    partial = sum(1 for r in output.values() if r.get("translation_status") == "partial")
-    failed = sum(1 for r in output.values() if r.get("translation_status") == "failed")
-    print("translate-ds 完成：成功 %d、部分 %d、失败 %d、总计 %d → %s"
-          % (success, partial, failed, len(output), args.out))
+    """Retired API command; preserve saved cache readers elsewhere."""
+    raise SystemExit("TRANSLATION_API_REMOVED: DeepSeek联网翻译已移除；原缓存保留")
 
 
 # ---------- translate（Translation V2） ----------
 
 def cmd_translate(args) -> None:
     """Field-level Translation V2; dry-run is always offline and side-effect free."""
+    if not args.dry_run:
+        raise SystemExit("TRANSLATION_API_REMOVED: Qwen联网翻译已移除；可使用 --dry-run 离线检查")
     products = _load_translation_products(args.products)
     if not isinstance(products, list):
         raise SystemExit("products JSON 顶层必须是数组: %s" % args.products)
@@ -1159,60 +1117,7 @@ def cmd_translate(args) -> None:
                plan["translation_memory_hits"], plan["estimated_api_requests"],
                plan["source_missing"], plan["review_blocked"], provider.rate, args.out))
         return
-    if args.offline:
-        raise SystemExit("translate 实际 API 调用不能与 --offline 同用；可先使用 --dry-run")
-    plan = service.plan(products, fields=fields, offset=args.offset, limit=args.limit,
-                        repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    print("translate V2 即将调用 %s%s：SKU %d、待翻译字段 %d、缓存命中 %d、TM 命中 %d、预计 API 请求 %d、source_missing %d、review_blocked %d、model=%s、rate=%.3g/s" %
-          (provider.name, " [parallel-providers]" if pool is not None else "",
-           plan["total_records"], plan["total_fields"], plan["cache_hits"],
-           plan["translation_memory_hits"], plan["estimated_api_requests"],
-           plan["source_missing"], plan["review_blocked"], model, provider.rate))
-    if pool is not None:
-        print("Parallel workers = %d" % pool.max_workers)
-        for alias, spec in ((item.get("name") or item.get("alias"), item)
-                            for item in config.get("providers", [])):
-            print("  Provider %s: model=%s rate=%s" % (alias, spec.get("model", "qwen-mt-flash"), spec.get("rate", 0.5)))
-    if not args.yes:
-        try:
-            confirmation = input("输入 YES 确认开始调用 API，其他输入将取消：")
-        except (EOFError, KeyboardInterrupt):
-            raise SystemExit("未确认，已取消 Translation V2 API 调用")
-        if confirmation.strip().upper() != "YES":
-            raise SystemExit("未确认，已取消 Translation V2 API 调用")
-    if pool is not None:
-        result = service.translate_records_parallel(
-            products, pool, fields=fields, offset=args.offset, limit=args.limit,
-            repair_partial=args.repair_partial, repair_failed=args.repair_failed)
-    else:
-        result = service.translate_records(products, fields=fields, offset=args.offset,
-                                           limit=args.limit, repair_partial=args.repair_partial,
-                                           repair_failed=args.repair_failed)
-    _save_json(result["records"], args.out)
-    qa_out = args.qa_out or str(Path(args.out).with_name("translation_qa.json"))
-    _save_json(result["qa_report"], qa_out)
-    summary_out = getattr(args, "summary_out", "") or str(Path(args.out).with_name("translation_run.json"))
-    _save_json({"summary": result.get("summary", {}), "pool": result.get("pool"),
-                "qa_report": result.get("qa_report", {}), "provider": provider.name,
-                "model": model, "api_calls": result.get("pool", {}).get("providers", {})}, summary_out)
-    if args.audit_out:
-        audit = []
-        for record in result["records"].values():
-            for field, value in (record.get("fields") or {}).items():
-                audit.append({"asin": record.get("asin"), "field": field,
-                              "source_field": value.get("field", field),
-                              "target_field": value.get("target_field", field),
-                              "source_hash": value.get("source_hash"),
-                              "provider": value.get("provider"), "model": value.get("model"),
-                              "status": value.get("translation_status"),
-                              "translation_status": value.get("translation_status"),
-                              "qa_status": value.get("qa_status"),
-                              "last_error": value.get("last_error")})
-        Path(args.audit_out).parent.mkdir(parents=True, exist_ok=True)
-        with Path(args.audit_out).open("w", encoding="utf-8") as handle:
-            for row in audit:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print("translate V2 完成：%s → %s；QA → %s；运行摘要 → %s" % (result["summary"], args.out, qa_out, summary_out))
+
 
 
 def cmd_translation_production(args) -> None:

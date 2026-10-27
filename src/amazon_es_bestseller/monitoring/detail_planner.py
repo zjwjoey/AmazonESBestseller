@@ -453,7 +453,8 @@ def write_detail_plan(plan: Mapping, output_dir: str | Path) -> dict[str, Path]:
     json_path = root / "detail_plan.json"
     csv_path = root / "detail_plan.csv"
     summary_path = root / "detail_plan_summary.json"
-    json_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
+    from ..collection.runtime_io import atomic_json
+    atomic_json(json_path, artifact)
     fields = ["snapshot_id", "ranking_asin", "ranking_rank", "research_category",
               "ranking_product_url_raw", "ranking_product_url_normalized", "detail_action",
               "action_reason", "existing_cache_state", "existing_detail_schema_version",
@@ -462,11 +463,9 @@ def write_detail_plan(plan: Mapping, output_dir: str | Path) -> dict[str, Path]:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(records)
-    summary_path.write_text(json.dumps({**(plan.get("summary") or {}),
-                                        "plan_id": plan_id, "plan_hash": plan_hash,
-                                        "snapshot_id": snapshot_id},
-                                       ensure_ascii=False, indent=2),
-                            encoding="utf-8")
+    atomic_json(summary_path, {**(plan.get("summary") or {}),
+                              "plan_id": plan_id, "plan_hash": plan_hash,
+                              "snapshot_id": snapshot_id})
     return {"json": json_path, "csv": csv_path, "summary": summary_path}
 
 
