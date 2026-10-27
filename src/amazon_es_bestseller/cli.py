@@ -1061,7 +1061,7 @@ def cmd_translate(args) -> None:
             raise SystemExit("translation config 顶层必须是对象: %s" % args.config)
     provider_name = args.provider or config.get("provider", "qwen-mt")
     if provider_name not in {"qwen-mt", "qwen_mt"}:
-        raise SystemExit("Translation V2 当前只允许 provider=qwen-mt；旧 DeepSeek 请继续使用 translate-ds")
+        raise SystemExit("Translation V2 仅保留离线规划；联网翻译API已移除")
     model = args.model or config.get("model") or "qwen-mt-flash"
     provider = QwenMTProvider(model=model,
                               endpoint=config.get("endpoint"),
@@ -1579,7 +1579,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="amazon-es",
         description="Amazon.es bestseller research pipeline")
     parser.add_argument("--offline", action="store_true",
-                        help="离线标记：collect/translate-ds/真实 translate 拒绝；Translation V2 dry-run 可用")
+                        help="离线标记：联网采集拒绝；翻译API已停用，dry-run可用")
     sub = parser.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("collect", help="联网采集榜单+详情（串行）")
@@ -1807,7 +1807,7 @@ def build_parser() -> argparse.ArgumentParser:
     ca.add_argument("--out", required=True)
     ca.set_defaults(func=cmd_audit_detail_cache)
 
-    t = sub.add_parser("translate-ds", help="联网：调用 DeepSeek API 翻译中文显示字段")
+    t = sub.add_parser("translate-ds", help="已停用：DeepSeek联网翻译API已移除")
     t.add_argument("--products", required=True, help="规范化商品 JSON 数组")
     t.add_argument("--cache", default="", help="翻译缓存 JSON（默认写入 --out）")
     t.add_argument("--out", required=True, help="ASIN → 翻译结果 JSON")
@@ -1820,7 +1820,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="已确认调用 API 时，绕过同源 partial 缓存并补翻缺失字段")
     t.set_defaults(func=cmd_translate_ds)
 
-    tv2 = sub.add_parser("translate", help="Translation V2：字段级 Qwen-MT 翻译（默认先 dry-run）")
+    tv2 = sub.add_parser("translate", help="Translation V2：仅支持离线dry-run，联网API已移除")
     tv2.add_argument("--products", required=True,
                      help="规范化商品 JSON 数组，或内部研究 CSV（按 ASIN/西语字段映射）")
     tv2.add_argument("--provider", default="qwen-mt", choices=("qwen-mt",), help="翻译提供商")
