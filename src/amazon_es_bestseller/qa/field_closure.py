@@ -118,19 +118,84 @@ _TRANSLATION_FIELDS = {
 _SPANISH_MARKERS = re.compile(r"\b(?:el|la|los|las|para|con|sin|del|en|un|una|comprados|piezas|tamaño|capacidad|material|color|negro|blanco|acero|plástico)\b", re.I)
 
 
-def _translation_residual(source: Any, target: Any) -> bool:
+def _translation_residual(source: Any, target: Any, identity_values: Optional[Iterable[Any]] = None) -> bool:
     s, t = str(source or "").strip(), str(target or "").strip()
     if not s:
         return False
     if not t:
         return True
+    # Mask only identity values explicitly identified as such and literally
+    # bound to this record's source field. This cannot excuse adjacent Spanish.
+    spans = []
+    for value in identity_values or ():
+        identity = str(value or "").strip()
+        if not identity or not re.search(re.escape(identity), s, re.I):
+            continue
+        spans.extend((match.start(), match.end())
+                     for match in re.finditer(re.escape(identity), t, re.I))
+
+    def has_unmasked_marker(value: str) -> bool:
+        for match in _SPANISH_MARKERS.finditer(value):
+            if not any(start <= match.start() and match.end() <= end for start, end in spans):
+                return True
+        return False
+
     if t.casefold() == s.casefold():
         # Pure model codes, sizes and unit-bearing quantities are validly
         # identical across languages (e.g. L, 500ml, 122cm x 51cm).
-        return bool(_SPANISH_MARKERS.search(s))
+        return has_unmasked_marker(t)
     # Long Spanish sentences surviving in a Chinese display value are a
     # stronger signal than legitimate model/brand tokens.
-    return len(t.split()) >= 5 and bool(_SPANISH_MARKERS.search(t))
+    return len(t.split()) >= 5 and has_unmasked_marker(t)
+
+
+_MODEL_CODE_LABELS = frozenset({
+    "número de modelo", "numero de modelo", "número modelo", "numero modelo",
+    "número de modelo del producto", "numero de modelo del producto",
+    "número de pieza del fabricante", "numero de pieza del fabricante",
+    "manufacturer part number", "referencia del fabricante", "manufacturer reference",
+})
+
+
+def _opaque_model_code(value: str) -> bool:
+    value = value.strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{1,39}", value):
+        return False
+    return any(char.isdigit() for char in value) or value.isupper()
+
+
+def _translation_identity_values(source: Any, record: Mapping, detail: Mapping) -> list[str]:
+    """Return identity values explicitly present in this record's source text."""
+    values = []
+    for mapping in (record, detail):
+        for key in ("brand_raw", "manufacturer_raw"):
+            value = _text(mapping.get(key))
+            if value:
+                values.append(value)
+        for key in ("model_name", "model_number", "manufacturer_part_number", "manufacturer_reference"):
+            value = _text(mapping.get(key))
+            if value and _opaque_model_code(value):
+                values.append(value)
+        for attribute in _attributes(record, detail):
+            label = _text(attribute.get("label_raw")).casefold()
+            value = _text(attribute.get("value_raw"))
+            if label in {"marca", "brand", "fabricante", "manufacturer"} and value:
+                values.append(value)
+            elif label in _MODEL_CODE_LABELS and value and _opaque_model_code(value):
+                values.append(value)
+    for line in str(source or "").splitlines():
+        label, separator, value = line.partition(":")
+        normalized_label = label.strip().casefold()
+        normalized_value = value.strip()
+        if not separator or not normalized_value:
+            continue
+        if normalized_label in {"marca", "brand", "fabricante", "manufacturer"}:
+            values.append(normalized_value)
+        elif normalized_label in _MODEL_CODE_LABELS and _opaque_model_code(normalized_value):
+            values.append(normalized_value)
+    source_text = str(source or "")
+    return list(dict.fromkeys(value for value in values
+                              if re.search(re.escape(value), source_text, re.I)))
 _HTML_PATTERNS = {
     "parent_asin": (r"parent[-_ ]?asin", r"asin de padre", r"asin padre"),
     "title_zh": (r"id=[\"']producttitle",),
@@ -774,7 +839,8 @@ def audit_field_closure(products: Iterable[Mapping], details: Optional[Iterable[
             if source in (None, ""):
                 continue
             target_value = product.get(target) or tr.get(target)
-            if _translation_residual(source, target_value):
+            identity_values = _translation_identity_values(source, product, detail)
+            if _translation_residual(source, target_value, identity_values=identity_values):
                 # One physical cell may have several explanations, but a
                 # missing translated core field already has its own finding.
                 if target in _TRANSLATED_CORE and not _has(target_value):

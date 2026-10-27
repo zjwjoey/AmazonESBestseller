@@ -9,13 +9,17 @@ TOKEN_RE = re.compile(
     # Numeric value+unit must win before the generic hyphenated model branch.
     # Otherwise ``400ml-Lubrica`` is captured as one protected token and the
     # Spanish verb cannot be normalized after provider restoration.
-    r"(?<!\w)(?:\d+(?:[.,]\d+)?\s*(?i:millilitros?|mililitros?|centilitros?|decilitros?|litros?|"
+    r"(?<!\w)(?:\b(?=[A-Z0-9.]*\d)[A-Z][A-Z0-9]*(?:\.[A-Z0-9]+)+\b|"
+    r"\d+(?:[.,]\d+)?\s*(?i:"
+    r"(?:cent[ií]metros?|mil[ií]metros?|metros?|pulgadas?)\s+(?:c[uú]bic[oa]s?|cuadrad[oa]s?)|"
+    r"(?:cubic|square)\s+(?:inches?|inch)|(?:mm|cm|m|in)(?:[²³]|\^[23]|[23])|"
+    r"millilitros?|mililitros?|centilitros?|decilitros?|litros?|"
     r"miligramos?|gramos?|kilogramos?|centímetros?|centimetros?|milímetros?|milimetros?|"
     r"metros?|kilómetros?|kilometros?|kilovatios?|vatios?|voltios?|amperios?|hercios?|"
     r"hertzios?|megahercios?|gigahercios?|grados?\s+celsius|grados?\s+cent[ií]grados?|"
     r"pulgadas?|inches?|inch|"
     r"mAh|Ah|ml|cl|dl|l(?!\.)|grs?|gm|g|kg|mg|mm|cm|km|m|w|kw|v|(?-i:A)|hz|"
-    r"ghz|mah|bar|psi|°c|(?i:db|decibelios?|lm|lumens?|lúmenes?|lumenes?|pcs|piezas?|unidades?|conteo|grosor|f\.)|%)(?!-\d)"
+    r"ghz|mah|bar|psi|°\s*c|(?i:db|decibelios?|lm|lumens?|lúmenes?|lumenes?|pcs|sets?|piezas?|unidades?|conteo)|%)(?!-\d)"
     r"|\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)+\b"
     r"|\d+(?:[.,]\d+)?(?:[×x*]\d+(?:[.,]\d+)?)+(?:\s*(?i:mm|cm|m))?"
     r"|\b\d+(?:[.,]\d+)?\b(?!(?:[.,]\d))(?!\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])"

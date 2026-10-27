@@ -20,7 +20,8 @@ from .text import dec_comma, strip_zero_width
 # ---------- 全量详情 attributes → 规格 dict 适配（无损模型 → 旧式 spec 输入） ----------
 #: 归一化 label → spec snake_case key 的同义别名（件数/格数多写法聚合）
 _SPEC_ALIASES = {
-    'numero_de_pieza': 'numero_de_piezas',
+    # Singular "Número de pieza" is a part identifier, not plural pieces.
+    # Keep its key separate so numeric part IDs cannot become package counts.
     'numero_de_productos': 'numero_de_piezas',
     # ``Número de unidades`` is overloaded by Amazon: it can mean volume or
     # weight (e.g. 500 Millilitros).  Preserve that key and only treat it as
@@ -198,7 +199,7 @@ _PACKAGE_KEYS = (
     'total_del_paquete_segun_la_medida_elegida_para_referenciar_precio',
 )
 _COUNT_BEFORE_RE = re.compile(
-    r'(\d+)\s*(?:piezas?|unidad(?:es)?|uds\.?|artículos?|paquetes?|juegos?|pack)\b', re.I)
+    r'(\d+)\s*(?:piezas?|unidad(?:es)?|uds\.?|artículos?|paquetes?|juegos?|packs?)\b', re.I)
 # 真实锚点："Set 4 Estándar" / "SET 4 PORTAEMBUTIDOS" / "Pack de 2" / "paquete de 6"
 # （"set N" 与 "set de N" 两种写法都匹配）
 _COUNT_AFTER_RE = re.compile(
@@ -244,11 +245,27 @@ def set_count(d) -> Optional[int]:
         return None
 
 
+def _dimension_axis_before_pack(text, match) -> bool:
+    """Do not read the last axis in ``40x70 Pack 6`` as seventy packs.
+
+    The title supplies no unit for that axis, so preserve it as raw evidence
+    and take only an independent explicit count such as ``Pack 6``. This does
+    not reject selected packaging such as ``1 x 12 unidades``.
+    """
+    return bool(re.fullmatch(r'\d+\s*packs?', match.group(0), re.I)
+                and re.search(r'\d\s*(?:x|×|\*)\s*$', text[:match.start()]))
+
+
+def _count_before_match(text):
+    return next((m for m in _COUNT_BEFORE_RE.finditer(text)
+                 if not _dimension_axis_before_pack(text, m)), None)
+
+
 def _count_from_text(s) -> Optional[int]:
     if not s:
         return None
     t = str(s)
-    m = _COUNT_BEFORE_RE.search(t)
+    m = _count_before_match(t)
     if m:
         return int(m.group(1))
     m = _COUNT_AFTER_RE.search(t)
@@ -271,7 +288,7 @@ def _variant_total_count(variant) -> Optional[int]:
     pack = _COUNT_AFTER_RE.search(text)
     pack_n = int(pack.group(1)) if pack else None
     head = text[:pack.start()] if pack else text
-    unit = _COUNT_BEFORE_RE.search(head)
+    unit = _count_before_match(head)
     unit_n = int(unit.group(1)) if unit else None
     if unit_n is None and pack_n is None:
         return None
@@ -556,6 +573,11 @@ def _valid_spec_text(value) -> str:
     return text
 
 
+_EXPLICIT_LENGTH_AXIS = r'\d+(?:[.,]\d+)?\s*(?:mm|cm|m|milímetros?|centímetros?|metros?)(?!\w)'
+_EXPLICIT_LENGTH_AXES_RE = re.compile(
+    rf'(?<!\w){_EXPLICIT_LENGTH_AXIS}(?:\s*(?:x|×|\*)\s*{_EXPLICIT_LENGTH_AXIS}){{1,2}}', re.I)
+
+
 def _title_core_spec_es(title_es) -> str:
     """Extract only explicit numeric spec evidence from the exact title.
 
@@ -566,6 +588,11 @@ def _title_core_spec_es(title_es) -> str:
     title = str(title_es or '').strip()
     if not title:
         return ''
+    # Keep units on every axis before considering shared-unit dimensions,
+    # single lengths or the later "x N" package-count fallback.
+    m = _EXPLICIT_LENGTH_AXES_RE.search(title)
+    if m:
+        return m.group(0).strip()
     # Dimensions with an explicit unit, preserving the Spanish source text.
     m = re.search(
         r'(?<![\w])\d+(?:[.,]\d+)?\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?'
@@ -588,12 +615,19 @@ def _title_core_spec_es(title_es) -> str:
     if m:
         return m.group(0).strip()
     # Explicit package/count language only; a bare trailing number is ignored.
+    # Mask an unlabelled dimension tuple immediately before "Pack". Besides
+    # the false "70 Pack" match, the fallback must not emit its "x 70" tail.
+    # Keep the following independent "Pack 6" literal available to the regex.
+    count_title = re.sub(
+        r'\d+(?:[.,]\d+)?\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?'
+        r'(?:\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?)?\s*(?=packs?\b)',
+        ' ', title, flags=re.I)
     m = re.search(
         r'(?<![\w])(?:\d+\s*(?:piezas?|unidades?|uds?\.?|artículos?|packs?|'
         r'cápsulas?|baterías?|cuchillas?|bolsas?|tabletas?|dosis?|juegos?)|'
         r'(?:pack|paquete|juego|set)\s+(?:de\s+)?\d+|'
         r'x\s*\d+(?:\s*(?:cápsulas?|baterías?|cuchillas?|bolsas?|tabletas?|dosis?))?)(?![\w])',
-        title, re.I)
+        count_title, re.I)
     if m:
         return m.group(0).strip()
     # Compatibility generations are explicit product-version evidence even
@@ -676,7 +710,7 @@ def build_spec_es(attributes=None, details=None, variant=None, title_es=None) ->
         if count_parts:
             text = ' / '.join(count_parts) if selected_count is not None else count_parts[0]
             if selected_count is None:
-                m = _COUNT_BEFORE_RE.search(text) or _COUNT_AFTER_RE.search(text)
+                m = _count_before_match(text) or _COUNT_AFTER_RE.search(text)
                 text = m.group(0) if m else text
             preferred['count'] = ('Cantidad seleccionada: ' if selected_count is not None
                                   else 'Cantidad explícita: ') + text
@@ -769,6 +803,12 @@ def translate_spec_es_to_zh(value) -> str:
     text = _valid_spec_text(value)
     if not text:
         return ''
+    if _EXPLICIT_LENGTH_AXES_RE.fullmatch(text):
+        units = {'mm': '毫米', 'milimetro': '毫米', 'cm': '厘米',
+                 'centimetro': '厘米', 'm': '米', 'metro': '米'}
+        axes = re.findall(r'(\d+(?:[.,]\d+)?)\s*([a-záéíóú]+)', text, re.I)
+        return '×'.join(number.replace(',', '.') + units[unit.casefold().replace('í', 'i').replace('é', 'e').rstrip('s')]
+                        for number, unit in axes)
     m = re.fullmatch(
         r'(n[uú]mero\s+(?:de\s+)?modelo|n[uú]mero\s+(?:de\s+)?pieza(?:\s+del\s+fabricante)?)\s*:\s*(.+)',
         text, re.I)

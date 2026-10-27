@@ -2,6 +2,8 @@ import json
 import time
 from pathlib import Path
 
+import pytest
+
 from amazon_es_bestseller.translation.cache import TranslationCache
 from amazon_es_bestseller.translation.pool import ProviderPool
 from amazon_es_bestseller.translation.preclean import audit_records
@@ -402,6 +404,77 @@ def test_plan_counts_structured_items_and_deterministic_specs_correctly(tmp_path
     }])
     assert structured["estimated_api_requests"] == 2
     assert deterministic["estimated_api_requests"] == 0
+
+
+@pytest.mark.parametrize('source_text', [
+    pytest.param('24_cm', id='B000Z2FZQM'),
+    pytest.param('24', id='B006IKI20G'),
+    pytest.param('PRO 600', id='B00CWKC7RK'),
+    pytest.param('J', id='B00PG4QE8M'),
+    pytest.param('x 22', id='B01M3NSF41'),
+    pytest.param('Paquete De 6', id='B08GL38L79'),
+    pytest.param('43 EU', id='B0B3RWB1L8'),
+    pytest.param('25mm', id='B0D14CBLPJ'),
+    pytest.param('20L', id='B0D8TLHKB8'),
+    pytest.param('300m', id='B0DQLX9ZQV'),
+    pytest.param('3mm X 300m', id='B0GFNN6MRW'),
+    pytest.param('21V', id='B0H1PTSTFJ'),
+    pytest.param('3L', id='B0HCGX16XT'),
+    pytest.param('F', id='B0HHWWZSZH'),
+])
+@pytest.mark.parametrize('prepared', [False, True], ids=['raw', 'preclean'])
+def test_plan_counts_saved_short_specs_without_a_deterministic_result(tmp_path, source_text, prepared):
+    provider = FakeProvider()
+    cache = TranslationCache(tmp_path / 'cache.json')
+    service = TranslationService(provider, cache)
+    record = {'asin': 'B00000001', 'specification_es': source_text}
+    if prepared:
+        record['fields'] = {'specification_es': {
+            'source_text': source_text, 'clean_text': source_text,
+            'clean_status': 'CLEAN', 'translate_allowed': True,
+        }}
+    # These real batch inputs have no changed, deterministic Chinese result.
+    # The execution path therefore needs a provider request for this field.
+    assert service._resolve_scalar_before_provider(
+        asin=record['asin'], source_field='specification_es',
+        target='specification_zh', text=source_text) is None
+    assert service.plan([record])['estimated_api_requests'] == 1
+    dry = service.translate_records([record], dry_run=True)
+    assert dry['summary']['estimated_api_requests'] == 1
+    assert dry['records'] == {}
+    assert provider.calls == []
+    assert cache.entries == {} and cache.memory == {}
+    assert not cache.path.exists()
+
+
+def test_plan_deduplicates_unresolved_short_specs_across_asins_without_calls(tmp_path):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / 'cache.json'))
+    records = [
+        {'asin': 'B00000001', 'specification_es': '24'},
+        {'asin': 'B00000002', 'specification_es': '24'},
+        {'asin': 'B00000003', 'specification_es': '25mm'},
+    ]
+    assert service.plan(records)['estimated_api_requests'] == 2
+    assert service.translate_records(records, dry_run=True)['summary']['estimated_api_requests'] == 2
+    assert provider.calls == []
+
+
+@pytest.mark.parametrize('source_text', [
+    'Capacidad: 500 ml',
+    'Peso: 250 g',
+    'Dimensiones: 30 x 20 cm; Capacidad: 500 ml',
+])
+def test_plan_keeps_resolved_specs_at_zero_requests_without_calls(tmp_path, source_text):
+    provider = FakeProvider()
+    service = TranslationService(provider, TranslationCache(tmp_path / 'cache.json'))
+    record = {'asin': 'B00000001', 'specification_es': source_text}
+    assert service._resolve_scalar_before_provider(
+        asin=record['asin'], source_field='specification_es',
+        target='specification_zh', text=source_text) is not None
+    assert service.plan([record])['estimated_api_requests'] == 0
+    assert service.translate_records([record], dry_run=True)['summary']['estimated_api_requests'] == 0
+    assert provider.calls == []
 
 
 def test_plan_excludes_identity_detail_values_from_api_requests(tmp_path):
