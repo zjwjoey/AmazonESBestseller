@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import threading
+from .runtime_io import read_json
 
 
 class SharedDetailQueue:
@@ -47,7 +48,7 @@ class SharedDetailQueue:
 
     def finish(self,asin,worker,status):
         with self.lock:
-            claim=json.loads((self.root/'claims'/(asin+'.json')).read_text(encoding='utf-8'))
+            claim=read_json(self.root/'claims'/(asin+'.json'))
             if claim['worker']!=worker:raise ValueError('CLAIM_OWNER_MISMATCH')
             if status=='SUCCESS' and not self.is_success(asin):raise ValueError('SUCCESS_EVIDENCE_REQUIRED')
             result={'asin':asin,'worker':worker,'status':status,'plan_hash':self.plan_hash}

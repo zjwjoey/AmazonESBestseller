@@ -24,6 +24,18 @@ def test_legacy_transport_is_removed():
     assert not caught.value.retryable
 
 
+def test_retired_transport_cannot_create_a_phantom_budget_charge():
+    from amazon_es_bestseller.translation.budget import BudgetedProvider
+    class NoLedgerAccess:
+        def __getattr__(self, name):
+            pytest.fail('retired API must not access ledger: ' + name)
+    provider = QwenMTProvider(api_key='offline-test')
+    result = BudgetedProvider(provider, NoLedgerAccess()).translate(
+        'hola', asin='B000000001', field='title_es')
+    assert result.error == 'TRANSLATION_API_REMOVED'
+    assert result.attempts == 0
+
+
 def test_retired_ds_cli_rejects_before_input_or_confirmation(monkeypatch):
     monkeypatch.setattr('builtins.input', lambda *_: pytest.fail('must not prompt'))
     with pytest.raises(SystemExit, match='TRANSLATION_API_REMOVED'):
