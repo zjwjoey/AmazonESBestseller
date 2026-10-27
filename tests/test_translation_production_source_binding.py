@@ -6,7 +6,7 @@ import pytest
 
 from amazon_es_bestseller.translation.preclean import audit_records
 from amazon_es_bestseller.translation.production import (
-    build_production_input, build_production_state, records_for_preclean,
+    build_production_input, build_production_state, merge_translation_shards, records_for_preclean,
 )
 from amazon_es_bestseller.translation.production_contract import target_field_for
 
@@ -209,3 +209,110 @@ def test_production_promotion_replays_preclean_once_for_the_whole_input(monkeypa
     monkeypatch.setattr(module, 'audit_records', counted)
     build_production_state(production, prepared, {})
     assert calls == [3]
+
+
+def token_list(prepared, location):
+    if location == 'field':
+        return prepared[0]['fields']['product_details']['protected_tokens']
+    return prepared[0]['details_structured'][0][location]['protected_tokens']
+
+
+@pytest.mark.parametrize('location', ['field', 'label_clean', 'value_clean'])
+def test_json_roundtrip_token_metadata_order_does_not_change_source_binding(location):
+    production, prepared = prepare({'asin': 'B000000001',
+                                    'product_details': 'IP44 Ip44: 15 Bar y 15 bar'})
+    prepared = json.loads(json.dumps(prepared, ensure_ascii=False))
+    tokens = token_list(prepared, location)
+    assert len(tokens) >= 2
+    tokens.reverse()
+    row = field_state(production, prepared, {}, 'product_details')
+    assert row['promotion_status'] == 'PENDING'
+    assert row['source_hash'] == production['records'][0]['fields']['product_details']['source_hash']
+
+
+@pytest.mark.parametrize('location', ['field', 'label_clean', 'value_clean'])
+@pytest.mark.parametrize('mutation', ['remove', 'duplicate', 'change_case'])
+def test_token_metadata_comparison_keeps_literal_tokens_and_duplicate_counts(location, mutation):
+    production, prepared = prepare({'asin': 'B000000001',
+                                    'product_details': 'IP44 Ip44: 15 Bar y 15 bar'})
+    tokens = token_list(prepared, location)
+    if mutation == 'remove':
+        tokens.pop()
+    elif mutation == 'duplicate':
+        tokens.append(tokens[0])
+    else:
+        tokens[-1] = tokens[-1].swapcase()
+    assert field_state(production, prepared, {}, 'product_details')['promotion_status'] == 'SOURCE_CHANGED'
+
+
+def test_token_metadata_comparison_does_not_ignore_detail_row_order():
+    production, prepared = prepare({'asin': 'B000000001', 'product_details': 'Color: Rojo\nVoltaje: 9 V'})
+    prepared[0]['details_structured'].reverse()
+    assert field_state(production, prepared, {}, 'product_details')['promotion_status'] == 'SOURCE_CHANGED'
+
+
+def test_protected_tokens_have_a_total_order_even_when_casefold_keys_tie():
+    from amazon_es_bestseller.translation.preclean import clean_text
+
+    tokens = clean_text('15 Bar 15 bar IP44 Ip44 M2 m2')['protected_tokens']
+    assert tokens == sorted(tokens, key=lambda item: (item.casefold(), item))
+    assert set(tokens) == {'15 Bar', '15 bar', 'IP44', 'Ip44', 'M2', 'm2'}
+
+
+def description_shard(envelope, batch='batch-1'):
+    return {'batch_id': batch, 'records': {'B000000001': {'asin': 'B000000001',
+            'fields': {'description_zh': envelope}}}}
+
+
+def empty_description():
+    return {'source_text': '', 'source_hash': '', 'translated_text': '',
+            'translation_status': 'source_missing', 'qa_status': 'source_missing',
+            'qa_issues': [], 'provider': 'qwen_mt', 'last_error': None}
+
+
+def test_missing_description_without_a_hash_remains_source_missing_across_shard_merge():
+    shards = [description_shard(empty_description()), description_shard(empty_description(), 'batch-2')]
+    before = copy.deepcopy(shards)
+    field = merge_translation_shards(shards)['B000000001']['fields']['description_zh']
+    assert field['translation_status'] == 'source_missing'
+    assert field['qa_status'] == 'source_missing'
+    assert field['source_hash'] == '' and field['last_error'] is None
+    assert field.get('promotion_status') != 'SOURCE_CHANGED'
+    assert shards == before
+
+
+@pytest.mark.parametrize('key,value', [
+    ('source_text', 'Texto sin hash'), ('translated_text', '译文'), ('candidate_text', '候选'),
+    ('source_text', ' '), ('raw_value', 'Texto original'), ('raw', {'source_text': 'Texto original'}),
+    ('translation_status', 'success'), ('translation_status', 'pending'),
+])
+def test_a_missing_hash_is_exempt_only_for_an_explicitly_empty_source(key, value):
+    envelope = empty_description()
+    envelope[key] = value
+    field = merge_translation_shards([description_shard(envelope)])['B000000001']['fields']['description_zh']
+    assert field['promotion_status'] == 'SOURCE_CHANGED'
+    assert field['last_error']['code'] == 'MISSING_SOURCE_HASH'
+
+
+@pytest.mark.parametrize('old', [
+    {'source_text': 'Texto original', 'source_hash': digest('Texto original'),
+     'translated_text': '原译文', 'translation_status': 'success'},
+    {'source_hash': 'old-source-hash', 'translation_status': 'failed'},
+    {'source_text': 'Texto original', 'source_hash': '', 'translation_status': 'failed'},
+])
+def test_nonempty_source_becoming_missing_still_blocks_and_retains_history(old):
+    shards = [description_shard(old), description_shard(empty_description(), 'batch-2')]
+    before = copy.deepcopy(shards)
+    field = merge_translation_shards(shards)['B000000001']['fields']['description_zh']
+    assert field['translation_status'] == 'source_changed'
+    assert field['promotion_status'] == 'SOURCE_CHANGED'
+    assert field['last_error']['code'] == 'SOURCE_CHANGED'
+    assert field['history'][-1]['source_hash'] == old['source_hash']
+    assert shards == before
+
+
+def test_two_empty_sources_with_equivalent_empty_hash_representations_do_not_imply_source_change():
+    old = empty_description()
+    old['source_hash'] = digest('')
+    field = merge_translation_shards([description_shard(old), description_shard(empty_description(), 'batch-2')])['B000000001']['fields']['description_zh']
+    assert field['translation_status'] == 'source_missing'

@@ -64,6 +64,14 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
     source is retained as a non-publishable candidate with explicit evidence,
     so an old translation can never silently become current.
     """
+    text_keys = ("source_text", "translated_text", "candidate_text")
+    raw_keys = ("raw_value", "raw_source_text", "raw")
+
+    def empty_source(envelope: Mapping[str, Any]) -> bool:
+        return (envelope.get("translation_status") == "source_missing"
+                and all(envelope.get(key) in (None, "") for key in text_keys)
+                and all(envelope.get(key) in (None, "", [], {}) for key in raw_keys))
+
     aggregate = _as_record_map(legacy_results)
     for shard in shards:
         records = shard.get("records") if isinstance(shard, Mapping) else None
@@ -78,12 +86,18 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
                 if isinstance(shard, Mapping) and shard.get("batch_id"):
                     candidate.setdefault("batch_id", shard.get("batch_id"))
                 old = current_fields.get(field)
-                if not candidate.get("source_hash"):
+                missing_source = empty_source(candidate)
+                if not candidate.get("source_hash") and not missing_source:
                     candidate.update(translation_status="source_changed", qa_status="review_required",
                                      promotion_status="SOURCE_CHANGED", last_error={
                                          "code": "MISSING_SOURCE_HASH"})
-                if old and old.get("source_hash") and candidate.get("source_hash") \
-                        and old.get("source_hash") != candidate.get("source_hash"):
+                old_had_source = bool(old and (
+                    old.get("source_hash") not in (None, "", _hash(""))
+                    or any(old.get(key) not in (None, "") for key in text_keys)
+                    or any(old.get(key) not in (None, "", [], {}) for key in raw_keys)))
+                if old and ((missing_source and old_had_source)
+                            or (old.get("source_hash") and candidate.get("source_hash")
+                                and old.get("source_hash") != candidate.get("source_hash"))):
                     history = list(old.get("history") or [])
                     history.append({"source_hash": old.get("source_hash"),
                                     "translation_status": old.get("translation_status"),
@@ -313,6 +327,20 @@ def records_for_preclean(production_input: Mapping[str, Any]) -> list[dict[str, 
     return rows
 
 
+def _same_preclean_facts(actual: Any, expected: Any, *, key: str = "") -> bool:
+    """Only protected-token metadata is unordered; keep exact token counts."""
+    if (key == "protected_tokens" and isinstance(actual, list) and isinstance(expected, list)
+            and all(isinstance(item, str) for item in actual + expected)):
+        return sorted(actual) == sorted(expected)
+    if isinstance(actual, Mapping) and isinstance(expected, Mapping):
+        return actual.keys() == expected.keys() and all(
+            _same_preclean_facts(actual[name], value, key=name) for name, value in expected.items())
+    if isinstance(actual, list) and isinstance(expected, list):
+        return len(actual) == len(expected) and all(
+            _same_preclean_facts(left, right) for left, right in zip(actual, expected))
+    return actual == expected
+
+
 def _preclean_binding_error(*, source_field: str, source: Mapping[str, Any],
                             canonical: Mapping[str, Any], preclean: Mapping[str, Any],
                             replay: Mapping[str, Any]) -> str | None:
@@ -338,11 +366,12 @@ def _preclean_binding_error(*, source_field: str, source: Mapping[str, Any],
     if (preclean.get("clean_schema_version") != replay.get("clean_schema_version")
             or (preclean.get("raw_fields") or {}).get(source_field) !=
                (replay.get("raw_fields") or {}).get(source_field)
-            or any(actual.get(key) != value for key, value in expected.items())):
+            or any(not _same_preclean_facts(actual.get(key), value, key=key)
+                   for key, value in expected.items())):
         return "PRECLEAN_SOURCE_BINDING_MISMATCH"
     related = ("details_structured", "detail_parser_status") if source_field == "product_details" else (
         ("bullet_items",) if source_field == "feature_bullets" else ())
-    if any(preclean.get(key) != replay.get(key) for key in related):
+    if any(not _same_preclean_facts(preclean.get(key), replay.get(key)) for key in related):
         return "PRECLEAN_SOURCE_BINDING_MISMATCH"
     return None
 
