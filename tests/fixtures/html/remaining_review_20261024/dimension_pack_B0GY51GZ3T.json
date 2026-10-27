@@ -1,0 +1,15 @@
+{
+  "asin": "B0GY51GZ3T",
+  "saved_html_sha256": "c8e5aa305155ad7cefdd84cbaf09ef201bde31f6d5be4473e7fa5f9c11fddcae",
+  "title_es": "LEBENGOOD Toallas de Mano 40x70 Pack 6 Lavabo Baño Cara Algodón Hotel Gym",
+  "source_evidence": "Pack de 6 toallas de mano 40x70 cm: tamaño ideal para manos y cara, perfectas para el baño, el aseo de invitados y el hotel.",
+  "attributes": [
+    {"label_raw": "Peso Artículo", "value_raw": "800 Gramos"},
+    {"label_raw": "Dimensiones del producto", "value_raw": "70l. x 40an. centímetros"},
+    {"label_raw": "Tamaño", "value_raw": "6 Toallas de mano"},
+    {"label_raw": "Número de Artículos", "value_raw": "6"},
+    {"label_raw": "Número de paquetes", "value_raw": "1"}
+  ],
+  "historical_derived_error": "Cantidad explícita: 70 Pack",
+  "expected_package_count": 6
+}

@@ -21,16 +21,21 @@ NUMBER_RE = re.compile(
 # one-letter ``m`` alternative, and ``4,25 Kilogramos`` was not recognized at
 # all.  The latter made a valid decimal-comma conversion fail QA.
 _UNIT_NAME_RE = (
+    # Match the entire area/volume unit before its linear prefix. Otherwise
+    # centimetros cubicos is incorrectly validated as centimetres alone.
+    r"(?:cent[ií]metros?|mil[ií]metros?|metros?|pulgadas?)\s+(?:c[uú]bic[oa]s?|cuadrad[oa]s?)|"
+    r"(?:cubic|square)\s+(?:inches?|inch)|(?:mm|cm|m|in)(?:[²³]|\^[23]|[23])|"
+    r"(?:立方|平方)(?:厘米|毫米|米|英寸)|"
     r"millilitros?|mililitros?|centilitros?|decilitros?|litros?|liters?|gramos?|grs?|gm|mili?gramos?|"
     r"kilogramos?|centímetros?|centimetros?|milímetros?|milimetros?|"
     r"metros?|kilómetros?|kilometros?|kilovatios?|vatios?|watios?|"
     r"voltios?|amperios?|hercios?|hertzios?|megahercios?|gigahercios?|"
     r"grados?\s+celsius|grados?\s+cent[ií]grados?|libras?\s+por\s+pulgada\s+cuadrada|"
     r"pulgadas?|inches?|inch|libras?|onzas?|pies?|"
-    r"miliamperios?\s*hora|miliamperios?hora|an(?:cho)?\.?|al(?:to)?\.?|mAh|Ah|(?i:db)|decibelios?|(?i:lm|lumens?|lúmenes?|lumenes?|pcs|piezas?|unidades?|conteo|grosor|f\.)|件|包装|ml|cl|dl|l\.|l(?!\.)|mg|g|kg|"
+    r"miliamperios?\s*hora|miliamperios?hora|mAh|Ah|(?i:db)|decibelios?|(?i:lm|lumens?|lúmenes?|lumenes?|pcs|sets?|piezas?|unidades?|conteo)|件|包装|包|套|ml|cl|dl|l(?!\.)|mg|g|kg|"
     # ``a`` is a Spanish preposition; only uppercase ``A`` is the
     # unambiguous ampere abbreviation in a mixed-language product field.
-    r"mm|cm|km|m|w|kw|v|(?-i:A)|hz|mhz|ghz|bar|psi|°c|%|"
+    r"mm|cm|km|m|w|kw|v|(?-i:A)|hz|mhz|ghz|bar|psi|°\s*c|%|"
     r"毫升|毫克|厘?米|毫米|公里|千米|英寸|千克|公斤|克|瓦特|瓦|千瓦|伏特|伏|安(?![\u4e00-\u9fff])|赫兹|升|流明|分贝|件|毫安时|摄氏度|磅|盎司|英尺"
 )
 UNIT_RE = re.compile(
@@ -38,8 +43,10 @@ UNIT_RE = re.compile(
     # miss ``9V已包含``. Only letters/digits should block a unit.
     r"(\d+(?:[.,]\d+)?)\s*(" + _UNIT_NAME_RE + r")(?![A-Za-z0-9_ÁÉÍÓÚÜÑáéíóúüñ])", re.I)
 _DIMENSION_AXIS_RE = re.compile(
-    r"(?<=\d)\s*(?:l\.|f\.|an\.|al\.|grosor|ancho|alto|largo|longitud|"
-    r"anchura|altura|profundidad|espesor)(?=\s|[xX×])", re.I)
+    r"(?:(?<=\d)\s*(?:l\.|f\.|an\.|al\.|grosor|ancho|alto|largo|longitud|"
+    r"anchura|altura|profundidad|espesor)(?=\s|[xX×]|$)|"
+    r"(?:长|深|宽|高|厚度|厚)\s*(?=\d)|"
+    r"(?<=\d)\s*(?:长|深|宽|高|厚度|厚)(?=\s*(?:[xX×]|(?:厘米|毫米|米|cm|mm|m|in)(?![A-Za-z]))))", re.I)
 _DIMENSION_COMPACT_RE = re.compile(
     r"(?P<sequence>(?<![A-Za-z0-9])\d+(?:[.,]\d+)?"
     r"(?:\s*[x×*]\s*\d+(?:[.,]\d+)?)+"
@@ -83,18 +90,34 @@ UNIT_ALIASES = {
     "grados centígrados": "°c", "grado centígrado": "°c",
     "db": "db", "decibelio": "db", "decibelios": "db", "分贝": "db",
     "lm": "lm", "lumen": "lm", "lumens": "lm", "lumenes": "lm", "lúmenes": "lm", "流明": "lm",
-    "pcs": "pcs", "pieza": "pcs", "piezas": "pcs", "unidad": "pcs", "unidades": "pcs", "conteo": "pcs", "件": "pcs", "包装": "pcs",
-    "grosor": "cm", "f": "cm", "f.": "cm", "l.": "cm",
+    "pcs": "pcs", "set": "pcs", "sets": "pcs", "pieza": "pcs", "piezas": "pcs", "unidad": "pcs", "unidades": "pcs", "conteo": "pcs", "件": "pcs", "包装": "pcs", "包": "pcs", "套": "pcs",
+    "° c": "°c",
     "liters": "l", "liter": "l", "libras por pulgada cuadrada": "psi",
     "pulgada": "in", "pulgadas": "in", "inch": "in", "inches": "in",
     "英寸": "in",
-    "an": "cm", "an.": "cm", "ancho": "cm", "ancho.": "cm",
-    "al": "cm", "al.": "cm", "alto": "cm", "alto.": "cm",
     "libras": "lb", "libra": "lb", "onzas": "oz", "onza": "oz",
     "pies": "ft", "pie": "ft", "磅": "lb", "盎司": "oz", "英尺": "ft",
     "mhz": "mhz", "megahercio": "mhz", "megahercios": "mhz",
     "ghz": "ghz", "gigahercio": "ghz", "gigahercios": "ghz",
 }
+for _base, _spanish, _chinese in (
+    ('cm', ('centímetro', 'centímetros', 'centimetro', 'centimetros'), '厘米'),
+    ('mm', ('milímetro', 'milímetros', 'milimetro', 'milimetros'), '毫米'),
+    ('m', ('metro', 'metros'), '米'),
+    ('in', ('pulgada', 'pulgadas'), '英寸'),
+):
+    for _power, _exponent, _adjectives, _prefix in (
+        ('2', '²', ('cuadrado', 'cuadrados', 'cuadrada', 'cuadradas'), '平方'),
+        ('3', '³', ('cúbico', 'cúbicos', 'cúbica', 'cúbicas', 'cubico', 'cubicos', 'cubica', 'cubicas'), '立方'),
+    ):
+        for _name in _spanish:
+            for _adjective in _adjectives:
+                UNIT_ALIASES[_name + ' ' + _adjective] = _base + _power
+        for _spelling in (_base + _exponent, _base + '^' + _power, _base + _power):
+            UNIT_ALIASES[_spelling] = _base + _power
+        UNIT_ALIASES[_prefix + _chinese] = _base + _power
+UNIT_ALIASES.update({'cubic inch': 'in3', 'cubic inches': 'in3',
+                     'square inch': 'in2', 'square inches': 'in2'})
 
 _SPANISH_MONTHS = {
     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5,
@@ -108,11 +131,11 @@ _COUNT_NOUN_RE = re.compile(
     r"piezas?|unidades?|paquetes?|packs?|rollos?|vasos?|bombillas?)\b"
 )
 _SOURCE_NEGATION_RE = re.compile(
-    r"(?i)(?<!\w)(?:sin\b|no\s+(?:requiere|contiene|incluye)|libre\s+de\b|"
+    r"(?i)(?<!\w)(?:sin\b|nunca\b|no\s+(?:requiere|contiene|incluye)|libre\s+de\b|"
     r"sin\s+fragancia\b|sin\s+perfume\b)"
 )
 _TARGET_NEGATION_RE = re.compile(
-    r"(?:不含(?:有)?|不包含|没有|无需|不需要|免(?:于|除)?|"
+    r"(?:切勿|请勿|不得|禁止|不含(?:有)?|不包含|没有|无需|不需要|免(?:于|除)?|"
     r"无(?:糖|麸质|香料|酒精|乳胶|硅|塑料|添加|异味))"
 )
 
@@ -126,8 +149,15 @@ def _units(text: str) -> List[tuple[str, str]]:
     value = _DIMENSION_AXIS_RE.sub("", str(text or ""))
     units: List[tuple[str, str]] = []
     dimension_spans = []
-    matches = list(_DIMENSION_COMPACT_RE.finditer(value))
-    matches.extend(_DIMENSION_PER_AXIS_RE.finditer(value))
+    per_axis_matches = list(_DIMENSION_PER_AXIS_RE.finditer(value))
+    # Prefer an explicit per-axis parse over a compact tuple with one shared
+    # trailing unit. Mixed units carry axis order: ``140 cm x 22 mm`` must not
+    # collapse to the final ``mm`` or a swapped/duplicated unit can pass QA.
+    matches = per_axis_matches + [
+        match for match in _DIMENSION_COMPACT_RE.finditer(value)
+        if not any(start < match.end() and match.start() < end
+                   for start, end in (item.span() for item in per_axis_matches))
+    ]
     for match in matches:
         sequence = match.group("sequence")
         unit_matches = re.findall(
@@ -138,8 +168,15 @@ def _units(text: str) -> List[tuple[str, str]]:
         if not unit_matches:
             continue
         dimension_spans.append(match.span())
-        canonical = _DIMENSION_UNIT_ALIASES.get(unit_matches[-1].casefold(),
-                                                 unit_matches[-1].casefold())
+        canonical_units = [
+            _DIMENSION_UNIT_ALIASES.get(unit.casefold(), unit.casefold())
+            for unit in unit_matches
+        ]
+        # Repeated identical axis units are equivalent to the common shared
+        # trailing-unit form (``10 cm x 20 cm`` == ``10 x 20 cm``). Keep the
+        # full ordered sequence only when axes use different units.
+        canonical = (canonical_units[0] if len(set(canonical_units)) == 1
+                     else "|".join(canonical_units))
         units.append((_DIMENSION_SENTINEL, canonical))
 
     # Remove complete dimension tuples before ordinary number+unit matching;
@@ -149,18 +186,23 @@ def _units(text: str) -> List[tuple[str, str]]:
     ordinary_text = value
     for start, end in reversed(dimension_spans):
         ordinary_text = ordinary_text[:start] + " " * (end - start) + ordinary_text[end:]
-    units.extend((number.replace(",", "."), UNIT_ALIASES.get(unit.casefold(), unit.casefold()))
-                 for number, unit in UNIT_RE.findall(ordinary_text))
+    unit_matches = list(UNIT_RE.finditer(ordinary_text))
+    for match in unit_matches:
+        key = re.sub(r"\s+", " ", match.group(2).casefold()).strip()
+        units.append((match.group(1).replace(",", "."), UNIT_ALIASES.get(key, key)))
     # Packaging quantities are written as a noun-first phrase, unlike the
     # normal number+unit form.  Keep this in QA only; normalization/business
     # package-count rules still decide whether a generic package of one is a
     # derived quantity.
-    for number in re.findall(
+    for packaging in re.finditer(
             r"(?i)\b(?:paquete|pack|set|conjunto)\s+de\s+(\d+(?:[.,]\d+)?)\b",
             value):
-        if not any(_number_key(existing) == _number_key(number) and unit == "pcs"
-                   for existing, unit in units):
-            units.append((number, "pcs"))
+        # Avoid counting the same physical "2 Unidades" occurrence twice,
+        # but do not erase another independent "Paquete de 2" occurrence.
+        if not any(m.span(1) == packaging.span(1)
+                   and UNIT_ALIASES.get(m.group(2).casefold(), m.group(2).casefold()) == "pcs"
+                   for m in unit_matches):
+            units.append((packaging.group(1), "pcs"))
     return units
 
 
@@ -298,6 +340,77 @@ def _protected_token_is_equivalent(token: str, source: str, translated: str) -> 
     return False
 
 
+def _negation_mismatch(source: str, translated: str) -> Dict[str, Any] | None:
+    """Bind a few reviewed constraints before the generic presence check."""
+    false_values = {'no', 'false', 'falso', '否', '假', '假的', '不是', '不', '无', '没有'}
+    true_values = {'sí', 'true', 'verdadero', '是', '真', '真的'}
+    src_value, dst_value = source.strip().casefold(), translated.strip().casefold()
+    if src_value in false_values | true_values:
+        expected = false_values if src_value in false_values else true_values
+        if dst_value in expected:
+            return None
+        return {'code': 'NEGATION_MISMATCH', 'source_negative': src_value in false_values,
+                'result_negative': dst_value in false_values, 'context': 'standalone_boolean'}
+    remaining_source, remaining_target = source, translated
+    failed = []
+    rules = (
+        (r'\bsin\s+comprometer\s+la\s+calidad\b',
+         r'不(?:会)?(?:牺牲|损害|降低|影响)(?:品质|质量)', 'quality_preserved'),
+        (r'\bmezclar(?:se)?(?:\s+entre\s+s[ií])?\s+sin\s+l[ií]mites\b',
+         r'(?:可(?:以)?|能(?:够)?)?(?:任意|自由)(?:相互)?混合', 'unrestricted_mixing'),
+    )
+    for source_pattern, target_pattern, context in rules:
+        for match in list(re.finditer(source_pattern, remaining_source, re.I)):
+            candidates = list(re.finditer(target_pattern, remaining_target))
+            faithful = next((m for m in candidates if not re.search(
+                r'(?:不|并非|不是|不能|不得|未必)\s*$', remaining_target[max(0,m.start()-5):m.start()])), None)
+            if faithful is None:
+                failed.append(context)
+                continue
+            remaining_source = remaining_source.replace(match.group(), ' ', 1)
+            remaining_target = remaining_target[:faithful.start()] + ' ' + remaining_target[faithful.end():]
+    storage = re.compile(r'\bnunca\s+almacenar\s+por\s+(?P<side>debajo|encima)\s+de\s*'
+                         r'(?P<value>\d+(?:[.,]\d+)?)\s*(?:°\s*C|grados?\s+celsius)\b', re.I)
+    target_storage = re.compile(r'(?:切勿|请勿|不得|禁止|不可|不能|不要|不应)\s*(?:在|于)?\s*'
+                                r'(?P<value>\d+(?:[.,]\d+)?)\s*(?:°\s*C|摄氏度)\s*'
+                                r'(?:以|之)?(?P<side>下|上)\s*(?:存放|储存|保存|存储)', re.I)
+    for match in list(storage.finditer(remaining_source)):
+        direction = '下' if match.group('side').casefold() == 'debajo' else '上'
+        faithful = next((m for m in target_storage.finditer(remaining_target)
+                         if m.group('side') == direction
+                         and _number_key(m.group('value')) == _number_key(match.group('value'))), None)
+        if faithful is None:
+            failed.append('storage_temperature_prohibition')
+            continue
+        remaining_source = remaining_source.replace(match.group(), ' ', 1)
+        remaining_target = remaining_target[:faithful.start()] + ' ' + remaining_target[faithful.end():]
+    source_negative = bool(_SOURCE_NEGATION_RE.search(remaining_source))
+    target_negative = bool(_TARGET_NEGATION_RE.search(remaining_target))
+    if failed or source_negative != target_negative:
+        return {'code': 'NEGATION_MISMATCH', 'source_negative': source_negative,
+                'result_negative': target_negative, 'unmatched_contexts': failed}
+    return None
+
+
+def _reviewed_source_candidate_holds(source: str, translated: str, field: str) -> List[Dict[str, Any]]:
+    """Known true errors require review; this function never repairs a text."""
+    issues = []
+    if field in {'feature_bullets', 'feature_bullets_es', 'feature_bullets_raw', 'features_es'}:
+        if (re.search(r'\bTierra\s+de\s+Siena\s+tostada\b', source, re.I)
+                and re.search(r'\bTierra\s+de\s+sombra\s+tostada\b', source, re.I)
+                and translated.count('熟褐土') >= 2):
+            issues.append({'code': 'COLOR_DISTINCTION_COLLAPSED'})
+        if re.search(r'\bVerde\s+vejiga\b', source, re.I) and '膀胱绿' in translated:
+            issues.append({'code': 'DOMAIN_TERM_REVIEW_REQUIRED'})
+        if (re.search(r'\btratamiento\s+antiadherente\b', source, re.I) and '涂层' in translated
+                and not re.search(r'\b(?:revestimiento|recubrimiento)\b', source, re.I)):
+            issues.append({'code': 'UNSUPPORTED_COATING_CLAIM'})
+    if (field in {'selected_variation_raw', 'selected_variant_es', 'variation_es'}
+            and re.search(r'\bSketcher\b', source, re.I) and '草图绘制器' in translated):
+        issues.append({'code': 'MODEL_TERM_REVIEW_REQUIRED'})
+    return issues
+
+
 def validate_translation(protected: ProtectedText, translated: str,
                          source: str, *, field: str = "",
                          brand: str = "",
@@ -355,12 +468,17 @@ def validate_translation(protected: ProtectedText, translated: str,
     if unit_mismatch:
         issues.append({"code": "UNIT_MISMATCH", "source": source_units_raw,
                        "result": result_units_raw})
-    source_is_negative = bool(_SOURCE_NEGATION_RE.search(str(source or "")))
-    target_is_negative = bool(_TARGET_NEGATION_RE.search(restored))
-    if source_is_negative != target_is_negative:
-        issues.append({"code": "NEGATION_MISMATCH",
-                       "source_negative": source_is_negative,
-                       "result_negative": target_is_negative})
+    # A mixed linear/cubic phrase cannot be accepted just because its first
+    # complete unit happens to match the source's expected unit.
+    if re.search(r'\d+(?:[.,]\d+)?\s*(?:(?:立方|平方))?(?:厘米|毫米|米|英寸)\s*'
+                 r'(?:立方|平方)(?:厘米|毫米|米|英寸)', restored):
+        if not unit_mismatch:
+            issues.append({'code': 'UNIT_MISMATCH', 'source': source_units_raw,
+                           'result': result_units_raw, 'reason': 'malformed_spatial_unit'})
+    negation = _negation_mismatch(str(source or ''), restored)
+    if negation:
+        issues.append(negation)
+    issues.extend(_reviewed_source_candidate_holds(str(source or ''), restored, field))
     if field in {"feature_bullets", "feature_bullets_es", "feature_bullets_raw", "features_es"}:
         def bullet_count(value: str) -> int:
             try:

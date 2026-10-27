@@ -126,6 +126,28 @@ class DictionaryService:
 
     def lookup_value(self, value: Any, *, field: str = "") -> Optional[str]:
         text = str(value or "").strip()
+        field_key = normalize_key(field).strip('¿? ')
+        text_key = normalize_key(text)
+        if field_key == 'nivel de resistencia al agua':
+            if text_key == 'resistente al agua':
+                return '耐水'
+            if text_key == 'a prueba de agua':
+                return '防水'
+        # Whole-value, field-bound resolutions: ordinary prose such as
+        # "Falso testimonio" and clothing uniforms must remain unresolved.
+        if field_key in {
+            'es impermeable', 'tiene revestimiento antiadherente',
+            'es seguro para el horno', 'el articulo es apto para lavavajillas',
+        } and text_key in {'falso', 'verdadero'}:
+            return '否' if text_key == 'falso' else '是'
+        if field_key in {'tipo acabado', 'tipo de acabado'} and text_key == 'uniforme':
+            return '均匀'
+        if field_key in {'uso en interiores o exteriores', 'uso interior o exterior'}:
+            if text_key in {'interior', 'exterior'}:
+                return '室内' if text_key == 'interior' else '室外'
+        if field_key in {'tipo acabado', 'tipo de acabado', 'descripcion revestimiento',
+                         'descripcion del revestimiento'} and text_key == 'con tratamiento antiadherente':
+            return '经防粘处理'
         # Boolean matching is exact/whole-field only.  In particular, never
         # replace ``No`` inside a normal Spanish sentence.
         if normalize_key(text) in self._indexes["booleans"]:
