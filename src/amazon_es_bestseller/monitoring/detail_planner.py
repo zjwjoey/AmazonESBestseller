@@ -242,6 +242,12 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
                     or candidate_actual_hash != candidate_expected_hash
                     or not isinstance(candidate.get("detail_record"), Mapping)):
                 raise ValueError("详情 planner 拒绝身份或原始证据未核验的候选")
+    elif snapshot_kind == "CANDIDATE_LINK_IDENTITY":
+        from .favorite_identity import verify_favorite_links
+        checked = verify_favorite_links(ranking_snapshot.get("candidates") or [])
+        if (snapshot_status != "LINK_IDENTITY_VERIFIED" or checked["rejected"]
+                or not checked["records"] or checked["records"] != ranking_snapshot.get("records")):
+            raise ValueError("喜爱榜候选原始证据或链接身份未核验")
     elif snapshot_status not in {"AUTHORITATIVE", "IDENTITY_COMPLETE"}:
         raise ValueError("详情 planner 只能使用 AUTHORITATIVE ranking snapshot")
     ranking_rows = _rows(ranking_snapshot)
@@ -453,7 +459,8 @@ def write_detail_plan(plan: Mapping, output_dir: str | Path) -> dict[str, Path]:
     json_path = root / "detail_plan.json"
     csv_path = root / "detail_plan.csv"
     summary_path = root / "detail_plan_summary.json"
-    json_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
+    from ..collection.runtime_io import atomic_json
+    atomic_json(json_path, artifact)
     fields = ["snapshot_id", "ranking_asin", "ranking_rank", "research_category",
               "ranking_product_url_raw", "ranking_product_url_normalized", "detail_action",
               "action_reason", "existing_cache_state", "existing_detail_schema_version",
@@ -462,11 +469,9 @@ def write_detail_plan(plan: Mapping, output_dir: str | Path) -> dict[str, Path]:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(records)
-    summary_path.write_text(json.dumps({**(plan.get("summary") or {}),
-                                        "plan_id": plan_id, "plan_hash": plan_hash,
-                                        "snapshot_id": snapshot_id},
-                                       ensure_ascii=False, indent=2),
-                            encoding="utf-8")
+    atomic_json(summary_path, {**(plan.get("summary") or {}),
+                              "plan_id": plan_id, "plan_hash": plan_hash,
+                              "snapshot_id": snapshot_id})
     return {"json": json_path, "csv": csv_path, "summary": summary_path}
 
 

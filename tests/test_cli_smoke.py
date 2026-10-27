@@ -204,37 +204,15 @@ def test_select_quota_global_uniqueness_and_shortfall(tmp_path):
     assert "QUOTA_UNIQUE_SHORTFALL" in str(ei.value.code)
 
 
-def test_translate_ds_isolates_partial_and_failed_records(tmp_path, monkeypatch, capsys):
+def test_translate_ds_retired_preserves_existing_cache(tmp_path, monkeypatch):
     products = tmp_path / "products.json"
-    out = tmp_path / "translations.json"
-    products.write_text(json.dumps([
-        {"asin": "B000000001", "title_es_raw": "Uno"},
-        {"asin": "B000000002", "title_es_raw": "Dos"},
-        {"asin": "B000000003", "title_es_raw": "Tres"},
-    ]), encoding="utf-8")
-    saves = []
-
-    class FakeTranslator:
-        def __init__(self, **kwargs):
-            self.cache_path = kwargs.get("cache_path")
-
-        def translate_record(self, record):
-            status = {"B000000001": "success", "B000000002": "partial",
-                      "B000000003": "failed"}[record["asin"]]
-            return {"asin": record["asin"], "translation_status": status,
-                    "title_zh": record["asin"] if status != "failed" else ""}
-
-        def save_cache(self):
-            saves.append(1)
-
-    import amazon_es_bestseller.translation.ds as ds
-    monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
-    monkeypatch.setattr("builtins.input", lambda prompt: "YES")
-    assert main(["translate-ds", "--products", str(products), "--out", str(out)]) == 0
-    saved = json.loads(out.read_text(encoding="utf-8"))
-    assert {v["translation_status"] for v in saved.values()} == {"success", "partial", "failed"}
-    assert len(saves) == 3
-    assert "成功 1、部分 1、失败 1" in capsys.readouterr().out
+    cache = tmp_path / "translations.json"
+    cache.write_text('{"historical":"preserve"}', encoding="utf-8")
+    original = cache.read_bytes()
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("retired API must not prompt"))
+    with pytest.raises(SystemExit, match="TRANSLATION_API_REMOVED"):
+        main(["translate-ds", "--products", str(products), "--out", str(cache)])
+    assert cache.read_bytes() == original
 
 
 def test_translate_ds_offline_rejected_before_translator_creation(monkeypatch):
@@ -247,10 +225,10 @@ def test_translate_ds_offline_rejected_before_translator_creation(monkeypatch):
     monkeypatch.setattr(ds, "DeepSeekTranslator", ExplodingTranslator)
     with pytest.raises(SystemExit) as ei:
         main(["--offline", "translate-ds", "--products", "missing.json", "--out", "out.json"])
-    assert "不能与 --offline 同用" in str(ei.value)
+    assert "TRANSLATION_API_REMOVED" in str(ei.value)
 
 
-def test_translate_ds_requires_explicit_yes_before_first_request(tmp_path, monkeypatch):
+def test_translate_ds_retired_without_creating_translator(tmp_path, monkeypatch):
     products = tmp_path / "products.json"
     products.write_text(json.dumps([{"asin": "B000000001", "title_es_raw": "Uno"}]), encoding="utf-8")
     calls = []
@@ -271,7 +249,7 @@ def test_translate_ds_requires_explicit_yes_before_first_request(tmp_path, monke
     monkeypatch.setattr("builtins.input", lambda prompt: "NO")
     with pytest.raises(SystemExit) as ei:
         main(["translate-ds", "--products", str(products), "--out", str(tmp_path / "out.json")])
-    assert "未确认" in str(ei.value)
+    assert "TRANSLATION_API_REMOVED" in str(ei.value)
     assert calls == []
 
 
@@ -341,7 +319,9 @@ def test_select_quota_to_export_minimal_offline_vertical_path(tmp_path, monkeypa
     import amazon_es_bestseller.translation.ds as ds
     monkeypatch.setattr(ds, "DeepSeekTranslator", FakeTranslator)
     monkeypatch.setattr("builtins.input", lambda prompt: "YES")
-    assert main(["translate-ds", "--products", str(normalized), "--out", str(translations)]) == 0
+    # Saved/model-provided overlay remains usable after retiring the API CLI.
+    translations.write_text(json.dumps({row["asin"]: FakeTranslator().translate_record(row)
+                                        for row in normalized_records}, ensure_ascii=False), encoding="utf-8")
     assert main(["enrich", "--rankings", str(rankings), "--details", str(details),
                  "--translations", str(translations), "--out", str(products)]) == 0
     assert main(["qa", "--products", str(products), "--out", str(qa)]) == 0

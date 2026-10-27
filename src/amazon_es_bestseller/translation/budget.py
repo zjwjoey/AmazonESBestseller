@@ -242,6 +242,11 @@ class BudgetedProvider(TranslationProvider):
     @property
     def model(self) -> str: return self.provider.model
     def translate(self, text: str, *, asin: str, field: str, source_language: str = "es", target_language: str = "zh-CN", context: dict[str, Any] | None = None) -> ProviderResponse:
+        # A retired transport did not make a billable attempt. Do not reserve
+        # or settle estimated fees in a preserved historical ledger for it.
+        if getattr(self.provider, "network_transport_removed", False):
+            return ProviderResponse(provider=self.name, model=self.model, status="failed",
+                                    error="TRANSLATION_API_REMOVED", attempts=0)
         try: reservation = self.ledger.reserve(asin=asin, field=field, text=text, request_id=(context or {}).get("budget_request_id"))
         except BudgetBlocked as exc: return ProviderResponse(provider=self.name, model=self.model, status="failed", error=str(exc), attempts=0, raw={"budget_blocked": str(exc)})
         response = None

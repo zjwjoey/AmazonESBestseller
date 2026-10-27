@@ -22,6 +22,7 @@ from ..monitoring.detail_planner import validate_detail_plan
 from .checkpoints import read_checkpoint, write_checkpoint
 from .detail import collect_details, reparse_saved_details
 from .planning import DetailState
+from .runtime_io import atomic_json
 
 NETWORK_ACTIONS = frozenset({"FETCH_NEW", "REFETCH_INVALID_CACHE", "RETRY_TRANSIENT_FAILURE"})
 OFFLINE_ACTIONS = frozenset({"REUSE_VALID_CACHE", "REPARSE_SAVED_HTML", "VERIFY_IDENTITY",
@@ -29,10 +30,7 @@ OFFLINE_ACTIONS = frozenset({"REUSE_VALID_CACHE", "REPARSE_SAVED_HTML", "VERIFY_
 
 
 def _atomic_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temporary, path)
+    atomic_json(path, value)
 
 
 def _checkpoint_record(checkpoint: Mapping | None) -> dict | None:

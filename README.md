@@ -165,18 +165,18 @@ python -c "import amazon_es_bestseller.cli as m; print(m.__file__)"
 Re-run `python -m pip install -e ".[test]"` from the intended tree if the path is wrong.
 
 Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `audit-detail-cache`, `qa`,
-`audit-fields` and `export`. `collect` and `translate-ds` are the only commands that
-require external services (`collect` uses low-frequency serial browser access; the latter
-calls DeepSeek only when explicitly run). Live collection tests run only when `RUN_LIVE=1`
+`audit-fields` and `export`. Live collection uses low-frequency browser access.
+Qwen and DeepSeek HTTP translation transports have been removed (2026-10-27).
+Live collection tests run only when `RUN_LIVE=1`
 is explicitly set. CI and the default test suite never access Amazon or DeepSeek, and the
 project does not provide CAPTCHA, proxy-rotation or stealth bypass behavior.
 
 `reparse-details --html-dir DIR1 DIR2 ...` accepts multiple saved-HTML directories;
 for duplicate ASINs, the first valid record in the supplied directory order wins.
-`translate-ds` reports `success`, `partial` and `failed` counts separately so partial
-translation is not mistaken for a complete failure. Before constructing the DS client,
-it prints the request summary and requires an explicit `YES`; any other input (including
-EOF) cancels without an API request. `--offline translate-ds` is rejected.
+`translate-ds` and non-dry-run `translate` now reject execution with
+`TRANSLATION_API_REMOVED`. Saved translation caches, original Spanish, manual
+notes and historical budget ledgers remain available. `translate --dry-run`,
+model-generated overlays and offline `fake` integration remain supported.
 
 需要复用本机 Chrome 登录会话时，可显式传入 Chrome 的用户配置目录。程序只让
 Playwright 使用该持久化上下文，不读取或导出 Cookie、本地存储等会话内容；运行前
@@ -272,7 +272,7 @@ python -m pytest -q -rs
 
 ### Field Closure Audit
 
-The offline `audit-fields` command follows `collect → enrich → translate-ds → enrich → qa → audit-fields →
+The offline `audit-fields` command follows `collect → enrich → saved/model translation overlay → enrich → qa → audit-fields →
 export` and emits deterministic JSON plus Markdown. It diagnoses automatic-field
 gaps as `SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`;
 source-missing values remain empty rather than being guessed.
@@ -315,8 +315,8 @@ The consolidation inventory and module boundaries are tracked in
 `docs/consolidation/`. The formal detail path remains `detail-plan` →
 `detail-run`; the Translation V2 staged adapter is exposed as
 `translation-production` and writes hash-bound candidates under its explicit
-run directory. Its default provider is deterministic `fake`; Qwen translation
-requires explicit configuration and verified pricing evidence. See
+run directory. Its provider is deterministic offline `fake`; real translation
+API execution has been retired. See
 `docs/ARCHITECTURE.md` for the module handoff and `docs/consolidation/INTEGRATION_PLAN.md`
 for current integration and acceptance status.
 
