@@ -866,10 +866,9 @@ def _load_detail_metadata(path) -> dict:
     """Absent legacy metadata is allowed; damaged metadata is never discarded."""
     from pathlib import Path
     path = Path(path)
-    if not path.exists():
-        return {}
+    from .runtime_io import read_json
     try:
-        meta = json.loads(path.read_text(encoding="utf-8"))
+        meta = read_json(path, {})
         if not isinstance(meta, dict):
             raise ValueError("cache metadata must be an object")
         status = meta.get("status_code")
@@ -881,7 +880,7 @@ def _load_detail_metadata(path) -> dict:
         if "recovered_from_challenge" in meta and not isinstance(meta["recovered_from_challenge"], bool):
             raise ValueError("invalid cached recovery flag")
         return meta
-    except (OSError, ValueError) as exc:
+    except ValueError as exc:
         return {"_metadata_error": "%s: %s" % (type(exc).__name__, exc)}
 
 
@@ -971,6 +970,7 @@ def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | 
 def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1") -> list[dict]:
     """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
+    from .runtime_io import read_text
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
     wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
     out = []
@@ -979,11 +979,16 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
         if not root.is_dir():
             continue
         for path in sorted(root.glob("*.html")):
-            try:
-                html = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeError):
-                continue
             asin = path.stem.upper()
+            # Valid named-ASIN files cannot represent a different requested
+            # identity under the existing parser contract. Filter before IO;
+            # legacy page_*.html files still require identity discovery.
+            if _ASIN_RE.fullmatch(asin) and ((wanted and asin not in wanted) or asin in seen_asins):
+                continue
+            try:
+                html = read_text(path)
+            except UnicodeError:
+                continue
             if not _ASIN_RE.fullmatch(asin):
                 match = re.search(r'(?:id|name)=["\']ASIN["\'][^>]*value=["\']([A-Z0-9]{10})', html, re.I)
                 if not match:
@@ -1240,9 +1245,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
         meta_path = os.path.splitext(path)[0] + ".meta.json"
         if os.path.exists(path):
             try:
-                with open(path, encoding="utf-8") as f:
-                    html = f.read()
-            except (OSError, UnicodeError) as exc:
+                from .runtime_io import read_text
+                html = read_text(path)
+            except UnicodeError as exc:
                 failed.append(asin)
                 checkpoint(asin, {"asin": asin, "status": "failed",
                     "detail_status": "CACHE_READ_ERROR", "error": str(exc), "source": "cache"})
