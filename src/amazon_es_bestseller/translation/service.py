@@ -21,7 +21,7 @@ from .qa import build_qa_report, qa_field
 from .schemas import TRANSLATION_SCHEMA_VERSION
 from .terminology import (postprocess, contextual_postprocess, strip_display_brand,
                           normalize_unit_display, deterministic_specification,
-                          specification_is_deterministic)
+                          specification_is_deterministic, normalize_dimension_axis_display)
 from .full_detail import LABEL_ES_ZH
 from .zh import spec_zh_from
 from .dictionary_service import DictionaryService, is_identity_attribute, normalize_key, resolve_exact
@@ -305,6 +305,7 @@ class TranslationService:
                         normalized = postprocess(source_field, response.text, value)
                         restored, _ = restore(protected, normalized)
                         restored = normalize_unit_display(restored)
+                        restored = normalize_dimension_axis_display(restored, value, field=source_field)
                         restored = contextual_postprocess(source_field, restored, value)
                         qa = qa_field(protected, restored, value, field=source_field,
                                       brand=brand,
@@ -334,6 +335,7 @@ class TranslationService:
                             if retry.status == "success" and retry.text:
                                 retry_normalized = postprocess(source_field, retry.text, value)
                                 retry_restored = normalize_unit_display(retry_normalized)
+                                retry_restored = normalize_dimension_axis_display(retry_restored, value, field=source_field)
                                 retry_restored = contextual_postprocess(source_field, retry_restored, value)
                                 retry_qa = qa_field(
                                     protected, retry_restored, value, field=source_field,
@@ -384,10 +386,25 @@ class TranslationService:
                         rendered_value = ""
                         if response.error:
                             errors.append(str(response.error))
+            label_zh = None
+            if label is not None:
+                label_zh = (self.dictionary.lookup_attribute_label(label.strip())
+                            or LABEL_ES_ZH.get(label.strip().casefold()))
+                if not label_zh and re.search(r'[\u4e00-\u9fff]', label):
+                    label_zh = label.strip()
+                if not label_zh:
+                    # Preserve the unknown source label, but never label an
+                    # untranslated detail pair a complete Chinese success.
+                    label_zh = label.strip()
+                    label_issue = {'code': 'UNTRANSLATED_DETAIL_LABEL', 'label': label}
+                    item_issues.append(label_issue)
+                    issues.append({'item_index': index, **label_issue})
+                    item_status = 'qa_failed'
+                    statuses[-1] = item_status
             item_providers.append(item_provider)
             item_models.append(item_model)
             item_aliases.append(item_alias)
-            rendered_items.append({"item_index": index, "label": label,
+            rendered_items.append({"item_index": index, "label": label, "label_zh": label_zh,
                                    "source_text": value, "translated_text": rendered_value,
                                    "translation_status": item_status,
                                    "qa_status": ("pass" if item_status == "success" else
@@ -398,8 +415,6 @@ class TranslationService:
                                    "resolution_source": item_resolution,
                                    "candidate_text": item_candidate_text})
             if label is not None:
-                label_zh = (self.dictionary.lookup_attribute_label(label.strip())
-                            or LABEL_ES_ZH.get(label.strip().casefold(), label.strip()))
                 rendered.append("%s：%s" % (label_zh, rendered_value))
             else:
                 rendered.append(rendered_value)
@@ -552,8 +567,6 @@ class TranslationService:
                     continue
                 if source in {"brand", "brand_es"}:
                     continue
-                if source == "specification_es" and specification_is_deterministic(text):
-                    continue
                 items = self._structured_items(source, self._prepared_value(record, source))
                 if items is not None:
                     for item_label, item_text in items:
@@ -689,6 +702,7 @@ class TranslationService:
                     normalized = postprocess(source_field, response.text, text)
                     restored, _ = restore(protected, normalized)
                     restored = normalize_unit_display(restored)
+                    restored = normalize_dimension_axis_display(restored, text, field=source_field)
                     restored = contextual_postprocess(source_field, restored, text)
                     if source_field in {"title_es_raw", "title_es", "title"}:
                         restored = strip_display_brand(restored, brand)
@@ -719,7 +733,7 @@ class TranslationService:
                             retry_normalized = postprocess(source_field, retry.text, text)
                             retry_restored = contextual_postprocess(
                                 source_field,
-                                normalize_unit_display(retry_normalized),
+                                normalize_dimension_axis_display(normalize_unit_display(retry_normalized), text, field=source_field),
                                 text,
                             )
                             if source_field in {"title_es_raw", "title_es", "title"}:

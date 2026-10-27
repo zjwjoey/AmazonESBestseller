@@ -1,0 +1,9 @@
+{
+  "asin": "B078SHCNPR",
+  "saved_html_sha256": "596a7c94c13202b7242126890e1daf9604b088f1f42eed66c11d6a1089805c3c",
+  "evidence": "Hash-verified saved product page; positive material and material-exclusion rows are independent facts.",
+  "rows": [
+    {"label_raw": "Material", "value_raw": "Gres", "expected_label_zh": "材质"},
+    {"label_raw": "Sin tipo de material", "value_raw": "Plástico", "expected_label_zh": "不含材质"}
+  ]
+}

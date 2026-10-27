@@ -1,0 +1,8 @@
+{
+  "asin": "B01M3NSF41",
+  "source_evidence_fixture": "../html/remaining_review_20261024/mixed_axis_units_B01M3NSF41.json",
+  "source": "140 cm x 22 mm",
+  "correct_translation": "140厘米×22毫米",
+  "first_axis_wrong_translation": "140毫米×22毫米",
+  "swapped_axes_translation": "140毫米×22厘米"
+}

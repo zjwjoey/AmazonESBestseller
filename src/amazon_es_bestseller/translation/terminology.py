@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -42,9 +43,16 @@ _DICTIONARY = DictionaryService()
 _UNIT_KEYS = sorted(_DICTIONARY.units, key=len, reverse=True)
 _UNIT_DISPLAY_RE = re.compile(
     r"(?P<number>\d+(?:[.,]\d+)?)\s*(?P<unit>"
-    + "|".join(re.escape(value) for value in _UNIT_KEYS)
+    + "|".join(re.escape(value).replace(r"\ ", r"\s+") for value in _UNIT_KEYS)
     + r")(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ])",
     re.I,
+)
+_COMPOUND_UNIT_DISPLAY_RE = re.compile(
+    r"(?P<number>\d+(?:[.,]\d+)?)\s*(?P<unit>"
+    + "|".join(re.escape(value).replace(r"\ ", r"\s+") for value in _UNIT_KEYS
+               if any(part in value for part in ("cúbic", "cubic", "cuadrad", "²", "³"))
+               or value == "cm3")
+    + r")(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ])", re.I,
 )
 
 
@@ -97,7 +105,7 @@ def strip_display_brand(translated: str, brand: str) -> str:
     return re.sub(r"\s{2,}", " ", output).strip()
 
 
-def normalize_unit_display(value: str) -> str:
+def normalize_unit_display(value: str, *, compounds_only: bool = False) -> str:
     """Normalize only explicit number+unit pairs through the unit dictionary.
 
     Protected tokens are restored after the provider call, so full Spanish
@@ -111,7 +119,8 @@ def normalize_unit_display(value: str) -> str:
             return match.group(0)
         return match.group("number") + translated
 
-    return _UNIT_DISPLAY_RE.sub(replace, str(value or ""))
+    pattern = _COMPOUND_UNIT_DISPLAY_RE if compounds_only else _UNIT_DISPLAY_RE
+    return pattern.sub(replace, str(value or ""))
 
 
 def normalize_spec_value(value: str) -> str:
@@ -127,6 +136,70 @@ def normalize_spec_value(value: str) -> str:
     return out
 
 
+_AXIS_NAMES = {'l.':'长','f.':'深','an.':'宽','al.':'高','grosor':'厚',
+               '长':'长','深':'深','宽':'宽','高':'高','厚':'厚','厚度':'厚'}
+_AXIS_PART = r'\d+(?:[.,]\d+)?\s*(?:grosor|an\.|al\.|l\.|f\.|厚度|长|深|宽|高|厚)'
+_AXIS_TUPLE = re.compile(
+    rf'(?<![A-Za-z0-9.,]){_AXIS_PART}(?:\s*[x×*]\s*{_AXIS_PART}){{1,2}}\s*'
+    r'(?:centímetros?|centimetros?|milímetros?|milimetros?|metros?|cm|mm|m|厘米|毫米|米)(?![A-Za-z])', re.I)
+_AXIS_VALUES = re.compile(r'(\d+(?:[.,]\d+)?)\s*(grosor|an\.|al\.|l\.|f\.|厚度|长|深|宽|高|厚)',re.I)
+_LENGTH_NAMES = {'centímetros':'厘米','centímetro':'厘米','centimetros':'厘米','centimetro':'厘米',
+                 'milímetros':'毫米','milímetro':'毫米','milimetros':'毫米','milimetro':'毫米',
+                 'metros':'米','metro':'米','cm':'厘米','mm':'毫米','m':'米','厘米':'厘米','毫米':'毫米','米':'米'}
+
+
+def normalize_dimension_axis_display(value: str, source: str, *, field: str) -> str:
+    """Translate a complete, source-matching axis tuple without supplying units.
+
+    Numeric values, axis roles and length unit must all match. Identity labels
+    and other fields are excluded; a partial tuple remains unchanged.
+    """
+    if field not in {'specification_es','product_details','product_details_es','detail_attributes_raw'}:
+        return str(value or '')
+    def identity(text,start):
+        prefix=re.split(r'[\n;；/]',text[:start])[-1]
+        return bool(re.search(r'(?i)(?:modelo|referencia|pieza|型号|零件|品牌|brand)\s*[:：]',prefix))
+    def facts(match):
+        parts=_AXIS_VALUES.findall(match.group(0))
+        last=list(_AXIS_VALUES.finditer(match.group(0)))[-1];unit=_LENGTH_NAMES.get(match.group(0)[last.end():].strip().casefold())
+        return tuple((Decimal(n.replace(',','.')),_AXIS_NAMES[a.casefold()]) for n,a in parts),unit
+    supported={facts(m) for m in _AXIS_TUPLE.finditer(str(source or '')) if not identity(str(source or ''),m.start())}
+    def replace(m):
+        key=facts(m)
+        if (key not in supported or identity(str(value or ''),m.start())
+                or not re.search(r'\d\s*(?:l\.|f\.|an\.|al\.|grosor)',m.group(0),re.I)):
+            return m.group(0)
+        parts=_AXIS_VALUES.findall(m.group(0));numbers='×'.join(n.replace(',','.') for n,a in parts)
+        axes='×'.join(_AXIS_NAMES[a.casefold()] for n,a in parts)
+        return numbers+key[1]+'（'+axes+'）'
+    return _AXIS_TUPLE.sub(replace,str(value or ''))
+
+
+def normalize_water_resistance_display(value: str, source: str, *, field: str) -> str:
+    """Keep water-resistant evidence distinct from waterproof claims.
+
+    Only a complete scalar value or an unambiguous matching detail row is
+    eligible. Other waterproof statements in the same item remain untouched.
+    """
+    output = str(value or "")
+    if field not in {"product_details", "product_details_es", "detail_attributes_raw"}:
+        return output
+    if normalize_key(source) == "resistente al agua" and output.strip() == "防水":
+        return output.replace("防水", "耐水", 1)
+    levels = re.findall(
+        r"^[ \t]*Nivel de resistencia al agua[ \t]*[:：][ \t]*([^\r\n]+)",
+        str(source or ""), re.I | re.M,
+    )
+    if not levels or {normalize_key(level) for level in levels} != {"resistente al agua"}:
+        return output
+    pattern = re.compile(
+        r"(^|[\n;；])([ \t]*(?:防水|耐水)等级[ \t]*[:：][ \t]*)防水([ \t]*)(?=$|[\n;；])"
+    )
+    if len(list(pattern.finditer(output))) != 1:
+        return output
+    return pattern.sub(r"\g<1>\g<2>耐水\3", output)
+
+
 def postprocess(field: str, translated: str, source: str) -> str:
     """Normalize known terms without inventing facts or changing raw source."""
     if not translated:
@@ -134,14 +207,17 @@ def postprocess(field: str, translated: str, source: str) -> str:
     if field in {"brand", "brand_es"}:
         # Brand is identity data, never a translation target.
         return str(source)
-    out = apply_terms(str(translated))
+    # Resolve complete units before the older word-level terms can split
+    # e.g. ``Centímetros cúbicos`` into length and an untranslated suffix.
+    out = apply_terms(normalize_unit_display(str(translated), compounds_only=True))
     out = normalize_unit_display(out)
     out = dedupe_technical_units(out)
     if field == "specification_es":
         # Only normalize labels/known values; the provider output remains the
         # source of non-deterministic text.
         out = apply_terms(out)
-    return out.strip()
+    out = normalize_dimension_axis_display(out.strip(), source, field=field)
+    return normalize_water_resistance_display(out, source, field=field)
 
 
 def deterministic_detail(source: Any) -> str:
@@ -205,7 +281,10 @@ def specification_is_deterministic(source: str) -> bool:
         known_words.update(re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}", unit.casefold()))
     for packaging in _DICTIONARY.packaging:
         known_words.update(re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}", packaging.casefold()))
-    text = re.sub(r"\d+(?:[.,]\d+)?", " ", str(source or ""))
+    # Axis names are grammar attached to numbers, not physical units. Do
+    # not require the old incorrect Grosor -> centimetres unit alias.
+    text = _DIMENSION_AXIS_RE.sub(r"\g<number>", str(source or ""))
+    text = re.sub(r"\d+(?:[.,]\d+)?", " ", text)
     text = re.sub(r"\b[A-Z0-9]+(?:[-/][A-Z0-9]+)*\b", " ", text)
     words = re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}", text.casefold())
     return all(word in known_words for word in words)
