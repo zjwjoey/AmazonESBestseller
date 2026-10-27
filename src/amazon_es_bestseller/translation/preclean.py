@@ -146,7 +146,7 @@ def clean_text(value: Any, *, field: str = "") -> dict[str, Any]:
     status = "NORMALIZED" if actions or text != source else "CLEAN"
     return {"source_text": source, "clean_text": text, "clean_status": status,
             "actions": actions, "issues": issues, "translate_allowed": not issues,
-            "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(text)), key=str.casefold),
+            "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(text)), key=lambda item: (item.casefold(), item)),
             "removed_ui_artifacts": ui_hits, "removed_zero_width": zero_hits,
             "html_detected": html_detected}
 
@@ -999,13 +999,13 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     f"{row['label']}: {row['value']}" for row in detail["rows"]),
                     "clean_status": detail["status"], "actions": detail.get("actions", []), "issues": detail["issues"],
                     "translate_allowed": detail["status"] in {"CLEAN", "NORMALIZED"},
-                    "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(detail["source_text"])), key=str.casefold)}
+                    "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(detail["source_text"])), key=lambda item: (item.casefold(), item))}
             elif field == "feature_bullets":
                 result = {"source_text": bullets["source_text"], "clean_text": "\n".join(
                     item["clean_text"] for item in bullets["items"]),
                     "clean_status": bullets["status"], "actions": [], "issues": bullets["issues"],
                     "translate_allowed": bullets["status"] in {"CLEAN", "NORMALIZED"},
-                    "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(bullets["source_text"])), key=str.casefold)}
+                    "protected_tokens": sorted(set(PROTECTED_TOKEN_RE.findall(bullets["source_text"])), key=lambda item: (item.casefold(), item))}
             else:
                 result = clean_text(raw, field=field)
             if field == "feature_bullets":

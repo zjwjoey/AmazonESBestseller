@@ -161,6 +161,7 @@ class BudgetLedger:
         if not (Decimal("0") < self.limit_cny <= MAX_APPROVED_BUDGET_CNY): raise ValueError("BUDGET_LIMIT_OUT_OF_RANGE")
         if not (1 <= self.max_unique_asins <= 1500): raise ValueError("BUDGET_UNIQUE_ASIN_SCOPE_INVALID")
         if not (Decimal("0") <= self.buffer_cny < self.limit_cny) or min(self.max_input_tokens, self.max_output_tokens, self.prompt_overhead_tokens, self.max_unique_asins) < 1: raise ValueError("BUDGET_LIMIT_INVALID")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         # Validate persisted evidence at open; every mutation still reloads it under file lock.
         with self._transaction() as state: self._state = state

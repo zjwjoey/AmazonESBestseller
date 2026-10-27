@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
 from .production_contract import (
-    PRODUCTION_TRANSLATION_FIELDS, canonical_record, canonical_source_field,
+    PRODUCTION_FIELD_ALIASES, PRODUCTION_TRANSLATION_FIELDS, canonical_record, canonical_source_field,
     source_text, target_field_for, translation_candidate_hash,
 )
 from .schemas import TRANSLATION_SCHEMA_VERSION
@@ -64,6 +64,14 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
     source is retained as a non-publishable candidate with explicit evidence,
     so an old translation can never silently become current.
     """
+    text_keys = ("source_text", "translated_text", "candidate_text")
+    raw_keys = ("raw_value", "raw_source_text", "raw")
+
+    def empty_source(envelope: Mapping[str, Any]) -> bool:
+        return (envelope.get("translation_status") == "source_missing"
+                and all(envelope.get(key) in (None, "") for key in text_keys)
+                and all(envelope.get(key) in (None, "", [], {}) for key in raw_keys))
+
     aggregate = _as_record_map(legacy_results)
     for shard in shards:
         records = shard.get("records") if isinstance(shard, Mapping) else None
@@ -78,12 +86,18 @@ def merge_translation_shards(shards: Sequence[Mapping[str, Any]], *,
                 if isinstance(shard, Mapping) and shard.get("batch_id"):
                     candidate.setdefault("batch_id", shard.get("batch_id"))
                 old = current_fields.get(field)
-                if not candidate.get("source_hash"):
+                missing_source = empty_source(candidate)
+                if not candidate.get("source_hash") and not missing_source:
                     candidate.update(translation_status="source_changed", qa_status="review_required",
                                      promotion_status="SOURCE_CHANGED", last_error={
                                          "code": "MISSING_SOURCE_HASH"})
-                if old and old.get("source_hash") and candidate.get("source_hash") \
-                        and old.get("source_hash") != candidate.get("source_hash"):
+                old_had_source = bool(old and (
+                    old.get("source_hash") not in (None, "", _hash(""))
+                    or any(old.get(key) not in (None, "") for key in text_keys)
+                    or any(old.get(key) not in (None, "", [], {}) for key in raw_keys)))
+                if old and ((missing_source and old_had_source)
+                            or (old.get("source_hash") and candidate.get("source_hash")
+                                and old.get("source_hash") != candidate.get("source_hash"))):
                     history = list(old.get("history") or [])
                     history.append({"source_hash": old.get("source_hash"),
                                     "translation_status": old.get("translation_status"),
@@ -288,21 +302,78 @@ def build_production_input(records: Iterable[Mapping[str, Any]], *,
 
 
 def records_for_preclean(production_input: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Expose only canonical Spanish fields to the existing Pre-Clean engine."""
+    """Replay the manifest-selected source without resolving old aliases again."""
     rows = []
     for item in production_input.get("records", []):
         source = item.get("source_record") or {}
         row = deepcopy(source)
         row["asin"] = str(item.get("asin") or "").upper()
-        # Canonical display text can mix attributes and detail bullets. Keep
-        # item evidence at the preclean boundary; never reconstruct items from
-        # that flattened text when the original structured surface exists.
-        for key in ("eligibleattributes", "canonicalstructuredsource", "attributes", "detail_attributes_raw"):
-            if isinstance(source.get(key), list):
-                row["product_details"] = deepcopy(source[key])
-                break
+        hints = source.get("detail_attributes_raw", source.get("attributes"))
+        for field in PRODUCTION_TRANSLATION_FIELDS:
+            selected = (item.get("fields") or {}).get(field) or {}
+            raw = selected.get("raw_value", selected.get("source_text", ""))
+            # Scalars use the exact text recorded by the manifest. Structured
+            # values keep their typed boundaries for the existing parser.
+            value = str(selected.get("source_text") or "") if isinstance(raw, str) else deepcopy(raw)
+            for alias in PRODUCTION_FIELD_ALIASES[field]:
+                row.pop(alias, None)
+            row[field] = value
+        # Raw attributes may disambiguate a colon inside a selected flat label.
+        # They remain lower-priority hints and cannot replace the selected text
+        # or become a source when the manifest says details are absent.
+        if isinstance(hints, list) and row.get("product_details") not in (None, "", [], {}):
+            row["attributes"] = deepcopy(hints)
         rows.append(row)
     return rows
+
+
+def _same_preclean_facts(actual: Any, expected: Any, *, key: str = "") -> bool:
+    """Only protected-token metadata is unordered; keep exact token counts."""
+    if (key == "protected_tokens" and isinstance(actual, list) and isinstance(expected, list)
+            and all(isinstance(item, str) for item in actual + expected)):
+        return sorted(actual) == sorted(expected)
+    if isinstance(actual, Mapping) and isinstance(expected, Mapping):
+        return actual.keys() == expected.keys() and all(
+            _same_preclean_facts(actual[name], value, key=name) for name, value in expected.items())
+    if isinstance(actual, list) and isinstance(expected, list):
+        return len(actual) == len(expected) and all(
+            _same_preclean_facts(left, right) for left, right in zip(actual, expected))
+    return actual == expected
+
+
+def _preclean_binding_error(*, source_field: str, source: Mapping[str, Any],
+                            canonical: Mapping[str, Any], preclean: Mapping[str, Any],
+                            replay: Mapping[str, Any]) -> str | None:
+    """Bind supplied preparation to the selected raw value and one replay.
+
+    The provider hashes clean text. A recalculated hash of an edited clean
+    envelope is not proof that it came from the immutable Spanish input.
+    """
+    raw = source.get("raw_value", source.get("source_text", ""))
+    selected_text = str(source.get("source_text") or "")
+    if (source_text(raw) != selected_text or source.get("source_hash") != _hash(selected_text)
+            or source_text(canonical.get(source_field, "")) != selected_text
+            or ("raw_value" in source and canonical.get(source_field, "") != raw)):
+        return "PRODUCTION_SOURCE_BINDING_MISMATCH"
+    if not selected_text:
+        return None
+    actual = (preclean.get("fields") or {}).get(source_field) or {}
+    # A stricter local hold remains a hold. It never needs to be relaxed to
+    # reproduce a native clean envelope, and cannot promote a translation.
+    if not actual.get("translate_allowed") or actual.get("source_review_hold"):
+        return None
+    expected = (replay.get("fields") or {}).get(source_field) or {}
+    if (preclean.get("clean_schema_version") != replay.get("clean_schema_version")
+            or (preclean.get("raw_fields") or {}).get(source_field) !=
+               (replay.get("raw_fields") or {}).get(source_field)
+            or any(not _same_preclean_facts(actual.get(key), value, key=key)
+                   for key, value in expected.items())):
+        return "PRECLEAN_SOURCE_BINDING_MISMATCH"
+    related = ("details_structured", "detail_parser_status") if source_field == "product_details" else (
+        ("bullet_items",) if source_field == "feature_bullets" else ())
+    if any(not _same_preclean_facts(preclean.get(key), replay.get(key)) for key in related):
+        return "PRECLEAN_SOURCE_BINDING_MISMATCH"
+    return None
 
 
 def _is_policy_error(error: Any) -> bool:
@@ -312,21 +383,29 @@ def _is_policy_error(error: Any) -> bool:
 
 def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
                  preclean: Mapping[str, Any] | None,
-                 result: Mapping[str, Any] | None) -> dict[str, Any]:
+                 result: Mapping[str, Any] | None,
+                 binding_error: str | None = None) -> dict[str, Any]:
     source_field = canonical_source_field(source_field)
     target = target_field_for(source_field)
     source_value = str(source.get("source_text") or "")
+    translation_input = str((preclean or {}).get("clean_text") or "")
     base = {
         "asin": asin, "field": source_field, "target_field": target,
         "source_text": source_value, "source_hash": source.get("source_hash", ""),
+        "translation_input_hash": _hash(translation_input) if translation_input else "",
         "preclean_status": (preclean or {}).get("clean_status", "SOURCE_MISSING"),
-        "translate_allowed": bool((preclean or {}).get("translate_allowed", False)),
+        "translate_allowed": bool((preclean or {}).get("translate_allowed", False)) and not bool(
+            (preclean or {}).get("source_review_hold")),
         "resolution_method": None, "translated_text": "", "candidate_text": "",
         "qa_status": "pending", "qa_issues": [], "promotion_status": "PENDING",
         "final_zh": None, "last_error": None, "updated_at": _now(),
         "field_type": target, "context": {"field": source_field, "target_field": target},
         "dictionary_version": "", "dictionary_hash": "", "translation_schema_version": "",
     }
+    if binding_error:
+        base.update(translation_status="source_changed", qa_status="review_required",
+                    promotion_status="SOURCE_CHANGED", last_error={"code": binding_error})
+        return base
     if not source_value:
         base.update(translation_status="source_missing", qa_status="source_missing",
                     promotion_status="SOURCE_MISSING")
@@ -340,7 +419,7 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
         base.update(translation_status="pending", promotion_status="PENDING")
         return base
     result_source_hash = str(result.get("source_hash") or "")
-    expected_source_hash = str(source.get("source_hash") or "")
+    expected_source_hash = base["translation_input_hash"]
     if not result_source_hash:
         base.update(translation_status="source_changed", qa_status="review_required",
                     promotion_status="SOURCE_CHANGED", candidate_text=result.get("candidate_text") or
@@ -348,12 +427,17 @@ def _field_state(*, asin: str, source_field: str, source: Mapping[str, Any],
                         "code": "MISSING_SOURCE_HASH", "expected_source_hash": expected_source_hash,
                     })
         return base
-    if result_source_hash != expected_source_hash:
+    if (result_source_hash != expected_source_hash
+            or ("source_text" in result and result.get("source_text") != translation_input)
+            or (result.get("asin") and str(result["asin"]).upper() != asin)
+            or (result.get("field") and canonical_source_field(result["field"]) != source_field)
+            or (result.get("target_field") and result["target_field"] != target)):
         base.update(translation_status="source_changed", qa_status="review_required",
                     promotion_status="SOURCE_CHANGED", candidate_text=result.get("candidate_text") or
                     result.get("translated_text") or "", last_error={
                         "code": "SOURCE_CHANGED",
-                        "expected_source_hash": source.get("source_hash"),
+                        "expected_source_hash": expected_source_hash,
+                        "raw_source_hash": source.get("source_hash"),
                         "result_source_hash": result_source_hash,
                     })
         return base
@@ -391,7 +475,14 @@ def build_production_state(production_input: Mapping[str, Any],
                            qa_version: str = "translation-qa-v1",
                            prompt_version: str = PROMPT_VERSION) -> dict[str, Any]:
     """Create field states and a release candidate without mutating source."""
+    from .preclean import audit_records
+
+    # Recompute preparation once for the entire immutable input, not per
+    # field. The replay anchors accepted clean text to the selected raw data.
+    replay_by_asin = {str(row.get("asin") or "").upper(): row for row in
+                      audit_records(records_for_preclean(production_input))["translation_input_records"]}
     preclean_by_asin = {str(row.get("asin") or "").upper(): row for row in preclean_records}
+    preclean_counts = Counter(str(row.get("asin") or "").upper() for row in preclean_records)
     if isinstance(translations, Mapping):
         translation_by_asin = {str(k).upper(): v for k, v in translations.items()}
     else:
@@ -406,14 +497,20 @@ def build_production_state(production_input: Mapping[str, Any],
         translated_record = translation_by_asin.get(asin, {}) or {}
         translated_fields = translated_record.get("fields") or {}
         source_record = item.get("source_record") or {}
+        canonical = canonical_record(source_record)
         field_states = []
         for source_field in PRODUCTION_TRANSLATION_FIELDS:
             source = (item.get("fields") or {}).get(source_field) or {"source_text": "", "source_hash": ""}
             clean = (preclean.get("fields") or {}).get(source_field) or {}
             target = target_field_for(source_field)
             result = translated_fields.get(target) or translated_fields.get(source_field)
+            binding_error = _preclean_binding_error(
+                source_field=source_field, source=source, canonical=canonical,
+                preclean=preclean, replay=replay_by_asin.get(asin, {}))
+            if preclean_counts[asin] > 1:
+                binding_error = "DUPLICATE_PRECLEAN_ASIN"
             state = _field_state(asin=asin, source_field=source_field, source=source,
-                                 preclean=clean, result=result)
+                                 preclean=clean, result=result, binding_error=binding_error)
             state["qa_version"] = qa_version
             state["prompt_version"] = prompt_version
             field_states.append(state)
