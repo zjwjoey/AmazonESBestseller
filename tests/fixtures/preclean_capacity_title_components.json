@@ -1,0 +1,42 @@
+{
+  "asin": "B0DYDN74D4",
+  "field": "feature_bullets",
+  "source_text": "DOBLE COMPARTIMENTO PARA UNA ALIMENTACIÓN SANA – Ya sea un tarro de muesli para llevar, un tarro de overnight oats o un tarro de yogur para llevar, el sistema de doble capa con compartimento intermedio sellado mantiene el muesli crujiente arriba y el yogur o la leche frescos abajo, para una deliciosa experiencia de overnight oats.\nPORCIÓN IDEAL Y FÁCIL DE LLEVAR – El tarro es compacto y ligero, con una capacidad de 240 ml + 120 ml, y se transporta a todas partes sin problema: a la oficina, de viaje, al gimnasio o de pícnic. Con este tarro disfrutas en cualquier momento de una comida equilibrada preparada por ti mismo.\nVIDRIO ALIMENTARIO, FÁCIL DE LIMPIAR – Tarros de meal prep de vidrio alimentario grueso, de sabor neutro y fáciles de limpiar: se pueden lavar en el lavavajillas. El vidrio transparente permite ver el contenido de un vistazo. También sirven como taza de muesli o recipiente para overnight oats.\nHERMÉTICO Y MANTIENE LA FRESCURA – Los tarros de vidrio cuentan con una tapa de rosca hermética y una junta de silicona: el doble sistema de cierre evita eficazmente las fugas. También sirven para muesli para llevar: la comida se mantiene fresca y se transporta con seguridad en el bolso, sin derramarse durante el trayecto.\nVERSÁTIL Y PORTÁTIL – Ya sea como tarro de muesli, tarro de yogur, prácticos tarros de pudin de chía o tarro de gachas para llevar, este tarro de meal prep es ideal para overnight oats, yogur, ensaladas, fruta o pudin. Un regalo perfecto para quienes valoran la funcionalidad y el estilo.",
+  "source_hash": "1cb1f41ef3c301b3114e953b02927b9c103e8901c14344e5b2e52c721985976b",
+  "source_evidence": {
+    "html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0DYDN74D4.html",
+    "sha256": "c315a80026309b6f3a9f37b9a9b6b4e584e2c1e418154bbc9bb8ef8ae845801e",
+    "identity_status": "IDENTITY_MATCH",
+    "form_asins": [
+      "B0DYDN74D4"
+    ]
+  },
+  "evidence_dom": [
+    {
+      "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[1]",
+      "text": "DOBLE COMPARTIMENTO PARA UNA ALIMENTACIÓN SANA – Ya sea un tarro de muesli para llevar, un tarro de overnight oats o un tarro de yogur para llevar, el sistema de doble capa con compartimento intermedio sellado mantiene el muesli crujiente arriba y el yogur o la leche frescos abajo, para una deliciosa experiencia de overnight oats.",
+      "independently_verified": true
+    },
+    {
+      "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[2]",
+      "text": "PORCIÓN IDEAL Y FÁCIL DE LLEVAR – El tarro es compacto y ligero, con una capacidad de 240 ml + 120 ml, y se transporta a todas partes sin problema: a la oficina, de viaje, al gimnasio o de pícnic. Con este tarro disfrutas en cualquier momento de una comida equilibrada preparada por ti mismo.",
+      "independently_verified": true
+    },
+    {
+      "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[3]",
+      "text": "VIDRIO ALIMENTARIO, FÁCIL DE LIMPIAR – Tarros de meal prep de vidrio alimentario grueso, de sabor neutro y fáciles de limpiar: se pueden lavar en el lavavajillas. El vidrio transparente permite ver el contenido de un vistazo. También sirven como taza de muesli o recipiente para overnight oats.",
+      "independently_verified": true
+    },
+    {
+      "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[4]",
+      "text": "HERMÉTICO Y MANTIENE LA FRESCURA – Los tarros de vidrio cuentan con una tapa de rosca hermética y una junta de silicona: el doble sistema de cierre evita eficazmente las fugas. También sirven para muesli para llevar: la comida se mantiene fresca y se transporta con seguridad en el bolso, sin derramarse durante el trayecto.",
+      "independently_verified": true
+    },
+    {
+      "dom_path": "/html/body/div[1]/div[1]/div[2]/div[5]/div[4]/div[39]/div/ul/li[5]",
+      "text": "VERSÁTIL Y PORTÁTIL – Ya sea como tarro de muesli, tarro de yogur, prácticos tarros de pudin de chía o tarro de gachas para llevar, este tarro de meal prep es ideal para overnight oats, yogur, ensaladas, fruta o pudin. Un regalo perfecto para quienes valoran la funcionalidad y el estilo.",
+      "independently_verified": true
+    }
+  ],
+  "title_from_saved_html": "ComSaf Vaso para Yogur y Cereales 240 ml Pack de 2 con Compartimento 120 ml"
+}

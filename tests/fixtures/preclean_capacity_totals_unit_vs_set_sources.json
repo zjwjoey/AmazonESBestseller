@@ -1,0 +1,132 @@
+[
+  {
+    "asin": "B0002HP8Y4",
+    "field": "specification_es",
+    "source_text": "Capacidad: 500 ml / Peso del producto: 1,9 Kilogramos / Dimensiones del producto: 40,8l. x 31an. x 21,2al. centímetros / Tamaño: 4 x 0,5L / Cantidad explícita: Juego de 4",
+    "source_hash": "5932a7bfadb4db72ca31be188fe6504558a0846d5808bb231fcdd17e00e1c289",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0002HP8Y4.html",
+    "html_sha256": "5373c7973b5c5e9cb1f858e1189196b4f22360f430f20f2150d7c714d87ac0ac",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B00EBD5M6Y",
+    "field": "feature_bullets",
+    "source_text": "CONTENIDO: 12 vasos licor bajos 4,5 cl apilables.\nCAPACIDAD: 4,5 cl.\nMATERIAL: Vidrio, vidrio templado.\nCARACTERÍSTICA: Resistente Al Choque Térmico.\nDISEÑO: patrón liso, acabado brillo.",
+    "source_hash": "1f5038a19c873c2fa7a83312463296e45e7d73811b2241b7bcea93fd13a9389f",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B00EBD5M6Y.html",
+    "html_sha256": "355067e7b7773985ba47bfd91c27a44c0026a43cef743f015db94c2a19c66a5c",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B01LYYYK65",
+    "field": "feature_bullets",
+    "source_text": "MOLDE CUORICINO: Diseñado para los pequeños grandes amores, con CUORICINO el romanticismo se asomará a tu mesa. ¡Diviértete decorando y personalizando tus propias creaciones dulces para regalar a tus seres queridos! En el paquete se incluye una receta exclusiva. Dimensiones: 63x65 h 38 mm. Volumen: 8x100 ml. Total 768 ml Envasado en una caja\nDISEÑO 3D | PORCIONES INDIVIDUALES: ¡Dos dimensiones ya no son suficientes! Como especialistas en formas, Silikomart ha desarrollado esta nueva gama, ¡desatando una revolución en la repostería! La tecnología 3D permite un moldeado perfecto y un efecto tridimensional sin precedentes, ideal para postres sorprendentes y creativos. Cada cavidad del molde tiene un revolucionario borde interior que da una ligera forma redondeada a la base de sus preparaciones.\nSILICONA DE PLATINO: Fabricada en silicona de platino de alta calidad apta para uso alimentario, 100% segura para la salud. Resistente al calor de -60° a +230°, irrompible y sin BPA. Reutilizable hasta 3000 cocciones garantizadas, ideal para un uso seguro a largo plazo.\nVERSÁTIL Y PRÁCTICO: La silicona platino Silikomart está diseñada para una limpieza rápida y fácil. Los moldes de silicona para tartas se pueden lavar en el lavavajillas para una máxima comodidad y ofrecen un diseño que ahorra espacio y encaja perfectamente en su cocina. Se pueden utilizar en el horno, microondas, congelador y enfriador rápido.\nSILIKOMART MADE IN ITALY: Desde hace más de 20 años, somos sinónimo de pasión por el arte de la pastelería. Con diseño y producción italianos, innovamos creando formas vanguardistas que superan los límites del sabor, transformando el genio creativo de los maestros pasteleros contemporáneos en extraordinarias obras de arte y garantizando calidad y excelencia globales.",
+    "source_hash": "ab016c046020a9482bdcea1c0e46457669a531fed63d2fdd8cb3538dd31d8145",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B01LYYYK65.html",
+    "html_sha256": "db33272290c60990426458d65c72c2a8ca3a5dfb8e2ba4ffa33c2268d32029e3",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": true
+  },
+  {
+    "asin": "B088KNKM6B",
+    "field": "specification_es",
+    "source_text": "Capacidad: 230 ml / Peso del producto: 4,39 Gramos / Dimensiones del producto: 6,5l. x 6,5an. x 9,5al. centímetros / Tamaño: 25 x 230 ml",
+    "source_hash": "70a73c71997d4c3779c7ce1ec90ae4218f4caaff6f21455883f4fa0fb5f3f179",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B088KNKM6B.html",
+    "html_sha256": "8bad8ebe19a6f24bf122c71433749f432eb83ea0535111f0ed12994f3ea8356d",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0B7JBVN8S",
+    "field": "specification_es",
+    "source_text": "Capacidad: 1,5 litros / Peso del producto: 2370 Gramos / Dimensiones del producto: 11,2l. x 11,2an. x 19,6al. centímetros / Tamaño: 3 x 1.5 L / Cantidad explícita: pack de 3",
+    "source_hash": "160bfed5d5ff179acd5a14f09caa24eee70c39c5240efed98f71ca7c09a5958b",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0B7JBVN8S.html",
+    "html_sha256": "3e8895d1b39c4f4fe5908367e7c4ae7c1f623f2f414536259ed141cdd91c91a6",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0CQT2G8LN",
+    "field": "specification_es",
+    "source_text": "Capacidad: 750 ml / Peso del producto: 3,58 Kilogramos / Dimensiones del producto: 11l. x 11an. x 14,1al. centímetros / Tamaño: 6x750ml / Cantidad explícita: pack de 6",
+    "source_hash": "5409c0803ca502a8266ca18053ffd873ee88aab681a45b03d74049b8a2d7afc3",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0CQT2G8LN.html",
+    "html_sha256": "22da587e2959b9ae13f8afb6bd6f547cddcf852b0edc2ab1d044ecad4791121c",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0D45TVBLS",
+    "field": "specification_es",
+    "source_text": "Capacidad: 300 ml / Dimensiones del producto: 20l. x 14an. x 8al. centímetros / Tamaño: 4x 300ml / Cantidad explícita: 4 piezas",
+    "source_hash": "781fee5594da2a13aefef23ea0427d6540560e6f91489406a12bd8c5adb99596",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0D45TVBLS.html",
+    "html_sha256": "09719b4c549b0d25fc46dd2d17f90cdc816f649beec040dc6ecd816f4b04235f",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0DT1NXVJR",
+    "field": "feature_bullets",
+    "source_text": "✔ 900 W DE POTENCIA – EBULLICIÓN RÁPIDA Este hervidor de agua eléctrico te permitirá hervir agua de forma muy rápida y, además, de una forma segura y sencilla. Gracias a sus 900 W de potencia tendrás el agua lista para tus bebidas calientes en solo unos minutos. Está libre de BPA.\n✔ CAPACIDAD 0,5 L – IDEAL PARA 1-2 TAZAS Podrás hervir, de una sola vez, hasta 0,5 litros. Así ahorrarás tiempo y energía y disfrutarás de tus bebidas favoritas en cualquier momento del día.\n✔ FUNCIONAMIENTO SENCILLO Su funcionamiento es muy sencillo. Tendrás que conectar el aparato a la red y pulsar el interruptor de puesta en marcha. El indicador luminoso se iluminará y el agua iniciará su calentamiento. Dependiendo de la cantidad de agua, los tiempos de calentamiento serán mayores o menores. Cuando el agua esté caliente, el aparato se desconectará de forma automática y el indicador luminoso se apagará y el interruptor de puesta en marcha volverá a su posición inicial.\n✔ RESISTENCIA OCULTA Y PLACA DE ACERO INOXIDABLE Su limpieza la podrás realizar de forma cómoda. Puedes limpiar la base con un paño seco, lo mismo que la base de la jarra. Para la parte exterior de la jarra podrás utilizar un paño ligeramente humedecido. Con el uso y en caso de aguas duras, en el interior de la jarra podrían quedar restos de cal que conviene eliminar periódicamente utilizando un descalcificador que no sea dañino a los materiales de la jarra.\n✔ VISOR DE NIVEL DE AGUA Podrás ver en todo momento la cantidad de agua que hay en la jarra para evitar que se quede vacía.\n✔ SISTEMA DE SEGURIDAD COMPLETO Este hervidor de agua eléctrico cuenta con desconexión automática para que si te la dejas conectada accidentalmente, se apague automáticamente. Además, también cuenta con sistema de protección contra la ebullición en seco, así cuando el hervidor no dispone de agua o esta se termina por accidente, el aparato se desconecta automáticamente evitando accidentes.",
+    "source_hash": "c19b581bcdca8a5ba04ade58d5a053e30072a4f8dc621f5dd149e701a8b56b0e",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0DT1NXVJR.html",
+    "html_sha256": "143f855587beb2c5d3987078acd591879bf9129b6cec9f134624898609b7ed13",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0DYTBDPGX",
+    "field": "feature_bullets",
+    "source_text": "JUEGO DE 4 TAZAS: juego de 4 tazas de café de cristal de doble pared para bebidas frías y calientes; ideal para café, té, café con leche y más\nDISEÑO APTO PARA ALIMENTOS: vidrio de borosilicato de alta calidad, libre de plomo y BPA, resistente a temperaturas extremas\nMANTIENE LA TEMPERATURA: la taza con doble pared aislante mantiene las bebidas calientes, mientras que la capa exterior permanece fría al tacto\nAGARRE CÓMODO: asa reforzada para un agarre cómodo\nAPTO PARA LAVAVAJILLAS: diseño que facilita la limpieza y el mantenimiento\nCAPACIDAD DE 382ML: cada taza contiene 382ml de tu bebida favorita; perfecta para el uso diario",
+    "source_hash": "66dbe10493cc61b3cab3f7cba1c4a6047dd028f20e31140d5503cc5f1e9aac80",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_2\\run\\html\\B0DYTBDPGX.html",
+    "html_sha256": "132a0bc862fe22d69035f53d38cfc66e3cb60d1c1d62dc61c8cf73060e4720df",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0FN6WBJBN",
+    "field": "product_description",
+    "source_text": "Especificación: Material: PET Color: Botella: Transparente Gorra: Negra Capacidad: 250ML Funciones: El juego de botellas de plástico PET de 12 piezas está equipado con tapas negras, etiquetas, cepillos de limpieza y embudos, y el diseño portátil cumple con múltiples escenarios, como envasado de bebidas, almacenamiento en la cocina, lavado de viajes, etc., y el cuerpo cuadrado de la botella se expande en un 30% para satisfacer las necesidades diarias. Hecho de material PET resistente a altas temperaturas y no deformado, la boca de botella roscada + tapa de doble sellado asegura que esté invertida y no tenga fugas, y bloquea la frescura durante mucho tiempo; El cepillo incluido es fácil de limpiar y evita daños en el lavavajillas. Admite el almacenamiento en frío y caliente de jugos, salsas, nueces, etc. (≤40 ° C), y el tamaño mini es fácil de almacenar y disfrutar de bebidas en cualquier momento y en cualquier lugar. Alcance del suministro: 12x 250ml Botella de Jugo con tapa 6 x Tapa negra 1x Embudo de silicona 1x Cepillo de limpieza grande 1x Etiqueta de negro 2x Etiquetas de color Nota: El producto se mide a mano y el error de tamaño de la medición manual es de aproximadamente 1-2 mm, lo cual es normal. Todas las imágenes se toman en la vida real, debido a los diferentes efectos de los monitores de computadora, el color del producto se desviará ligeramente, sujeto a la recepción del producto real.",
+    "source_hash": "85c812e0ab5335a4a32fed9e1cef7b2d5d85e6729e3ed4efe77dd1208d81816f",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_3\\run\\html\\B0FN6WBJBN.html",
+    "html_sha256": "bd71e5b6ac2bad0d96328851d25e32f45e1afaacfeb3649bdcf3192901807314",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0GF35S4JT",
+    "field": "specification_es",
+    "source_text": "Capacidad: 1,5 litros / Peso del producto: 1500 Gramos / Dimensiones del producto: 20,8l. x 15,7an. x 6,7al. centímetros / Tamaño: 3 Contenedores (1.5L / Cantidad explícita: Set de 3",
+    "source_hash": "1bacddfc6b1efb38d9bc2c39aef93ca683aa959e95f2134c47a852f65e6f3039",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0GF35S4JT.html",
+    "html_sha256": "a9771bb881ef74de92cdefb5becd8707c5c2dc72f91a5c2d767ccddfeabcfd2b",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0HFNQPJZ9",
+    "field": "product_description",
+    "source_text": "Características del producto: 1. Las materias primas de este juego de tazas de café To Go Thermo están hechas de acero inoxidable 304 de grado alimenticio en el interior y exterior de plástico PP resistente, lo que mantiene el café seguro e higiénico. 2. El diseño de doble pared de la taza térmica de acero inoxidable proporciona un excelente aislamiento y reduce eficazmente el riesgo de quemaduras. El anillo de sellado de silicona extraíble se cierra de forma segura y evita fugas, ideal como taza de café para llevar mientras viajas. 3. El diámetro ancho de la taza permite un fácil llenado y limpieza. Gracias al diseño divisible, el vaso térmico con tapa es completamente desmontable y, por lo tanto, es muy fácil de limpiar. Especificaciones del producto: Material: acero inoxidable 304 en el interior. Color: Verde, Camello Capacidad: 380 ml. Tamaño: 9 x 12,5 cm. Estructura: taza térmica con anillo de sellado extraíble y tapa Adecuado para: tazas de café bebidas frías y calientes, tazas de café para llevar. El paquete Juego de 2 tazas térmicas de acero inoxidable de 380 ml.",
+    "source_hash": "8f80060600b89fd71491e45fc52ceb08a13d0a94284def9f7385a014ee339ff4",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0HFNQPJZ9.html",
+    "html_sha256": "3ed2d98f1dd601a1c0eeb4efd0082411c1c54e8052603a3aa54d9222e24a8fbd",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  },
+  {
+    "asin": "B0HJRB5J44",
+    "field": "product_description",
+    "source_text": "Las cajas de almacenamiento transparentes apilables de SP BERNER son la solución práctica para organizar el armario o el zapatero. Este pack de 5 cajas de 6 litros cada una está pensado para guardar zapatos, botas o zapatillas, manteniendo todo identificado y a la vista sin necesidad de abrir cada caja. Su tapa transparente se ajusta con firmeza al cuerpo de la caja, protegiendo el calzado del polvo y facilitando el apilado de varias cajas sin que se desplacen, ideal para aprovechar el espacio vertical de armarios y zapateros. Fabricadas en plástico ligero y resistente, estas cajas para zapatos son fáciles de mover y transportar, manteniendo su forma incluso cuando se apilan varias unidades juntas durante el uso diario. 6 litros de capacidad por caja. Organiza tu armario de forma práctica: coloca este pack de 5 cajas apiladas en el zapatero o el armario y disfruta de un espacio ordenado, visible y fácil de mantener durante todo el año",
+    "source_hash": "884d10b8c0a214d5eedd57384af09b8ad12a1e8edc2f76bad69a85ba4ec11927",
+    "source_html_path": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\workers\\worker_1\\run\\html\\B0HJRB5J44.html",
+    "html_sha256": "7541daf72578e3507d11732c6e0322da932e16afa555e3e5e5ef2c6f0f48359f",
+    "html_hash_verified": true,
+    "expected_numeric_conflict": false
+  }
+]
