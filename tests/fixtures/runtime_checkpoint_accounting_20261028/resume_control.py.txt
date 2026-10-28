@@ -1,0 +1,28 @@
+"""Historical stop evidence is separate from a fresh browser admission."""
+import hashlib
+import json
+from pathlib import Path
+from amazon_es_bestseller.collection.runtime_io import read_json
+
+def stop_hash(value):
+    return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
+def may_resume(old_stop, receipt, *, explicit=False, program=False):
+    if not old_stop:return True
+    if old_stop.get('status')=='PROGRAM_STOP':return program
+    if old_stop.get('status') in {'ACCESS_STOP','DELIVERY_STOP'}:
+        return explicit or (receipt.get('historical_stop_hash')==stop_hash(old_stop)
+                            and receipt.get('access_status')=='NORMAL'
+                            and receipt.get('delivery_is_spain') is True)
+    return False
+
+def restore_outcomes(root, usable):
+    root=Path(root)
+    def read(p):return read_json(p)
+    state=root/'run/state/details_state.json'
+    outcomes={a:'reused' for a,r in (read(state) if state.exists() else {}).items() if usable(r,a)}
+    for p in (root/'workers').glob('worker_*/run/checkpoints/*.json'):
+        c=read(p);asin=c.get('asin')
+        if c.get('status')=='success' and usable(c.get('record'),asin):outcomes[asin]='success'
+        elif asin not in outcomes:outcomes[asin]=c.get('status') or 'pending'
+    return outcomes

@@ -1,8 +1,11 @@
 """Saved-evidence regressions from the full offline review; no live transport."""
 from copy import deepcopy
+import ast
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
+import threading
 
 import openpyxl
 import pytest
@@ -11,6 +14,7 @@ from amazon_es_bestseller.collection import runtime_io
 from amazon_es_bestseller.collection.candidate_snapshot import parse_saved_candidate_pages
 from amazon_es_bestseller.collection.detail import CURRENT_DETAIL_SCHEMA_VERSION, collect_details, parse_detail_page
 from amazon_es_bestseller.collection.detail_executor import _usable_record, execute_detail_plan
+from amazon_es_bestseller.collection.detail_reconciliation import checkpoint_outcome
 from amazon_es_bestseller.export.excel import export_workbook, merge_manual_fields
 from amazon_es_bestseller.monitoring.candidate_detail_handoff import verify_candidate_selection
 from amazon_es_bestseller.monitoring.detail_planner import build_detail_plan, validate_detail_plan, write_detail_plan
@@ -251,3 +255,76 @@ def test_quality_gate_cannot_approve_empty_missing_or_unknown_checks(checks):
     assert not result['research_ready']
     assert not result['checks_complete']
     assert result['final_quality_status'] in {'BLOCKED', 'PARTIAL_REVIEW'}
+
+
+@pytest.mark.parametrize('changes', [{'detail_status': 'PARSER_ERROR'},
+    {'resolved_asin': OTHER}, {'final_access_state': 'BLOCKED'},
+    {'is_captcha': True}, None])
+def test_success_checkpoint_label_cannot_promote_unusable_record(saved_record, changes):
+    record = None if changes is None else {**saved_record, **changes}
+    assert checkpoint_outcome({'asin': ASIN, 'status': 'success', 'record': record},
+                              _usable_record) == 'CHECKPOINT_REVIEW_REQUIRED'
+
+
+def test_checkpoint_accounting_preserves_real_success_and_real_failure(saved_record):
+    checkpoint = {'asin': ASIN, 'status': 'success', 'record': saved_record}
+    assert checkpoint_outcome(checkpoint, _usable_record) == 'success'
+    assert checkpoint_outcome({**checkpoint, 'status': 'failed'}, _usable_record) == 'failed'
+
+
+def saved_task_scripts(tmp_path):
+    task = tmp_path / 'project/runtime/task'
+    task.mkdir(parents=True)
+    for name in ['resume_control.py', 'run_shared.py']:
+        (task / name).write_bytes((FIXTURES / 'runtime_checkpoint_accounting_20261028' / (name + '.txt')).read_bytes())
+    return task
+
+
+def test_staged_old_task_accounting_cannot_restore_invalid_success(tmp_path, saved_record):
+    from scripts.repair_detail_runtime import stage_checkpoint_accounting
+    task = saved_task_scripts(tmp_path)
+    original = {p.name: p.read_bytes() for p in task.iterdir()}
+    staged = stage_checkpoint_accounting(task, tmp_path / 'staged')
+    assert {p.name: p.read_bytes() for p in task.iterdir()} == original
+    path = Path(staged['directory']) / 'resume_control.py'
+    spec = importlib.util.spec_from_file_location('staged_restore', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    checkpoints = task / 'workers/worker_1/run/checkpoints'
+    checkpoints.mkdir(parents=True)
+    cp = {'asin': ASIN, 'status': 'success', 'record': {**saved_record, 'resolved_asin': OTHER}}
+    (checkpoints / (ASIN + '.json')).write_text(json.dumps(cp), encoding='utf-8')
+    assert module.restore_outcomes(task, _usable_record) == {ASIN: 'CHECKPOINT_REVIEW_REQUIRED'}
+    tree = ast.parse((Path(staged['directory']) / 'run_shared.py').read_text(encoding='utf-8'))
+    function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'restore_shared')
+    namespace = {'checkpoint_outcome': checkpoint_outcome}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), '<saved-task-loop>', 'exec'), namespace)
+    assert namespace['restore_shared']({}, checkpoints, runtime_io.read_json, _usable_record) == {
+        ASIN: 'CHECKPOINT_REVIEW_REQUIRED'}
+    refresh = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'restore_worker')
+    exec(compile(ast.Module(body=[refresh], type_ignores=[]), '<saved-worker-loop>', 'exec'), namespace)
+    assert namespace['restore_worker']({}, task / 'workers/worker_1', runtime_io.read_json,
+        _usable_record, threading.RLock()) == {ASIN: 'CHECKPOINT_REVIEW_REQUIRED'}
+    replay = tmp_path / 'updated-project/runtime/task'
+    replay.mkdir(parents=True)
+    for name in original:
+        (replay / name).write_bytes((Path(staged['directory']) / name).read_bytes())
+    restaged = stage_checkpoint_accounting(replay, tmp_path / 'restaged')
+    assert staged['staged_hashes'] == restaged['staged_hashes']
+
+
+def test_task_accounting_staging_rejects_unreviewed_drift(tmp_path):
+    from scripts.repair_detail_runtime import stage_checkpoint_accounting
+    task = saved_task_scripts(tmp_path)
+    (task / 'resume_control.py').write_text('raise RuntimeError("unexpected source")', encoding='utf-8')
+    with pytest.raises(ValueError, match='UNREVIEWED_TASK'):
+        stage_checkpoint_accounting(task, tmp_path / 'output')
+    assert not (tmp_path / 'output').exists()
+
+
+def test_task_accounting_staging_never_writes_inside_production_project(tmp_path):
+    from scripts.repair_detail_runtime import stage_checkpoint_accounting
+    task = saved_task_scripts(tmp_path)
+    with pytest.raises(ValueError, match='OUTPUT_MUST_NOT_WRITE'):
+        stage_checkpoint_accounting(task, tmp_path / 'project/output')
+    assert not (tmp_path / 'project/output').exists()

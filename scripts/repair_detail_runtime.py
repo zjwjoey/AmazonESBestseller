@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from amazon_es_bestseller.collection.runtime_io import read_json, atomic_json
 from amazon_es_bestseller.collection.detail_executor import _usable_record, execute_detail_plan
-from amazon_es_bestseller.collection.detail_reconciliation import reconcile_outcomes
+from amazon_es_bestseller.collection.detail_reconciliation import checkpoint_outcome, reconcile_outcomes
 from amazon_es_bestseller.monitoring.detail_planner import write_detail_plan, validate_detail_plan
 
 
@@ -145,6 +145,46 @@ def write(path, data):
             'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in scripts.glob('*.py')}}
 
 
+def stage_checkpoint_accounting(task_root, output):
+    """Stage only two already-reviewed task scripts; no task/data is executed."""
+    task_root, output = Path(task_root).resolve(), Path(output).resolve()
+    production = task_root.parents[1]
+    if output == production or output.is_relative_to(production):
+        raise ValueError('OUTPUT_MUST_NOT_WRITE_PRODUCTION_PROJECT')
+    helper = 'from amazon_es_bestseller.collection.detail_reconciliation import checkpoint_outcome\n'
+    patches = {
+        'resume_control.py': ("outcomes[asin]=c.get('status') or 'pending'",
+                              'outcomes[asin]=checkpoint_outcome(c,usable)',
+                              'from amazon_es_bestseller.collection.runtime_io import read_json\n', 1),
+        'run_shared.py': ("outcomes[cp['asin']]=cp.get('status') or 'pending'",
+                          "outcomes[cp['asin']]=checkpoint_outcome(cp,_usable_record)",
+                          'import run as common\n', 2),
+    }
+    staged, source_hashes = {}, {}
+    for name, (old, new, anchor, expected_count) in patches.items():
+        body = (task_root / name).read_bytes()
+        source_hashes[name] = hashlib.sha256(body).hexdigest()
+        text = body.decode('utf-8')
+        # read_bytes keeps CRLF; normalize only the staged code text.
+        text = text.replace('\r\n', '\n')
+        if text.count(old) == expected_count and new not in text:
+            text = text.replace(old, new)
+        elif old in text or text.count(new) != expected_count:
+            raise ValueError('UNREVIEWED_TASK_CHECKPOINT_ACCOUNTING:' + name)
+        if helper not in text:
+            if text.count(anchor) != 1:
+                raise ValueError('UNREVIEWED_TASK_IMPORT_ANCHOR:' + name)
+            text = text.replace(anchor, anchor + helper, 1)
+        compile(text, str(task_root / name), 'exec')
+        staged[name] = text
+    output.mkdir(parents=True, exist_ok=False)
+    for name, text in staged.items():
+        (output / name).write_text(text, encoding='utf-8')
+    return {'directory': str(output), 'source_hashes': source_hashes,
+            'staged_hashes': {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
+                              for name in staged}, 'production_writes': 0, 'network_requests': 0}
+
+
 def repair(task_root, output, checkout):
     task_root, output, checkout = Path(task_root).resolve(), Path(output).resolve(), Path(checkout).resolve()
     production = task_root.parents[1]  # <project>/runtime/<task>
@@ -173,9 +213,9 @@ def repair(task_root, output, checkout):
             outcomes[asin] = 'success'
         elif asin and outcomes.get(asin) not in {'success', 'reused'}:
             if path.parent == task_root / 'shared_queue/checkpoints':
-                outcomes[asin] = cp.get('status') or 'pending'
+                outcomes[asin] = checkpoint_outcome(cp, _usable_record)
             else:
-                outcomes.setdefault(asin, cp.get('status') or 'pending')
+                outcomes.setdefault(asin, checkpoint_outcome(cp, _usable_record))
         if index and index % 1500 == 0:
             print(f'Offline checkpoints read: {index}/{len(paths)}', flush=True)
     held = read(task_root / 'shared_held_items.json', {})
