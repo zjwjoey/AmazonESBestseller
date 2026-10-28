@@ -267,11 +267,13 @@ def merge_manual_fields(records: List[Mapping], prev_workbook=None) -> List[Mapp
     """从前版工作簿按 ASIN 合并 ``备注``（QA_RULES §22，DATA_MODEL §19）。
 
     只回填前版非空备注；自动流程不清空、不覆盖、不以 QA 状态替换。
-    找任意同时含 ``ASIN`` + ``备注`` 列的 sheet（新契约：中西选品清单）。
+    遍历所有同时含 ``ASIN`` + ``备注`` 列的 sheet，保留原备注格式。
+    待回填的同 ASIN 有多条不同备注时阻止导出，不按表顺序猜选。
     """
     out = [dict(r) for r in records]
     if prev_workbook is None:
         return out
+    manual = {}
     for name in getattr(prev_workbook, 'sheetnames', ()):
         ws = prev_workbook[name]
         hr = _find_header_row(ws, 'ASIN')
@@ -282,20 +284,26 @@ def merge_manual_fields(records: List[Mapping], prev_workbook=None) -> List[Mapp
         ci_notes = _col_index(header, '备注')
         if ci_asin is None or ci_notes is None:
             continue
-        manual = {}
         for r in ws.iter_rows(min_row=hr + 1, values_only=True):
             if ci_asin >= len(r) or r[ci_asin] is None or str(r[ci_asin]).strip() == '':
                 continue
             a = str(r[ci_asin]).strip().upper()
-            if ci_notes < len(r) and r[ci_notes] not in (None, ''):
-                manual[a] = str(r[ci_notes]).strip()
-        if not manual:
+            if ci_notes < len(r) and r[ci_notes] is not None:
+                text = str(r[ci_notes])
+                if text.strip():
+                    values = manual.setdefault(a, [])
+                    if text not in values:
+                        values.append(text)
+    for rec in out:
+        if _notes_of(rec) != '':
             continue
-        for rec in out:
-            a = str(rec.get('asin', '')).strip().upper()
-            if a in manual and _notes_of(rec) == '':
-                rec['备注'] = manual[a]
-        break
+        a = str(rec.get('asin', '')).strip().upper()
+        values = manual.get(a, [])
+        if len(values) > 1:
+            # Sheet order cannot establish which human note is authoritative.
+            raise ValueError('MANUAL_NOTES_CONFLICT:%s' % a)
+        if values:
+            rec['备注'] = values[0]
     return out
 
 

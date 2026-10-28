@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from ..access.detector import AccessStopError
-from ..monitoring.detail_planner import validate_detail_plan
+from ..monitoring.detail_planner import _cache_classification, validate_detail_plan
+from ..models import is_valid_asin, normalize_asin
 from .checkpoints import read_checkpoint, write_checkpoint
 from .detail import collect_details, reparse_saved_details
 from .planning import DetailState
-from .runtime_io import atomic_json
+from .runtime_io import atomic_json, read_json
 
 NETWORK_ACTIONS = frozenset({"FETCH_NEW", "REFETCH_INVALID_CACHE", "RETRY_TRANSIENT_FAILURE"})
 OFFLINE_ACTIONS = frozenset({"REUSE_VALID_CACHE", "REPARSE_SAVED_HTML", "VERIFY_IDENTITY",
@@ -48,6 +49,7 @@ def _usable_record(record, asin: str) -> bool:
     return (isinstance(record, Mapping)
             and str(record.get("asin") or "").upper() == asin
             and bool(str(record.get("title_es_raw") or "").strip())
+            and _cache_classification(record) == "VALID_PRODUCT_PAGE"
             and not record.get("is_captcha")
             and not any(str(record.get(key) or "").upper() in {
                 "BLOCKED", "CHALLENGE", "RATE_LIMITED", "NETWORK_ERROR", "UNKNOWN"}
@@ -114,12 +116,14 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     state = DetailState(root / "state" / "details_state.json")
     state.ensure_valid()
     if len(state) == 0 and (root / "details.json").exists():
-        try:
-            legacy = json.loads((root / "details.json").read_text(encoding="utf-8"))
-            if isinstance(legacy, list):
-                state.update(legacy)
-        except (OSError, ValueError):
-            pass
+        # A damaged/unreadable legacy authority file is not an empty dataset.
+        # Fail before requests or writes rather than rebuilding it as [].
+        legacy = read_json(root / "details.json")
+        if not isinstance(legacy, list) or any(
+                not isinstance(row, Mapping) or not is_valid_asin(normalize_asin(row.get("asin")))
+                for row in legacy):
+            raise ValueError("LEGACY_DETAIL_RECORDS_INVALID")
+        state.update(legacy)
 
     # A verified candidate selection may carry a parser result bound to saved
     # HTML. Revalidate that file at execution time, then merge the parsed fact
