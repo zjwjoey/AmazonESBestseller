@@ -29,12 +29,12 @@ def _retry(operation, codes=(32, 33)):
             time.sleep(_DELAYS[attempt])
 
 
-def read_json(path, default=None):
-    """Only an absent file is a cache miss; permission errors must stop callers."""
+def read_text(path, *, encoding='utf-8'):
+    """Read saved evidence with the same verified sharing-lock policy as JSON."""
     path = Path(path)
     def read():
         try:
-            return path.read_text(encoding='utf-8')
+            return path.read_text(encoding=encoding)
         except PermissionError as error:
             # CPython's CRT open() can discard WinError 32 and expose only
             # errno 13. Confirm the sharing error through a read-only Win32
@@ -44,8 +44,13 @@ def read_json(path, default=None):
                 if code in {32, 33}:
                     error.winerror = code
             raise
+    return _retry(read)
+
+
+def read_json(path, default=None):
+    """Only an absent file is a cache miss; permission errors must stop callers."""
     try:
-        text = _retry(read)
+        text = read_text(path)
     except FileNotFoundError:
         return default
     return json.loads(text)
