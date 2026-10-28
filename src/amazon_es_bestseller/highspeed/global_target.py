@@ -18,6 +18,17 @@ MAIN_PRIORITY_POLICY = {**POLICY,
     'primary_sources': ['BEST_SELLERS', 'NEW_RELEASES'],
     'supplemental_sources': ['CUSTOMER_FAVORITES']}
 
+# New tasks only. Existing sealed 20k/30k plans keep their original semantics.
+MAIN_PRIORITY_10000_POLICY = {**MAIN_PRIORITY_POLICY,
+    'profile': 'MAIN_PRIORITY_10000_FAVORITES_3000_V1', 'target': 10000,
+    'source_minima': {'BEST_SELLERS': 3500, 'NEW_RELEASES': 3500, 'CUSTOMER_FAVORITES': 3000}}
+MAIN_PRIORITY_50000_POLICY = {**MAIN_PRIORITY_POLICY,
+    'profile': 'MAIN_PRIORITY_50000_FAVORITES_3000_V1', 'target': 50000,
+    'source_minima': {'BEST_SELLERS': 15000, 'NEW_RELEASES': 15000, 'CUSTOMER_FAVORITES': 3000}}
+SNAPSHOT_PROFILES = {'main-priority-10000': MAIN_PRIORITY_10000_POLICY,
+                     'main-priority': MAIN_PRIORITY_POLICY,
+                     'main-priority-50000': MAIN_PRIORITY_50000_POLICY}
+
 
 def source_targets(policy=None):
     if policy is not None:
@@ -30,7 +41,7 @@ def is_global_policy(policy):
     if policy is None:return False
     if not isinstance(policy,dict):
         raise ValueError('EXACT_GLOBAL_TARGET_POLICY_REQUIRED')
-    expected = MAIN_PRIORITY_POLICY if policy.get('profile') == MAIN_PRIORITY_POLICY['profile'] else POLICY
+    expected = next((p for p in SNAPSHOT_PROFILES.values() if policy.get('profile') == p['profile']), POLICY)
     if (policy != expected or set(policy) != set(expected)
             or any(type(policy[k]) is not type(v) for k,v in expected.items())):
         raise ValueError('EXACT_GLOBAL_30000_TARGET_POLICY_REQUIRED')

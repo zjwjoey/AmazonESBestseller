@@ -18,6 +18,9 @@ def publish_snapshot_review(store, run_id, fields):
     progress['review_status_updated_at'] = utc_text()
     run = store.update_run(run_id, **fields)
     progress['status'] = run['status']
+    if run['status']=='STOPPED':
+        progress['phase'] = ('PAUSED' if run.get('stop_reason')=='USER_PAUSED' else
+            'REVIEW_COMPLETE' if fields['snapshot_review']['status'] in {'PASSED','FAILED'} else 'STOPPED_REVIEW_PENDING')
     atomic_json(path, progress)
     return run
 

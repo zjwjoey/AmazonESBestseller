@@ -1,5 +1,5 @@
 """Read-only run-bound local monitor; never starts or retries a collector."""
-import argparse,json,sqlite3,time,os,subprocess,shutil
+import argparse,json,time,os,subprocess,shutil
 from pathlib import Path
 from collections import Counter
 from .budgets import aware_time,utc_text
@@ -38,12 +38,20 @@ def observation_times(clock,events,requests):
 def _run_token(root,run_id):
     path=Path(root)/'index.sqlite3'
     if not path.is_file():return None
-    db=sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True,timeout=2)
+    # PAGE progress is a published projection. Avoid copying a large index for
+    # every lightweight wake-up check, and never write source WAL read marks.
+    progress_path=Path(root)/'snapshot_progress.json'
+    if progress_path.is_file():
+        progress=json.loads(progress_path.read_text('utf8'))
+        if progress.get('run_id')==run_id:
+            return (progress.get('status'),progress.get('review_status_updated_at'))
+    from .store import ReadOnlyRunStore
+    reader=ReadOnlyRunStore(root);db=reader.db
     try:
         row=db.execute('SELECT status FROM runs WHERE run_id=?',(run_id,)).fetchone()
         stop=db.execute("SELECT max(event_id) FROM events WHERE run_id=? AND json_extract(data_json,'$.kind')='STOP'",(run_id,)).fetchone()
         return (row[0] if row else None,stop[0])
-    finally:db.close()
+    finally:reader.close()
 
 
 def wait_for_next_sample(root,run_id,seconds):
@@ -58,14 +66,15 @@ def wait_for_next_sample(root,run_id,seconds):
 def snapshot(root,plan,clock,*,now=None,window_start=None):
     now=aware_time(now);start=aware_time(window_start or clock['started_at'])
     if clock['run_id']!=plan['run_id'] or clock['plan_sha256']!=digest(plan):raise ValueError('MONITOR_EXACT_RUN_PLAN_REQUIRED')
-    db=sqlite3.connect((Path(root)/'index.sqlite3').resolve().as_uri()+'?mode=ro',uri=True)
+    from .store import ReadOnlyRunStore
+    reader=ReadOnlyRunStore(root);db=reader.db
     try:
-        rows=[json.loads(x[0]) for x in db.execute('SELECT data_json FROM observations WHERE run_id=?',(plan['run_id'],))]
+        rows=list(reader.iter_observations(plan['run_id']))
         requests=[{**json.loads(r[0]),'status':r[1]} for r in db.execute('SELECT data_json,status FROM requests WHERE run_id=?',(plan['run_id'],))]
         pages=[json.loads(x[0]) for x in db.execute('SELECT data_json FROM pages WHERE run_id=?',(plan['run_id'],))]
         run=db.execute('SELECT metadata_json,status FROM runs WHERE run_id=?',(plan['run_id'],)).fetchone()
         events=[json.loads(r[0]) for r in db.execute("SELECT data_json FROM events WHERE run_id=? AND json_extract(data_json,'$.kind')='STOP'",(plan['run_id'],))]
-    finally:db.close()
+    finally:reader.close()
     metrics=measure_three(rows,plan['run_id'],target_policy=plan['target_policy'])
     _,qualified,_,_=qualify_three(rows,plan['run_id'])
     first={};own={k:{} for k in metrics['sources']}
@@ -106,13 +115,18 @@ def snapshot(root,plan,clock,*,now=None,window_start=None):
     state={**json.loads(run[0]),'status':run[1]} if run else {}
     running=state.get('status')=='RUNNING'
     page_only=plan.get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1'
+    schedule=state.get('category_schedule') or {}
+    cooling=bool(running and schedule.get('deadline') and aware_time(schedule['deadline'])>now)
+    reviewing=bool(running and state.get('snapshot_phase')=='FINAL_DOM_REVIEW')
     alerts=[]
     if running and not process['verified']:alerts.append('COLLECTOR_PROCESS_NOT_VERIFIED')
     if any(g!='NORMAL' for g in gate_values):alerts.append('ACCESS_GATE_NOT_NORMAL_NO_REQUESTS_ALLOWED')
     if any(p['below_plan_20_percent'] for p in progress.values()):alerts.append('QUANTITY_GOAL_BEHIND_20_PERCENT')
-    if running and request_times and (now-max(request_times)).total_seconds()>300 and not metrics['target_met']:alerts.append('NO_REQUEST_PROGRESS_FOR_5_MINUTES_CHECK_PHASE')
+    if running and not cooling and not reviewing and request_times and (now-max(request_times)).total_seconds()>300 and not metrics['target_met']:alerts.append('NO_REQUEST_PROGRESS_FOR_5_MINUTES_CHECK_PHASE')
     return {'run_id':plan['run_id'],'plan_sha256':digest(plan),'observed_at':utc_text(now),'window_start':utc_text(start),
         'run_status':state.get('status'),'stop_reason':state.get('stop_reason'),
+        'snapshot_phase':'CATEGORY_COOLDOWN' if cooling else state.get('snapshot_phase'),
+        'category_schedule':schedule,
         'snapshot_review':state.get('snapshot_review'),
         'snapshot_acceptance':state.get('snapshot_acceptance'),
         'quality_gate_scope':state.get('quality_gate_scope'),

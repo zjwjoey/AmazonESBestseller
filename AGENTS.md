@@ -466,3 +466,22 @@ must report partial results separately from failures.
   the current page instead of blindly trusting a prior successful session check.
 - Keep the access detector and historical challenge-cache stop unchanged.
   No proxy/profile/account/cookie/IP rotation or challenge bypass is authorized.
+
+## 33. Snapshot expansion and offline evidence (2026-10-28)
+
+- New PAGE tasks may use explicit 10k/20k/50k profiles. Never reinterpret or edit
+  an existing sealed plan/clock to change its target. Profile preparation is not
+  LIVE approval; source budgets, identity and access gates remain mandatory.
+- `CARD_IMAGE_V1` and `SPAIN_UI_PREFLIGHT_V1` are opt-in, approval-bound contracts.
+  Old evidence replays with its original field contract. Image URLs come from
+  the same product card/link, never another card, guessed variant or title.
+- Read-only tools must query an isolated DB+WAL copy. SQLite `mode=ro` alone
+  can update the original `-shm`; do not open protected source databases even
+  for status/benchmark. Reject a copy if source metadata changes during capture.
+- Incremental counters are derived progress only. Confirm source-quota skips
+  and total-target stops against the full projection; final DOM/receipt and
+  CSV/JSONL reviews remain mandatory. Destination-reviewed runs retain the
+  original projection path. Do not manufacture missing historical approvals.
+- Cooperative pause does not reset budgets/deadlines or release access stops.
+  Raw observations, ASIN hints, manual notes and detail handoff authority are
+  unchanged. See `docs/SNAPSHOT_MODULE_50000.md` for implementation boundaries.

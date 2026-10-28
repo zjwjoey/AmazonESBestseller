@@ -2009,6 +2009,8 @@ def build_parser() -> argparse.ArgumentParser:
     register_multisource(sub)
     from .highspeed.cli import register as register_highspeed
     register_highspeed(sub)
+    from .highspeed.snapshot_cli import register as register_snapshot
+    register_snapshot(sub)
     return parser
 
 

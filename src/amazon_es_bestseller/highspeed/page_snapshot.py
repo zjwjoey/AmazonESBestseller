@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from urllib.parse import urlsplit
 from ..multisource.storage import atomic_json,immutable_json,sealed,read_sealed,digest
-from .global_target import MAIN_PRIORITY_POLICY,is_global_policy
+from .global_target import SNAPSHOT_PROFILES,is_global_policy
 from .three_contract import verify_source
 from .three_metrics import measure_three
 from .v4_runner import V4T1Runner
@@ -41,9 +41,15 @@ def promote_favorite_page(work,current_index,*,minimum_met):
 
 
 def validate_page_snapshot(plan):
+    if plan.get('snapshot_field_contract') not in {None, 'CARD_IMAGE_V1'}:
+        raise ValueError('UNKNOWN_SNAPSHOT_FIELD_CONTRACT')
+    if plan.get('delivery_preflight_contract') not in {None, 'SPAIN_UI_PREFLIGHT_V1'}:
+        raise ValueError('UNKNOWN_SNAPSHOT_DELIVERY_PREFLIGHT_CONTRACT')
     if (plan.get('collection_contract')!=CONTRACT or plan.get('stage')!='T1'
-            or not is_global_policy(plan.get('target_policy')) or plan['target_policy']!=MAIN_PRIORITY_POLICY
-            or plan.get('target_unique_links')!=20000 or plan.get('source_targets')!=MAIN_PRIORITY_POLICY['source_minima']
+            or not is_global_policy(plan.get('target_policy'))
+            or plan['target_policy'] not in SNAPSHOT_PROFILES.values()
+            or plan.get('target_unique_links')!=plan['target_policy']['target']
+            or plan.get('source_targets')!=plan['target_policy']['source_minima']
             or plan.get('snapshot_metadata_contract')!='SOURCE_CATEGORY_IDENTITY_V1'
             or not plan.get('current_protocol_reference')):
         raise ValueError('EXPLICIT_CURRENT_PAGE_SNAPSHOT_CONTRACT_REQUIRED')
@@ -68,11 +74,22 @@ def validate_page_snapshot(plan):
 
 
 class CurrentPageSnapshotRunner(V4T1Runner):
+    def before_central_review(self, plan):
+        self.store.update_run(plan['run_id'], snapshot_phase='FINAL_DOM_REVIEW')
+
+    def pause_requested(self, plan):
+        from .snapshot_control import pause_pending
+        if not hasattr(self.store, 'root'):return False
+        return pause_pending(self.store.root, plan)
+
     def run(self,plan,**kwargs):
         validate_page_snapshot(plan)
         self._snapshot_metrics=None
         result=super().run(plan,**kwargs)
         metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
+        if getattr(self, '_metrics_index', None) is not None and self._metrics_index.measure() != metrics:
+            self.store.append_event(plan['run_id'], {'kind':'SNAPSHOT_INCREMENTAL_ACCOUNTING_MISMATCH',
+                'acceptance_uses':'FULL_RECOMPUTATION_ONLY'})
         from .snapshot_review import snapshot_review_fields,publish_snapshot_review
         fields=snapshot_review_fields(self.store.get_run(plan['run_id']),metrics,result['quality'],
             len(self.store.pages(plan['run_id'])))
@@ -84,11 +101,19 @@ class CurrentPageSnapshotRunner(V4T1Runner):
 
     def mark_run_running(self,plan):
         from .snapshot_review import snapshot_review_fields,publish_snapshot_review
-        self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),
-            plan['run_id'],target_policy=plan['target_policy'])
+        self._metrics_index = None
+        self._favorite_minimum_confirmed = False
+        if not self.store._review_projection(plan['run_id']):
+            from .snapshot_metrics import SnapshotMetricsIndex, update_from_store
+            self._metrics_index = SnapshotMetricsIndex(plan['run_id'], plan['target_policy'])
+            self._metrics_cursor = update_from_store(self._metrics_index, self.store, plan['run_id'], 0)
+            self._snapshot_metrics = self._metrics_index.measure()
+        else:
+            self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),
+                plan['run_id'],target_policy=plan['target_policy'])
         run={**self.store.get_run(plan['run_id']),'status':'RUNNING'}
         fields=snapshot_review_fields(run,self._snapshot_metrics,{},len(self.store.pages(plan['run_id'])))
-        publish_snapshot_review(self.store,plan['run_id'],{**fields,'status':'RUNNING'})
+        publish_snapshot_review(self.store,plan['run_id'],{**fields,'status':'RUNNING','snapshot_phase':'CAPTURING'})
 
     def accept_navigation_frame(self,plan,source,parsed,receipt):
         from .three_runner import V4ThreeSourceRunner
@@ -145,13 +170,24 @@ class CurrentPageSnapshotRunner(V4T1Runner):
     def should_collect_source(self,plan,source):
         if self._snapshot_metrics is None:
             self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
-        return not (source['source_type']=='CUSTOMER_FAVORITES' and self._snapshot_metrics['sources']['CUSTOMER_FAVORITES']['target_met'])
+        if source['source_type']=='CUSTOMER_FAVORITES' and self._snapshot_metrics['sources']['CUSTOMER_FAVORITES']['target_met']:
+            if getattr(self, '_favorite_minimum_confirmed', False):return False
+            # Before skipping requests on a quota, confirm the authoritative
+            # projection. Incremental accounting alone never admits completion.
+            full=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
+            if full['sources']['CUSTOMER_FAVORITES']['target_met'] and getattr(self, '_metrics_index', None) is not None:
+                self._favorite_minimum_confirmed = True
+            return not full['sources']['CUSTOMER_FAVORITES']['target_met']
+        return True
 
     def target_stop_reason(self,plan):
         if self._snapshot_metrics is None:
             self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),
                 plan['run_id'],target_policy=plan['target_policy'])
-        return 'SNAPSHOT_20000_TARGET_REACHED' if self._snapshot_metrics and self._snapshot_metrics['target_met'] else None
+        if self._snapshot_metrics and self._snapshot_metrics['target_met']:
+            full=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
+            if full['target_met']:return f"SNAPSHOT_{plan['target_policy']['target']}_TARGET_REACHED"
+        return None
 
     def before_source(self,plan,source):
         run=self.store.get_run(plan['run_id']);schedule=run.get('category_schedule') or {}
@@ -159,24 +195,33 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         if schedule.get('current') not in {None,key}:
             if schedule.get('next')!=key or not schedule.get('deadline'):
                 schedule.update(next=key,deadline=utc_text(e.clock()+timedelta(seconds=plan['category_cooldown_seconds'])))
-                self.store.update_run(plan['run_id'],category_schedule=schedule)
+                self.store.update_run(plan['run_id'],category_schedule=schedule,snapshot_phase='CATEGORY_COOLDOWN')
                 self.store.append_event(plan['run_id'],{'kind':'CATEGORY_COOLDOWN_STARTED',**schedule})
             deadline=aware_time(schedule['deadline'])
             while e.clock()<deadline:
+                if self.pause_requested(plan):raise ValueError('USER_PAUSED')
                 if e._gate(plan).get('state')!='NORMAL':raise ValueError('GLOBAL_ACCESS_GATE_BLOCKED_DURING_COOLDOWN')
                 reason=budget_reason(plan,self.store.budget_counters(plan['run_id']),now=e.clock(),
                     started_at=run['started_at'],authorization=self._active_authorization)
                 if reason:raise ValueError(reason)
                 e.sleep(min(30,(deadline-e.clock()).total_seconds()))
         schedule={'current':key,'next':None,'deadline':None}
-        self.store.update_run(plan['run_id'],category_schedule=schedule)
+        self.store.update_run(plan['run_id'],category_schedule=schedule,snapshot_phase='CAPTURING')
 
     def _record_approval(self,plan,authorization):
         self._active_authorization=authorization
+        # Reuse the existing immutable approval journal, without enabling T2.
+        from .v4_t2_runner import V4T2Runner
+        V4T2Runner._record_approval(self, plan, authorization)
 
     def after_page(self,plan,source,key,parsed):
         self._admit_navigation(plan,source,key,parsed)
-        metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
+        if getattr(self, '_metrics_index', None) is not None:
+            from .snapshot_metrics import update_from_store
+            self._metrics_cursor=update_from_store(self._metrics_index,self.store,plan['run_id'],self._metrics_cursor)
+            metrics=self._metrics_index.measure()
+        else:
+            metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
         self._snapshot_metrics=metrics
         position=next(i for i,(s,u) in enumerate(self._work) if s['source_id']==source['source_id']
                       and u==parsed['committed_page']['page_url'])
@@ -184,7 +229,10 @@ class CurrentPageSnapshotRunner(V4T1Runner):
             promote_favorite_page(self._work,position,minimum_met=metrics['sources']['CUSTOMER_FAVORITES']['target_met'])
         self.store.update_run(plan['run_id'],snapshot_metrics=metrics)
         progress={'run_id':plan['run_id'],'observed_at':utc_text(self.engine.clock()),'metrics':metrics,
-                  'source_id':source['source_id'],'source_complete':False}
+                  'source_id':source['source_id'],'page_url':parsed['committed_page']['page_url'],
+                  'phase':'CAPTURING','status':'RUNNING','source_complete':False}
         atomic_json(self.store.root/'snapshot_progress.json',progress)
-        print('SNAPSHOT_PROGRESS qualified=%d target=20000 favorites=%d/3000' %
-              (metrics['F_global_conservative_review_groups'],metrics['sources']['CUSTOMER_FAVORITES']['E_qualified_review_groups']),flush=True)
+        print('SNAPSHOT_PROGRESS qualified=%d target=%d favorites=%d/%d' %
+              (metrics['F_global_conservative_review_groups'],metrics['global_target'],
+               metrics['sources']['CUSTOMER_FAVORITES']['E_qualified_review_groups'],
+               metrics['sources']['CUSTOMER_FAVORITES']['target']),flush=True)

@@ -1,5 +1,7 @@
 # AmazonESBestseller
 
+快照模块的统一入口、待审 1 万／2 万／5 万配置、保存页面验证、暂停恢复和当前 PAGE 报告见 [快照模块与 5 万候选任务](docs/SNAPSHOT_MODULE_50000.md)。配置生成不启动采集；快照候选数量不等于已确认可售 SKU 或正式生产验收。
+
 详情结束后的审查阶段、范围、字段空缺/错误率与实时进度，见
 [docs/POST_DETAIL_AUDIT.md](docs/POST_DETAIL_AUDIT.md)。
 

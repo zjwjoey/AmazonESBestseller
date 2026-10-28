@@ -223,7 +223,10 @@ def _official_ranked_empty(soup,legacy,page_url):
 
 def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                   http_status=None, origin='OFFLINE_FIXTURE', snapshot_id=None, page_number=1,
-                  acp_responses=None, parser_profile_version=None, snapshot_metadata_contract=None):
+                  acp_responses=None, parser_profile_version=None, snapshot_metadata_contract=None,
+                  snapshot_field_contract=None):
+    if snapshot_field_contract not in {None, 'CARD_IMAGE_V1'}:
+        raise ValueError('UNKNOWN_SNAPSHOT_FIELD_CONTRACT')
     if snapshot_metadata_contract not in {None, 'SOURCE_CATEGORY_IDENTITY_V1'}:
         raise ValueError('UNKNOWN_SNAPSHOT_METADATA_CONTRACT')
     version = parser_profile_version or (PAGINATION_VERSION if source['source_type'] in RANKED
@@ -260,6 +263,8 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
     if snapshot_metadata_contract:
         page['snapshot_metadata_contract']=snapshot_metadata_contract
     rows = []
+    if snapshot_field_contract:
+        page['snapshot_field_contract'] = snapshot_field_contract
     if not permitted:
         page['status'] = 'ACCESS_RESTRICTED'
         return {'page': page, 'observations': [], 'pagination': [], 'discovered_sources': [], 'acp_pending': []}
@@ -325,7 +330,7 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
                          'ranking_position': None, 'ranking_semantics': subtype,
                          'representation': 'SERVER', 'representation_slot': slot,
                          'source_evidence': proof})
-    metadata_cards={_sha(str(c)):c for c in cards} if snapshot_metadata_contract else {}
+    metadata_cards={_sha(str(c)):c for c in cards} if snapshot_metadata_contract or snapshot_field_contract else {}
     for index, row in enumerate(rows):
         row.update(source_id=source['source_id'], source_type=kind, source_subtype=source['source_subtype'],
                    source_url=source['actual_source_url'], source_page_url=page_url, page_url=page_url,
@@ -354,14 +359,19 @@ def parse_v4_page(html, *, source, page_url, run_id, observed_at, evidence_path,
             row.setdefault(key, None)
         row.setdefault('promotion_badge_raw', [])
         row.setdefault('binding_doubts', [])
-        if snapshot_metadata_contract:
-            from .snapshot_metadata import annotate_observation
+        if snapshot_metadata_contract or snapshot_field_contract:
             card_sha=(row.get('source_evidence') or {}).get('card_sha256')
             bound_card=metadata_cards.get(card_sha)
             slot=row.get('representation_slot')
             if bound_card is None and row.get('representation')=='SERVER' and not card_sha:
                 if type(slot) is int and 0<=slot<len(cards):bound_card=cards[slot]
-            annotate_observation(row,soup,source,page_url,sha,bound_card)
+            if snapshot_metadata_contract:
+                from .snapshot_metadata import annotate_observation
+                annotate_observation(row,soup,source,page_url,sha,bound_card)
+            if snapshot_field_contract:
+                from .snapshot_images import card_image
+                row.update(card_image(bound_card, row.get('raw_product_url'), page_url))
+                row['snapshot_field_contract'] = snapshot_field_contract
         row.setdefault('preserved_variant_parameters', row.get('preserved_identity_parameters', []))
         row.setdefault('title_components_raw', [])
         row['source_memberships'] = [{'source_id': source['source_id'], 'source_type': kind, 'source_subtype': source['source_subtype']}]
