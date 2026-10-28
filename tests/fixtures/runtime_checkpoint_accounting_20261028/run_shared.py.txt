@@ -1,0 +1,19 @@
+from pathlib import Path
+import run as common
+
+def restore_shared(outcomes,checkpoint_root,read,_usable_record):
+    for path in checkpoint_root.glob('*.json'):
+        cp=read(path)
+        if cp.get('status')=='success' and _usable_record(cp.get('record'),cp.get('asin')):outcomes[cp['asin']]='success'
+        elif cp.get('asin') and outcomes.get(cp['asin']) not in {'success','reused'}:
+            outcomes[cp['asin']]=cp.get('status') or 'pending'
+    return outcomes
+
+def restore_worker(outcomes,wroot,read,_usable_record,state_lock):
+    for cp_path in (wroot/'run/checkpoints').glob('*.json'):
+        cp=read(cp_path)
+        with state_lock:
+            if cp.get('status')=='success' and _usable_record(cp.get('record'),cp.get('asin')):outcomes[cp['asin']]='success'
+            elif cp.get('asin') not in outcomes:
+                outcomes[cp['asin']]=cp.get('status') or 'pending'
+    return outcomes

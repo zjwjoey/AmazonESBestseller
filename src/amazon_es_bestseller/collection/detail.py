@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 from ..access.detector import (AccessStopError, CAPTCHA_RE, detect_access_status,
                                require_normal_access)
 from ..identity import resolve_identity, asin_from_url
-from ..models import AccessState
+from ..models import AccessState, is_valid_asin, normalize_asin
 from .checkpoints import write_checkpoint
 
 CURRENT_DETAIL_SCHEMA_VERSION = 2
@@ -1160,6 +1160,14 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
     记入失败并继续，不让一个慢页毁掉整批；访问受限仍由 require_normal_access
     抛 AccessStopError，不吞、不重试、不绕过。
     """
+    if isinstance(asins, (str, bytes)) or asins is None:
+        raise ValueError("DETAIL_ASIN_LIST_REQUIRED")
+    asins = [normalize_asin(asin) for asin in asins]
+    if any(not is_valid_asin(asin) for asin in asins):
+        raise ValueError("DETAIL_INVALID_ASIN")
+    asins = list(dict.fromkeys(asins))
+    if not asins:
+        return []
     # Keep direct collector use safe as well as the CLI path.  The adapter is a
     # no-op for offline fake sessions used by the test suite.
     from ..access.location import ensure_spain_delivery

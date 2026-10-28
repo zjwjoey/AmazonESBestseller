@@ -6,6 +6,15 @@ _SUCCESS = {'success', 'reused'}
 _NETWORK = {'FETCH_NEW', 'REFETCH_INVALID_CACHE', 'RETRY_TRANSIENT_FAILURE'}
 
 
+def checkpoint_outcome(checkpoint, usable):
+    """A checkpoint label alone cannot establish a reusable successful record."""
+    status = str(checkpoint.get('status') or 'pending')
+    if status.lower() in _SUCCESS:
+        return (status.lower() if usable(checkpoint.get('record'), checkpoint.get('asin'))
+                else 'CHECKPOINT_REVIEW_REQUIRED')
+    return status
+
+
 def reconcile_outcomes(tasks, outcomes, held):
     tasks = list(tasks)
     asins = [row['asin'] for row in tasks]

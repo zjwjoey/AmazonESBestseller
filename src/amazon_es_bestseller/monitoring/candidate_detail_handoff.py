@@ -24,13 +24,13 @@ def verify_candidate_selection(candidate_snapshot: Mapping, saved_detail_html: s
     checks the card/link pair, then the saved detail page and identity resolver.
     """
     root = Path(saved_detail_html)
-    allowed = {str(value) for value in candidate_ids or ()}
+    allowed = None if candidate_ids is None else {str(value) for value in candidate_ids}
     verified, rejected = [], []
     for candidate in candidate_snapshot.get("candidates", []):
         if not isinstance(candidate, Mapping):
             continue
         candidate_id = str(candidate.get("candidate_id") or "")
-        if allowed and candidate_id not in allowed:
+        if allowed is not None and candidate_id not in allowed:
             continue
         for observation in candidate.get("observations", []):
             if not isinstance(observation, Mapping):

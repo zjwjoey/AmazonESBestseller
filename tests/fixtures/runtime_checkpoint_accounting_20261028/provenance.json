@@ -1,0 +1,14 @@
+[
+  {
+    "source": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\resume_control.py",
+    "source_sha256": "5e5bbf36abce084e10c5f29e0768795e33d6425329c8547dbf7070c7cbed910f",
+    "fixture": "resume_control.py.txt",
+    "reduction": "Checkpoint restore functions only; no task execution or business data"
+  },
+  {
+    "source": "F:\\AmazonESBestseller\\runtime\\action_detail5500_live_20261023_161301_8b4e\\run_shared.py",
+    "source_sha256": "4a60adda9e74c2cb946f9497bc253b83c58f27da77dcbbd6362958ffce6785de",
+    "fixture": "run_shared.py.txt",
+    "reduction": "Checkpoint restore functions only; no task execution or business data"
+  }
+]

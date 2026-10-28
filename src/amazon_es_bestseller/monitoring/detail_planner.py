@@ -154,25 +154,28 @@ def _identity_status(ranking_asin: str, record: Mapping | None) -> str:
 def _cache_classification(record: Mapping | None) -> str:
     if not record:
         return "SOURCE_MISSING"
-    explicit = str(record.get("cache_classification") or record.get("classification") or "").upper()
-    if explicit in {"VALID_PRODUCT_PAGE", "VALID"}:
-        return "VALID_PRODUCT_PAGE"
-    if explicit in {"CHALLENGE", "BLOCKED", "RATE_LIMITED"}:
+    explicit = {str(record.get(key) or "").upper()
+                for key in ("cache_classification", "classification")}
+    statuses = {str(record.get(key) or "").upper()
+                for key in ("detail_status", "status", "error_class")}
+    access = {str(record.get(key) or "").upper()
+              for key in ("access_state", "final_access_state")}
+    # A stale positive cache marker cannot erase later failure evidence.
+    # initial_access_state is history: recovered NORMAL responses stay usable.
+    if record.get("is_captcha") or (access | statuses | explicit) & _ACCESS_STATES:
         return "ACCESS_BLOCKED"
-    if explicit in {"INVALID_OR_EMPTY", "INVALID"}:
-        return "INVALID"
-    status = str(record.get("detail_status") or record.get("status") or "").upper()
-    access = str(record.get("access_state") or "").upper()
-    if access in _ACCESS_STATES or status in _ACCESS_STATES:
-        return "ACCESS_BLOCKED"
-    if access in _TRANSIENT_STATES or status in _TRANSIENT_STATES:
-        return "TRANSIENT_FAILED"
-    if status in _NON_RETRYABLE_STATES or str(record.get("error_class") or "").upper() in _NON_RETRYABLE_STATES:
+    if statuses & _NON_RETRYABLE_STATES:
         return "NON_RETRYABLE_FAILURE"
+    if (access | statuses) & _TRANSIENT_STATES:
+        return "TRANSIENT_FAILED"
+    if (explicit | statuses) & {"INVALID_OR_EMPTY", "INVALID"}:
+        return "INVALID"
+    if explicit & {"VALID_PRODUCT_PAGE", "VALID"}:
+        return "VALID_PRODUCT_PAGE"
     # Backward-compatible old state records are accepted only when they carry
     # actual parsed product evidence, not merely an ASIN or file path.
     if (record.get("title_es_raw") and not record.get("is_captcha")
-            and status not in {"INVALID", "FAILED"}):
+            and not statuses & {"INVALID", "FAILED"}):
         return "VALID_PRODUCT_PAGE"
     return "INVALID"
 
@@ -438,9 +441,10 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
 
 def write_detail_plan(plan: Mapping, output_dir: str | Path) -> dict[str, Path]:
     """Write the stable JSON/CSV/summary artifacts requested by V1."""
+    checked = validate_detail_plan({**plan, "plan_hash": None})
+    records = [dict(row) for row in checked["records"]]
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
-    records = [dict(row) for row in (plan.get("records") or []) if isinstance(row, Mapping)]
     snapshot_id = str(plan.get("snapshot_id") or "")
     snapshot_ids = {str(row.get("snapshot_id") or "") for row in records if row.get("snapshot_id")}
     if snapshot_id and snapshot_ids - {snapshot_id}:
@@ -479,11 +483,21 @@ def validate_detail_plan(plan: Mapping) -> dict:
     """Validate snapshot homogeneity and the immutable artifact hash."""
     if not isinstance(plan, Mapping):
         raise ValueError("detail plan 必须是 object artifact")
-    records = [row for row in (plan.get("records") or []) if isinstance(row, Mapping)]
+    records = plan.get("records", [])
+    if not isinstance(records, (list, tuple)) or any(not isinstance(row, Mapping) for row in records):
+        raise ValueError("DETAIL_PLAN_RECORDS_INVALID")
     snapshot_id = str(plan.get("snapshot_id") or "")
     ids = {str(row.get("snapshot_id") or "") for row in records if row.get("snapshot_id")}
-    if snapshot_id and ids - {snapshot_id}:
+    if len(ids) > 1 or (snapshot_id and ids - {snapshot_id}):
         raise ValueError("detail plan 包含混合 snapshot_id")
+    seen = set()
+    for row in records:
+        asin = normalize_asin(row.get("ranking_asin") or row.get("asin"))
+        if not is_valid_asin(asin):
+            raise ValueError("DETAIL_PLAN_INVALID_ASIN")
+        if asin in seen:
+            raise ValueError("DETAIL_PLAN_DUPLICATE_ASIN:%s" % asin)
+        seen.add(asin)
     if plan.get("plan_hash"):
         payload = {"plan_schema_version": int(plan.get("plan_schema_version") or 1),
                    "snapshot_id": snapshot_id, "records": records}
