@@ -103,8 +103,10 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         from .snapshot_review import snapshot_review_fields,publish_snapshot_review
         self._metrics_index = None
         self._favorite_minimum_confirmed = False
+        self._target_quantity_confirmed = False
         self._budget_blocked_sources = set()
-        if not self.store._review_projection(plan['run_id']):
+        from .store import RunStore
+        if isinstance(self.store, RunStore) and not self.store._review_projection(plan['run_id']):
             from .snapshot_metrics import SnapshotMetricsIndex, update_from_store
             self._metrics_index = SnapshotMetricsIndex(plan['run_id'], plan['target_policy'])
             self._metrics_cursor = update_from_store(self._metrics_index, self.store, plan['run_id'], 0)
@@ -192,8 +194,12 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         if self._snapshot_metrics is None:
             self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),
                 plan['run_id'],target_policy=plan['target_policy'])
+            self._target_quantity_confirmed = self._snapshot_metrics['target_met']
         if self._snapshot_metrics and self._snapshot_metrics['target_met']:
+            if getattr(self, '_target_quantity_confirmed', False):
+                return f"SNAPSHOT_{plan['target_policy']['target']}_TARGET_REACHED"
             full=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
+            self._target_quantity_confirmed = full['target_met']
             if full['target_met']:return f"SNAPSHOT_{plan['target_policy']['target']}_TARGET_REACHED"
         return None
 
@@ -235,6 +241,7 @@ class CurrentPageSnapshotRunner(V4T1Runner):
 
     def after_page(self,plan,source,key,parsed):
         self._admit_navigation(plan,source,key,parsed)
+        self._target_quantity_confirmed = False
         if getattr(self, '_metrics_index', None) is not None:
             from .snapshot_metrics import update_from_store
             self._metrics_cursor=update_from_store(self._metrics_index,self.store,plan['run_id'],self._metrics_cursor)

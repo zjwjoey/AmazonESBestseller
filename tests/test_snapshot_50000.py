@@ -242,3 +242,21 @@ def test_source_budget_exhaustion_leaves_other_families_running_but_not_access_s
     assert not runner.continue_after_source_stop('CHALLENGE')
     assert not runner.continue_after_source_stop('GLOBAL_ACCESS_GATE_BLOCKED')
     assert not runner.continue_after_source_stop('RUN_REQUEST_BUDGET_EXHAUSTED')
+
+
+def test_incremental_target_alone_cannot_stop_and_full_confirmation_is_cached(monkeypatch):
+    from amazon_es_bestseller.highspeed import page_snapshot as module
+    from amazon_es_bestseller.highspeed.global_target import MAIN_PRIORITY_50000_POLICY
+    from types import SimpleNamespace
+    runner=module.CurrentPageSnapshotRunner.__new__(module.CurrentPageSnapshotRunner)
+    runner._snapshot_metrics={'target_met':True}  # Derived counter only, not admission.
+    runner.store=SimpleNamespace(iter_observations=lambda _: [])
+    calls=[]; result=[False]
+    def full(*args,**kwargs):calls.append('full');return {'target_met':result[0]}
+    monkeypatch.setattr(module,'measure_three',full)
+    plan={'run_id':'TEST_ONLY','target_policy':MAIN_PRIORITY_50000_POLICY}
+    assert runner.target_stop_reason(plan) is None
+    result[0]=True
+    assert runner.target_stop_reason(plan)=='SNAPSHOT_50000_TARGET_REACHED'
+    assert runner.target_stop_reason(plan)=='SNAPSHOT_50000_TARGET_REACHED'
+    assert calls==['full','full']
