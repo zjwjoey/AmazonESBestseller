@@ -41,6 +41,7 @@ def test_matrix_uses_installed_entrypoint_not_archived_release(tmp_path, monkeyp
     def check_output(command, **kwargs):
         if command[0] == 'git':
             return 'abc\trefs/heads/main\n' if 'ls-remote' in command else 'abc\n'
+        assert kwargs.get('encoding') == 'utf-8', 'import paths may contain Chinese storage directories'
         return str(Path(kwargs['env']['PYTHONPATH']).resolve() / 'amazon_es_bestseller/__init__.py')
 
     def run(command, **kwargs):

@@ -112,7 +112,7 @@ def verify(output, task_root=None):
             by_group[name] = {'total': len(group), 'passed': sum(not any(case.find(x) is not None for x in ['failure', 'error', 'skipped']) for case in group),
                               'failed': sum(case.find('failure') is not None or case.find('error') is not None for case in group)}
         imported = subprocess.check_output([sys.executable, '-B', '-c',
-            'import amazon_es_bestseller;print(amazon_es_bestseller.__file__)'], cwd=output, env=env, text=True).strip()
+            'import amazon_es_bestseller;print(amazon_es_bestseller.__file__)'], cwd=output, env=env, text=True, encoding='utf-8').strip()
         if not Path(imported).resolve().is_relative_to(root.resolve()):
             raise ValueError('WRONG_IMPORT:' + imported)
         results['versions'][label] = {'source_root': str(root), 'imported_module': imported, 'exit_code': result.returncode,
