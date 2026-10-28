@@ -103,6 +103,7 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         from .snapshot_review import snapshot_review_fields,publish_snapshot_review
         self._metrics_index = None
         self._favorite_minimum_confirmed = False
+        self._budget_blocked_sources = set()
         if not self.store._review_projection(plan['run_id']):
             from .snapshot_metrics import SnapshotMetricsIndex, update_from_store
             self._metrics_index = SnapshotMetricsIndex(plan['run_id'], plan['target_policy'])
@@ -168,6 +169,7 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         self._work[position+1:position+1]=additions
 
     def should_collect_source(self,plan,source):
+        if source['source_type'] in getattr(self, '_budget_blocked_sources', set()):return False
         if self._snapshot_metrics is None:
             self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
         if source['source_type']=='CUSTOMER_FAVORITES' and self._snapshot_metrics['sources']['CUSTOMER_FAVORITES']['target_met']:
@@ -180,7 +182,13 @@ class CurrentPageSnapshotRunner(V4T1Runner):
             return not full['sources']['CUSTOMER_FAVORITES']['target_met']
         return True
 
+    def source_skip_event(self, plan, source):
+        return ('SOURCE_BUDGET_ALREADY_EXHAUSTED' if source['source_type'] in
+            getattr(self,'_budget_blocked_sources',set()) else 'SOURCE_MINIMUM_ALREADY_MET')
+
     def target_stop_reason(self,plan):
+        if len(getattr(self, '_budget_blocked_sources', set())) == 3:
+            return 'SNAPSHOT_SOURCE_BUDGETS_EXHAUSTED'
         if self._snapshot_metrics is None:
             self._snapshot_metrics=measure_three(list(self.store.iter_observations(plan['run_id'])),
                 plan['run_id'],target_policy=plan['target_policy'])
@@ -188,6 +196,17 @@ class CurrentPageSnapshotRunner(V4T1Runner):
             full=measure_three(list(self.store.iter_observations(plan['run_id'])),plan['run_id'],target_policy=plan['target_policy'])
             if full['target_met']:return f"SNAPSHOT_{plan['target_policy']['target']}_TARGET_REACHED"
         return None
+
+    def continue_after_source_stop(self, reason):
+        # A family budget is not an access restriction. Keep other approved
+        # families inside their original caps, without transferring budgets.
+        prefixes=('THREE_SOURCE_REQUEST_BUDGET_EXHAUSTED:', 'THREE_SOURCE_PAGE_BUDGET_EXHAUSTED:',
+                  'THREE_SOURCE_NATIVE_BUDGET_EXHAUSTED:')
+        if not reason.startswith(prefixes):return False
+        family=reason.rsplit(':',1)[-1]
+        if family not in {'BEST_SELLERS','NEW_RELEASES','CUSTOMER_FAVORITES'}:return False
+        self.__dict__.setdefault('_budget_blocked_sources', set()).add(family)
+        return True
 
     def before_source(self,plan,source):
         run=self.store.get_run(plan['run_id']);schedule=run.get('category_schedule') or {}

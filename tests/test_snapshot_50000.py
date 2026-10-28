@@ -225,3 +225,20 @@ def test_receipt_review_rejects_unjournaled_index_reservation(tmp_path):
         {'request_id':'unpublished','status':'RESERVED'}])
     result=receipt_review(store,{'plan':plan})
     assert not result['passed'] and result['errors']==['RESERVATION_INDEX_MISMATCH']
+
+
+def test_source_budget_exhaustion_leaves_other_families_running_but_not_access_stops():
+    from amazon_es_bestseller.highspeed.page_snapshot import CurrentPageSnapshotRunner
+    from amazon_es_bestseller.highspeed.three_metrics import measure_three
+    from amazon_es_bestseller.highspeed.global_target import MAIN_PRIORITY_50000_POLICY
+    runner=CurrentPageSnapshotRunner.__new__(CurrentPageSnapshotRunner)
+    runner._snapshot_metrics=measure_three([], 'TEST_ONLY', target_policy=MAIN_PRIORITY_50000_POLICY)
+    plan={'target_policy': MAIN_PRIORITY_50000_POLICY}
+    assert runner.continue_after_source_stop('THREE_SOURCE_PAGE_BUDGET_EXHAUSTED:BEST_SELLERS')
+    assert not runner.should_collect_source(plan,{'source_type':'BEST_SELLERS'})
+    assert runner.source_skip_event(plan,{'source_type':'BEST_SELLERS'})=='SOURCE_BUDGET_ALREADY_EXHAUSTED'
+    assert runner.should_collect_source(plan,{'source_type':'NEW_RELEASES'})
+    assert runner.should_collect_source(plan,{'source_type':'CUSTOMER_FAVORITES'})
+    assert not runner.continue_after_source_stop('CHALLENGE')
+    assert not runner.continue_after_source_stop('GLOBAL_ACCESS_GATE_BLOCKED')
+    assert not runner.continue_after_source_stop('RUN_REQUEST_BUDGET_EXHAUSTED')

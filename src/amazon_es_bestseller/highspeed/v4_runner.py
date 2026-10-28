@@ -68,7 +68,7 @@ class V4T1Runner:
                 if url in committed:
                     continue
                 if not self.should_collect_source(plan,source):
-                    self.store.append_event(run_id,{'kind':'SOURCE_MINIMUM_ALREADY_MET_GLOBAL_COMPLETE','source_id':source['source_id']})
+                    self.store.append_event(run_id,{'kind':self.source_skip_event(plan,source),'source_id':source['source_id']})
                     continue
                 try:
                     self.before_source(plan,source)
@@ -297,6 +297,9 @@ class V4T1Runner:
 
     def should_collect_source(self,plan,source):
         return True
+
+    def source_skip_event(self, plan, source):
+        return 'SOURCE_MINIMUM_ALREADY_MET_GLOBAL_COMPLETE'
 
     def pause_requested(self, plan):
         return False
