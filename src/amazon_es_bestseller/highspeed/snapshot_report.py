@@ -35,6 +35,16 @@ def receipt_review(store, run):
         if (not receipts or {r['request_id'] for r in receipts} != {r['request_id'] for r in reservations}
                 or len(receipts) != len(reservations)):
             raise ValueError('UNFINISHED_OR_MISSING_RECEIPTS')
+        request_index = {q['request_id']:q for q in store.requests(run_id)}
+        if set(request_index) != {q['request_id'] for q in reservations}:
+            raise ValueError('RESERVATION_INDEX_MISMATCH')
+        for q in reservations:
+            indexed_q = dict(request_index[q['request_id']]); status = indexed_q.pop('status')
+            original_q = dict(q); original_q.pop('status', None)
+            if status != 'NORMAL' or indexed_q != original_q:
+                raise ValueError('RESERVATION_INDEX_CONTENT_OR_STATUS_MISMATCH')
+        if len(reservations) > min(plan['max_requests_per_run'], plan['max_pages_per_run']):
+            raise ValueError('PAGE_OR_REQUEST_BUDGET_EXCEEDED')
         indexed = {r['request_id']: r for r in store.iter_responses(run_id)}
         if set(indexed) != {r['request_id'] for r in receipts}:
             raise ValueError('RECEIPT_INDEX_MISMATCH')
@@ -83,6 +93,8 @@ def receipt_review(store, run):
             allowed = False
             for approval in applicable:
                 try:
+                    from .task_clock import validate_task_clock
+                    validate_task_clock(plan, approval, now=q['observed_at'])
                     # Same validation used by the request engine for admitted pages.
                     authorize_v4_response(receipt, source, approval)
                     allowed = True; break

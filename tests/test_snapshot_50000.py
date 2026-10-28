@@ -210,3 +210,18 @@ def test_delivery_diagnostics_failure_saves_blocked_evidence(tmp_path):
     result=json.loads((out/'delivery_gate.json').read_text('utf8'))
     assert result['status']=='BLOCKED' and result['access_status']=='UNKNOWN'
     assert result['automatic_retry'] is False
+
+
+def test_receipt_review_rejects_unjournaled_index_reservation(tmp_path):
+    from amazon_es_bestseller.highspeed.snapshot_report import receipt_review
+    from amazon_es_bestseller.multisource.storage import immutable_json, sealed
+    from types import SimpleNamespace
+    root=tmp_path/'store';directory=root/'runs'/'TEST_ONLY'
+    plan={'run_id':'TEST_ONLY'}
+    immutable_json(directory/'plan.json',sealed(plan))
+    immutable_json(directory/'requests'/'q.reserved.json',sealed({'request_id':'q'}))
+    immutable_json(directory/'responses'/'q.json',sealed({'request_id':'q'}))
+    store=SimpleNamespace(root=root,requests=lambda _:[{'request_id':'q','status':'NORMAL'},
+        {'request_id':'unpublished','status':'RESERVED'}])
+    result=receipt_review(store,{'plan':plan})
+    assert not result['passed'] and result['errors']==['RESERVATION_INDEX_MISMATCH']
