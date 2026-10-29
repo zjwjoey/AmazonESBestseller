@@ -6,6 +6,13 @@ without creating a directory or database. A source changing during capture is
 rejected; callers may retry later. No SQLite connection opens the source index.
 Reports and gate artifacts must be written outside the source directory.
 
+Historical V3 replay/report helpers use the same isolated SQLite copy. Legacy
+`multisource status/qa/compare/report/exceptions` do not create stores, seed source
+registries, publish identity views or rewrite checkpoints. They project current
+identity evidence in memory; explicit ingestion/reparse retains its write behavior.
+A stopped page whose derived HTML has never been published requires an explicit
+write/repair rather than silently creating evidence during a query.
+
 `snapshot-review-status --out ...` previews a stopped run's display correction
 from an existing final audit. It does not publish the correction or append events.
 The separate `snapshot-review-correct --apply --out ...` explicitly publishes

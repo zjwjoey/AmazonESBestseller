@@ -1807,19 +1807,6 @@ def build_parser() -> argparse.ArgumentParser:
     ca.add_argument("--out", required=True)
     ca.set_defaults(func=cmd_audit_detail_cache)
 
-    t = sub.add_parser("translate-ds", help="已停用：DeepSeek联网翻译API已移除")
-    t.add_argument("--products", required=True, help="规范化商品 JSON 数组")
-    t.add_argument("--cache", default="", help="翻译缓存 JSON（默认写入 --out）")
-    t.add_argument("--out", required=True, help="ASIN → 翻译结果 JSON")
-    t.add_argument("--endpoint", default="", help="完整 API endpoint（默认 DeepSeek chat/completions）")
-    t.add_argument("--model", default="", help="模型名（默认 deepseek-chat）")
-    t.add_argument("--max-retries", type=int, default=2)
-    t.add_argument("--backoff-seconds", type=float, default=1.0)
-    t.add_argument("--timeout", type=float, default=60.0)
-    t.add_argument("--repair-partial", action="store_true",
-                   help="已确认调用 API 时，绕过同源 partial 缓存并补翻缺失字段")
-    t.set_defaults(func=cmd_translate_ds)
-
     tv2 = sub.add_parser("translate", help="Translation V2：仅支持离线dry-run，联网API已移除")
     tv2.add_argument("--products", required=True,
                      help="规范化商品 JSON 数组，或内部研究 CSV（按 ASIN/西语字段映射）")
@@ -2011,10 +1998,18 @@ def build_parser() -> argparse.ArgumentParser:
     register_highspeed(sub)
     from .highspeed.snapshot_cli import register as register_snapshot
     register_snapshot(sub)
+    from .canary import register as register_canary
+    register_canary(sub)
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    # Compatibility stop only: retired DS is absent from public parser/help.
+    import sys
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    command_tokens = [token for token in tokens if token != '--offline']
+    if command_tokens and command_tokens[0] == 'translate-ds':
+        cmd_translate_ds(None)
     from .access.detector import AccessStopError
     from .access.location import DeliveryLocationError
     from .monitoring.snapshot import SnapshotIncompleteError

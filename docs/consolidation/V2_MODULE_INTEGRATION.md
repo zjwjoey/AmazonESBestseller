@@ -1,5 +1,13 @@
 # Main Consolidation V2 — Module Integration Status
 
+Current status (2026-10-29): `OFFLINE_CONSOLIDATION_MERGED`, as recorded in
+[V2_CLOSURE_REPORT.md](V2_CLOSURE_REPORT.md). Candidate identity selection, formal
+detail provenance, the source-evidence adapter and offline business-chain closure
+were subsequently merged. The sections below retain the 2026-10-20 milestone;
+their remaining-work list is historical, not the current main backlog.
+PAGE/three-window/configurable snapshot integration is documented separately in
+[the current entry disposition](../ENTRY_RETIREMENT_20261029.md).
+
 Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f8ccdd492e6c68`. PR #10 merged as `bb26de10a892748e1534d02231fc9918ee230e92`; PR #11 merged as `f5f30c05ccf42925b7984eaa8656143e68b854d4`; PR #12 merged as `2f2a73c704acccd40c431270bcd2aec037eb9537`.
 
 ## Completed in V2
@@ -45,6 +53,7 @@ Baseline rechecked on 2026-10-20: `origin/main` was `f62d3265c46cb809ecb98dc6e8f
 - Run a full cross-module offline business-loop test after those adapters exist.
 - Current main supports the separate commands and existing `stable-research`/Field Closure workflows, but has no one command that safely orchestrates candidate selection through translated export.
 
-Current V2 disposition: `PARTIALLY_CONSOLIDATED`. See `V2_BLOCKERS.md` and `V2_END_TO_END_TEST_REPORT.md`.
+Historical V2 disposition at that milestone: `PARTIALLY_CONSOLIDATED`. See the
+closure report above for the subsequent merged offline status.
 
 The V4 performance, browser dispatch, highspeed and multi-lane implementations remain experimental. No production collection, translation provider call, or production data operation was performed.

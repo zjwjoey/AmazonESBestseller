@@ -25,14 +25,17 @@ def run_live_v4(args):
 def _run_live_v4(args):
     from .store import RunStore, ReadOnlyRunStore
     plan = load_json(args.plan); approval = load_json(args.authorization)
+    three_source=plan.get('collection_contract')=='V4_THREE_SOURCE_5001'
+    page_snapshot=plan.get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1'
+    if plan['stage'] not in {'T1','T2'} and not (three_source and plan['stage']=='T3'):
+        raise ValueError('V4_T3_EXECUTION_DISABLED')
+    diagnostics = getattr(args, 'experimental_protocol_diagnostics', False)
+    if not page_snapshot and args.operation != 'check' and not diagnostics:
+        raise ValueError('LEGACY_DYNAMIC_ENTRY_RETIRED: explicit experimental protocol diagnostics required')
     if Path(args.root).resolve().parent.name != plan['run_id']:
         raise ValueError('V4_FRESH_RUN_DIRECTORY_REQUIRED')
     store = ReadOnlyRunStore(args.root) if args.operation == 'check' else RunStore(args.root)
     try:
-        three_source=plan.get('collection_contract')=='V4_THREE_SOURCE_5001'
-        page_snapshot=plan.get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1'
-        if plan['stage'] not in {'T1','T2'} and not (three_source and plan['stage']=='T3'):
-            raise ValueError('V4_T3_EXECUTION_DISABLED')
         if page_snapshot:
             from .page_snapshot import CurrentPageSnapshotRunner
             runner=CurrentPageSnapshotRunner(store)
@@ -43,7 +46,9 @@ def _run_live_v4(args):
             runner = (V4T2Runner if plan['stage']=='T2' else V4T1Runner)(store)
         validate_v4_authorization(plan, approval, runner.engine._gate(plan), store_root=store.root)
         if args.operation == 'check':
-            return {'authorized_now': True, 'stage': plan['stage'], 'browser_started': False}
+            return {'authorized_now': bool(page_snapshot or diagnostics),
+                    'scope_authorization_valid': True, 'legacy_execution_retired': not page_snapshot and not diagnostics,
+                    'stage': plan['stage'], 'browser_started': False}
         if not args.live:
             raise ValueError('V4_EXPLICIT_T1_T2_LIVE_SWITCH_REQUIRED')
         if plan.get('snapshot_metadata_contract') and not args.profile_dir:
@@ -177,6 +182,8 @@ def main(argv=None):
         p.add_argument('--postal-code', default='28001')
         p.add_argument('--release-pause', action='store_true', help='Explicitly acknowledge this run pause; gates/budgets remain unchanged.')
         p.add_argument('--reverify-source-id', action='append', default=[])
+        p.add_argument('--experimental-protocol-diagnostics', action='store_true',
+                       help='Isolated legacy protocol diagnostics only; all original approvals, budgets and access gates still required')
     p = sub.add_parser('report')
     p.add_argument('--retain-lightning-empty', action='store_true',
                    help='Explicit user acceptance of the real empty lightning source; strict eight-product result remains separate.')

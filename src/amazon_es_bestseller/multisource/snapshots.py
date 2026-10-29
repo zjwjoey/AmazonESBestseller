@@ -70,10 +70,13 @@ class CheckpointManager:
 
 
 class SnapshotManager:
-    def __init__(self, root):
+    def __init__(self, root, *, create=True):
         self.root = Path(root).resolve()
+        self.query_only = not create
         marker = self.root / ".multisource_store.json"
         if not marker.exists():
+            if not create:
+                raise ValueError('EXISTING_MULTISOURCE_STORE_REQUIRED')
             if self.root.exists() and any(self.root.iterdir()):
                 raise ValueError("DEDICATED_EMPTY_MULTISOURCE_DIRECTORY_REQUIRED")
             self.root.mkdir(parents=True, exist_ok=True)
@@ -541,7 +544,8 @@ class SnapshotManager:
             raise ValueError("SNAPSHOT_CONTENT_COUNT_MISMATCH")
         if refresh_identity:
             from .identity import ProductIdentityRegistry
-            observations = ProductIdentityRegistry(self.root / "identity").materialize_views(observations, version)
+            observations = ProductIdentityRegistry(self.root / "identity", create=not self.query_only).materialize_views(
+                observations, version, persist=not self.query_only)
         else:
             observations = json.loads((directory / "identity_links.json").read_text(encoding="utf-8"))
         from .quality import audit_snapshot
@@ -557,9 +561,10 @@ class SnapshotManager:
         checkpoint, committed = CheckpointManager(directory).reconstruct(spec)
         pages = [record["page"] for record in committed]
         raw = [row for record in committed for row in record["observations"]]
-        registry = ProductIdentityRegistry(self.root / "identity")
-        registry.ingest(raw)
-        observations = registry.materialize_views(raw, "v1")
+        registry = ProductIdentityRegistry(self.root / "identity", create=not self.query_only)
+        if not self.query_only:
+            registry.ingest(raw)
+        observations = registry.materialize_views(raw, "v1", persist=not self.query_only)
         source_index = {s["source_id"]: s for s in spec["sources"]}
         requests = [read_sealed(path) for path in (directory / "requests").glob("*.json")]
         receipts = [{"path": str(path), "sha256": digest(path.read_bytes())} for path in (directory / "requests").glob("*.json")]
@@ -569,7 +574,11 @@ class SnapshotManager:
             body = request["transport_evidence"]["response"]["body"]
             data = body.encode("utf-8")
             evidence = self.root / "html" / (digest(data) + ".failed.html")
-            immutable_bytes(evidence, data)
+            if self.query_only:
+                if not evidence.is_file() or digest(evidence.read_bytes()) != digest(data):
+                    raise ValueError('STOPPED_PAGE_DERIVATION_REQUIRES_EXPLICIT_WRITE')
+            else:
+                immutable_bytes(evidence, data)
             source = source_index[request["source_id"]]
             url = request.get("parent_page_url") or request["page_url"]
             pages.append({"source_id": source["source_id"], "source_type": source["source_type"],

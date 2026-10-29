@@ -7,7 +7,6 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
-import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
@@ -15,17 +14,13 @@ from ..multisource.storage import read_sealed, digest, immutable_json, sealed
 from .adapters import parse_page
 from .category_mapping import load_mapping_rules, map_category
 from .v3_links import normalize_product_url_v3, NORMALIZER_VERSION
-from .store import RunStore
+from .store import RunStore, ReadOnlyRunStore
 
 @contextmanager
 def readonly_store(root):
-    root=Path(root).resolve()
-    db=sqlite3.connect((root/'index.sqlite3').as_uri()+'?mode=ro',uri=True)
-    db.row_factory=sqlite3.Row
-    db.execute('BEGIN')
-    store=object.__new__(RunStore);store.root=root;store.db=db
+    store=ReadOnlyRunStore(root)
     try:yield store
-    finally:db.close()
+    finally:store.close()
 
 def _ref(path):
     path=Path(path).resolve()

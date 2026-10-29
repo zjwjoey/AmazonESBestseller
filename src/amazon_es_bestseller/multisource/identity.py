@@ -6,6 +6,7 @@ rebuildable view, never the authority for an identity or a manual review.
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import re
@@ -183,9 +184,10 @@ class IdentityEvidenceResolver:
 class ProductIdentityRegistry:
     """Durable review journal and stable internal entities across restarts."""
 
-    def __init__(self, directory: str | Path):
+    def __init__(self, directory: str | Path, *, create=True):
         self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        if create:
+            self.directory.mkdir(parents=True, exist_ok=True)
         self.resolver = IdentityEvidenceResolver()
         self.checkpoint = self.directory / "checkpoint.json"
 
@@ -403,7 +405,7 @@ class ProductIdentityRegistry:
                 raise ValueError("OBSERVATION_NOT_INGESTED")
             return [row for row in rows if row["observation_id"] in ids]
 
-    def materialize_views(self, observations: list[dict], parse_version: str) -> list[dict]:
+    def materialize_views(self, observations: list[dict], parse_version: str, *, persist=True) -> list[dict]:
         """Project reviewed identity onto immutable parse-version observations.
 
         Base observation IDs stay fixed. Changed identity-bearing evidence gets
@@ -414,7 +416,7 @@ class ProductIdentityRegistry:
         if not parse_version or not isinstance(parse_version, str):
             raise ValueError("PARSE_VERSION_REQUIRED")
         requested = list(observations)
-        with file_lock(self.directory / ".lock"):
+        with file_lock(self.directory / ".lock") if persist else nullcontext():
             known, events = self._load()
             items = []
             projections = []
@@ -433,13 +435,21 @@ class ProductIdentityRegistry:
                         stored.update(base_observation_id=base_id, view_only=True,
                                       identity_fingerprint=fingerprint, parse_version=parse_version)
                     path = self.directory / "observations" / (digest(view_id) + ".json")
-                    immutable_json(path, stored)
+                    if persist:
+                        immutable_json(path, stored)
                     items.append({"observation_id": view_id, "sha256": digest(stored)})
                     known[view_id] = stored
                 projections.append((row, base_id, view_id, fingerprint, changed))
             if items:
-                self._append(events, {"action": "INGEST", "observations": items})
-            mapped = {row["observation_id"]: row for row in self._write_checkpoint(known, events)}
+                if persist:
+                    self._append(events, {"action": "INGEST", "observations": items})
+                else:
+                    # Replay new views after durable review events in memory;
+                    # no existing decision can attach itself to the new identity.
+                    events = [*events, {'action': 'INGEST', 'observations': items,
+                        'event_id': 'query_projection_'+digest(items), 'projection_only': True}]
+            mapped = {row["observation_id"]: row for row in
+                      (self._write_checkpoint(known, events) if persist else self._materialize(known, events))}
             result = []
             keys = ("product_id", "identity_status", "review_status", "identity_evidence",
                     "identity_conflict_reason", "original_identity_conflict_reason", "confirmed_asin",

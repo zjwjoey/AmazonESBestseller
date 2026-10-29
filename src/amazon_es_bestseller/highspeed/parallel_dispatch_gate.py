@@ -1,4 +1,4 @@
-"""TEST-ONLY asynchronous global dispatch gate; not a live browser adapter."""
+"""Shared asynchronous dispatch pacing for the reviewed three-window adapter."""
 import asyncio
 import time
 
@@ -12,8 +12,8 @@ class AsyncDispatchGate:
 
     One process/event loop owns this object. The callback must dispatch a
     nonblocking request and return only after the dispatch has been initiated.
-    Production route integration, durable send journals, and cross-process lock
-    ownership remain prerequisites, so this prototype must not be used live.
+    The parallel CLI/transport supplies durable journals, fresh admission and
+    exclusive run ownership. This gate alone never grants collection permission.
     """
     def __init__(self, *, interval=3.0, deadline, clock=time.time, wait=None,
                  prior_next_start=0.0, persist_next_start=None):
