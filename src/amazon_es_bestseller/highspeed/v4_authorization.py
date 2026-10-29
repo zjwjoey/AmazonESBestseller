@@ -85,7 +85,9 @@ def validate_plan_v4(plan):
         v = plan.get(key)
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
             raise ValueError('FINITE_DURATION_OR_PACING_REQUIRED:' + key)
-    if plan['max_duration_hours'] > (24 if page_snapshot else 10) or plan['request_pacing_seconds'] < 3:
+    from .global_target import CUSTOM_PROFILE
+    extended_page=page_snapshot and (plan.get('target_policy') or {}).get('profile') in {CUSTOM_PROFILE,'MAIN_PRIORITY_100000_FAVORITES_3000_V1'}
+    if plan['max_duration_hours'] > (168 if extended_page else 24 if page_snapshot else 10) or plan['request_pacing_seconds'] < 3:
         raise ValueError('V4_DURATION_OR_PACING_INVALID')
     for key in ('max_native_requests_per_source','max_dynamic_requests_per_source'):
         if key in plan and (type(plan[key]) is not int or not 1<=plan[key]<=plan['max_requests_per_run']):

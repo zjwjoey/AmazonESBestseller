@@ -7,49 +7,74 @@ import uuid
 
 from ..multisource.storage import immutable_json, digest
 from .cli import load_json, reference
-from .global_target import SNAPSHOT_PROFILES
+from .global_target import SNAPSHOT_PROFILES,configurable_policy,is_page_policy
 from .store import ReadOnlyRunStore
 
 
-def task_config(profile='main-priority-50000'):
+def task_config(profile='main-priority-50000',*,target=None,hours=None,source_minima=None,page_budgets=None,source_ids=None):
     if profile not in SNAPSHOT_PROFILES:
         raise ValueError('UNKNOWN_SNAPSHOT_TARGET_PROFILE')
     policy = deepcopy(SNAPSHOT_PROFILES[profile])
+    custom=any(v is not None for v in (target,hours,source_minima))
+    if custom:
+        policy=configurable_policy(policy['target'] if target is None else target,
+            policy['total_task_hours'] if hours is None else hours,source_minima)
+    flexible=custom or policy['target']==100000 or page_budgets is not None or source_ids is not None
     # Finite planning envelope, not a promise of reachable supply or execution approval.
     pages = {'BEST_SELLERS': 2200, 'NEW_RELEASES': 2200, 'CUSTOMER_FAVORITES': 600} if policy['target'] == 50000 else {
         'BEST_SELLERS': 550, 'NEW_RELEASES': 450, 'CUSTOMER_FAVORITES': 200}
-    return {'config_contract': 'CURRENT_PAGE_TASK_CONFIG_V1', 'target_policy': policy,
+    if flexible:
+        pages=page_budgets if page_budgets is not None else {
+            'BEST_SELLERS':max(1,(policy['target']*44+999)//1000),
+            'NEW_RELEASES':max(1,(policy['target']*44+999)//1000),
+            'CUSTOMER_FAVORITES':max(1,(policy['target']*12+999)//1000)}
+    if not isinstance(pages,dict) or set(pages)!=set(policy['source_minima']):
+        raise ValueError('ALL_THREE_SOURCE_BUDGETS_REQUIRED')
+    result={'config_contract': 'CURRENT_PAGE_TASK_CONFIG_V2' if flexible else 'CURRENT_PAGE_TASK_CONFIG_V1', 'target_policy': policy,
             'source_budgets': {k: {'requests': n, 'PAGE': n, 'native': 0} for k, n in pages.items()},
-            'snapshot_field_contract': 'CARD_IMAGE_V1', 'max_duration_hours': 24,
+            'snapshot_field_contract': 'CARD_IMAGE_V1', 'max_duration_hours': policy['total_task_hours'],
             'delivery_preflight_contract': 'SPAIN_UI_PREFLIGHT_V1',
             'request_pacing_seconds': 3, 'category_cooldown_seconds': 1800, 'parallelism': 1,
-            'max_raw_observations_per_run': 500000, 'history_observation_limit': 1000000,
+            'max_raw_observations_per_run': max(500000,policy['target']*10), 'history_observation_limit': 2000000 if flexible else 1000000,
             'approved': False, 'live_enabled': False}
+    if source_ids is not None:result['source_ids']=list(source_ids)
+    validate_config(result)
+    return result
 
 
 def validate_config(config):
     from .global_target import is_global_policy
-    if config.get('config_contract') != 'CURRENT_PAGE_TASK_CONFIG_V1':
+    v2=config.get('config_contract')=='CURRENT_PAGE_TASK_CONFIG_V2'
+    if config.get('config_contract') not in {'CURRENT_PAGE_TASK_CONFIG_V1','CURRENT_PAGE_TASK_CONFIG_V2'}:
         raise ValueError('SNAPSHOT_CONFIG_CONTRACT_REQUIRED')
     policy = config.get('target_policy')
-    if not is_global_policy(policy) or policy not in SNAPSHOT_PROFILES.values():
+    if not is_page_policy(policy) or not v2 and policy not in SNAPSHOT_PROFILES.values():
         raise ValueError('SNAPSHOT_PROFILE_REQUIRED')
+    if not v2 and policy.get('profile')=='MAIN_PRIORITY_100000_FAVORITES_3000_V1':
+        raise ValueError('LARGE_OR_CUSTOM_POLICY_REQUIRES_CONFIG_V2')
     if config.get('approved') is not False or config.get('live_enabled') is not False:
         raise ValueError('CONFIG_IS_NOT_EXECUTION_APPROVAL')
     for key, lower, upper in (('request_pacing_seconds', 3, 3600), ('category_cooldown_seconds', 1800, 86400),
-                              ('max_duration_hours', 1, 24), ('parallelism', 1, 1),
-                              ('max_raw_observations_per_run', 1, 1000000), ('history_observation_limit', 1, 1000000)):
+                              ('max_duration_hours', 2 if v2 else 1, 168 if v2 else 24), ('parallelism', 1, 1),
+                              ('max_raw_observations_per_run', 1, 2000000 if v2 else 1000000), ('history_observation_limit', 1, 2000000 if v2 else 1000000)):
         if type(config.get(key)) is not int or not lower <= config[key] <= upper:
             raise ValueError('BOUNDED_SNAPSHOT_CONFIG_REQUIRED:' + key)
+    if v2 and config['max_duration_hours']!=policy['total_task_hours']:
+        raise ValueError('CONFIG_DURATION_MUST_MATCH_SEALED_POLICY')
+    if config['history_observation_limit']<config['max_raw_observations_per_run']:
+        raise ValueError('HISTORY_CAP_CANNOT_BE_SMALLER_THAN_RUN_CAP')
+    ids=config.get('source_ids')
+    if ids is not None and (not isinstance(ids,list) or not ids or any(not isinstance(s,str) or not s for s in ids) or len(set(ids))!=len(ids)):
+        raise ValueError('EXPLICIT_UNIQUE_SOURCE_IDS_REQUIRED')
     budgets = config.get('source_budgets', {})
     if set(budgets) != set(policy['source_minima']):
         raise ValueError('ALL_THREE_SOURCE_BUDGETS_REQUIRED')
     for values in budgets.values():
         if (set(values) != {'requests', 'PAGE', 'native'} or values['native'] != 0
                 or any(type(v) is not int or v < 0 for v in values.values())
-                or not 1 <= values['PAGE'] == values['requests'] <= 6000):
+                or not 1 <= values['PAGE'] == values['requests'] <= (60000 if v2 else 6000)):
             raise ValueError('FINITE_PAGE_ONLY_BUDGET_REQUIRED')
-    if sum(v['requests'] for v in budgets.values()) > 6000:
+    if sum(v['requests'] for v in budgets.values()) > (60000 if v2 else 6000):
         raise ValueError('SNAPSHOT_REQUEST_ENVELOPE_EXCEEDED')
     if config.get('snapshot_field_contract') != 'CARD_IMAGE_V1':
         raise ValueError('SNAPSHOT_IMAGE_FIELD_CONTRACT_REQUIRED')
@@ -66,6 +91,10 @@ def prepare_page_task(base_plan, base_approval, config, output, runtime_root, ta
         raise ValueError('SNAPSHOT_BASE_AUTH_PLAN_MISMATCH')
     run_id = 'snapshot' + str(config['target_policy']['target']) + '_' + uuid.uuid4().hex[:12]
     plan = deepcopy(base_plan)
+    if config.get('source_ids') is not None:
+        selected=set(config['source_ids']);known={s['source_id'] for s in plan['sources']}
+        if not selected.issubset(known):raise ValueError('SOURCE_SELECTION_OUTSIDE_REVIEWED_ROOTS')
+        plan['sources']=[s for s in plan['sources'] if s['source_id'] in selected]
     for key in ('parent_run_id', 'seed_reference', 'continuation_mode'):
         plan.pop(key, None)
     plan.update(run_id=run_id, snapshot_id=run_id, campaign_id=run_id, campaign_created_at=utc_text(),
@@ -77,11 +106,14 @@ def prepare_page_task(base_plan, base_approval, config, output, runtime_root, ta
         plan[key] = deepcopy(config[key])
     cap = sum(v['requests'] for v in plan['source_budgets'].values())
     plan.update(max_requests_per_run=cap, max_requests_per_day=cap, max_pages_per_run=cap)
+    for key in ('max_native_requests_per_source','max_dynamic_requests_per_source'):
+        if key in plan:plan[key]=min(plan[key],cap)
     # Do not carry old-run page expansion/amendment proofs into a new batch.
     if any(s.get('snapshot_admission_root') or s.get('favorite_budget_reference') for s in plan['sources']):
         raise ValueError('FRESH_REVIEWED_ROOT_SOURCES_REQUIRED')
-    validate_plan_v4(plan)
+    validate_plan_v4(plan);validate_page_snapshot(plan)
     approval = deepcopy(base_approval)
+    approval['sources']={s['source_id']:approval['sources'][s['source_id']] for s in plan['sources']}
     for key in ('favorite_budget_reference', 'time_extension_reference', 'response_alias_reference',
                 'network_recovery_reference', 'agent_recovery_reference'):
         approval.pop(key, None)
@@ -107,6 +139,11 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='operation', required=True)
     p = sub.add_parser('profile', help='Write a pending task configuration only.')
     p.add_argument('--target-profile', choices=tuple(SNAPSHOT_PROFILES), default='main-priority-50000')
+    p.add_argument('--target-count',type=int,help='New task target, 1..100000; never edits a sealed task')
+    p.add_argument('--duration-hours',type=int,help='New task duration, 2..168 hours, including QA')
+    p.add_argument('--source-minima',help='JSON mapping of the three independent source minima')
+    p.add_argument('--page-budgets',help='JSON mapping of the three finite PAGE budgets')
+    p.add_argument('--source-ids',nargs='+',help='Explicit subset of reviewed root source IDs')
     p.add_argument('--out', required=True)
     p = sub.add_parser('prepare-page', help='Offline new plan proposal from reviewed PAGE roots; no approval.')
     for opt in ('base-plan', 'base-authorization', 'config', 'out', 'runtime-root', 'task'):
@@ -118,7 +155,10 @@ def main(argv=None):
     args, rest = parser.parse_known_args(argv)
     if rest: parser.error('unrecognized arguments: ' + ' '.join(rest))
     if args.operation == 'profile':
-        result = task_config(args.target_profile); immutable_json(Path(args.out), result)
+        result = task_config(args.target_profile,target=args.target_count,hours=args.duration_hours,
+            source_minima=json.loads(args.source_minima) if args.source_minima else None,
+            page_budgets=json.loads(args.page_budgets) if args.page_budgets else None,source_ids=args.source_ids)
+        immutable_json(Path(args.out), result)
     elif args.operation == 'prepare-page':
         result = prepare_page_task(load_json(args.base_plan), load_json(args.base_authorization), load_json(args.config),
                                    args.out, args.runtime_root, args.task)

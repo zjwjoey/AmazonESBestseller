@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from urllib.parse import urlsplit
 from ..multisource.storage import atomic_json,immutable_json,sealed,read_sealed,digest
-from .global_target import SNAPSHOT_PROFILES,is_global_policy
+from .global_target import SNAPSHOT_PROFILES,is_global_policy,is_page_policy
 from .three_contract import verify_source
 from .three_metrics import measure_three
 from .v4_runner import V4T1Runner
@@ -41,13 +41,17 @@ def promote_favorite_page(work,current_index,*,minimum_met):
 
 
 def validate_page_snapshot(plan):
+    from .global_target import CUSTOM_PROFILE
+    policy=plan.get('target_policy') or {}
+    if policy.get('profile') in {CUSTOM_PROFILE,'MAIN_PRIORITY_100000_FAVORITES_3000_V1'} and plan.get('max_duration_hours')!=policy.get('total_task_hours'):
+        raise ValueError('SNAPSHOT_PLAN_DURATION_MUST_MATCH_POLICY')
     if plan.get('snapshot_field_contract') not in {None, 'CARD_IMAGE_V1'}:
         raise ValueError('UNKNOWN_SNAPSHOT_FIELD_CONTRACT')
     if plan.get('delivery_preflight_contract') not in {None, 'SPAIN_UI_PREFLIGHT_V1'}:
         raise ValueError('UNKNOWN_SNAPSHOT_DELIVERY_PREFLIGHT_CONTRACT')
     if (plan.get('collection_contract')!=CONTRACT or plan.get('stage')!='T1'
             or not is_global_policy(plan.get('target_policy'))
-            or plan['target_policy'] not in SNAPSHOT_PROFILES.values()
+            or not is_page_policy(plan['target_policy'])
             or plan.get('target_unique_links')!=plan['target_policy']['target']
             or plan.get('source_targets')!=plan['target_policy']['source_minima']
             or plan.get('snapshot_metadata_contract')!='SOURCE_CATEGORY_IDENTITY_V1'
