@@ -12,6 +12,9 @@ import json
 from pathlib import Path
 import re
 import sqlite3
+import shutil
+import tempfile
+import os
 import uuid
 
 from ..multisource.contracts import timestamp, canonical_page_url
@@ -372,6 +375,18 @@ class RunStore:
                 value["text"] = value["body"] = data.decode("utf-8")
             yield value
 
+    def matching_responses(self, run_id, *, kind, request_url=None, page_key=None):
+        """Select receipt metadata in SQLite; bodies still verified on reuse."""
+        clauses = ['run_id=?', "json_extract(data_json,'$.kind')=?",
+                   "json_extract(data_json,'$.access_state')='NORMAL'"]
+        params = [run_id, kind]
+        for key, value in (('request_url', request_url), ('page_key', page_key)):
+            if value is not None:
+                clauses.append("json_extract(data_json,'$." + key + "')=?")
+                params.append(value)
+        return [json.loads(row[0]) for row in self.db.execute(
+            'SELECT data_json FROM responses WHERE ' + ' AND '.join(clauses) + ' ORDER BY rowid', params)]
+
     def get_response(self, request_id, *, with_body=True):
         row = self.db.execute("SELECT data_json FROM responses WHERE request_id=?", (request_id,)).fetchone()
         if row is None:
@@ -726,3 +741,54 @@ class RunStore:
             "observations": list(self.iter_observations(run_id)), "requests": self.requests(run_id),
             "responses": list(self.iter_responses(run_id)), "candidates": list(self.iter_candidates(run_id)),
             "events": self.events(run_id)}
+
+
+class ReadOnlyRunStore(RunStore):
+    """Existing index snapshot only: no creation, recovery, DDL or gate writes."""
+    def __init__(self, root):
+        self.root = Path(root).resolve()
+        marker = self.root / '.highspeed_store.json'
+        database = self.root / 'index.sqlite3'
+        if not marker.is_file() or not database.is_file():
+            raise ValueError('EXISTING_HIGH_SPEED_STORE_REQUIRED')
+        if json.loads(marker.read_text('utf8')) != {'schema_version': 2, 'module': 'highspeed_multisource_v2'}:
+            raise ValueError('HIGH_SPEED_STORE_MARKER_CONFLICT')
+        # SQLite mode=ro can still write WAL shared-memory read marks. Never
+        # open the source database with SQLite: capture DB+WAL into an isolated
+        # directory and reject concurrent source changes during that capture.
+        temp_root = Path(os.environ.get('SNAPSHOT_READ_TEMP', r'F:\ai文件\CodexStorage\temp')) if os.name == 'nt' else Path(tempfile.gettempdir())
+        temp_root.mkdir(parents=True, exist_ok=True)
+        if temp_root == self.root or temp_root.is_relative_to(self.root):
+            raise ValueError('READ_ONLY_COPY_OUTSIDE_SOURCE_REQUIRED')
+        self._read_copy = tempfile.TemporaryDirectory(prefix='snapshot_read_', dir=temp_root)
+        try:
+            source_files = [database, database.with_name(database.name + '-wal')]
+            def tokens():
+                return [(p.stat().st_size, p.stat().st_mtime_ns) if p.exists() else None for p in source_files]
+            before = tokens()
+            for source, token in zip(source_files, before):
+                if token is not None:
+                    shutil.copyfile(source, Path(self._read_copy.name) / source.name)
+            if tokens() != before:
+                raise ValueError('READ_ONLY_SOURCE_CHANGED_DURING_COPY_RETRY_LATER')
+            copied = Path(self._read_copy.name) / database.name
+            self.db = sqlite3.connect(copied.as_uri() + '?mode=ro', uri=True, timeout=20, isolation_level=None)
+        except BaseException:
+            self._read_copy.cleanup()
+            raise
+        self.db.row_factory = sqlite3.Row
+        self.db.execute('PRAGMA query_only=ON')
+        self.db.execute('BEGIN')
+
+    def close(self):
+        try:
+            self.db.close()
+        finally:
+            self._read_copy.cleanup()
+
+    def _deny(self, *args, **kwargs):
+        raise ValueError('READ_ONLY_SNAPSHOT_STORE')
+
+    begin_run = update_run = set_gate = recover_gate = save_html = _deny
+    reserve_request = save_response = commit_page = recover = apply_review = append_event = _deny
+    _transaction = _index_page = run_lock = _deny

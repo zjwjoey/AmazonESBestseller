@@ -203,7 +203,8 @@ def audit_v4(pages, observations, sources, *, require_live=False):
                                    observed_at=page['observed_at'], evidence_path=str(path),
                                    http_status=page.get('http_status'), origin=page['origin'], acp_responses=acp,
                                    parser_profile_version=page.get('parser_version'),
-                                   snapshot_metadata_contract=page.get('snapshot_metadata_contract'))
+                                   snapshot_metadata_contract=page.get('snapshot_metadata_contract'),
+                                   snapshot_field_contract=page.get('snapshot_field_contract'))
             for row in parsed['observations']:
                 expected[row['observation_id']] = row
             if require_live:

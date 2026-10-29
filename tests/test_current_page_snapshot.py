@@ -104,11 +104,13 @@ def test_restart_preserves_category_cooldown_deadline_instead_of_resetting():
 
 
 @pytest.mark.parametrize('with_amendment',[False,True])
-def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp_path,with_amendment):
+@pytest.mark.parametrize('profile',['main-priority','main-priority-50000'])
+def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp_path,with_amendment,profile):
     from amazon_es_bestseller.highspeed.three_contract import source_from_navigation
     from amazon_es_bestseller.highspeed.v4_sources import source_for_url,SEEDS
     from amazon_es_bestseller.highspeed.page_snapshot import CONTRACT as PAGE
-    from amazon_es_bestseller.highspeed.global_target import MAIN_PRIORITY_POLICY
+    from amazon_es_bestseller.highspeed.global_target import SNAPSHOT_PROFILES
+    MAIN_PRIORITY_POLICY=SNAPSHOT_PROFILES[profile]
     from amazon_es_bestseller.highspeed.task_clock import start_task_clock
     from amazon_es_bestseller.highspeed.v4_authorization import prerequisite_review_session
     probe,old,proof=make_probe(tmp_path/'probe')
@@ -127,7 +129,7 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
             source.update(collection_category_key='Hogar',collection_category_evidence=context,owned_page_navigation=deepcopy(POLICY))
         plan.update(sources=sources,collection_contract=PAGE,current_protocol_reference=ref(proof),
             target_policy=deepcopy(MAIN_PRIORITY_POLICY),source_targets=deepcopy(MAIN_PRIORITY_POLICY['source_minima']),
-            snapshot_metadata_contract='SOURCE_CATEGORY_IDENTITY_V1',target_unique_links=20000,
+            snapshot_metadata_contract='SOURCE_CATEGORY_IDENTITY_V1',target_unique_links=MAIN_PRIORITY_POLICY['target'],
             category_cooldown_seconds=1800,max_duration_hours=24,max_requests_per_run=5,max_requests_per_day=5,
             max_pages_per_run=5,source_budgets={'BEST_SELLERS':{'requests':3,'PAGE':3,'native':0},
             'NEW_RELEASES':{'requests':1,'PAGE':1,'native':0},'CUSTOMER_FAVORITES':{'requests':1,'PAGE':1,'native':0}},
@@ -136,6 +138,8 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
         for k in ('collection_contract','current_protocol_reference','target_policy','source_targets',
                   'snapshot_metadata_contract','target_unique_links','category_cooldown_seconds','max_duration_hours',
                   'max_requests_per_run','max_requests_per_day','max_pages_per_run','source_budgets'):auth[k]=deepcopy(plan[k])
+        if profile=='main-priority-50000':
+            plan['snapshot_field_contract']=auth['snapshot_field_contract']='CARD_IMAGE_V1'
         auth.update(plan_sha256=digest(plan),expires_at=(NOW+timedelta(hours=24)).isoformat(),
             task_clock_reference=start_task_clock(plan['task_clock_path'],plan,'TEST_ONLY',now=NOW),sources={})
         for source in sources:
@@ -217,6 +221,46 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
             assert again['run']['snapshot_acceptance']=='NOT_ACCEPTED_SNAPSHOT_QUANTITY_SHORTFALL'
             assert again['snapshot_metrics']['acceptance']==again['run']['snapshot_acceptance']
             assert again['run']['production_acceptance']=='NOT_EVALUATED'
+            from amazon_es_bestseller.highspeed.snapshot_control import request_pause, release_pause
+            request_pause(store.root,plan)
+            count_before_pause=len(store.requests(plan['run_id']))
+            with prerequisite_review_session():
+                paused=CurrentPageSnapshotRunner(store,clock=lambda:clock[0],sleep=lambda _:None).run(plan,authorization=auth,transport=transport,resume=True)
+            assert paused['run']['stop_reason']=='USER_PAUSED'
+            assert len(store.requests(plan['run_id']))==count_before_pause
+            release_pause(store.root,plan)
+            with prerequisite_review_session():
+                again=CurrentPageSnapshotRunner(store,clock=lambda:clock[0],sleep=lambda _:None).run(plan,authorization=auth,transport=transport,resume=True)
+            assert len(transport.calls)==len(set(transport.calls))
+            assert again['run']['started_at']==result['run']['started_at']
+            from amazon_es_bestseller.highspeed.snapshot_report import export_page_snapshot
+            from amazon_es_bestseller.highspeed.store import ReadOnlyRunStore
+            reader=ReadOnlyRunStore(store.root)
+            try:
+                report=export_page_snapshot(reader,plan['run_id'],tmp_path/'reports')
+                assert report['target']==MAIN_PRIORITY_POLICY['target']
+                assert report['DOM_review_passed'] and report['receipt_review_passed'],report
+                assert not report['accepted'] and report['production_acceptance']=='NOT_EVALUATED'
+                assert report['CSV_JSONL_independently_verified']
+                from amazon_es_bestseller.highspeed.snapshot_report import receipt_review
+                missing_approval={**reader.get_run(plan['run_id']),'execution_approval_references':[]}
+                assert receipt_review(reader,missing_approval)['errors']==['EXECUTION_APPROVAL_REQUIRED']
+                assert not any(e.get('kind')=='SNAPSHOT_INCREMENTAL_ACCOUNTING_MISMATCH' for e in store.events(plan['run_id']))
+                with pytest.raises(ValueError,match='READ_ONLY'):
+                    reader.save_html('MUST_NOT_WRITE')
+            finally:reader.close()
+            # A new pending 50k task must not mutate this existing run or grant LIVE.
+            from amazon_es_bestseller.highspeed.snapshot_cli import prepare_page_task,task_config
+            task=tmp_path/'TEST_ONLY_task.txt';task.write_text('TEST_ONLY pending configuration',encoding='utf8')
+            old_digest=digest(plan)
+            pending=prepare_page_task(plan,auth,task_config(),tmp_path/'pending',tmp_path/'newruntime',task)
+            import json
+            new_plan=json.loads((Path(pending['directory'])/'plan.pending.json').read_text('utf8'))
+            new_auth=json.loads((Path(pending['directory'])/'authorization.pending.json').read_text('utf8'))
+            assert new_plan['target_unique_links']==50000 and not new_plan['live_enabled']
+            assert not new_auth['approved'] and new_auth['task_clock_reference'] is None
+            assert digest(plan)==old_digest and plan['run_id']!=new_plan['run_id']
+            assert not Path(new_plan['task_clock_path']).exists()
             # Repair an old display using the existing final audit only.
             from amazon_es_bestseller.highspeed.snapshot_review import refresh_snapshot_review
             store.update_run(plan['run_id'],snapshot_review=None)

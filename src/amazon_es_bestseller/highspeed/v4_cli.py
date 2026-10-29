@@ -23,11 +23,11 @@ def run_live_v4(args):
 
 
 def _run_live_v4(args):
-    from .store import RunStore
+    from .store import RunStore, ReadOnlyRunStore
     plan = load_json(args.plan); approval = load_json(args.authorization)
     if Path(args.root).resolve().parent.name != plan['run_id']:
         raise ValueError('V4_FRESH_RUN_DIRECTORY_REQUIRED')
-    store = RunStore(args.root)
+    store = ReadOnlyRunStore(args.root) if args.operation == 'check' else RunStore(args.root)
     try:
         three_source=plan.get('collection_contract')=='V4_THREE_SOURCE_5001'
         page_snapshot=plan.get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1'
@@ -52,6 +52,12 @@ def _run_live_v4(args):
             locks.enter_context(store.run_lock(plan['run_id']))
             locks.enter_context(file_lock(Path(plan['shared_access_gate_path']).parent / 'highspeed_live.lock'))
             validate_v4_authorization(plan, approval, runner.engine._gate(plan), store_root=store.root)
+            if page_snapshot:
+                from .snapshot_control import pause_pending, release_pause
+                if getattr(args, 'release_pause', False):
+                    if args.operation != 'resume':raise ValueError('EXPLICIT_PAGE_SNAPSHOT_RESUME_REQUIRED')
+                    release_pause(store.root, plan)
+                if pause_pending(store.root, plan):raise ValueError('USER_PAUSED_EXPLICIT_RESUME_REQUIRED')
             run = store.begin_run(plan, started_at=utc_text())
             reason = budget_reason(plan, store.summary(plan['run_id']), started_at=run['started_at'], authorization=approval)
             if reason:
@@ -69,6 +75,25 @@ def _run_live_v4(args):
                 def load_lazy_ranking_content(self, *a, **kw):
                     return None
             with BoundedSession(headless=not args.headful, profile_dir=args.profile_dir) as session:
+                if page_snapshot and plan.get('delivery_preflight_contract') == 'SPAIN_UI_PREFLIGHT_V1':
+                    from .delivery_preflight import verify_session_delivery
+                    directory = store.root / 'delivery_preflight' / uuid.uuid4().hex
+                    try:
+                        delivery = verify_session_delivery(session, directory,
+                            postal_code=getattr(args, 'postal_code', '28001'))
+                    except ValueError:
+                        diagnostics = load_json(directory / 'delivery_gate.json')
+                        state = diagnostics.get('access_status', 'UNKNOWN')
+                        if state != 'NORMAL':
+                            store.set_gate(state, run_id=plan['run_id'], reason='DELIVERY_PREFLIGHT_ACCESS_STOP',
+                                evidence_path=str(directory / 'delivery_page.html'))
+                            runner.engine._persist_shared_stop(plan, state, {'evidence_path': str(directory / 'delivery_page.html')})
+                        store.update_run(plan['run_id'], status='STOPPED', stop_reason='DELIVERY_PREFLIGHT_STOPPED',
+                            finished_at=utc_text(), quality_gate_passed=False,
+                            snapshot_review={'scope':plan['collection_contract'],'status':'PENDING','passed':False},
+                            snapshot_acceptance='NOT_ACCEPTED_SNAPSHOT_QA_PENDING', production_acceptance='NOT_EVALUATED')
+                        raise
+                    store.append_event(plan['run_id'], {'kind': 'DELIVERY_PREFLIGHT_VERIFIED', **delivery})
                 allowed = {u for s in plan['sources'] for u in s['page_urls']}
                 def bounded(route):
                     req = route.request
@@ -149,6 +174,8 @@ def main(argv=None):
             p.add_argument('--' + opt, required=True)
         p.add_argument('--live', action='store_true'); p.add_argument('--headful', action='store_true')
         p.add_argument('--profile-dir')
+        p.add_argument('--postal-code', default='28001')
+        p.add_argument('--release-pause', action='store_true', help='Explicitly acknowledge this run pause; gates/budgets remain unchanged.')
         p.add_argument('--reverify-source-id', action='append', default=[])
     p = sub.add_parser('report')
     p.add_argument('--retain-lightning-empty', action='store_true',
@@ -203,10 +230,15 @@ def main(argv=None):
     elif args.operation == 'prepare':
         result = prepare_v4(args.fixtures, args.out, args.runtime_root, args.shared_gate)
     elif args.operation == 'report':
-        from .store import RunStore
-        store = RunStore(args.root)
+        from .store import ReadOnlyRunStore
+        store = ReadOnlyRunStore(args.root)
         try:
             run = store.get_run(args.run_id)
+            if run['plan'].get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1':
+                from .snapshot_report import export_page_snapshot
+                result=export_page_snapshot(store,args.run_id,args.out)
+                print(json.dumps(result,ensure_ascii=False,indent=2))
+                return result
             if run['plan'].get('collection_contract')=='V4_THREE_SOURCE_5001':
                 from .three_report import export_three
                 result=export_three(store,args.run_id,args.out)

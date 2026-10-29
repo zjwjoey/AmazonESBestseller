@@ -8,10 +8,11 @@ from .budgets import aware_time,utc_text
 
 def _task_hours(plan):
     policy=plan.get('target_policy') or {}
-    if policy.get('profile')=='MAIN_PRIORITY_20000_FAVORITES_3000_V1':
+    from .global_target import SNAPSHOT_PROFILES,CUSTOM_PROFILE
+    if policy.get('profile') in {p['profile'] for p in SNAPSHOT_PROFILES.values()} | {CUSTOM_PROFILE}:
         from .global_target import is_global_policy
         is_global_policy(policy)
-        return 24
+        return policy['total_task_hours']
     return 10
 
 

@@ -53,8 +53,14 @@ class V4T1Runner:
                              p.get('execution_status')=='APPROVED_SOURCE_PAGE_SCOPE_EXECUTED')}
             self.mark_run_running(plan)
             stop = None
+            from .receipt_lookup import ReceiptLookup
+            receipt_lookup = ReceiptLookup(self.store.iter_responses(run_id))
             work=self.page_work(plan)
             for source,url in work:
+                if self.pause_requested(plan):
+                    stop = 'USER_PAUSED'
+                    self.store.append_event(run_id, {'kind': 'STOP', 'reason': stop, 'observed_at': utc_text(e.clock())})
+                    break
                 target_reason=self.target_stop_reason(plan)
                 if target_reason:
                     stop=target_reason
@@ -62,7 +68,7 @@ class V4T1Runner:
                 if url in committed:
                     continue
                 if not self.should_collect_source(plan,source):
-                    self.store.append_event(run_id,{'kind':'SOURCE_MINIMUM_ALREADY_MET_GLOBAL_COMPLETE','source_id':source['source_id']})
+                    self.store.append_event(run_id,{'kind':self.source_skip_event(plan,source),'source_id':source['source_id']})
                     continue
                 try:
                     self.before_source(plan,source)
@@ -73,8 +79,7 @@ class V4T1Runner:
                     sid=source['source_id']
                     scope_id=source.get('snapshot_admission_root',sid) if plan.get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1' else sid
                     source_scope=authorization['sources'][scope_id]
-                    existing = [r for r in self.store.iter_responses(run_id) if r.get('kind') == 'PAGE'
-                                and r.get('request_url') == url and r.get('access_state') == 'NORMAL']
+                    existing = receipt_lookup.pages.get(url, [])
                     if key in reverify_source_ids:
                         existing = []
                         self.store.append_event(run_id, {'kind': 'V4_T1_IN_SCOPE_REVERIFICATION', 'source_id': key,
@@ -92,6 +97,7 @@ class V4T1Runner:
                     else:
                         response, receipt, last = e._request(plan, authorization, transport, source, url,
                                                             'PAGE', started, last, page_key=key)
+                        receipt_lookup.add(receipt)
                     if plan.get('snapshot_metadata_contract'):
                         from ..access.location import inspect_delivery_location
                         destination=inspect_delivery_location(response['text'])
@@ -104,7 +110,7 @@ class V4T1Runner:
                     dynamic_receipts=[]
                     rendered_frames=[]
                     derivation=None
-                    for old in self.store.iter_responses(run_id):
+                    for old in receipt_lookup.acp.get(key, []):
                         if (old.get('kind') == 'ACP' and old.get('page_key') == key and old.get('access_state') == 'NORMAL'
                                 and aware_time(old['observed_at']) >= aware_time(receipt['observed_at'])
                                 and (old.get('ranking_context_binding') or {}).get('page_evidence_sha256') == receipt['sha256']):
@@ -121,7 +127,8 @@ class V4T1Runner:
                                   evidence_path=receipt['html_path'], http_status=receipt.get('status_code'),
                                   origin='LIVE_CAPTURE', acp_responses=acp,
                                   page_number=source['page_urls'].index(url)+1,
-                                  snapshot_metadata_contract=plan.get('snapshot_metadata_contract'))
+                                  snapshot_metadata_contract=plan.get('snapshot_metadata_contract'),
+                                  snapshot_field_contract=plan.get('snapshot_field_contract'))
                     parsed = parse()
                     def commit():
                         p = {**parsed['page'], 'run_id': run_id, 'snapshot_id': plan['snapshot_id'],
@@ -265,6 +272,7 @@ class V4T1Runner:
                     self.store.append_event(run_id, {'kind': 'STOP', 'reason': stop, 'observed_at': utc_text(e.clock())})
                     break
             pages = self.store.pages(run_id); rows = list(self.store.iter_observations(run_id))
+            self.before_central_review(plan)
             qa_started = time.perf_counter()
             deferred=self.defer_central_review_to_capacity()
             quality = ({'central_full_dom_review_passed':False,'errors':[],
@@ -289,6 +297,15 @@ class V4T1Runner:
 
     def should_collect_source(self,plan,source):
         return True
+
+    def source_skip_event(self, plan, source):
+        return 'SOURCE_MINIMUM_ALREADY_MET_GLOBAL_COMPLETE'
+
+    def pause_requested(self, plan):
+        return False
+
+    def before_central_review(self, plan):
+        pass
 
     def mark_run_running(self,plan):
         self.store.update_run(plan['run_id'],status='RUNNING')
