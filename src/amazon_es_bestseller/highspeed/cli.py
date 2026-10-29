@@ -82,62 +82,11 @@ def export_gate(store, run_id, output, *, authorization_path=None):
         "directory": str(directory), "gate_validation_error": record.get("gate_validation_error")}
 
 def run_live(args, store, plan, approval, *, entry_time):
+    """Compatibility rejection only; the old browser execution body is deleted."""
     if plan.get('snapshot_contract_version') == 4:
         raise ValueError('V4_REQUIRES_EXPLICIT_V4_CLI_AND_BOUNDED_PROTOCOL_DIAGNOSTICS')
-    # No browser is even constructed while another run owns this store.
-    with ExitStack() as locks:
-        locks.enter_context(store.run_lock(plan["run_id"]))
-        if plan.get("shared_access_gate_path"):
-            locks.enter_context(file_lock(Path(plan["shared_access_gate_path"]).parent / "highspeed_live.lock"))
-        return _run_live_locked(args, store, plan, approval, entry_time=entry_time)
+    raise ValueError('LEGACY_HIGHSPEED_LIVE_RETIRED: use the reviewed PAGE snapshot entry')
 
-def _run_live_locked(args, store, plan, approval, *, entry_time):
-    from .runner import HighSpeedRunner
-    runner = HighSpeedRunner(store, progress=lambda event: print(json.dumps(event, ensure_ascii=False)))
-    validate_plan(plan)
-    validate_authorization(plan, approval, runner._gate(plan), store_root=store.root)
-    if getattr(args, "offline", False) or not args.live or plan["stage"] == "T0":
-        raise ValueError("EXPLICIT_LIVE_SWITCH_REQUIRED")
-    if plan.get("snapshot_contract_version") == 3:
-        reference=plan.get("category_mapping_config_reference")
-        if not reference or hashlib.sha256(Path(reference["path"]).read_bytes()).hexdigest()!=reference.get("sha256"):
-            raise ValueError("V3_MAPPING_CONFIG_REFERENCE_REQUIRED")
-    # Freeze task start before browser setup; resume never resets its clock.
-    if args.operation == "run":
-        store.begin_run(plan, started_at=entry_time)
-    else:
-        if store.get_run(plan["run_id"])["plan"] != plan:
-            raise ValueError("IMMUTABLE_RUN_PLAN_MISMATCH")
-    reason = budget_reason(plan, store.summary(plan["run_id"]), started_at=store.get_run(plan["run_id"])["started_at"])
-    if reason:
-        raise ValueError(reason)
-    from ..access.browser import BrowserSession
-    from ..transport.playwright import PlaywrightTransport
-    class BoundedSession(BrowserSession):
-        def load_lazy_ranking_content(self, *a, **kw):
-            return None
-    startup = time.perf_counter()
-    with BoundedSession(headless=not args.headful, profile_dir=getattr(args, "profile_dir", None)) as session:
-        store.append_event(plan["run_id"], {"kind": "BROWSER_START", "stage": "browser_start",
-            "duration_seconds": time.perf_counter()-startup})
-        allowed = {url for scope in approval["sources"].values() for url in scope.get("page_urls", [])}
-        def bounded_document(route):
-            if route.request.resource_type == "document" and route.request.url not in allowed:
-                route.abort()
-            else:
-                route.continue_()
-        session.page.route("**/*", bounded_document)
-        transport = PlaywrightTransport(session, measure_timings=plan.get("snapshot_contract_version") == 3)
-        (store.root / "native_acp_contracts").mkdir(parents=True, exist_ok=True)
-        def save_contract(value):
-            save_native_contract(store, plan, value)
-        def record_local_replay(event):
-            store.append_event(plan['run_id'],{'kind':'NATIVE_CAROUSEL_LOCAL_UI_REPLAY',**event})
-        if plan.get('snapshot_contract_version')==3:
-            transport.install_bounded_acp_capture(on_capture=save_contract,on_local_replay=record_local_replay)
-        else:
-            transport.install_bounded_acp_capture(on_capture=save_contract)
-        return runner.run(plan, authorization=approval, transport=transport, resume=True, preheld_lock=True)
 
 def dispatch(args):
     entry_time = utc_text()

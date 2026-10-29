@@ -37,10 +37,12 @@ def validate_parallel_amendment(plan, original_auth, amendment, *, now, gate, co
         if digest(amendment.get(k))!=digest(plan.get(k)):
             raise ValueError('PARALLEL_CANNOT_CHANGE_BUDGET_OR_TARGET:'+k)
     if (amendment.get('workers')!=3 or amendment.get('parallel_scope')!='THREE_FIXED_WINDOWS_SAME_CONTEXT' or
-        amendment.get('access_stop_scope')!='all' or amendment.get('profile_rotation') is not False or
+        amendment.get('access_stop_scope') not in {'all','worker'} or amendment.get('profile_rotation') is not False or
         amendment.get('cookie_rotation') is not False or amendment.get('account_rotation') is not False or
         amendment.get('ip_rotation') is not False):
-        raise ValueError('PARALLEL_FIXED_CONTEXT_GLOBAL_STOP_REQUIRED')
+        raise ValueError('PARALLEL_FIXED_CONTEXT_EXPLICIT_STOP_SCOPE_REQUIRED')
+    if amendment.get('access_stop_scope')=='worker' and amendment.get('fault_handling_contract')!='PAUSE_ALERT_V1':
+        raise ValueError('WORKER_STOP_REQUIRES_REVIEWED_PAUSE_ALERT_CONTRACT')
     if amendment.get('code_manifest_sha256')!=digest(code_manifest):
         raise ValueError('PARALLEL_CODE_MANIFEST_MISMATCH')
     return amendment

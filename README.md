@@ -372,9 +372,9 @@ $snapshotWorktree = (Get-Location).Path  # 当前代码检出目录
 $snapshotPython = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe'
 Set-Location -LiteralPath $snapshotWorktree
 $snapshotStore = Join-Path $snapshotWorktree 'outputs\multisource_user_check'
-& '.\scripts\Invoke-Multisource.ps1' -Python $snapshotPython sources --root $snapshotStore
-& '.\scripts\Invoke-Multisource.ps1' -Python $snapshotPython replay --root $snapshotStore --plan '.\configs\multisource\offline_five_lists.json'
-& '.\scripts\Invoke-Multisource.ps1' -Python $snapshotPython qa --root $snapshotStore --run-id offline_five_lists
+& $snapshotPython '.\scripts\amazon_es.py' --offline multisource sources --root $snapshotStore
+& $snapshotPython '.\scripts\amazon_es.py' --offline multisource replay --root $snapshotStore --plan '.\configs\multisource\offline_five_lists.json'
+& $snapshotPython '.\scripts\amazon_es.py' --offline multisource qa --root $snapshotStore --run-id offline_five_lists
 ```
 
 完整的指定榜单／类目、历史 HTML、暂停恢复、日期／期间比较、报告、人工身份审核和 Windows 外部调度命令见 [多榜单模块说明](docs/MULTISOURCE_SNAPSHOT_V1_1.md)；实时运行前必须完成 [P0 审核计划](docs/MULTISOURCE_P0_PLAN_V1_1.md) 的独立授权。

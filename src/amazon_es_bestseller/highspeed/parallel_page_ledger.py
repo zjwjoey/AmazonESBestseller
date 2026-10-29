@@ -1,8 +1,4 @@
-"""Offline prototype: durable claims for a three-slot PAGE snapshot coordinator.
-
-Not wired to a browser, production store, historical audit, or live CLI.
-This module is not an authorization to collect or to resume a real task.
-"""
+"""Durable claims and disabled slots for the reviewed three-window PAGE path."""
 from __future__ import annotations
 import json
 import hashlib
@@ -61,6 +57,8 @@ class ParallelPageLedger:
                     worker INTEGER NOT NULL, claimed_at REAL NOT NULL, outcome TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS aliases(alias_url TEXT PRIMARY KEY, primary_url TEXT NOT NULL,
                     evidence_path TEXT NOT NULL, evidence_sha256 TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS disabled_workers(worker INTEGER PRIMARY KEY,
+                    reason TEXT NOT NULL, disabled_at REAL NOT NULL);
             ''')
             current=db.execute('SELECT run_id,plan_sha256,deadline,page_budget,min_interval,prior_consumed,prior_last_start,family_limits,prior_family_consumed,cooldown_seconds,prior_category,prior_cooldown_until FROM config WHERE id=1').fetchone()
             if current is None:
@@ -116,6 +114,8 @@ class ParallelPageLedger:
                 'SELECT deadline,page_budget,min_interval,prior_consumed,stop_reason,next_start,family_limits,prior_family_consumed,current_category,cooldown_until,cooldown_seconds FROM config WHERE id=1').fetchone()
             if stop or now>=deadline:
                 db.commit();return None
+            if db.execute('SELECT 1 FROM disabled_workers WHERE worker=?',(worker,)).fetchone():
+                db.commit();return None
             if now<next_start:
                 db.commit();return None
             if prior+db.execute('SELECT count(*) FROM claims').fetchone()[0]>=budget:
@@ -155,7 +155,8 @@ class ParallelPageLedger:
             db.execute('UPDATE config SET next_start=? WHERE id=1',(now+interval,))
             db.commit();return url
 
-    def complete(self, worker, url, *, state, receipt):
+    def complete(self, worker, url, *, state, receipt, stop_scope='all'):
+        if stop_scope not in {'worker','all'}:raise ValueError('EXPLICIT_ACCESS_STOP_SCOPE_REQUIRED')
         if state not in {'SAVED','HELD','ACCESS_STOP'} or not receipt:
             raise ValueError('DURABLE_RECEIPT_AND_OUTCOME_REQUIRED')
         with self._connect() as db:
@@ -165,8 +166,23 @@ class ParallelPageLedger:
             outcome='HELD' if state=='ACCESS_STOP' else state
             db.execute('UPDATE pages SET state=?,receipt=? WHERE url=?',(outcome,receipt,url))
             db.execute('UPDATE claims SET outcome=? WHERE url=?',(state,url))
-            if state=='ACCESS_STOP':db.execute("UPDATE config SET stop_reason='ACCESS_STOP' WHERE id=1")
+            if state=='ACCESS_STOP' and stop_scope=='all':db.execute("UPDATE config SET stop_reason='ACCESS_STOP' WHERE id=1")
             db.commit()
+
+    def disable_worker(self, worker, reason, *, hold_claim=True):
+        """Reserve ambiguous work permanently; never reassign it to another slot."""
+        if worker not in (1,2,3) or not reason:raise ValueError('EXACT_WORKER_AND_REASON_REQUIRED')
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('INSERT OR IGNORE INTO disabled_workers VALUES (?,?,?)',(worker,reason,time.time()))
+            if hold_claim:
+                db.execute("UPDATE pages SET state='HELD' WHERE worker=? AND state='RESERVED'",(worker,))
+                db.execute("UPDATE claims SET outcome='HELD_AMBIGUOUS' WHERE worker=? AND outcome='RESERVED'",(worker,))
+            db.commit()
+
+    def disabled_workers(self):
+        with self._connect() as db:
+            return dict(db.execute('SELECT worker,reason FROM disabled_workers'))
 
     def replay_committed(self, url, receipt, *, verify):
         with self._connect() as db:
@@ -239,7 +255,7 @@ class ParallelPageLedger:
             db.commit()
 
     def stop(self, reason):
-        if reason not in {'USER_PAUSED','ACCESS_STOP','JOURNAL_FAILURE'}:raise ValueError('EXPLICIT_STOP_REASON_REQUIRED')
+        if reason not in {'USER_PAUSED','ACCESS_STOP','JOURNAL_FAILURE','CONTROL_STOP'}:raise ValueError('EXPLICIT_STOP_REASON_REQUIRED')
         with self._connect() as db:
             db.execute('BEGIN IMMEDIATE')
             db.execute('UPDATE config SET stop_reason=COALESCE(stop_reason,?) WHERE id=1',(reason,));db.commit()

@@ -485,3 +485,20 @@ must report partial results separately from failures.
 - Cooperative pause does not reset budgets/deadlines or release access stops.
   Raw observations, ASIN hints, manual notes and detail handoff authority are
   unchanged. See `docs/SNAPSHOT_MODULE_50000.md` for implementation boundaries.
+
+## 34. User-reviewed PAGE fault handling (2026-10-29)
+
+- The reviewed three-fixed-window PAGE path may use `access_stop_scope="worker"`
+  with an explicitly reviewed `fault_handling_contract="PAUSE_ALERT_V1"` amendment.
+  Existing sealed `all` amendments keep their original scope. Do not rewrite old
+  plans, approvals, clocks, deadlines, budgets or evidence to adopt this policy.
+- A page-open/body/DOM failure disables that fixed worker, preserves its ambiguous
+  claims and alerts the user. Other healthy workers may continue their original
+  admitted same-category work. Never retry, replace or transfer the failed claim.
+- A shared journal, queue, identity binding or commit/review failure stops all new
+  requests. Keep the owner process/context alive in `WAITING_FOR_OPERATOR`, save
+  the original exception and show a desktop notice. Acknowledging a notice never
+  releases access stops, renews a clock or resumes collection.
+- Recovery and LIVE execution still require reviewed evidence, current Spain UI
+  and access checks and the original task clock. Offline tests and a new local
+  release do not authorize collection. See `docs/SNAPSHOT_FAULT_ALERTS.md`.

@@ -32,6 +32,11 @@ def test_monitor_reads_real_saved_fixture_progress_without_network_and_excludes_
         assert set(result['quantity_goals'])=={'BEST_SELLERS','NEW_RELEASES','CUSTOMER_FAVORITES','GLOBAL'}
         assert result['task_elapsed_wall_seconds']==3600
         assert result['alerts'] and result['sources']['CUSTOMER_FAVORITES']['E_qualified_review_groups']>0
+        store.update_run(p['run_id'],status='PAUSED_ERROR',snapshot_phase='WAITING_FOR_OPERATOR',stop_reason='SHARED_COMMIT_FAILURE')
+        waiting=snapshot(store.root,p,read_sealed(p['task_clock_path']),now=NOW+timedelta(hours=1),window_start=NOW+timedelta(minutes=10))
+        assert waiting['snapshot_phase']=='WAITING_FOR_OPERATOR'
+        assert 'COLLECTOR_PAUSED_WAITING_FOR_OPERATOR' in waiting['alerts']
+        assert 'NO_REQUEST_PROGRESS_FOR_5_MINUTES_CHECK_PHASE' not in waiting['alerts']
     finally:store.close()
 
 

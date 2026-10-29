@@ -13,11 +13,12 @@ from .v4_quality import audit_v4
 
 
 class ParallelSnapshotCommitter:
-    def __init__(self,runner,plan,queue,*,stop,fixture_mode=False):
+    def __init__(self,runner,plan,queue,*,stop,fixture_mode=False,access_stop_scope='all',observed_access=None):
         if runner.store.get_run(plan['run_id'])['plan']!=plan:
             raise ValueError('IMMUTABLE_RUN_PLAN_MISMATCH')
         self.runner=runner;self.store=runner.store;self.plan=plan
         self.queue=queue;self.stop=stop;self.fixture_mode=fixture_mode
+        self.access_stop_scope=access_stop_scope;self.observed_access=observed_access
 
     def __call__(self,worker,item,response):
         plan=self.plan;source=item['source'];url=item['url'];reservation=item['reservation']
@@ -26,7 +27,9 @@ class ParallelSnapshotCommitter:
             self.stop('RESERVATION_BINDING_FAILURE');raise ValueError('RESERVATION_BINDING_FAILURE')
         state=detect_access_status(response.get('status_code'),response.get('text','')+'\n'+
             response.get('rendered_dom_html','')+'\n'+response.get('http_document_html','')).value
-        if state!='NORMAL':self.stop(state)
+        if state!='NORMAL':
+            if self.observed_access:self.observed_access(worker,state,item)
+            else:self.stop(state)
         origin='OFFLINE_FIXTURE' if self.fixture_mode else 'LIVE_CAPTURE'
         try:
             receipt=self.store.save_response(plan['run_id'],reservation,{**response,'origin':origin,
@@ -36,9 +39,10 @@ class ParallelSnapshotCommitter:
             self.stop('RESPONSE_JOURNAL_FAILURE')
             raise
         if state!='NORMAL':
-            self.store.set_gate(state,run_id=plan['run_id'],evidence_path=receipt['evidence_path'])
-            if not self.fixture_mode:self.runner.engine._persist_shared_stop(plan,state,receipt)
-            self.queue.complete(worker,url,state='ACCESS_STOP',receipt=receipt['sha256'])
+            if self.access_stop_scope=='all':
+                self.store.set_gate(state,run_id=plan['run_id'],evidence_path=receipt['evidence_path'])
+                if not self.fixture_mode:self.runner.engine._persist_shared_stop(plan,state,receipt)
+            self.queue.complete(worker,url,state='ACCESS_STOP',receipt=receipt['sha256'],stop_scope=self.access_stop_scope)
             return receipt
         self.queue.complete(worker,url,state='SAVED',receipt=receipt['sha256'])
         try:

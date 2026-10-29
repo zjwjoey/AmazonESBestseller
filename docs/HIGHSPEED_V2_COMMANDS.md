@@ -1,3 +1,5 @@
+> 历史参考：旧 LIVE 执行程序和 Invoke 包装脚本已移除。当前使用 `python scripts/amazon_es.py snapshot --help`；历史数据仅离线审查。以下保留历史命令记录，不能执行旧 LIVE 任务。
+
 # High-Speed V2 commands
 
 V2 remains isolated from production and P0. The checked-in T1/T2/T3 templates are pending source-capacity and human review, with `live_enabled=false` and empty exact source scopes. None starts live collection. Requests remain serial with 3-second pacing and no category cooldown. The inherited shared Access Gate must be NORMAL; creating a new V2 store never clears it.

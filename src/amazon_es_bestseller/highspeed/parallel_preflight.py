@@ -12,7 +12,7 @@ from .task_clock import request_stop_reason
 def verify_code_manifest(code_root,manifest):
     root=Path(code_root).resolve();files=manifest.get('files',{})
     required={f'src/amazon_es_bestseller/highspeed/parallel_{name}.py' for name in
-        ('transport','commit','coordinator','admission','dispatch_gate','page_ledger','amendment','preflight','checkpoint','cli','alias_review')}
+        ('transport','commit','coordinator','admission','dispatch_gate','page_ledger','amendment','preflight','checkpoint','cli','alias_review','faults')}
     if not required.issubset(files):raise ValueError('COMPLETE_PARALLEL_CODE_MANIFEST_REQUIRED')
     for relative,expected in files.items():
         path=(root/relative).resolve()
@@ -33,7 +33,8 @@ def verify_isolated_acceptance(plan,amendment,manifest):
         raise ValueError('ISOLATED_ACCEPTANCE_SCOPE_MISMATCH')
     required={'test_parallel_browser_pipeline','test_parallel_snapshot_hooks','test_parallel_checkpoint',
         'test_parallel_real_gate_offline','test_parallel_dispatch_gate','test_parallel_admission',
-        'test_parallel_cli','test_parallel_preflight','test_parallel_alias_review','test_parallel_early_access_stop'}
+        'test_parallel_cli','test_parallel_preflight','test_parallel_alias_review','test_parallel_early_access_stop',
+        'test_parallel_fault_alerts','test_parallel_fault_browser'}
     covered=set()
     receipts=review.get('test_executions',[])
     if not receipts:raise ValueError('ACTUAL_TEST_EXECUTION_REQUIRED')
@@ -58,6 +59,11 @@ def verify_isolated_acceptance(plan,amendment,manifest):
 
 
 def check_parallel_start(runner,plan,authorization,amendment,manifest,*,code_root,now):
+    # A compatibility import selector may route an old checkout to a new
+    # release. Never validate old on-disk bytes while executing new modules.
+    loaded=Path(__file__).resolve()
+    expected=(Path(code_root).resolve()/'src/amazon_es_bestseller/highspeed/parallel_preflight.py').resolve()
+    if loaded!=expected:raise ValueError('LOADED_PARALLEL_CODE_ROOT_MISMATCH')
     verify_code_manifest(code_root,manifest)
     validate_page_snapshot(plan)
     gate=runner.engine._gate(plan)

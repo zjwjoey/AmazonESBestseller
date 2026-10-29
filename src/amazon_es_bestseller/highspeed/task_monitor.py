@@ -114,12 +114,14 @@ def snapshot(root,plan,clock,*,now=None,window_start=None):
     process=process_evidence(plan)
     state={**json.loads(run[0]),'status':run[1]} if run else {}
     running=state.get('status')=='RUNNING'
+    waiting=state.get('status')=='PAUSED_ERROR' and state.get('snapshot_phase')=='WAITING_FOR_OPERATOR'
     page_only=plan.get('collection_contract')=='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1'
     schedule=state.get('category_schedule') or {}
     cooling=bool(running and schedule.get('deadline') and aware_time(schedule['deadline'])>now)
     reviewing=bool(running and state.get('snapshot_phase')=='FINAL_DOM_REVIEW')
     alerts=[]
-    if running and not process['verified']:alerts.append('COLLECTOR_PROCESS_NOT_VERIFIED')
+    if (running or waiting) and not process['verified']:alerts.append('COLLECTOR_PROCESS_NOT_VERIFIED')
+    if waiting:alerts.append('COLLECTOR_PAUSED_WAITING_FOR_OPERATOR')
     if any(g!='NORMAL' for g in gate_values):alerts.append('ACCESS_GATE_NOT_NORMAL_NO_REQUESTS_ALLOWED')
     if any(p['below_plan_20_percent'] for p in progress.values()):alerts.append('QUANTITY_GOAL_BEHIND_20_PERCENT')
     if running and not cooling and not reviewing and request_times and (now-max(request_times)).total_seconds()>300 and not metrics['target_met']:alerts.append('NO_REQUEST_PROGRESS_FOR_5_MINUTES_CHECK_PHASE')

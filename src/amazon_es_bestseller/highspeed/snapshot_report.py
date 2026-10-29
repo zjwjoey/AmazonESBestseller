@@ -129,7 +129,7 @@ def inspect_snapshot(store, run_id):
     rows = list(store.iter_observations(run_id))
     metrics = measure_three(rows, run_id, target_policy=plan['target_policy'])
     return {'run_id': run_id, 'status': run['status'], 'stop_reason': run.get('stop_reason'),
-            'snapshot_phase': run.get('snapshot_phase') if run['status']=='RUNNING' else stop_category(run.get('stop_reason')),
+            'snapshot_phase': run.get('snapshot_phase') if run['status'] in {'RUNNING','PAUSED_ERROR'} else stop_category(run.get('stop_reason')),
             'stop_category': stop_category(run.get('stop_reason')), 'metrics': metrics,
             'pause_pending': pause_pending(store.root, plan), 'category_schedule': run.get('category_schedule'),
             'last_request_at': store.latest_request_time(), 'budgets_used': store.budget_counters(run_id),

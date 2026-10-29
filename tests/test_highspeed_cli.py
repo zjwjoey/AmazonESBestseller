@@ -134,14 +134,15 @@ def test_retired_live_rejects_even_when_shared_lock_is_held(tmp_path, monkeypatc
         with pytest.raises(ValueError, match='LEGACY_HIGHSPEED_LIVE_RETIRED'):
             invoke("highspeed", "run", "--root", str(tmp_path / "different_store"), "--plan", str(path), "--live")
 
-@pytest.mark.skipif(not shutil.which("pwsh"), reason="PowerShell runtime is not installed")
-def test_powershell_helper_forwards_flags_and_exact_python_runtime():
+def test_legacy_helpers_removed_and_python_launcher_retains_offline_query_cli():
     repository = Path(__file__).resolve().parents[1]
-    result = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-File", str(repository / "scripts/Invoke-HighSpeed.ps1"),
-        "-Python", sys.executable, "--offline", "highspeed", "--help"], cwd=repository,
+    assert not (repository / 'scripts/Invoke-HighSpeed.ps1').exists()
+    assert not (repository / 'scripts/Invoke-Multisource.ps1').exists()
+    result = subprocess.run([sys.executable, '-B', str(repository / 'scripts/amazon_es.py'),
+        "--offline", "highspeed", "--help"], cwd=repository,
         capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert result.returncode == 0, result.stderr
-    assert "V2 import:" in result.stdout and "gate-export" in result.stdout
+    assert "gate-export" in result.stdout
 
 def test_cli_renormalize_keeps_original_journals_and_request_count(tmp_path):
     path, plan = offline_fixture(tmp_path); root = tmp_path / "store"
