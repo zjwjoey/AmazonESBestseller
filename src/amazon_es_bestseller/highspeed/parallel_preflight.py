@@ -59,6 +59,11 @@ def verify_isolated_acceptance(plan,amendment,manifest):
 
 
 def check_parallel_start(runner,plan,authorization,amendment,manifest,*,code_root,now):
+    # A compatibility import selector may route an old checkout to a new
+    # release. Never validate old on-disk bytes while executing new modules.
+    loaded=Path(__file__).resolve()
+    expected=(Path(code_root).resolve()/'src/amazon_es_bestseller/highspeed/parallel_preflight.py').resolve()
+    if loaded!=expected:raise ValueError('LOADED_PARALLEL_CODE_ROOT_MISMATCH')
     verify_code_manifest(code_root,manifest)
     validate_page_snapshot(plan)
     gate=runner.engine._gate(plan)
