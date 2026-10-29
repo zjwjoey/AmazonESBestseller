@@ -100,10 +100,16 @@ def _execute(manager, args, spec=None):
 def dispatch(args):
     from .snapshots import SnapshotManager
     from .sources import SourceRegistry, discover_sources
-    manager = SnapshotManager(args.root)
-    registry = SourceRegistry(manager.root / "source_registry.json")
-    registry.seed_roots()
     operation = args.operation
+    query = operation in {'status', 'qa', 'compare', 'report', 'exceptions'}
+    if query and args.out:
+        root, output = Path(args.root).resolve(), Path(args.out).resolve()
+        if output == root or output.is_relative_to(root) or root.is_relative_to(output):
+            raise ValueError('OUTPUT_MUST_BE_OUTSIDE_SOURCE')
+    manager = SnapshotManager(args.root, create=not query)
+    registry = SourceRegistry(manager.root / "source_registry.json")
+    if not query:
+        registry.seed_roots()
     if operation == "sources":
         return {"types": SOURCE_ROOTS, "sources": registry.list(), "coverage": registry.coverage()}
     if operation == "discover":
