@@ -440,8 +440,14 @@ class ProductIdentityRegistry:
                     items.append({"observation_id": view_id, "sha256": digest(stored)})
                     known[view_id] = stored
                 projections.append((row, base_id, view_id, fingerprint, changed))
-            if items and persist:
-                self._append(events, {"action": "INGEST", "observations": items})
+            if items:
+                if persist:
+                    self._append(events, {"action": "INGEST", "observations": items})
+                else:
+                    # Replay new views after durable review events in memory;
+                    # no existing decision can attach itself to the new identity.
+                    events = [*events, {'action': 'INGEST', 'observations': items,
+                        'event_id': 'query_projection_'+digest(items), 'projection_only': True}]
             mapped = {row["observation_id"]: row for row in
                       (self._write_checkpoint(known, events) if persist else self._materialize(known, events))}
             result = []

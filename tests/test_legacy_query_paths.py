@@ -7,7 +7,7 @@ from amazon_es_bestseller.multisource.identity import ProductIdentityRegistry
 from test_highspeed_readonly_cli import fingerprint
 from test_highspeed_cli import offline_fixture, invoke
 from test_multisource_snapshots import setup
-from test_multisource_identity import confirmed
+from test_multisource_identity import confirmed, observation, B
 
 
 def test_historical_v3_store_reads_wal_copy_without_source_shm_changes(tmp_path):
@@ -55,3 +55,23 @@ def test_identity_query_projects_current_evidence_without_publishing_views(tmp_p
     view = reader.materialize_views([changed],'v2',persist=False)
     assert view[0]['observation_id'] == row['observation_id']
     assert fingerprint(directory) == before
+
+
+def test_new_identity_fingerprint_projects_without_inheriting_or_persisting(tmp_path):
+    row = confirmed(tmp_path)
+    directory = tmp_path/'identity'
+    registry = ProductIdentityRegistry(directory);registry.ingest(row)
+    before = fingerprint(directory)
+    changed = {**row,'raw_product_url':'https://www.amazon.es/dp/'+B,
+               'asin_observed':B,'asin_from_card':B}
+    result = ProductIdentityRegistry(directory,create=False).materialize_views([changed],'v2',persist=False)[0]
+    assert result['identity_view_changed'] is True
+    assert result['product_id'] is None
+    assert fingerprint(directory) == before
+
+
+def test_missing_identity_registry_is_projected_without_creating_it(tmp_path):
+    directory = tmp_path/'missing'
+    result = ProductIdentityRegistry(directory,create=False).materialize_views([observation()],'v1',persist=False)
+    assert len(result) == 1
+    assert not directory.exists()
