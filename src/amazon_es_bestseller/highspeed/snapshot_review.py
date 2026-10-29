@@ -71,34 +71,39 @@ def refresh_snapshot_review(store, run_id, output):
     from .three_metrics import measure_three
 
     with store.run_lock(run_id):
-        run = store.get_run(run_id)
-        if run.get('collection_contract') != CONTRACT or run['status'] != 'STOPPED':
-            raise ValueError('STOPPED_CURRENT_PAGE_SNAPSHOT_REQUIRED')
-        events = store.events(run_id)
-        # The correction event is metadata-only; all capture/resume events must
-        # precede the final DOM review. Never re-use a review from an old attempt.
-        evidence_events = [e for e in events if e.get('kind') != 'SNAPSHOT_REVIEW_STATUS_CORRECTED']
-        event = evidence_events[-1] if evidence_events else {}
-        quality = run.get('qa', {})
-        if (event.get('kind') != 'V4_CENTRAL_DOM_REVIEW'
-                or event.get('errors') != quality.get('errors')
-                or not run.get('finished_at')):
-            raise ValueError('FINAL_CURRENT_RUN_DOM_REVIEW_REQUIRED')
-        rows = list(store.iter_observations(run_id))
-        pages = store.pages(run_id)
-        if (quality.get('reviewed_observations') != len(rows)
-                or quality.get('reviewed_capture_frames', 0) < len(pages)):
-            raise ValueError('FINAL_REVIEW_COVERAGE_MISMATCH')
-        metrics = measure_three(rows, run_id, target_policy=run['plan']['target_policy'])
-        fields = snapshot_review_fields(run, metrics, quality, len(pages))
-        report = {'run_id': run_id, 'operation': 'SNAPSHOT_REVIEW_STATUS_CORRECTION',
-                  'new_network_requests': 0, 'raw_evidence_modified': False,
-                  'audit_event': event, 'audit_event_sha256': digest(event),
-                  'original_qa': quality,
-                  'previous': {k: run.get(k) for k in fields}, 'corrected': fields}
+        report = preview_snapshot_review(store, run_id)
+        report['operation'] = 'SNAPSHOT_REVIEW_STATUS_CORRECTION'
         immutable_json(Path(output), report)
-        publish_snapshot_review(store, run_id, fields)
+        publish_snapshot_review(store, run_id, report['corrected'])
         store.append_event(run_id, {'kind': 'SNAPSHOT_REVIEW_STATUS_CORRECTED',
                                     'report_path': str(Path(output).resolve()),
                                     'report_sha256': digest(report), 'new_network_requests': 0})
         return report
+
+
+def preview_snapshot_review(store, run_id):
+    """Compute a stopped-run metadata correction without locks or publication."""
+    from ..multisource.storage import digest
+    from .three_metrics import measure_three
+
+    run = store.get_run(run_id)
+    if run.get('collection_contract') != CONTRACT or run['status'] != 'STOPPED':
+        raise ValueError('STOPPED_CURRENT_PAGE_SNAPSHOT_REQUIRED')
+    events = store.events(run_id)
+    evidence_events = [e for e in events if e.get('kind') != 'SNAPSHOT_REVIEW_STATUS_CORRECTED']
+    event = evidence_events[-1] if evidence_events else {}
+    quality = run.get('qa', {})
+    if (event.get('kind') != 'V4_CENTRAL_DOM_REVIEW'
+            or event.get('errors') != quality.get('errors') or not run.get('finished_at')):
+        raise ValueError('FINAL_CURRENT_RUN_DOM_REVIEW_REQUIRED')
+    rows = list(store.iter_observations(run_id))
+    pages = store.pages(run_id)
+    if (quality.get('reviewed_observations') != len(rows)
+            or quality.get('reviewed_capture_frames', 0) < len(pages)):
+        raise ValueError('FINAL_REVIEW_COVERAGE_MISMATCH')
+    metrics = measure_three(rows, run_id, target_policy=run['plan']['target_policy'])
+    fields = snapshot_review_fields(run, metrics, quality, len(pages))
+    return {'run_id': run_id, 'operation': 'SNAPSHOT_REVIEW_STATUS_PREVIEW',
+            'new_network_requests': 0, 'raw_evidence_modified': False,
+            'audit_event': event, 'audit_event_sha256': digest(event), 'original_qa': quality,
+            'previous': {key: run.get(key) for key in fields}, 'corrected': fields}

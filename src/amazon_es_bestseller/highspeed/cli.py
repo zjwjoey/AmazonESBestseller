@@ -179,13 +179,21 @@ def dispatch(args):
         specs = load_json(args.pages)
         return run_benchmark(specs.get("pages", []) if isinstance(specs, dict) else specs, args.out,
             synthetic_unique=args.synthetic_unique, synthetic_observations=args.synthetic_observations)
-    from .store import RunStore
+    from .store import RunStore, ReadOnlyRunStore
     from .path_checks import validate_store_root, validate_run_storage_root
     validate_store_root(args.root)
     preloaded_plan = load_json(args.plan) if operation in {"run", "resume"} else None
     if preloaded_plan or args.run_id:
         validate_run_storage_root(args.root, preloaded_plan["run_id"] if preloaded_plan else args.run_id)
-    store = RunStore(args.root)
+    read_operations = {'status', 'qa', 'report', 'gate-export', 'snapshot-review-status'}
+    if operation == 'snapshot-review-correct' and not getattr(args, 'apply', False):
+        raise ValueError('EXPLICIT_METADATA_APPLY_REQUIRED')
+    if operation in {'report', 'gate-export', 'snapshot-review-status', 'snapshot-review-correct'}:
+        source = Path(args.root).resolve()
+        output = Path(args.out).resolve()
+        if output == source or output.is_relative_to(source) or source.is_relative_to(output):
+            raise ValueError('OUTPUT_MUST_BE_OUTSIDE_SOURCE')
+    store = (ReadOnlyRunStore if operation in read_operations else RunStore)(args.root)
     try:
         if operation in {"run", "resume"}:
             from .runner import HighSpeedRunner
@@ -205,6 +213,11 @@ def dispatch(args):
         if operation == "status":
             return {"run": store.get_run(args.run_id), "summary": store.summary(args.run_id), "access_gate": store.get_gate()}
         if operation == "snapshot-review-status":
+            from .snapshot_review import preview_snapshot_review
+            report = preview_snapshot_review(store, args.run_id)
+            immutable_json(Path(args.out), report)
+            return report
+        if operation == "snapshot-review-correct":
             from .snapshot_review import refresh_snapshot_review
             return refresh_snapshot_review(store, args.run_id, args.out)
         if operation == "qa":
@@ -254,7 +267,7 @@ def register(subparsers):
     op.add_argument("--historical-root",required=True);op.add_argument("--historical-run-id",required=True)
     op.add_argument("--root",required=True);op.add_argument("--run-id",required=True);op.add_argument("--out",required=True)
     op.set_defaults(func=command)
-    for name in ("run", "resume", "status", "qa", "report", "gate-export", "renormalize", "review-identity", "gate-recover", "snapshot-review-status"):
+    for name in ("run", "resume", "status", "qa", "report", "gate-export", "renormalize", "review-identity", "gate-recover", "snapshot-review-status", "snapshot-review-correct"):
         op = operations.add_parser(name)
         op.add_argument("--root", required=True)
         op.add_argument("--run-id", default="")
@@ -264,8 +277,10 @@ def register(subparsers):
             op.add_argument("--live", action="store_true")
             op.add_argument("--headful", action="store_true")
             op.add_argument("--profile-dir", help="One fixed normal browser profile for this run and its recovery; no rotation")
-        if name in {"report", "gate-export", "renormalize", "snapshot-review-status"}:
+        if name in {"report", "gate-export", "renormalize", "snapshot-review-status", "snapshot-review-correct"}:
             op.add_argument("--out", required=True)
+        if name == 'snapshot-review-correct':
+            op.add_argument('--apply', action='store_true', help='Explicit stopped-run metadata correction; status is preview only')
         if name in {"gate-export", "gate-recover"}:
             op.add_argument("--authorization", required=name == "gate-recover")
         if name == "review-identity":
