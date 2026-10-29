@@ -185,6 +185,11 @@ def dispatch(args):
     preloaded_plan = load_json(args.plan) if operation in {"run", "resume"} else None
     if preloaded_plan or args.run_id:
         validate_run_storage_root(args.root, preloaded_plan["run_id"] if preloaded_plan else args.run_id)
+    if preloaded_plan:
+        if preloaded_plan.get('stage') == 'T0' and args.live:
+            raise ValueError('T0_MUST_REMAIN_OFFLINE')
+        if preloaded_plan.get('stage') != 'T0':
+            raise ValueError('LEGACY_HIGHSPEED_LIVE_RETIRED: use the reviewed PAGE snapshot entry')
     read_operations = {'status', 'qa', 'report', 'gate-export', 'snapshot-review-status'}
     if operation == 'snapshot-review-correct' and not getattr(args, 'apply', False):
         raise ValueError('EXPLICIT_METADATA_APPLY_REQUIRED')
@@ -247,7 +252,7 @@ def command(args):
     print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
 
 def register(subparsers):
-    parser = subparsers.add_parser("highspeed", help="V2 link-first isolated snapshot tests")
+    parser = subparsers.add_parser("highspeed", help="历史快照离线回放与审查；旧LIVE入口已退役")
     operations = parser.add_subparsers(dest="operation", required=True)
     op = operations.add_parser("baseline-v3", help="Historical CSV baseline; no browser")
     op.add_argument("--csv", required=True); op.add_argument("--candidate-jsonl"); op.add_argument("--out", required=True)

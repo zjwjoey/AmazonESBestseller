@@ -70,7 +70,7 @@ def test_unapproved_live_never_initializes_browser(tmp_path, monkeypatch):
     gate = tmp_path / "shared_gate.json"; immutable_json(gate, sealed({"state": "NETWORK_ERROR"}))
     plan.update(stage="T1", origin="LIVE_CAPTURE", live_enabled=True, shared_access_gate_path=str(gate))
     path.write_text(json.dumps(plan), encoding="utf-8")
-    with pytest.raises(ValueError, match="LIVE_AUTHORIZATION_REQUIRED"):
+    with pytest.raises(ValueError, match="LEGACY_HIGHSPEED_LIVE_RETIRED"):
         invoke("highspeed", "run", "--root", str(tmp_path / "store"), "--plan", str(path), "--live")
 
 def test_invalid_t0_live_switch_never_opens_browser(tmp_path, monkeypatch):
@@ -90,7 +90,7 @@ def test_pending_templates_are_not_live_authorization():
         assert plan["max_requests_per_run"] > 45 and plan["max_requests_per_day"] > 15
         assert plan["category_cooldown_seconds"] == 0 and plan["max_raw_observations_per_run"] > 30000
 
-def test_live_lock_contention_prevents_even_browser_constructor(tmp_path, monkeypatch):
+def test_retired_live_rejects_even_when_store_lock_is_held(tmp_path, monkeypatch):
     from amazon_es_bestseller.access.browser import BrowserSession
     from amazon_es_bestseller.highspeed.store import RunStore
     monkeypatch.setattr(BrowserSession, "__init__", lambda *args, **kwargs: pytest.fail("contended lock must prevent browser construction"))
@@ -101,7 +101,7 @@ def test_live_lock_contention_prevents_even_browser_constructor(tmp_path, monkey
     store = RunStore(root)
     try:
         with store.run_lock(plan["run_id"]):
-            with pytest.raises(OSError):
+            with pytest.raises(ValueError, match='LEGACY_HIGHSPEED_LIVE_RETIRED'):
                 invoke("highspeed", "run", "--root", str(root), "--plan", str(path), "--live")
     finally:
         store.close()
@@ -120,7 +120,7 @@ def test_offline_entry_time_includes_store_initialization(tmp_path, monkeypatch)
     assert datetime.fromisoformat(result["run"]["started_at"].replace("Z", "+00:00")) == entry
     assert result["run"]["elapsed_seconds"] >= 2
 
-def test_shared_live_lock_serializes_different_store_roots_before_browser(tmp_path, monkeypatch):
+def test_retired_live_rejects_even_when_shared_lock_is_held(tmp_path, monkeypatch):
     from amazon_es_bestseller.access.browser import BrowserSession
     from amazon_es_bestseller.multisource.storage import file_lock
     monkeypatch.setattr(BrowserSession, "__init__", lambda *args, **kwargs: pytest.fail("shared lock must prevent browser construction"))
@@ -131,7 +131,7 @@ def test_shared_live_lock_serializes_different_store_roots_before_browser(tmp_pa
     plan.update(stage="T1", origin="LIVE_CAPTURE", live_enabled=True, shared_access_gate_path=str(shared))
     path.write_text(json.dumps(plan), encoding="utf-8")
     with file_lock(shared.parent / "highspeed_live.lock"):
-        with pytest.raises(OSError):
+        with pytest.raises(ValueError, match='LEGACY_HIGHSPEED_LIVE_RETIRED'):
             invoke("highspeed", "run", "--root", str(tmp_path / "different_store"), "--plan", str(path), "--live")
 
 @pytest.mark.skipif(not shutil.which("pwsh"), reason="PowerShell runtime is not installed")

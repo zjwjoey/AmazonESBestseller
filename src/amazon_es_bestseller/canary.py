@@ -108,7 +108,7 @@ def review_saved_evidence(manifest_path, *, output=None):
     manifest = json.loads(manifest_raw.decode('utf-8-sig'))
     base = manifest_path.parent
     protected = {base}
-    if manifest.get('contract') != CONTRACT:
+    if not isinstance(manifest, dict) or manifest.get('contract') != CONTRACT:
         raise ValueError('CANARY_OFFLINE_CONTRACT_REQUIRED')
     pages, details = manifest['pages'], manifest.get('details', [])
     if any(not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows)
@@ -176,6 +176,8 @@ def review_saved_evidence(manifest_path, *, output=None):
     if 'task_plan' in manifest:
         task = _json(manifest['task_plan'], base, protected)
         clock = _json(manifest['task_clock'], base, protected)
+        if not isinstance(task, dict) or not isinstance(clock, dict):
+            raise ValueError('CANARY_PLAN_AND_CLOCK_OBJECTS_REQUIRED')
         checks['existing_clock_binding'] = clock.get('run_id') == task.get('run_id') and clock.get('plan_sha256') == digest(task)
     report = {'contract': CONTRACT, 'extracted_from': EXTRACTED_FROM, 'plan': plan,
         'checks': checks, 'passed': all(checks.values()), 'pages': page_reports, 'details': detail_reports,

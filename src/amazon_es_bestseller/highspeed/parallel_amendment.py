@@ -1,6 +1,7 @@
 """Validate a parallel-execution amendment without changing the original plan.
 
-Isolated development only; this is not connected to the production CLI.
+Used by parallel_cli. Each run still requires its own reviewed amendment and
+acceptance evidence; integration into main is not deployment or LIVE approval.
 """
 from pathlib import Path
 import hashlib

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import uuid
 from pathlib import Path
 
 from .contracts import SOURCE_ROOTS, ORIGINS, PHASE_TARGETS, timestamp
@@ -39,7 +38,6 @@ def _history(manager, args):
 
 
 def _execute(manager, args, spec=None):
-    from .authorization import validate_authorization
     data = spec or _plan(args.plan)
     plan = dict(data.get("plan", data))
     sources = _filter_sources(data["sources"], args) if spec is None else data["sources"]
@@ -59,48 +57,32 @@ def _execute(manager, args, spec=None):
         selected_ids = {s["source_id"] for s in sources}
         pages = [p for p in pages if p["source_id"] in selected_ids]
         plan["planned_pages"] = len(pages)
-    authorization = read_json(args.authorization) if args.authorization else None
     if origin != "LIVE_CAPTURE":
         return manager.run(plan, sources, run_id=run_id,
             snapshot_id=snapshot_id, origin=origin, pages=pages, resume=args.operation == "resume")
     if getattr(args, "offline", False):
         raise ValueError("GLOBAL_OFFLINE_FLAG_FORBIDS_LIVE_CAPTURE")
-    if not args.live:
-        raise ValueError("LIVE_SWITCH_REQUIRED")
-    # No browser is opened before all scope/budget/previous-gate checks pass.
-    validate_authorization(plan, authorization, sources, manager._gate())
-    from ..access.browser import BrowserSession
-    from ..transport.playwright import PlaywrightTransport
-
-    class BoundedSnapshotSession(BrowserSession):
-        def load_lazy_ranking_content(self, *a, **kw):
-            # Explicit metered ACP requests replace uncounted lazy requests.
-            return None
-
-    with BoundedSnapshotSession(headless=not args.headful) as session:
-        allowed_documents = {url for scope in authorization["sources"].values() for url in scope.get("page_urls", [])}
-        def document_scope(route):
-            request = route.request
-            if request.resource_type == "document" and request.url not in allowed_documents:
-                route.abort()
-            else:
-                route.continue_()
-        session.page.route("**/*", document_scope)
-        transport = PlaywrightTransport(session)
-        def save_aborted_native_contract(evidence):
-            immutable_json(manager._run_dir(run_id) / "native_acp_contracts" / (uuid.uuid4().hex + ".json"),
-                {**evidence, **timestamp(), "run_id": run_id,
-                 "note": "Native request was aborted before transmission; not a successful response or a metered network attempt."})
-        transport.install_bounded_acp_capture(on_capture=save_aborted_native_contract)
-        return manager.run(plan, sources, run_id=run_id,
-            snapshot_id=snapshot_id, origin=origin, pages=pages,
-            authorization=authorization, transport=transport, resume=args.operation == "resume")
+    raise ValueError('LEGACY_MULTISOURCE_LIVE_RETIRED: use the reviewed PAGE snapshot entry')
 
 
 def dispatch(args):
     from .snapshots import SnapshotManager
     from .sources import SourceRegistry, discover_sources
     operation = args.operation
+    if operation in {'run', 'resume', 'daily'}:
+        origin = getattr(args, 'origin', None)
+        if args.plan:
+            origin = origin or read_json(args.plan).get('origin')
+        elif operation == 'resume' and args.run_id:
+            from .snapshots import safe_id
+            spec_path = Path(args.root)/'runs'/safe_id(args.run_id)/'run_spec.json'
+            if spec_path.is_file():
+                origin = origin or read_sealed(spec_path).get('origin')
+        live_requested = args.live or origin == 'LIVE_CAPTURE'
+        if live_requested:
+            if getattr(args, 'offline', False):
+                raise ValueError('GLOBAL_OFFLINE_FLAG_FORBIDS_LIVE_CAPTURE')
+            raise ValueError('LEGACY_MULTISOURCE_LIVE_RETIRED: use the reviewed PAGE snapshot entry')
     query = operation in {'status', 'qa', 'compare', 'report', 'exceptions'}
     if query and args.out:
         root, output = Path(args.root).resolve(), Path(args.out).resolve()
@@ -221,7 +203,7 @@ def dispatch(args):
 
 
 def register(subparsers):
-    parser = subparsers.add_parser("multisource", help="隔离多榜单快照、身份审核和离线回放；实时采集默认关闭")
+    parser = subparsers.add_parser("multisource", help="历史多榜单身份审查和离线回放；旧LIVE入口已退役")
     parser.add_argument("operation", choices=("sources", "discover", "verify", "run", "status", "pause", "resume", "replay", "qa", "compare", "report", "exceptions", "reparse", "identity-review", "identity-undo", "identity-attach", "budget-adjust", "migrate", "rollback", "daily"))
     parser.add_argument("--root", required=True, help="全新或已标记的独立测试目录")
     for name in ("plan", "run-id", "left", "right", "out", "authorization", "html", "page-url", "observed-at", "mapping", "actor", "evidence", "event-id", "state", "date", "reason", "left-date", "right-date", "left-start", "left-end", "right-start", "right-end", "test-evidence"):

@@ -467,7 +467,7 @@ def test_collect_with_rankings_file_keeps_supplied_rankings(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("command", [
-    "collect", "select-quota", "translate-ds", "enrich", "repair-cache",
+    "collect", "select-quota", "enrich", "repair-cache",
     "reparse-details", "audit-detail-cache", "qa", "audit-fields", "export",
 ])
 def test_each_cli_help_is_parseable(command, capsys):
