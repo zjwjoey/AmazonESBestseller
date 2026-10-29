@@ -594,8 +594,6 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
         plan_path=directory/(stage+'.plan.pending.json');auth_path=directory/(stage+'.authorization.pending.json')
         immutable_json(plan_path,plan);immutable_json(auth_path,authorization)
         outputs[stage]={'plan':_ref(plan_path),'authorization':_ref(auth_path),'run_id':run_id,'store_root':str(runtime),'browser_profile':str(runtime.parent/'browser_profile')}
-    script=directory/'Start-Reviewed-V3.ps1'
-    script.write_text("param([Parameter(Mandatory=$true)][string]$PlanPath,[Parameter(Mandatory=$true)][string]$AuthorizationPath,[Parameter(Mandatory=$true)][string]$StoreRoot,[Parameter(Mandatory=$true)][string]$PythonPath,[Parameter(Mandatory=$true)][string]$WorktreePath)\n$ErrorActionPreference='Stop'\n$plan=Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json\n$auth=Get-Content -LiteralPath $AuthorizationPath -Raw | ConvertFrom-Json\nif ($plan.live_enabled -ne $true -or $auth.approved -ne $true) { throw 'Pending templates require explicit source/budget/stage approval before activation.' }\n$env:PYTHONPATH=Join-Path $WorktreePath 'src'\n$env:PYTHONDONTWRITEBYTECODE='1'\n$env:PYTHONIOENCODING='utf-8'\nRemove-Item Env:RUN_LIVE -ErrorAction SilentlyContinue\n$ProfilePath=Join-Path (Split-Path -Parent $StoreRoot) 'browser_profile'\n& $PythonPath -m amazon_es_bestseller.cli highspeed run --root $StoreRoot --plan $PlanPath --authorization $AuthorizationPath --run-id $plan.run_id --profile-dir $ProfilePath --headful --live\nif ($LASTEXITCODE -ne 0) { throw 'Reviewed V3 run failed; retain logs and evidence.' }\n",encoding='utf-8-sig')
     capacity_reference=None
     if pending_source_pack:
         from .v3_capacity import export_capacity
@@ -603,7 +601,7 @@ def prepare_v3(historical_root,historical_run_id,out,*,mapping_config,pending_so
         export_capacity(historical_root,historical_run_id,outputs['T2']['plan']['path'],pending_source_pack,capacity_path)
         capacity_reference=_ref(capacity_path)
     manifest={'origin':'OFFLINE_PREPARATION','live_requests':0,'approved':False,'generated_at':utc_text(),
-        'source_navigation_plan_reference':prior_ref,'mapping_config_reference':mapping_reference,'stages':outputs,'launcher':_ref(script),
+        'source_navigation_plan_reference':prior_ref,'mapping_config_reference':mapping_reference,'stages':outputs,'legacy_live_entry':'REMOVED',
         'pending_navigation_pack_reference':pending_reference,'new_literal_navigation_sources':len(new_sources),
         'fresh_batch_runtime_root':str(batch_runtime),'runtime_directories_created':False,
         'source_capacity_estimate_reference':capacity_reference,

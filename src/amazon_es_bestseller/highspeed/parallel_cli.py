@@ -12,12 +12,13 @@ from .parallel_admission import ParallelAdmission
 from .parallel_coordinator import ParallelSnapshotCoordinator
 from .parallel_dispatch_gate import AsyncDispatchGate
 from .snapshot_control import release_pause,pause_pending
+from .parallel_faults import FaultReporter,wait_for_operator
 
 
 def load(path):return json.loads(Path(path).read_text(encoding='utf8'))
 
 
-async def execute(runner,plan,auth,queue,profile,*,headless):
+async def execute(runner,plan,auth,queue,profile,*,headless,access_stop_scope='all',reporter=None):
     from playwright.async_api import async_playwright
     admission=ParallelAdmission(runner,plan,auth,clock=runner.engine.clock)
     gate=AsyncDispatchGate(interval=plan['request_pacing_seconds'],deadline=queue.identity[2],
@@ -30,14 +31,37 @@ async def execute(runner,plan,auth,queue,profile,*,headless):
     runner._record_approval(plan,auth)
     runner.mark_run_running(plan)
     work=runner.page_work(plan)
-    coordinator=ParallelSnapshotCoordinator(runner,plan,queue,gate,admit=admission,stop_reason=reason)
+    reporter=reporter or FaultReporter(runner.store.root,plan['run_id'],digest(plan))
+    coordinator=ParallelSnapshotCoordinator(runner,plan,queue,gate,admit=admission,stop_reason=reason,
+        access_stop_scope=access_stop_scope,reporter=reporter)
     coordinator.add_work(work)
     if any(r[3] in {'HELD','SAVED','RESERVED'} for r in queue.snapshot()['pages']):
         raise ValueError('QUEUE_REVIEW_REQUIRED_BEFORE_BROWSER_START')
     async with async_playwright() as p:
-        context=await p.chromium.launch_persistent_context(str(profile),headless=headless,service_workers='block')
-        try:return await coordinator.run(context)
-        finally:await context.close()
+        context=None
+        try:
+            try:
+                context=await p.chromium.launch_persistent_context(str(profile),headless=headless,service_workers='block')
+                result=await coordinator.run(context)
+            except Exception as error:
+                coordinator.fault(None,None,error,'browser')
+                result={'stop_reason':coordinator.stopped,'failures':coordinator.failures}
+            reason=result.get('stop_reason') or 'WORKER_ERRORS_RECORDED'
+            if result.get('failures') or reason in {'ALL_WORKERS_DISABLED','UNRESOLVED_SAVED_OR_HELD_REQUEST','GLOBAL_ACCESS_GATE_BLOCKED'}:
+                if not any(r.get('scope')=='all' for r in result.get('failures',[])):
+                    result.setdefault('failures',[]).append(reporter.record(worker=None,url=None,request_id=None,
+                        stage='waiting',error=RuntimeError(reason),scope='all'))
+                try:
+                    runner.store.update_run(plan['run_id'],status='PAUSED_ERROR',stop_reason=reason,
+                        snapshot_phase='WAITING_FOR_OPERATOR',quality_gate_passed=False)
+                except Exception as error:
+                    reporter.record(worker=None,url=None,request_id=None,stage='paused_status',error=error,scope='all')
+                # Context and owner process remain alive. Closing a popup never
+                # reaches this release; only explicit exit-wait or Ctrl+C does.
+                result['operator_exit']=await wait_for_operator(reporter,reason)
+            return result
+        finally:
+            if context is not None:await context.close()
 
 
 def _main(argv=None):
@@ -97,7 +121,8 @@ def _main(argv=None):
             if queue.snapshot()['config'][0]=='USER_PAUSED':queue.acknowledge_user_resume(store.root)
             failure=None
             try:
-                result=asyncio.run(execute(runner,plan,auth,queue,profile,headless=not args.headful))
+                result=asyncio.run(execute(runner,plan,auth,queue,profile,headless=not args.headful,
+                    access_stop_scope=amendment['access_stop_scope']))
             except BaseException as exc:
                 failure=exc
                 result={'stop_reason':'PARALLEL_EXECUTION_FAILURE:'+type(exc).__name__+':'+str(exc)}
@@ -115,7 +140,8 @@ def _main(argv=None):
             metrics=measure_three(rows,plan['run_id'],target_policy=plan['target_policy'])
             publish_snapshot_review(store,plan['run_id'],snapshot_review_fields(run,metrics,qa,len(pages)))
             if failure is not None:raise failure
-            return {'stop_reason':result['stop_reason'],'quality':qa,'metrics':metrics}
+            return {'stop_reason':result['stop_reason'],'failures':result.get('failures',[]),
+                'operator_exit':result.get('operator_exit'),'quality':qa,'metrics':metrics}
     finally:store.close()
 
 

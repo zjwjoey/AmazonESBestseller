@@ -138,8 +138,9 @@ def test_replay_never_overwrites_existing_or_historical_directory(tmp_path):
 
 def test_pending_templates_are_new_unapproved_live_disabled_and_literal_sources(tmp_path):
     root,mapping=old_capture(tmp_path);result=prepare_v3(root,'old',tmp_path/'plans',mapping_config=mapping,runtime_root=tmp_path/'machine_runtime')
-    launcher=Path(result['manifest']['launcher']['path']).read_text(encoding='utf-8-sig')
-    assert '--profile-dir $ProfilePath' in launcher
+    assert result['manifest']['legacy_live_entry']=='REMOVED'
+    assert 'launcher' not in result['manifest']
+    assert not (Path(result['directory'])/'Start-Reviewed-V3.ps1').exists()
     for stage,item in result['manifest']['stages'].items():
         plan=json.loads(Path(item['plan']['path']).read_text(encoding='utf-8'))
         auth=json.loads(Path(item['authorization']['path']).read_text(encoding='utf-8'))
@@ -221,8 +222,9 @@ def test_missing_v3_mapping_snapshot_rejects_before_browser_or_request(tmp_path,
     monkeypatch.setattr(HighSpeedRunner,'_gate',lambda *a,**kw:{'state':'NORMAL'})
     monkeypatch.setattr(BrowserSession,'__enter__',lambda self:(_ for _ in ()).throw(AssertionError('Browser must not be opened')))
     store=Store(tmp_path/'store')
-    with pytest.raises(ValueError,match='V3_MAPPING_CONFIG_REFERENCE_REQUIRED'):
-        cli._run_live_locked(SimpleNamespace(live=True,offline=False,operation='run'),store,p,{},entry_time=NOW.isoformat())
+    assert not hasattr(cli, '_run_live_locked')
+    with pytest.raises(ValueError,match='LEGACY_HIGHSPEED_LIVE_RETIRED'):
+        cli.run_live(SimpleNamespace(live=True,offline=False,operation='run'),store,p,{},entry_time=NOW.isoformat())
     assert not store.requests and store.run is None
 
 def test_large_nested_candidate_history_roundtrips_without_csv_truncation(tmp_path):

@@ -194,6 +194,14 @@ def main(argv=None):
 
 def dispatch(args):
     argv = args.snapshot_args
+    if argv and argv[0]=='alerts':
+        from .parallel_faults import main as alerts_main
+        return alerts_main(argv[1:])
+    if argv and argv[0] in {'parallel-check','parallel-resume'}:
+        if argv[0]=='parallel-resume' and getattr(args,'offline',False):
+            raise ValueError('OFFLINE_SNAPSHOT_LIVE_FORBIDDEN')
+        from .parallel_cli import main as parallel_main
+        return parallel_main(['check' if argv[0]=='parallel-check' else 'resume',*argv[1:]])
     live_operations = {'run', 'resume', 'configure-delivery'}
     if argv and argv[0] in live_operations and getattr(args, 'offline', False):
         raise ValueError('OFFLINE_SNAPSHOT_LIVE_FORBIDDEN')
@@ -206,7 +214,7 @@ def dispatch(args):
 
 def register(sub):
     p = sub.add_parser('snapshot', help='PAGE快照：配置、只读审查、暂停恢复；执行必须显式--live',
-        description='PAGE快照统一入口：profile / prepare-page / status / preflight / pause / report / benchmark / run / resume。',
+        description='PAGE快照统一入口：profile / prepare-page / status / preflight / pause / report / benchmark / run / resume / parallel-check / parallel-resume / alerts。异常后保留进程，提醒确认不会恢复采集。',
         epilog='各子命令参数见：amazon-es snapshot <子命令> --help。配置、审查不会启动浏览器；--offline 禁止运行采集。')
     p.add_argument('snapshot_args', nargs=argparse.REMAINDER)
     p.set_defaults(func=dispatch)

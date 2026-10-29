@@ -6,7 +6,7 @@ from amazon_es_bestseller.highspeed.parallel_preflight import verify_isolated_ac
 
 def test_complete_code_manifest_rejects_changed_missing_and_outside_paths(tmp_path):
     files={}
-    for name in ('transport','commit','coordinator','admission','dispatch_gate','page_ledger','amendment','preflight','checkpoint','cli','alias_review'):
+    for name in ('transport','commit','coordinator','admission','dispatch_gate','page_ledger','amendment','preflight','checkpoint','cli','alias_review','faults'):
         relative=f'src/amazon_es_bestseller/highspeed/parallel_{name}.py'
         path=tmp_path/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('TEST_ONLY',encoding='utf8')
         files[relative]=hashlib.sha256(path.read_bytes()).hexdigest()

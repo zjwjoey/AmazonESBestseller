@@ -1,3 +1,5 @@
+> 旧 V3 LIVE 程序已删除，不再生成 Start-Reviewed-V3.ps1。prepare-v3 只生成离线审查产物和 pending 方案。
+
 # HighSpeed Snapshot V3 offline workflows and staged preparation
 
 Use Python 3.12 with explicit worktree `PYTHONPATH=src`, `PYTHONDONTWRITEBYTECODE=1`, `PYTHONIOENCODING=utf-8`; do not set `RUN_LIVE`. V3 development lives in `codex/highspeed-snapshot-v3`, production main remains untouched.
