@@ -35,3 +35,26 @@ jobs:
         run: python -m compileall src
       - name: Run offline tests
         run: python -m pytest -q -rs
+
+  browser-faults:
+    name: Offline browser fault tests
+    runs-on: ubuntu-latest
+    env:
+      RUN_LIVE: ""
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install -e ".[test]"
+      - name: Install isolated fixture browser
+        run: python -m playwright install --with-deps chromium
+      - name: Test fixture-only browser faults and operator wait
+        run: >-
+          python -m pytest -q
+          tests/parallel/test_parallel_fault_browser.py
+          tests/parallel/test_parallel_fault_alerts.py
+          tests/parallel/test_parallel_preflight.py

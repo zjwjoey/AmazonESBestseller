@@ -8,7 +8,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 
 def pytest_collection_modifyitems(items):
-    browser_modules={'test_parallel_browser_pipeline','test_parallel_real_gate_offline','test_parallel_transport'}
+    browser_modules={'test_parallel_browser_pipeline','test_parallel_real_gate_offline','test_parallel_transport',
+                     'test_parallel_fault_browser'}
     local_modules={'test_parallel_checkpoint','test_parallel_snapshot_hooks'}
     executable_exists=False
     try:
