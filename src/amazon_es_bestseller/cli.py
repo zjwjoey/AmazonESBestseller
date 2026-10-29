@@ -2011,6 +2011,8 @@ def build_parser() -> argparse.ArgumentParser:
     register_highspeed(sub)
     from .highspeed.snapshot_cli import register as register_snapshot
     register_snapshot(sub)
+    from .canary import register as register_canary
+    register_canary(sub)
     return parser
 
 
