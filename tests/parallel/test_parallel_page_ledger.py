@@ -102,7 +102,7 @@ def test_family_budget_does_not_transfer_and_unknown_family_fails_closed(tmp_pat
     with pytest.raises(ValueError,match='UNAPPROVED_SOURCE_FAMILY'):q.claim(2,now=16)
 
 
-def test_category_cooldown_and_inflight_barrier_survive_restart(tmp_path):
+def test_no_category_cooldown_but_inflight_barrier_survives_restart(tmp_path):
     kwargs=dict(run_id='TEST_ONLY',original_plan_sha256='original',deadline=10000,page_budget=10,
                 prior_category='first',prior_cooldown_until=0)
     q=ParallelPageLedger(tmp_path/'queue.sqlite',**kwargs)
@@ -111,10 +111,25 @@ def test_category_cooldown_and_inflight_barrier_survive_restart(tmp_path):
     assert q.claim(1,now=10)=='a'
     assert q.claim(2,now=13) is None  # Cannot cross while request is in flight.
     q.complete(1,'a',state='SAVED',receipt='proof');q.replay_committed('a','proof',verify=lambda *_:True)
-    assert q.claim(2,now=16) is None  # Starts the persistent cooldown.
+    assert q.claim(2,now=16) is None  # Selects the next category, without waiting.
     q=ParallelPageLedger(tmp_path/'queue.sqlite',**kwargs)
-    assert q.claim(2,now=1815) is None
-    assert q.claim(2,now=1816)=='b'
+    assert q.claim(2,now=16)=='b'
+    assert q.claim(3,now=18) is None  # Shared request pacing remains mandatory.
+
+
+def test_historical_cooldown_is_retained_as_evidence_without_blocking_claim(tmp_path):
+    kwargs=dict(run_id='TEST_ONLY',original_plan_sha256='original',deadline=10000,page_budget=10,
+                cooldown_seconds=1800,prior_category='first',prior_cooldown_until=5000)
+    q=ParallelPageLedger(tmp_path/'queue.sqlite',**kwargs)
+    q.seed([{'url':'a','category':'first','family':'BEST_SELLERS'}])
+    before=q.identity
+    assert q.claim(1,now=10)=='a'
+    reopened=ParallelPageLedger(tmp_path/'queue.sqlite',**kwargs)
+    assert reopened.identity==before
+    assert reopened.scheduler_state()==('first',0)
+    with reopened._connect() as db:
+        assert db.execute('SELECT cooldown_seconds,prior_cooldown_until,cooldown_until FROM config').fetchone()==(1800,5000,5000)
+    assert reopened.claim(2,now=13) is None  # No repeat/reassignment of the reservation.
 
 
 def test_query_order_alias_never_recollects_historical_page(tmp_path):

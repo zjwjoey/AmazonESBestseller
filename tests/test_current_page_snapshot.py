@@ -82,7 +82,7 @@ def test_owned_child_needs_actual_same_run_normal_parent_receipt(tmp_path):
     finally:store.close()
 
 
-def test_restart_preserves_category_cooldown_deadline_instead_of_resetting():
+def test_restart_does_not_wait_for_legacy_category_cooldown():
     clock=[NOW+timedelta(seconds=600)];sleeps=[]
     state={'started_at':NOW.isoformat(),'category_schedule':{
         'current':'Hogar','next':'Jardín','deadline':(NOW+timedelta(seconds=1800)).isoformat()}}
@@ -99,7 +99,7 @@ def test_restart_preserves_category_cooldown_deadline_instead_of_resetting():
           'max_requests_per_run':100,'max_requests_per_day':100,'max_pages_per_run':100,
           'max_raw_observations_per_run':10000,'history_observation_limit':10000}
     runner.before_source(plan,{'collection_category_key':'Jardín'})
-    assert sum(sleeps)==1200 and max(sleeps)<=30
+    assert sleeps==[] and clock[0]==NOW+timedelta(seconds=600)
     assert state['category_schedule']=={'current':'Jardín','next':None,'deadline':None}
 
 

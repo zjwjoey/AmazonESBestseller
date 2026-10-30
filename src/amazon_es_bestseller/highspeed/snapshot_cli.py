@@ -34,7 +34,7 @@ def task_config(profile='main-priority-50000',*,target=None,hours=None,source_mi
             'source_budgets': {k: {'requests': n, 'PAGE': n, 'native': 0} for k, n in pages.items()},
             'snapshot_field_contract': 'CARD_IMAGE_V1', 'max_duration_hours': policy['total_task_hours'],
             'delivery_preflight_contract': 'SPAIN_UI_PREFLIGHT_V1',
-            'request_pacing_seconds': 3, 'category_cooldown_seconds': 1800, 'parallelism': 1,
+            'request_pacing_seconds': 3, 'category_cooldown_seconds': 0, 'parallelism': 1,
             'max_raw_observations_per_run': max(500000,policy['target']*10), 'history_observation_limit': 2000000 if flexible else 1000000,
             'approved': False, 'live_enabled': False}
     if source_ids is not None:result['source_ids']=list(source_ids)
@@ -54,7 +54,7 @@ def validate_config(config):
         raise ValueError('LARGE_OR_CUSTOM_POLICY_REQUIRES_CONFIG_V2')
     if config.get('approved') is not False or config.get('live_enabled') is not False:
         raise ValueError('CONFIG_IS_NOT_EXECUTION_APPROVAL')
-    for key, lower, upper in (('request_pacing_seconds', 3, 3600), ('category_cooldown_seconds', 1800, 86400),
+    for key, lower, upper in (('request_pacing_seconds', 3, 3600), ('category_cooldown_seconds', 0, 86400),
                               ('max_duration_hours', 2 if v2 else 1, 168 if v2 else 24), ('parallelism', 1, 1),
                               ('max_raw_observations_per_run', 1, 2000000 if v2 else 1000000), ('history_observation_limit', 1, 2000000 if v2 else 1000000)):
         if type(config.get(key)) is not int or not lower <= config[key] <= upper:
