@@ -7,8 +7,10 @@ isolated database/WAL copy and never launches a browser.
 
 An explicit `resume --live --release-pause --profile-dir ...` additionally requires
 the passing isolated acceptance report and current normal-UI Spain delivery.
-The original sealed plan, task clock, source budgets and category cooldown remain
-unchanged. Three fixed windows share one persistent context and a global dispatch
+The original sealed plan, task clock and source budgets remain unchanged. PAGE
+snapshots no longer wait between categories. Legacy cooldown values remain as
+historical evidence and do not gate scheduling; unsettled claims still prevent
+cross-category work. Three fixed windows share one persistent context and a global dispatch
 gate; requests remain bound to durable reservations and per-window source scope.
 Any observed access restriction closes all new dispatch and persists the access
 stop even if response-body capture fails. Uncertain claims remain held for review.

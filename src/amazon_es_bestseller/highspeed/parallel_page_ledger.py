@@ -27,7 +27,7 @@ class ParallelPageLedger:
 
     def __init__(self, path, *, run_id, original_plan_sha256, deadline, page_budget, min_interval=3.0,
                  prior_consumed=0, prior_last_start=None, family_limits=None, prior_family_consumed=None,
-                 cooldown_seconds=1800, prior_category=None, prior_cooldown_until=0):
+                 cooldown_seconds=0, prior_category=None, prior_cooldown_until=0):
         self.path=Path(path)
         self.path.parent.mkdir(parents=True,exist_ok=True)
         limits=dict(family_limits or {}); prior=dict(prior_family_consumed or {})
@@ -39,7 +39,7 @@ class ParallelPageLedger:
                        None if prior_last_start is None else float(prior_last_start),
                        json.dumps(limits,sort_keys=True),json.dumps(prior,sort_keys=True),
                        int(cooldown_seconds),prior_category,float(prior_cooldown_until))
-        if self.identity[3] < 1 or self.identity[4] < 3 or not 0<=self.identity[5]<=self.identity[3] or self.identity[9]<1800:
+        if self.identity[3] < 1 or self.identity[4] < 3 or not 0<=self.identity[5]<=self.identity[3] or self.identity[9]<0:
             raise ValueError('BOUNDED_BUDGET_AND_GLOBAL_PACING_REQUIRED')
         with self._connect() as db:
             db.executescript('''
@@ -110,8 +110,8 @@ class ParallelPageLedger:
         now=time.time() if now is None else float(now)
         with self._connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            deadline,budget,interval,prior,stop,next_start,limits_json,prior_json,category,cooldown_until,cooldown=db.execute(
-                'SELECT deadline,page_budget,min_interval,prior_consumed,stop_reason,next_start,family_limits,prior_family_consumed,current_category,cooldown_until,cooldown_seconds FROM config WHERE id=1').fetchone()
+            deadline,budget,interval,prior,stop,next_start,limits_json,prior_json,category=db.execute(
+                'SELECT deadline,page_budget,min_interval,prior_consumed,stop_reason,next_start,family_limits,prior_family_consumed,current_category FROM config WHERE id=1').fetchone()
             if stop or now>=deadline:
                 db.commit();return None
             if db.execute('SELECT 1 FROM disabled_workers WHERE worker=?',(worker,)).fetchone():
@@ -126,8 +126,10 @@ class ParallelPageLedger:
             if db.execute("SELECT 1 FROM pages WHERE state='SAVED' LIMIT 1").fetchone():
                 db.commit();return None
             limits=json.loads(limits_json); family_prior=json.loads(prior_json)
-            if now<cooldown_until:
-                db.commit();return None
+            # Category cooldown was removed for PAGE snapshots. Keep historical
+            # config/deadline bytes as provenance, without using them as a gate.
+            # The shared request interval and all unsettled-claim barriers above
+            # and below remain enforced.
             if category is None:
                 first=db.execute("SELECT category FROM pages WHERE state='PENDING' ORDER BY rowid LIMIT 1").fetchone()
                 if first is None:db.commit();return None
@@ -147,7 +149,7 @@ class ParallelPageLedger:
                 unsettled=db.execute("SELECT 1 FROM pages WHERE category=? AND state IN ('RESERVED','SAVED','HELD') LIMIT 1",(category,)).fetchone()
                 nxt=db.execute("SELECT category FROM pages WHERE state='PENDING' AND category<>? ORDER BY rowid LIMIT 1",(category,)).fetchone()
                 if not unsettled and nxt:
-                    db.execute('UPDATE config SET current_category=?,cooldown_until=? WHERE id=1',(nxt[0],now+cooldown))
+                    db.execute('UPDATE config SET current_category=? WHERE id=1',(nxt[0],))
                 db.commit();return None
             url=row[0]
             db.execute("UPDATE pages SET state='RESERVED',worker=? WHERE url=? AND state='PENDING'",(worker,url))
@@ -266,7 +268,8 @@ class ParallelPageLedger:
 
     def scheduler_state(self):
         with self._connect() as db:
-            return db.execute('SELECT current_category,cooldown_until FROM config WHERE id=1').fetchone()
+            category=db.execute('SELECT current_category FROM config WHERE id=1').fetchone()[0]
+            return category,0  # Historical cooldown_until is not an effective wait.
 
     def acknowledge_user_resume(self,store_root):
         from ..multisource.storage import digest

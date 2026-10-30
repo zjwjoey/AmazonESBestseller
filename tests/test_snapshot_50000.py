@@ -6,6 +6,18 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize('profile',['main-priority-10000','main-priority','main-priority-50000','main-priority-100000'])
+def test_new_page_profiles_disable_category_cooldown_and_keep_shared_pacing(profile):
+    from amazon_es_bestseller.highspeed.snapshot_cli import task_config,validate_config
+    config=task_config(profile)
+    assert config['category_cooldown_seconds']==0
+    assert config['request_pacing_seconds']>=3
+    validate_config(config)
+    config['category_cooldown_seconds']=-1
+    with pytest.raises(ValueError,match='BOUNDED_SNAPSHOT_CONFIG'):
+        validate_config(config)
+
+
 def test_new_profiles_preserve_old_policy_and_reject_tampering():
     from amazon_es_bestseller.highspeed.global_target import (
         MAIN_PRIORITY_POLICY, MAIN_PRIORITY_10000_POLICY, MAIN_PRIORITY_50000_POLICY,

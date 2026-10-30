@@ -3,7 +3,6 @@
 This contract does not assert that the legacy eight-source native loading or
 capacity stages passed. Native requests remain disabled for this task mode.
 """
-from datetime import timedelta
 import hashlib
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -12,7 +11,7 @@ from .global_target import SNAPSHOT_PROFILES,is_global_policy,is_page_policy
 from .three_contract import verify_source
 from .three_metrics import measure_three
 from .v4_runner import V4T1Runner
-from .budgets import aware_time,utc_text,budget_reason
+from .budgets import utc_text
 from .page_navigation import POLICY,validate_admitted_source,extend_source
 from .three_navigation import discover_navigation
 
@@ -57,8 +56,10 @@ def validate_page_snapshot(plan):
             or plan.get('snapshot_metadata_contract')!='SOURCE_CATEGORY_IDENTITY_V1'
             or not plan.get('current_protocol_reference')):
         raise ValueError('EXPLICIT_CURRENT_PAGE_SNAPSHOT_CONTRACT_REQUIRED')
-    if type(plan.get('category_cooldown_seconds')) is not int or not 1800<=plan['category_cooldown_seconds']<=86400:
-        raise ValueError('PAGE_SNAPSHOT_NORMAL_CATEGORY_COOLDOWN_REQUIRED')
+    # Legacy sealed plans retain this historical field; PAGE execution no
+    # longer sleeps between categories. New configs write zero.
+    if type(plan.get('category_cooldown_seconds')) is not int or not 0<=plan['category_cooldown_seconds']<=86400:
+        raise ValueError('PAGE_SNAPSHOT_LEGACY_COOLDOWN_FIELD_INVALID')
     seen=set();last=None
     for source in plan['sources']:
         verify_source(source)
@@ -170,7 +171,7 @@ class CurrentPageSnapshotRunner(V4T1Runner):
             self.admitted_urls.add(ref['url']);self._known_source_ids.add(child['source_id'])
             additions.append((child,ref['url']))
         # Breadth first inside one department: visit each approved family before
-        # its discovered descendants; never cross a department cooldown early.
+        # its discovered descendants; category work remains grouped.
         position=max(i for i,(s,u) in enumerate(self._work) if s['collection_category_key']==source['collection_category_key'])
         self._work[position+1:position+1]=additions
 
@@ -219,21 +220,7 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         return True
 
     def before_source(self,plan,source):
-        run=self.store.get_run(plan['run_id']);schedule=run.get('category_schedule') or {}
-        key=source['collection_category_key'];e=self.engine
-        if schedule.get('current') not in {None,key}:
-            if schedule.get('next')!=key or not schedule.get('deadline'):
-                schedule.update(next=key,deadline=utc_text(e.clock()+timedelta(seconds=plan['category_cooldown_seconds'])))
-                self.store.update_run(plan['run_id'],category_schedule=schedule,snapshot_phase='CATEGORY_COOLDOWN')
-                self.store.append_event(plan['run_id'],{'kind':'CATEGORY_COOLDOWN_STARTED',**schedule})
-            deadline=aware_time(schedule['deadline'])
-            while e.clock()<deadline:
-                if self.pause_requested(plan):raise ValueError('USER_PAUSED')
-                if e._gate(plan).get('state')!='NORMAL':raise ValueError('GLOBAL_ACCESS_GATE_BLOCKED_DURING_COOLDOWN')
-                reason=budget_reason(plan,self.store.budget_counters(plan['run_id']),now=e.clock(),
-                    started_at=run['started_at'],authorization=self._active_authorization)
-                if reason:raise ValueError(reason)
-                e.sleep(min(30,(deadline-e.clock()).total_seconds()))
+        key=source['collection_category_key']
         schedule={'current':key,'next':None,'deadline':None}
         self.store.update_run(plan['run_id'],category_schedule=schedule,snapshot_phase='CAPTURING')
 

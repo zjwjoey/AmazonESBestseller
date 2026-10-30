@@ -340,11 +340,17 @@ Collection rules for this controlled phase:
 
 - Collect **one category at a time, serially**. Do not use concurrent category
   or detail collection. A task may define its own reviewed per-category target.
-- Keep the inter-category cooldown enabled. The plan/configuration is the
+- For category/detail collection outside the PAGE snapshot path, keep the inter-category cooldown enabled. The plan/configuration is the
   source of the effective interval; the normal default is **1,800 seconds
   (30 minutes)**. The process must remain alive during the countdown and resume
   a persisted deadline after restart. A zero interval requires explicit task
   authorization and must not be assumed globally.
+- PAGE candidate snapshots no longer wait between categories (user instruction,
+  2026-10-30). Keep categories grouped and retain the shared request pacing,
+  access stops, budgets, fixed worker claims and checkpoint contracts. Preserve
+  historical sealed plans/clocks and legacy cooldown fields as evidence;
+  never rewrite them to remove a wait. This exception applies to the serial
+  CurrentPageSnapshotRunner and three-fixed-window PAGE ledger only.
 - Keep normal conservative per-request pacing and the existing serial scheduler;
   do not run categories or detail requests concurrently.
 - On any **Challenge, HTTP 403, HTTP 429, Robot Check, CAPTCHA, access denied or
