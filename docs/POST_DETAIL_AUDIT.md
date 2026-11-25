@@ -64,12 +64,7 @@ creates receipts or a formal Source Audit PASS.
 
 ## Launching the intended code
 
-Use scripts/Invoke-PostDetailAudit.ps1 from the checkout you intend to review,
-with -Python pointing to the intended Python executable, -Command audit-fields,
---products/--details/--rankings pointing to the read-only input files,
---stage source, --out pointing to a new report and --progress-json pointing
-outside the source directories.
-
-The launcher verifies and prints the imported module location and restricts
-execution to the three offline audit commands. It does not change the globally
-installed Python package or start collection/paid translation.
+The old PowerShell launcher was retired. For a historical diagnostic, use the
+installed CLI from the intended checkout, for example `amazon-es audit-fields
+--help` to inspect the read-only input options. Managed tasks use `amazon-es
+task-finalize --task-root <task-root>` for final reconciliation.

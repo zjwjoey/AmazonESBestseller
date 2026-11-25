@@ -89,6 +89,35 @@ def test_terminal_batches_at_boundaries(tmp_path, count, sizes):
     assert all(row["batch_id"] for row in coordinator.ledger.current("detail"))
 
 
+def test_real_batch_boundaries_reconcile_field_totals_after_resume(tmp_path):
+    from amazon_es_bestseller.collection.detail_batch_audit import DetailBatchAudit
+    from amazon_es_bestseller.collection.field_completeness import EXTRACTED, PARSER_MISSED, SOURCE_ABSENT
+
+    workspace = TaskWorkspace.create(tmp_path / "task", "field-counts")
+    report_root = workspace.root / "audit"
+    field = "feature_bullets_raw"
+
+    for offset in (0, 50):
+        coordinator = DetailBatchAudit(workspace, lambda _rows: None)
+        for index in range(offset, offset + 50):
+            state = (SOURCE_ABSENT, PARSER_MISSED, EXTRACTED, EXTRACTED, EXTRACTED)[index % 5]
+            coordinator.ledger.record(
+                stage="detail", unit_id=f"B{index:09d}", digests=[], record={"index": index},
+                status="PASS", anomalies=[],
+                fields={field: {"eligible": True, "state": state, "source_present": state != SOURCE_ABSENT}},
+            )
+        coordinator.flush(enforce_pause=False)
+        totals = json.loads((report_root / "field_completeness.json").read_bytes())[field]
+        assert totals["eligible_count"] == offset + 50
+        assert totals["source_absent_count"] == totals["parser_missed_count"] == (offset + 50) // 5
+        assert totals["extracted_count"] == (offset + 50) * 3 // 5
+
+    batches = [json.loads(file.read_bytes())["fields"][field] for file in (report_root / "batches").glob("*.json")]
+    assert len(batches) == 2
+    for key in ("eligible_count", "source_present_count", "extracted_count", "parser_missed_count", "source_absent_count"):
+        assert sum(batch[key] for batch in batches) == totals[key]
+
+
 def test_interrupted_batch_republishes_without_new_attempt(tmp_path):
     from amazon_es_bestseller.collection.detail_batch_audit import DetailBatchAudit
     workspace = TaskWorkspace.create(tmp_path / "task", "restart", audit_batch_size=2)
@@ -158,5 +187,17 @@ def test_cumulative_counts_use_latest_attempt_instead_of_both_versions(tmp_path)
     field = report["feature_bullets_raw"]
     assert field["eligible_count"] == field["extracted_count"] == 1
     assert field["source_absent_count"] == field["parser_missed_count"] == 0
+    missing_bullets = '<div id="feature-bullets"><ul><li>Tres bolsillos</li></ul></div>'
+    assert accept(missing_bullets, {}) == "WARN"
+    anomaly_file = workspace.root / "audit" / "anomaly_asins.json"
+    [first] = json.loads(anomaly_file.read_bytes())
+    assert first["first_seen_batch"] == first["batch_id"]
+    assert accept(missing_bullets.replace("Tres", "Cuatro"), {}) == "WARN"
+    [current] = json.loads(anomaly_file.read_bytes())
+    assert current["first_seen_batch"] == first["batch_id"]
+    assert current["batch_id"] != first["batch_id"]
+    assert current["html_sha256"] != first["html_sha256"]
+    from amazon_es_bestseller.evidence_store import read_evidence
+    assert b"Cuatro bolsillos" in read_evidence(current["evidence_path"], current["html_sha256"])
     with workspace.transaction() as connection:
-        assert connection.execute("SELECT count(*) FROM audit_attempts").fetchone()[0] == 2
+        assert connection.execute("SELECT count(*) FROM audit_attempts").fetchone()[0] == 4

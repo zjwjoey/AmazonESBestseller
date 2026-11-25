@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from time import perf_counter
 
 from ..audit_ledger import AuditLedger, canonical_json
@@ -91,12 +92,15 @@ class DetailBatchAudit:
             current = [row for row in self.ledger.current("detail", current_versions=True) if row["status"] != "ACCESS_STOP"]
             cumulative = self.monitor.summarize(current)
             signals = self.monitor.signals(batch, cumulative)
+            cumulative_started = perf_counter()
+            self._write_cumulative(current, cumulative, signals, batch_id)
+            cumulative_seconds = perf_counter() - cumulative_started
             atomic_json(self.directory / "batches" / (batch_id + ".json"), {
                 "batch_id": batch_id, "asins": [row["unit_id"] for row in rows],
                 "quality_signals": signals, "fields": batch,
+                "cumulative_publication_seconds": cumulative_seconds,
                 "publication_seconds": perf_counter() - started,
             })
-            self._write_cumulative(current, cumulative, signals, batch_id)
             # An audit record was committed before any of these original files
             # may be transformed into verified, retrievable archives.
             with self.workspace.transaction() as conn:
@@ -114,13 +118,34 @@ class DetailBatchAudit:
                 raise DetailQualityPause("DETAIL_FIELD_QUALITY_PAUSED")
 
     def _write_cumulative(self, rows, fields, signals, batch_id):
-        from collections import Counter
         counts = Counter(row["status"] for row in rows)
         atomic_json(self.directory / "field_completeness.json", fields)
         atomic_json(self.directory / "cumulative_quality.json",
                     {"detail_status_counts": dict(counts), "latest_batch": batch_id, "signals": signals})
-        atomic_json(self.directory / "anomaly_asins.json", [
-            {"asin": row["unit_id"], "html_sha256": row["evidence_digest"],
-             "parser_version": row["parser_version"], "batch_id": row["batch_id"] or batch_id,
-             "status": row["status"], **issue}
-            for row in rows for issue in row["anomalies"]])
+        first_seen = {}
+        with self.workspace.transaction() as conn:
+            history = conn.execute("""SELECT unit_id,batch_id,anomalies FROM audit_attempts
+                WHERE stage='detail' AND batch_id IS NOT NULL AND anomalies<>'[]'
+                ORDER BY checked_at,audit_id""").fetchall()
+        for historical in history:
+            for issue in json.loads(historical["anomalies"]):
+                first_seen.setdefault(self._issue_key(historical, issue), historical["batch_id"])
+        anomalies = []
+        for row in rows:
+            published_batch = row["batch_id"] or batch_id
+            digest = row["evidence_digest"]
+            # The active name also resolves to the verified gzip after
+            # archival. It remains stable across interrupted publication.
+            location = str(self.ledger.evidence.active / (digest + ".html")) if digest else None
+            for issue in row["anomalies"]:
+                anomalies.append({
+                    "asin": row["unit_id"], "html_sha256": digest, "evidence_path": location,
+                    "parser_version": row["parser_version"], "batch_id": published_batch,
+                    "first_seen_batch": first_seen.get(self._issue_key(row, issue), published_batch),
+                    "status": row["status"], **issue,
+                })
+        atomic_json(self.directory / "anomaly_asins.json", anomalies)
+
+    @staticmethod
+    def _issue_key(row, issue):
+        return (row["unit_id"], issue["field"], issue["code"], issue.get("label"))
