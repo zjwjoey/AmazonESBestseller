@@ -78,6 +78,10 @@ def test_corrupt_archive_retains_original_and_orphans(tmp_path):
         "ARCHIVE_ORIGINAL_MISMATCH", "UNRESOLVED_TEMPORARY"}
     assert active.exists() and orphan.exists()
     assert store.archive_stats(verify=True)["errors"] == [digest]
+    unindexed = store.archive_root / "orphan.html.gz"
+    unindexed.write_bytes(gzip.compress(b"undocumented evidence"))
+    assert "UNINDEXED_ARCHIVE:" + unindexed.name in store.archive_stats(verify=True)["errors"]
+    assert unindexed.exists()
 
 
 def test_legacy_and_gzip_reads_with_memory_limit(tmp_path):
@@ -107,3 +111,77 @@ def test_changed_evidence_switches_current_without_erasing_history(tmp_path):
     assert [a["audit_id"] for a in AuditLedger(TaskWorkspace(tmp_path)).current("detail")] == [new_id]
     with workspace.transaction() as conn:
         assert conn.execute("SELECT count(*) FROM audit_attempts").fetchone()[0] == 2
+
+
+
+def test_default_gib_thresholds_and_temporary_bytes(tmp_path, monkeypatch):
+    from amazon_es_bestseller.task_workspace import GIB
+
+    workspace = TaskWorkspace.create(tmp_path, "offline")
+    store = AuditLedger(workspace).evidence
+    occupied = [8 * (2 * GIB) // 10]
+    real_bytes = store._bytes
+    monkeypatch.setattr(store, "_bytes", lambda: occupied[0] + real_bytes())
+    assert store.capacity()["state"] == "WARN"
+    occupied[0] = 9 * (2 * GIB) // 10
+    assert store.capacity()["state"] == "COMPACT"
+    occupied[0] = 2 * GIB - 2
+    # Raw evidence and transient work consume the same byte allowance.
+    (store.temporary / "working-decompression").write_bytes(b"xy")
+    assert store.capacity() == {"active_bytes": 2 * GIB, "peak_bytes": 2 * GIB, "state": "PAUSE"}
+    with pytest.raises(CacheCapacityExceeded):
+        store.save(b"a")
+    assert not list(store.active.iterdir())
+
+
+def test_archive_interrupted_before_publish_retains_active_bytes(tmp_path, monkeypatch):
+    from amazon_es_bestseller import evidence_store
+
+    workspace = task(tmp_path)
+    ledger = AuditLedger(workspace)
+    snapshot_store = ledger.evidence
+    detail_store = AuditLedger(TaskWorkspace(tmp_path)).evidence
+    active, digest = snapshot_store.save(b"x" * 740)
+    audit(ledger, "snapshot", "page", digest)
+    with pytest.raises(CacheCapacityExceeded):
+        detail_store.save(b"y" * 261)
+
+    def interrupt(src, compressed, **_kwargs):
+        compressed.write(src.read(128))
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(evidence_store.shutil, "copyfileobj", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            detail_store.archive(digest)
+        assert active.read_bytes() == b"x" * 740
+    assert detail_store.recover() == []
+    assert read_evidence(active, digest) == b"x" * 740
+    assert detail_store.capacity()["active_bytes"] == 0
+
+
+def test_rule_version_changes_invalidate_current_lookup(tmp_path):
+    ledger = AuditLedger(task(tmp_path))
+    _, evidence = ledger.evidence.save(b"example")
+    old = audit(ledger, "detail", "sku", evidence, qa_version="old-qa")
+    assert ledger.lookup("detail", "sku", {"id": "sku"}) is None
+    assert not ledger.current("detail", current_versions=True)
+
+    latest = audit(ledger, "detail", "sku", evidence)
+    assert latest != old
+    assert ledger.lookup("detail", "sku", {"id": "sku"}) == "PASS"
+    assert ledger.current("detail", current_versions=True)[0]["audit_id"] == latest
+
+
+
+def test_snapshot_cannot_reserve_using_a_separate_cache_allowance(tmp_path):
+    from contextlib import closing
+    from amazon_es_bestseller.highspeed.store import RunStore
+
+    workspace = task(tmp_path)
+    detail_cache = AuditLedger(workspace).evidence
+    detail_cache.save(b"a" * 1000)
+    with closing(RunStore(tmp_path / "store")) as snapshot:
+        snapshot.task_evidence = AuditLedger(TaskWorkspace(tmp_path)).evidence
+        with pytest.raises(CacheCapacityExceeded, match="ACTIVE_CACHE_HARD_LIMIT"):
+            snapshot.reserve_request("not-created", {})

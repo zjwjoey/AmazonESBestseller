@@ -60,6 +60,15 @@ def test_cli_managed_offline_replay_and_final_reconciliation(tmp_path):
     result = finalize_task(workspace.root)
     assert result["state"] == "QUALITY_REVIEW_COMPLETE", result["errors"]
     assert result["detail"]["batch_covered"] == 1
+    products = workspace.root / "detail" / "details.json"
+    original = products.read_bytes()
+    altered = json.loads(original)
+    altered[0]["title_es_raw"] = "un producto distinto"
+    products.write_text(json.dumps(altered), encoding="utf-8")
+    recalculated = finalize_task(workspace.root)
+    assert recalculated["state"] == "COLLECTION_COMPLETE"
+    assert recalculated["detail"]["mismatched_output_asins"] == [asin]
+    products.write_bytes(original)
     archive, = (workspace.root / "evidence" / "archive").glob("*.gz")
     archive.write_bytes(b"fixture corrupted")
     assert finalize_task(workspace.root)["state"] == "COLLECTION_COMPLETE"
@@ -122,3 +131,32 @@ def test_access_stop_preserves_partial_batch_and_prevents_next_request(tmp_path,
     report = json.loads((root / "detail_execution_manifest.json").read_bytes())
     assert report["execution_status"] == "ACCESS_STOP"
     assert len(list((workspace.root / "audit" / "batches").glob("*.json"))) == 1
+
+def test_cumulative_counts_use_latest_attempt_instead_of_both_versions(tmp_path):
+    from amazon_es_bestseller.collection.detail_batch_audit import DetailBatchAudit
+
+    workspace = TaskWorkspace.create(tmp_path / "task", "latest", audit_batch_size=1)
+    client = DetailBatchAudit(workspace, lambda _rows: None)
+    asin = "B000000001"
+    url = "https://www.amazon.es/dp/" + asin
+    root = '<html><input id="ASIN" value="' + asin + '"><span id="productTitle">Bolso azul</span>'
+    record = dict(asin=asin, requested_asin=asin, resolved_asin=asin, identity_status="MATCH",
+                  title_es_raw="Bolso azul")
+
+    def accept(markup, fields):
+        raw = (root + markup + "</html>").encode()
+        path, digest = client.ledger.evidence.save(raw)
+        checkpoint = dict(status="success", record={**record, **fields},
+                          capture_meta={"status_code": 200, "access_state": "NORMAL", "final_url": url},
+                          html_evidence={"path": str(path), "sha256": digest})
+        return client.accept(asin, checkpoint)
+
+    assert accept("", {}) == "PASS"
+    assert accept('<div id="feature-bullets"><ul><li>Dos bolsillos</li></ul></div>',
+                  {"feature_bullets_raw": ["Dos bolsillos"]}) == "PASS"
+    report = json.loads((workspace.root / "audit" / "field_completeness.json").read_bytes())
+    field = report["feature_bullets_raw"]
+    assert field["eligible_count"] == field["extracted_count"] == 1
+    assert field["source_absent_count"] == field["parser_missed_count"] == 0
+    with workspace.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM audit_attempts").fetchone()[0] == 2

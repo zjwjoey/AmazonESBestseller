@@ -440,6 +440,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                 "parser_version": parser_version, "execution_status": execution_status,
                 "completed_count": completed_count,
                 "incomplete_count": len(outcomes) - completed_count}
+    if coordinator:
+        manifest["checkpoint_root"] = str(checkpoint_dir.resolve())
     _atomic_json(run_root / "manifest.json", manifest)
     _atomic_json(root / "latest_detail_run.json", {"run_id": run_id,
                                                      "path": str(run_root.relative_to(root))})

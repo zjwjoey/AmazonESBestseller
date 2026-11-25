@@ -1,5 +1,5 @@
 from amazon_es_bestseller.collection.field_completeness import (
-    EXTRACTED, LOW_QUALITY, PARSER_MISSED, SOURCE_ABSENT, UNKNOWN,
+    EXTRACTED, LOW_QUALITY, PARSER_MISSED, SOURCE_ABSENT,
     FieldCompletenessMonitor, check_detail_fields,
 )
 from amazon_es_bestseller.task_workspace import DEFAULT_THRESHOLDS
@@ -22,7 +22,7 @@ def test_known_source_miss_absence_and_low_quality_are_distinct():
     assert fields["feature_bullets_raw"]["state"] == PARSER_MISSED
     assert fields["attributes"]["state"] == SOURCE_ABSENT
     assert fields["product_description_raw"]["state"] == LOW_QUALITY
-    assert fields["date_first_available_raw"]["state"] == UNKNOWN
+    assert fields["date_first_available_raw"]["state"] == SOURCE_ABSENT
     monitor = FieldCompletenessMonitor(DEFAULT_THRESHOLDS)
     summary = monitor.summarize([{"fields": fields}])
     assert summary["feature_bullets_raw"]["parser_missed_rate"] == 1
@@ -45,3 +45,24 @@ def test_success_tag_cannot_override_wrong_identity_or_blank_title():
         {"level": "PAUSE", "scope": "batch", "field": "title_es_raw", "rate": 1.0},
         {"level": "PAUSE", "scope": "task", "field": "title_es_raw", "rate": 1.0},
     ]
+
+
+def test_saved_source_binds_details_and_quarantines_mixed_bullets():
+    html = (PRODUCT + '<div id="feature-bullets"><li>Dos bolsillos</li></div>'
+            '<div id="productOverview_feature_div"><table><tr><td>Color</td><td>Azul</td></tr></table></div>')
+    valid, fields, anomalies = check_detail_fields(
+        ASIN, {**RECORD, "feature_bullets_raw": ["Motor de 2400 W"]}, {"status": "success"}, html, META)
+    assert not valid
+    assert fields["attributes"]["state"] == PARSER_MISSED
+    assert fields["feature_bullets_raw"]["state"] == LOW_QUALITY
+    assert {"field": "feature_bullets_raw", "code": "DETAIL_FIELD_NOT_BOUND_TO_SOURCE"} in anomalies
+
+
+def test_informational_content_is_not_a_missing_product_description():
+    html = (PRODUCT + '<div id="productDescription"><h2>Descripción del producto</h2></div>'
+            '<div id="aplus"><p>Contenido ampliado</p></div>')
+    valid, fields, _ = check_detail_fields(ASIN, RECORD, {"status": "success"}, html, META)
+    assert valid
+    for name in ("feature_bullets_raw", "product_description_raw", "selected_variation_raw", "seller_raw"):
+        assert fields[name]["state"] == SOURCE_ABSENT
+        assert not fields[name]["source_present"]

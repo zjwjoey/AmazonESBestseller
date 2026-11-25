@@ -10,9 +10,9 @@ from ..access.detector import AccessState, detect_access_status
 from ..identity import asin_from_url
 from ..models import is_valid_asin
 from .detail import (
-    _attribute_label_key, _collect_attributes, _feature_bullets_raw,
-    _page_asin_candidates, _product_description_raw,
-    _selected_variation, _text,
+    _attribute_label_key, _collect_attributes, _current_model_comparison_attributes,
+    _feature_bullets_raw, _first_available_date_raw, _page_asin_candidates,
+    _product_description_raw, _selected_variation, _seller_evidence, _text,
 )
 
 EXTRACTED = "EXTRACTED"
@@ -49,6 +49,18 @@ def _state(value, available, *, title=""):
     return PARSER_MISSED if _is_substantive(available, title) else SOURCE_ABSENT
 
 
+def _evidence_values(key, value):
+    def normalized(text):
+        return " ".join(str(text or "").split()).casefold()
+
+    if key == "attributes":
+        return {(_attribute_label_key(row.get("label_raw", "")), normalized(row.get("value_raw")))
+                for row in value}
+    if key == "feature_bullets_raw":
+        return {normalized(item) for item in value}
+    return {normalized(value)}
+
+
 def check_detail_fields(asin, record, checkpoint, html, meta):
     """Check evidence without treating a success flag as page identity."""
     record = record or {}
@@ -79,19 +91,29 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
             "asin": asin if identity else None,
             "title_es_raw": title,
             "feature_bullets_raw": _feature_bullets_raw(dom),
-            "attributes": _collect_attributes(dom),
+            "attributes": _collect_attributes(dom) + _current_model_comparison_attributes(dom, asin)[0],
             "product_description_raw": _product_description_raw(dom, asin),
             "selected_variation_raw": _selected_variation(dom),
             "brand_raw": _text(dom, "#bylineInfo") or _text(dom, "#productOverview_feature_div .po-brand"),
-            "seller_raw": _text(dom, "#sellerProfileTriggerId"),
+            "seller_raw": _seller_evidence(dom, html)[0],
+            "date_first_available_raw": _first_available_date_raw(dom),
         })
     fields = {}
     for key, source in field_source.items():
         value = record.get(key) if normal else None
         state = (_state(value, source, title=title if key == "product_description_raw" else "")
                  if key != "asin" else (EXTRACTED if identity and normal else UNKNOWN))
+        source_present = _is_substantive(source, title if key == "product_description_raw" else "")
+        if key in (*KEY_FIELDS, "selected_variation_raw") and state == EXTRACTED:
+            observed = _evidence_values(key, source) if source_present else set()
+            extracted = _evidence_values(key, value)
+            if extracted - observed:
+                state = LOW_QUALITY
+                anomalies.append({"field": key, "code": "DETAIL_FIELD_NOT_BOUND_TO_SOURCE"})
+            elif observed - extracted:
+                state = PARSER_MISSED
         fields[key] = {"state": state, "eligible": bool(normal and dom),
-                       "source_present": _is_substantive(source) or state == EXTRACTED}
+                       "source_present": source_present}
         if state in {PARSER_MISSED, LOW_QUALITY}:
             anomalies.append({"field": key, "code": state})
     if normal and (not _is_substantive(title) or not _is_substantive(record.get("title_es_raw"))
@@ -107,7 +129,9 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
         for label, variants in values.items():
             if len(variants) > 1 and re.search(r"capacidad|cantidad|material|color|tamaño|dimensi|modelo", label):
                 anomalies.append({"field": key, "code": "ATTRIBUTE_VARIANT_OR_ROLE_CONFLICT", "label": label})
-    valid = normal and identity and not any(a["code"] == "DETAIL_TITLE_MISSING_OR_UNBOUND" for a in anomalies)
+    valid = normal and identity and not any(a["code"] in {
+        "DETAIL_TITLE_MISSING_OR_UNBOUND", "DETAIL_FIELD_NOT_BOUND_TO_SOURCE",
+    } for a in anomalies)
     return valid, fields, anomalies
 
 

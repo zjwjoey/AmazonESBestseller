@@ -230,6 +230,9 @@ class EvidenceStore:
             archives = [dict(row) for row in conn.execute("SELECT * FROM evidence WHERE archive_path IS NOT NULL")]
         errors = []
         if verify:
+            indexed_paths = {Path(row["archive_path"]).resolve() for row in archives}
+            errors.extend("UNINDEXED_ARCHIVE:" + path.name for path in sorted(self.archive_root.iterdir())
+                          if path.is_file() and path.resolve() not in indexed_paths)
             for row in archives:
                 try:
                     path = Path(row["archive_path"])

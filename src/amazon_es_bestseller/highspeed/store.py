@@ -59,7 +59,7 @@ def _plan_normalizer_version(plan, *, validate_evidence=True):
     return NORMALIZER_VERSION
 
 
-from ..evidence_store import read_evidence
+from ..evidence_store import CacheCapacityExceeded, read_evidence
 
 
 class RunStore:
@@ -296,6 +296,9 @@ class RunStore:
         return {"evidence_path": str(path), "html_path": str(path), "sha256": hashed, "evidence_sha256": hashed}
 
     def reserve_request(self, run_id, request):
+        evidence = getattr(self, "task_evidence", None)
+        if evidence is not None and evidence.capacity()["state"] == "PAUSE":
+            raise CacheCapacityExceeded("ACTIVE_CACHE_HARD_LIMIT")
         run = self.get_run(run_id)
         limits = run["plan"]
         if request.get("limits"):

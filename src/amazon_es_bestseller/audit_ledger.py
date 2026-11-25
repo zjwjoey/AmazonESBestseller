@@ -27,10 +27,14 @@ class AuditLedger:
                 PRIMARY KEY(stage,unit_id))""")
             conn.execute("CREATE INDEX IF NOT EXISTS audits_stage_batch ON audit_attempts(stage,batch_id)")
 
+    def qa_version(self, stage):
+        contract = self.workspace.manifest["audit_contract_version"]
+        return contract + ":detail-source-binding-v2" if stage == "detail" else contract
+
     def record(self, *, stage, unit_id, digests, record, status, fields, anomalies,
                parser_version=None, qa_version=None, batch_id=None):
         parser = parser_version or self.workspace.manifest["parser_version"]
-        qa = qa_version or self.workspace.manifest["audit_contract_version"]
+        qa = qa_version or self.qa_version(stage)
         task = self.workspace.manifest["task_id"]
         digests = tuple(dict.fromkeys(d for d in digests if d))
         record_digest = sha256(canonical_json(record).encode("utf-8"))
@@ -65,7 +69,7 @@ class AuditLedger:
                                   WHERE c.stage=? AND c.unit_id=? AND a.record_digest=?
                                   AND a.parser_version=? AND a.qa_version=?""",
                                (stage, unit_id, digest, self.workspace.manifest["parser_version"],
-                                self.workspace.manifest["audit_contract_version"])).fetchone()
+                                self.qa_version(stage))).fetchone()
         return row["status"] if row else None
 
     def current(self, stage, *, pending_limit=None, current_versions=False):
@@ -75,7 +79,7 @@ class AuditLedger:
         params = (stage,)
         if current_versions:
             query += " AND a.parser_version=? AND a.qa_version=?"
-            params += (self.workspace.manifest["parser_version"], self.workspace.manifest["audit_contract_version"])
+            params += (self.workspace.manifest["parser_version"], self.qa_version(stage))
         if pending_limit is not None:
             query += " AND a.batch_id IS NULL AND a.status!='ACCESS_STOP'"
             order += " LIMIT ?"
