@@ -19,7 +19,7 @@
     "field": "product_description",
     "record": {
       "asin": "B0012F245G",
-      "product_description_raw": "Descripción del producto Pintura acrílica brillante y luminosa, alto grado de opacidad y alta pigmentación. Advertencia de seguridad Solo para uso externo. Evitar el contacto con los ojos. Mantener alejado del fuego o de fuentes de calor directas."
+      "product_description_raw": "Pintura acrílica brillante y luminosa, alto grado de opacidad y alta pigmentación. Advertencia de seguridad Solo para uso externo. Evitar el contacto con los ojos. Mantener alejado del fuego o de fuentes de calor directas."
     },
     "expected_status": "CLEAN",
     "expected_allowed": true,
