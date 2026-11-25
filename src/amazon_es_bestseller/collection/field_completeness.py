@@ -89,7 +89,7 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
     if normal and page_identity:
         attributes = _collect_attributes(dom) + _current_model_comparison_attributes(dom, asin)[0]
         field_source.update({
-            "asin": asin if identity else None,
+            "asin": asin,
             "title_es_raw": title,
             "feature_bullets_raw": _feature_bullets_raw(dom),
             "attributes": attributes,
@@ -105,7 +105,8 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
         value = record.get(key) if eligible and identity else None
         state = (_state(value, source, title=title if key == "product_description_raw" else "")
                  if key != "asin" else (EXTRACTED if identity and normal else UNKNOWN))
-        source_present = _is_substantive(source, title if key == "product_description_raw" else "")
+        source_present = (bool(source) if key == "asin"
+                          else _is_substantive(source, title if key == "product_description_raw" else ""))
         if key != "asin" and state == EXTRACTED:
             observed = _evidence_values(key, source) if source_present else set()
             extracted = _evidence_values(key, value)

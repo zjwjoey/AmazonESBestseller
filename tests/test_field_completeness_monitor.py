@@ -82,3 +82,14 @@ def test_optional_fields_are_counted_only_when_source_bound():
     stats = FieldCompletenessMonitor(DEFAULT_THRESHOLDS).summarize([{"fields": fields}])
     assert stats["brand_raw"]["effective_extraction_rate"] == 1
     assert stats["seller_raw"]["extracted_count"] == 0
+
+
+def test_numeric_asin_counts_as_present_source():
+    asin = "1234567890"
+    record = {**RECORD, "asin": asin, "requested_asin": asin, "resolved_asin": asin}
+    valid, fields, _ = check_detail_fields(asin, record, {"status": "success"},
+        PRODUCT.replace(ASIN, asin), {**META, "final_url": URL.replace(ASIN, asin)})
+    assert valid
+    assert fields["asin"] == {"state": EXTRACTED, "eligible": True, "source_present": True}
+    stats = FieldCompletenessMonitor(DEFAULT_THRESHOLDS).summarize([{"fields": fields}])
+    assert stats["asin"]["effective_extraction_rate"] == 1
