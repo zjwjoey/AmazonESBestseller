@@ -102,6 +102,8 @@ def test_changed_evidence_switches_current_without_erasing_history(tmp_path):
     old_id = audit(ledger, "detail", "sku", old)
     new_id = audit(ledger, "detail", "sku", new, parser_version="v2.1")
     assert old_id != new_id
+    assert audit(ledger, "detail", "sku", old) == old_id
+    assert ledger.current("detail", current_versions=True) == []
     assert [a["audit_id"] for a in AuditLedger(TaskWorkspace(tmp_path)).current("detail")] == [new_id]
     with workspace.transaction() as conn:
         assert conn.execute("SELECT count(*) FROM audit_attempts").fetchone()[0] == 2

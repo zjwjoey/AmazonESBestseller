@@ -995,8 +995,15 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
     for root in roots:
         if not root.is_dir():
             continue
-        paths = {p.name.removesuffix(".gz") for pattern in ("*.html", "*.html.gz") for p in root.glob(pattern)}
-        paths.update(p.name.removesuffix(".meta.json") + ".html" for p in root.glob("*.meta.json"))
+        remaining = wanted - seen_asins
+        if not remaining and wanted:
+            break
+        if remaining and all(evidence_path(root / (asin + ".html")).is_file()
+                             for asin in remaining):
+            paths = {asin + ".html" for asin in remaining}
+        else:
+            paths = {p.name.removesuffix(".gz") for pattern in ("*.html", "*.html.gz") for p in root.glob(pattern)}
+            paths.update(p.name.removesuffix(".meta.json") + ".html" for p in root.glob("*.meta.json"))
         for name in sorted(paths):
             path = root / name
             asin = path.stem.upper()

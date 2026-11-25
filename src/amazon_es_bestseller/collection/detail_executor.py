@@ -186,7 +186,7 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                       "record": record, "capture_meta": meta,
                       "html_evidence": {"path": str(path), "sha256": digest}}
         write_checkpoint(checkpoint_dir, asin, checkpoint)
-        return coordinator.accept(asin, checkpoint)
+        return coordinator.accept(asin, checkpoint, evidence_bytes=data)
 
     verified_handoffs = []
     handed_off = {}

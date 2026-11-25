@@ -47,9 +47,13 @@ class AuditLedger:
             conn.execute("""INSERT OR IGNORE INTO audit_attempts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                          (audit_id, task, stage, unit_id, digests[0] if digests else None, record_digest,
                           parser, qa, utc_now(), *result, batch_id))
-            conn.execute("""INSERT INTO audit_current VALUES(?,?,?)
-                            ON CONFLICT(stage,unit_id) DO UPDATE SET audit_id=excluded.audit_id""",
-                         (stage, unit_id, audit_id))
+            # An exact replay preserves an already-indexed newer attempt.
+            if prior:
+                conn.execute("INSERT OR IGNORE INTO audit_current VALUES(?,?,?)", (stage, unit_id, audit_id))
+            else:
+                conn.execute("""INSERT INTO audit_current VALUES(?,?,?)
+                                ON CONFLICT(stage,unit_id) DO UPDATE SET audit_id=excluded.audit_id""",
+                             (stage, unit_id, audit_id))
             conn.executemany("INSERT OR IGNORE INTO evidence_audits VALUES(?,?,?,?,?,?,?)",
                              [(digest, stage, unit_id, audit_id, status, parser, qa) for digest in digests])
         return audit_id
@@ -64,11 +68,14 @@ class AuditLedger:
                                 self.workspace.manifest["audit_contract_version"])).fetchone()
         return row["status"] if row else None
 
-    def current(self, stage, *, pending_limit=None):
+    def current(self, stage, *, pending_limit=None, current_versions=False):
         query = """SELECT a.* FROM audit_current c JOIN audit_attempts a USING(audit_id)
                    WHERE c.stage=?"""
         order = " ORDER BY a.checked_at,a.unit_id"
         params = (stage,)
+        if current_versions:
+            query += " AND a.parser_version=? AND a.qa_version=?"
+            params += (self.workspace.manifest["parser_version"], self.workspace.manifest["audit_contract_version"])
         if pending_limit is not None:
             query += " AND a.batch_id IS NULL AND a.status!='ACCESS_STOP'"
             order += " LIMIT ?"

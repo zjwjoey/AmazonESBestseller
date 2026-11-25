@@ -32,7 +32,7 @@ class DetailBatchAudit:
             conn.execute("""CREATE TABLE IF NOT EXISTS detail_batches (
                 batch_id TEXT PRIMARY KEY, ids TEXT NOT NULL, status TEXT NOT NULL)""")
 
-    def accept(self, asin, checkpoint, *, flush=True):
+    def accept(self, asin, checkpoint, *, flush=True, evidence_bytes=None):
         """Called immediately after the authoritative checkpoint is durable."""
         payload = checkpoint_payload(checkpoint)
         previous = self.ledger.lookup("detail", asin, payload)
@@ -45,7 +45,12 @@ class DetailBatchAudit:
         source = ref.get("sha256")
         included = [source] if source else []
         included.extend(checkpoint.get("related_evidence_sha256", ()))
-        html = read_evidence(ref["path"], source).decode("utf-8") if source else None
+        if source and evidence_bytes is not None:
+            if sha256(evidence_bytes) != source:
+                raise ValueError("DETAIL_REPLAY_BUFFER_SHA256_MISMATCH:" + asin)
+            html = evidence_bytes.decode("utf-8")
+        else:
+            html = read_evidence(ref["path"], source).decode("utf-8") if source else None
         record = checkpoint.get("record")
         valid, fields, issues = check_detail_fields(asin, record, checkpoint, html, meta)
         if not source and checkpoint.get("status") == "success":
@@ -65,7 +70,7 @@ class DetailBatchAudit:
         return status
 
     def _pending(self):
-        return self.ledger.current("detail", pending_limit=self.batch_size)
+        return self.ledger.current("detail", pending_limit=self.batch_size, current_versions=True)
 
     def flush(self, *, partial=False, enforce_pause=True):
         while True:
@@ -83,7 +88,7 @@ class DetailBatchAudit:
             # and use the exact validated checkpoint version for each audit.
             self.publish(rows)
             batch = self.monitor.summarize(rows)
-            current = [row for row in self.ledger.current("detail") if row["status"] != "ACCESS_STOP"]
+            current = [row for row in self.ledger.current("detail", current_versions=True) if row["status"] != "ACCESS_STOP"]
             cumulative = self.monitor.summarize(current)
             signals = self.monitor.signals(batch, cumulative)
             atomic_json(self.directory / "batches" / (batch_id + ".json"), {
