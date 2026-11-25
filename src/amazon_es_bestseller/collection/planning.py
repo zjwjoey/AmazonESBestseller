@@ -97,6 +97,10 @@ class DetailState:
             rec.setdefault("detail_schema_version", CURRENT_DETAIL_SCHEMA_VERSION)
             self._data[a] = rec
 
+    def discard(self, asin) -> None:
+        self.ensure_valid()
+        self._data.pop(normalize_asin(asin), None)
+
     def save(self) -> None:
         self.ensure_valid()
         atomic_json(self.path, self._data, sort_keys=True)

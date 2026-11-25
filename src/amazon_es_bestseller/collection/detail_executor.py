@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from ..access.detector import AccessStopError
+from ..evidence_store import read_evidence, CacheCapacityExceeded
+from ..task_workspace import TaskWorkspace
 from ..monitoring.detail_planner import _cache_classification, validate_detail_plan
 from ..models import is_valid_asin, normalize_asin
 from .checkpoints import read_checkpoint, write_checkpoint
@@ -115,6 +117,49 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     checkpoint_dir = Path(checkpoint_root or (root / "checkpoints"))
     state = DetailState(root / "state" / "details_state.json")
     state.ensure_valid()
+    coordinator = None
+    if plan.get("task_root"):
+        from .detail_batch_audit import DetailBatchAudit, DetailQualityPause
+        workspace = TaskWorkspace(plan["task_root"])
+        if workspace.manifest["task_id"] != plan.get("task_id"):
+            raise ValueError("DETAIL_TASK_ID_MISMATCH")
+        if workspace.manifest["parser_version"] != parser_version:
+            raise ValueError("DETAIL_TASK_PARSER_VERSION_MISMATCH")
+        if root.resolve() != workspace.root / "detail":
+            raise ValueError("DETAIL_RUN_REQUIRES_TASK_DETAIL_DIRECTORY")
+        if workspace.manifest["task_status"] == "QUALITY_PAUSED":
+            raise DetailQualityPause("DETAIL_FIELD_QUALITY_PAUSED")
+        workspace.bind(detail_plan_id=plan.get("plan_id"))
+
+        def publish_batch(rows):
+            from ..audit_ledger import canonical_json
+            from ..evidence_store import sha256
+            from .detail_batch_audit import checkpoint_payload
+            for row in rows:
+                asin = row["unit_id"]
+                checkpoint = read_checkpoint(checkpoint_dir, asin) or {}
+                if sha256(canonical_json(checkpoint_payload(checkpoint)).encode("utf-8")) != row["record_digest"]:
+                    raise ValueError("DETAIL_AUDIT_CHECKPOINT_VERSION_MISMATCH:" + asin)
+                if row["status"] in {"PASS", "WARN"}:
+                    state.update([checkpoint["record"]])
+                else:
+                    state.discard(asin)
+            state.save()
+            _atomic_json(root / "details.json", state.records())
+
+        coordinator = DetailBatchAudit(workspace, publish_batch)
+        coordinator.flush()
+
+        def before_request():
+            evidence = coordinator.ledger.evidence
+            capacity = evidence.capacity()
+            if capacity["state"] in {"COMPACT", "PAUSE"}:
+                coordinator.flush(partial=True)
+                capacity = evidence.capacity()
+            _atomic_json(workspace.root / "cache" / "cache_state.json", capacity)
+            if capacity["state"] == "PAUSE":
+                raise CacheCapacityExceeded("ACTIVE_CACHE_HARD_LIMIT")
+
     if len(state) == 0 and (root / "details.json").exists():
         # A damaged/unreadable legacy authority file is not an empty dataset.
         # Fail before requests or writes rather than rebuilding it as [].
@@ -137,7 +182,7 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
             continue
         asin = _asin(row)
         try:
-            actual_hash = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+            actual_hash = hashlib.sha256(read_evidence(evidence_path)).hexdigest()
         except OSError:
             actual_hash = ""
         if (actual_hash != expected_hash
@@ -202,9 +247,13 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if (_checkpoint_matches(checkpoint, row) and checkpoint.get("status") == "success"):
             recovered = _checkpoint_record(checkpoint)
             if _usable_record(recovered, asin):
-                state.update([recovered])
+                if coordinator:
+                    status = coordinator.accept(asin, checkpoint)
+                else:
+                    state.update([recovered])
+                    status = "PASS"
                 skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
-                                "status": "ALREADY_SUCCESS"})
+                                "status": "ALREADY_SUCCESS" if status in {"PASS", "WARN"} else status})
                 continue
         pending.append(row)
 
@@ -256,17 +305,28 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if offline:
             raise ValueError("offline detail execution contains network actions")
         try:
+            hooks = ({"evidence_store": coordinator.ledger.evidence,
+                      "on_checkpoint": coordinator.accept, "before_request": before_request}
+                     if coordinator else {})
             details = _call_collector(collector, [_asin(row) for row in pending], session, root,
                                 request_urls=request_urls, execution_context=context,
                                 write_summary=False, parser_version=parser_version,
-                                checkpoint_root=checkpoint_dir)
+                                checkpoint_root=checkpoint_dir, **hooks)
         except AccessStopError as exc:
             access_stop = str(exc)
+        finally:
+            if coordinator:
+                coordinator.flush(partial=True, enforce_pause=not access_stop)
+
+    if coordinator:
+        coordinator.flush(partial=True)
+        accepted = {r["unit_id"]: r["status"] for r in coordinator.ledger.current("detail")}
+        details = [r for r in details if accepted.get(r.get("asin")) in {"PASS", "WARN"}]
 
     for row in pending:
         checkpoint = read_checkpoint(checkpoint_dir, _asin(row))
         recovered = _checkpoint_record(checkpoint) if _checkpoint_matches(checkpoint, row) else None
-        if _usable_record(recovered, _asin(row)):
+        if not coordinator and _usable_record(recovered, _asin(row)):
             state.update([recovered])
     if details:
         expected = {_asin(row) for row in pending}
@@ -274,7 +334,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                or not _usable_record(record, str(record.get("asin") or "").upper())
                for record in details):
             raise ValueError("DETAIL_COLLECTOR_RETURNED_INVALID_OR_UNPLANNED_RECORD")
-        state.update(details)
+        if not coordinator:
+            state.update(details)
     state.save()
     details_full = state.records()
     _atomic_json(root / "details.json", details_full)
@@ -302,6 +363,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if (str(status or "").lower() == "success"
                 and not _usable_record(_checkpoint_record(checkpoint), asin)):
             status = None
+        if coordinator and status == "success" and accepted.get(asin) not in {"PASS", "WARN"}:
+            status = accepted.get(asin) or "PENDING"
         status = status or ("SUCCESS" if asin in detail_by_asin else "PENDING")
         outcomes.append({"snapshot_id": row.get("snapshot_id"), "ranking_asin": asin,
                          **candidate_provenance.get(asin, {}),

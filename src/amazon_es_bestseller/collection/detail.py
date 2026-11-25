@@ -1156,7 +1156,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                     execution_context: Optional[dict] = None,
                     write_summary: bool = True,
                     details_output_path: Optional[str] = None,
-                    parser_version: str = "v1", checkpoint_root=None) -> List[dict]:
+                    parser_version: str = "v1", checkpoint_root=None,
+                    evidence_store=None, on_checkpoint=None, before_request=None) -> List[dict]:
     """串行采集详情页：原始 HTML 落盘 html/<asin>.html + 结果 details.json。
 
     访问纪律（extract_details.js 语义）：goto → wait_for_product_page →
@@ -1209,6 +1210,8 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                          "asin": asin, "status": status})
 
     def quarantine_invalid(asin, path, meta_path):
+        if evidence_store is not None:
+            return  # Managed evidence retains its original bytes and audit status.
         target = os.path.join(quarantine_root, asin)
         os.makedirs(target, exist_ok=True)
         for source in (path, meta_path):
@@ -1251,7 +1254,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                               str(enriched["final_url"]), re.I)
             if match:
                 enriched.setdefault("resolved_asin", match.group(1).upper())
+        if evidence_store is not None:
+            enriched["capture_meta"] = capture_meta
+            if reference:
+                enriched["html_evidence"] = reference
+            if related:
+                enriched["related_evidence_sha256"] = related
         write_checkpoint(checkpoint_dir, asin, enriched)
+        if on_checkpoint is not None:
+            on_checkpoint(asin, enriched)
 
     def product_not_found(asin, meta, source):
         failed.append(asin)
@@ -1268,17 +1279,24 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             raise AccessStopError("其他工作槽触发访问限制，停止新的详情请求")
         path = os.path.join(html_dir, asin + ".html")
         meta_path = os.path.splitext(path)[0] + ".meta.json"
-        if os.path.exists(path):
+        from ..evidence_store import evidence_path, read_evidence
+        from .runtime_io import atomic_json
+        capture_meta = _load_detail_metadata(meta_path)
+        reference = capture_meta.get("html_evidence")
+        related = capture_meta.get("related_evidence_sha256") or []
+        if reference or evidence_path(path).is_file():
             try:
-                from .runtime_io import read_text
-                html = read_text(path)
+                html = read_evidence(reference["path"], reference["sha256"]).decode("utf-8") if reference else read_evidence(path).decode("utf-8")
+                if evidence_store is not None and not reference:
+                    physical, digest = evidence_store.save(html.encode("utf-8"))
+                    reference = {"path": str(physical), "sha256": digest}
             except UnicodeError as exc:
                 failed.append(asin)
                 checkpoint(asin, {"asin": asin, "status": "failed",
                     "detail_status": "CACHE_READ_ERROR", "error": str(exc), "source": "cache"})
                 progress(asin, "failed")
                 continue
-            meta = _load_detail_metadata(meta_path)
+            meta = capture_meta
             cached_status = meta.get("status_code", 200)
             cached_url = meta.get("final_url") or ""
             cache_meta = {"status_code": cached_status, "final_url": cached_url,
@@ -1337,11 +1355,15 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                 # Preserve every previous capture before honoring an explicit
                 # refetch. A historical challenge still takes the unchanged
                 # gate above and never reaches this branch.
-                history = os.path.join(str(out_dir), "cache_history", asin, uuid.uuid4().hex)
-                os.makedirs(history, exist_ok=False)
-                for source in (path, meta_path):
-                    if os.path.exists(source):
-                        shutil.copy2(source, os.path.join(history, os.path.basename(source)))
+                if evidence_store is not None:
+                    if reference:
+                        related = [*related, reference["sha256"]]
+                else:
+                    history = os.path.join(str(out_dir), "cache_history", asin, uuid.uuid4().hex)
+                    os.makedirs(history, exist_ok=False)
+                    for source in (path, meta_path):
+                        if os.path.exists(source):
+                            shutil.copy2(source, os.path.join(history, os.path.basename(source)))
             else:
                 if classification != "VALID_PRODUCT_PAGE":
                     quarantine_invalid(asin, path, meta_path)
@@ -1383,6 +1405,9 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
                                  "source": "cache", "record": rec})
                 progress(asin, "success")
                 continue
+        if before_request is not None:
+            before_request()
+        reference, capture_meta = None, {}
         request_started = False
         access_stopped = False
         stage = "request"
@@ -1398,8 +1423,17 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             stage = "document_capture"
             html = session.page.content()
             stage = "raw_persist"
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(html)  # 先保留证据，再判定访问状态
+            if evidence_store is None:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(html)
+            else:
+                physical, digest = evidence_store.save(html.encode("utf-8"))
+                reference = {"path": str(physical), "sha256": digest}
+                capture_meta = {"status_code": status, "requested_asin": asin,
+                                "requested_url": requested_url,
+                                "final_url": str(getattr(session.page, "url", "") or ""),
+                                "html_evidence": reference, "related_evidence_sha256": related}
+                atomic_json(meta_path, capture_meta)
             stage = "access_gate"
             initial_state = detect_access_status(status, html)
             state = initial_state
@@ -1408,21 +1442,26 @@ def collect_details(asins: List[str], session, out_dir: str, on_progress=None,
             state, html, recovered = maybe_wait_for_challenge(session, state, html, status)
             if original_html != html and state.value == "NORMAL":
                 stage = "challenge_evidence_persist"
-                with open(path + ".challenge", "w", encoding="utf-8") as f:
-                    f.write(original_html)
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(html)
+                if evidence_store is None:
+                    with open(path + ".challenge", "w", encoding="utf-8") as f:
+                        f.write(original_html)
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(html)
+                else:
+                    related = [*related, reference["sha256"]]
+                    physical, digest = evidence_store.save(html.encode("utf-8"))
+                    reference = {"path": str(physical), "sha256": digest}
             # Save HTTP evidence even when the gate stops here. Otherwise a
             # 403 with product-like HTML could be replayed as a legacy 200.
             final_url = str(getattr(session.page, "url", "") or "")
             stage = "metadata_persist"
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump({"status_code": status, "final_url": final_url,
-                           "requested_url": requested_url, "requested_asin": asin,
-                           "initial_access_state": initial_state.value,
-                           "access_state": state.value,
-                           "recovered_from_challenge": recovered}, f,
-                          ensure_ascii=False, indent=2)
+            capture_meta = {"status_code": status, "final_url": final_url,
+                            "requested_url": requested_url, "requested_asin": asin,
+                            "initial_access_state": initial_state.value, "access_state": state.value,
+                            "recovered_from_challenge": recovered}
+            if reference:
+                capture_meta.update(html_evidence=reference, related_evidence_sha256=related)
+            atomic_json(meta_path, capture_meta)
             if _confirmed_product_not_found(html, {"status_code": status, "final_url": final_url}):
                 stage = "missing_product_checkpoint"
                 product_not_found(asin, {"initial_access_state": initial_state.value,

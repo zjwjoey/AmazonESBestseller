@@ -54,10 +54,17 @@ class AuditLedger:
                              [(digest, stage, unit_id, audit_id, status, parser, qa) for digest in digests])
         return audit_id
 
-    def current(self, stage):
+    def current(self, stage, *, pending_limit=None):
+        query = """SELECT a.* FROM audit_current c JOIN audit_attempts a USING(audit_id)
+                   WHERE c.stage=?"""
+        order = " ORDER BY a.checked_at,a.unit_id"
+        params = (stage,)
+        if pending_limit is not None:
+            query += " AND a.batch_id IS NULL AND a.status!='ACCESS_STOP'"
+            order += " LIMIT ?"
+            params += (pending_limit,)
         with self.workspace.transaction() as conn:
-            rows = conn.execute("""SELECT a.* FROM audit_current c JOIN audit_attempts a USING(audit_id)
-                                   WHERE c.stage=? ORDER BY a.checked_at,a.unit_id""", (stage,)).fetchall()
+            rows = conn.execute(query + order, params).fetchall()
         return [{**row, "fields": json.loads(row["fields"]), "anomalies": json.loads(row["anomalies"])}
                 for row in rows]
 
