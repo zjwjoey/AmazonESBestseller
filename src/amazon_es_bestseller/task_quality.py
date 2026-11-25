@@ -11,7 +11,7 @@ from .collection.checkpoints import read_checkpoint
 from .collection.detail_batch_audit import checkpoint_payload
 from .collection.field_completeness import FieldCompletenessMonitor
 from .collection.runtime_io import read_json
-from .evidence_store import sha256
+from .evidence_store import CacheCapacityExceeded, sha256
 from .monitoring.detail_planner import validate_detail_plan
 from .multisource.storage import digest, read_sealed
 from .task_workspace import TaskWorkspace, atomic_json
@@ -56,6 +56,36 @@ def _snapshot_receipt_errors(store, plan, pages, requests):
     return errors
 
 
+def _audit_managed_snapshot(workspace, snapshot_id, errors):
+    from .highspeed.incremental_audit import SnapshotPageAudit
+    from .highspeed.store import ReadOnlyRunStore
+    with closing(ReadOnlyRunStore(workspace.root / "store")) as store:
+        run = store.get_run(snapshot_id)
+        plan = run["plan"]
+        pages = store.pages(snapshot_id)
+        references = {(src["source_id"], url) for src in plan["sources"] for url in src["page_urls"]}
+        completed = {(r["source_id"], r["page_url"]) for r in pages}
+        requests = store.requests(snapshot_id)
+        unfinished = [r["request_id"] for r in requests if r["status"] == "RESERVED"]
+        audit = SnapshotPageAudit(workspace).coverage(plan, pages)
+        receipt_errors = _snapshot_receipt_errors(store, plan, pages, requests)
+        snapshot = {
+            "mode": "WORKSPACE", "run_id": snapshot_id, "run_status": run["status"],
+            "stop_reason": run.get("stop_reason"), "planned_base_pages": len(references),
+            "completed_base_pages": len(references & completed), "additional_pages": len(completed - references),
+            "missing_base_pages": [list(key) for key in sorted(references - completed)],
+            "unfinished_requests": unfinished, "request_statuses": dict(Counter(r["status"] for r in requests)),
+            "audit": audit, "receipt_errors": receipt_errors,
+        }
+        if receipt_errors:
+            errors.append("SNAPSHOT_RECEIPT_VERIFICATION_FAILED")
+        if run["status"] != "STOPPED" or references - completed or unfinished:
+            errors.append("SNAPSHOT_SCOPE_INCOMPLETE")
+        if not audit["central_full_dom_review_passed"]:
+            errors.append("SNAPSHOT_AUDIT_INCOMPLETE")
+    return snapshot
+
+
 def finalize_task(root):
     workspace = TaskWorkspace(root)
     manifest = workspace.manifest
@@ -67,32 +97,11 @@ def finalize_task(root):
         snapshot = {"mode": "WORKSPACE", "run_id": snapshot_id, "run_status": "NOT_STARTED"}
         errors.append("SNAPSHOT_SCOPE_INCOMPLETE")
     elif snapshot_id:
-        from .highspeed.incremental_audit import SnapshotPageAudit
-        from .highspeed.store import ReadOnlyRunStore
-        with closing(ReadOnlyRunStore(workspace.root / "store")) as store:
-            run = store.get_run(snapshot_id)
-            plan = run["plan"]
-            pages = store.pages(snapshot_id)
-            references = {(src["source_id"], url) for src in plan["sources"] for url in src["page_urls"]}
-            completed = {(r["source_id"], r["page_url"]) for r in pages}
-            requests = store.requests(snapshot_id)
-            unfinished = [r["request_id"] for r in requests if r["status"] == "RESERVED"]
-            audit = SnapshotPageAudit(workspace).coverage(plan, pages)
-            receipt_errors = _snapshot_receipt_errors(store, plan, pages, requests)
-            snapshot = {
-                "mode": "WORKSPACE", "run_id": snapshot_id, "run_status": run["status"],
-                "stop_reason": run.get("stop_reason"), "planned_base_pages": len(references),
-                "completed_base_pages": len(references & completed), "additional_pages": len(completed - references),
-                "missing_base_pages": [list(key) for key in sorted(references - completed)],
-                "unfinished_requests": unfinished, "request_statuses": dict(Counter(r["status"] for r in requests)),
-                "audit": audit, "receipt_errors": receipt_errors,
-            }
-            if receipt_errors:
-                errors.append("SNAPSHOT_RECEIPT_VERIFICATION_FAILED")
-            if run["status"] != "STOPPED" or references - completed or unfinished:
-                errors.append("SNAPSHOT_SCOPE_INCOMPLETE")
-            if not audit["central_full_dom_review_passed"]:
-                errors.append("SNAPSHOT_AUDIT_INCOMPLETE")
+        try:
+            snapshot = _audit_managed_snapshot(workspace, snapshot_id, errors)
+        except CacheCapacityExceeded:
+            snapshot = {"mode": "WORKSPACE", "run_id": snapshot_id, "run_status": "AUDIT_CAPACITY_BLOCKED"}
+            errors.extend(("SNAPSHOT_SCOPE_INCOMPLETE", "SNAPSHOT_AUDIT_CACHE_CAPACITY"))
     elif manifest.get("external_snapshot"):
         snapshot = {"mode": "EXTERNAL", "reference": manifest["external_snapshot"]}
         import hashlib

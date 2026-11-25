@@ -141,8 +141,9 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
         if profile=='main-priority-50000':
             plan['snapshot_field_contract']=auth['snapshot_field_contract']='CARD_IMAGE_V1'
             from amazon_es_bestseller.task_workspace import TaskWorkspace
-            workspace = TaskWorkspace.create(tmp_path / 'managed', 'managed-task')
+            workspace = TaskWorkspace.create(tmp_path / 'managed' / plan['run_id'], 'managed-task')
             plan.update(task_id='managed-task', task_root=str(workspace.root))
+            auth['store_root'] = str(workspace.root / 'store')
         auth.update(plan_sha256=digest(plan),expires_at=(NOW+timedelta(hours=24)).isoformat(),
             task_clock_reference=start_task_clock(plan['task_clock_path'],plan,'TEST_ONLY',now=NOW),sources={})
         for source in sources:
@@ -258,6 +259,40 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
                 with pytest.raises(ValueError,match='READ_ONLY'):
                     reader.save_html('MUST_NOT_WRITE')
             finally:reader.close()
+            if plan.get('task_root'):
+                # The saved detail advances the very same task and evidence ledger.
+                from amazon_es_bestseller.collection.detail_executor import execute_detail_plan
+                from amazon_es_bestseller.evidence_store import sha256
+                from amazon_es_bestseller.highspeed.incremental_audit import page_evidence_digests
+                from amazon_es_bestseller.monitoring.detail_planner import write_detail_plan
+                from amazon_es_bestseller.task_quality import finalize_task
+                import json
+                asin = 'B000000001'
+                html = tmp_path / 'detail-fixtures'
+                html.mkdir()
+                (html / (asin + '.html')).write_text(
+                    f'<html><input id="ASIN" value="{asin}"><h1 id="productTitle">Bolso de viaje</h1></html>',
+                    encoding='utf8')
+                detail_plan = dict(task_id=plan['task_id'], task_root=plan['task_root'],
+                    snapshot_id=plan['snapshot_id'],
+                    records=[dict(ranking_asin=asin, snapshot_id=plan['snapshot_id'],
+                                  detail_action='REPARSE_SAVED_HTML')])
+                artifact = write_detail_plan(detail_plan, workspace.root / 'detail' / 'plan')['json']
+                details = execute_detail_plan(json.loads(artifact.read_bytes()), None, str(workspace.root / 'detail'),
+                                              offline=True, parser_version='v2', saved_html=html)
+                task_report = finalize_task(workspace.root)
+                assert details['completed_count'] == 1
+                assert task_report['detail']['terminal'] == task_report['detail']['batch_covered'] == 1
+                assert task_report['snapshot']['receipt_errors'] == []
+                assert task_report['snapshot']['audit']['reviewed_capture_frames'] == len(store.pages(plan['run_id']))
+                digests = {digest for page in store.pages(plan['run_id']) for digest in page_evidence_digests(page)}
+                digests.add(sha256((html / (asin + '.html')).read_bytes()))
+                assert task_report['archive']['files'] == len(digests)
+                assert all((workspace.root / 'evidence' / 'archive' / (digest + '.html.gz')).is_file()
+                           for digest in digests)
+                assert task_report['archive']['errors'] == []
+                assert task_report['cache']['active_bytes'] == 0
+
             # A new pending 50k task must not mutate this existing run or grant LIVE.
             from amazon_es_bestseller.highspeed.snapshot_cli import prepare_page_task,task_config
             task=tmp_path/'TEST_ONLY_task.txt';task.write_text('TEST_ONLY pending configuration',encoding='utf8')

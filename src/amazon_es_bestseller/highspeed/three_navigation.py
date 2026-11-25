@@ -33,7 +33,7 @@ def category_key(url):
 
 
 def _body(page):
-    body = read_evidence(page['evidence_path'])
+    body = read_evidence(page['evidence_path'], infer_digest=False)
     if hashlib.sha256(body).hexdigest() != page['evidence_sha256']:
         raise ValueError('THREE_NAV_HTML_SHA_MISMATCH')
     return BeautifulSoup(body, 'lxml')
@@ -70,7 +70,7 @@ def _source_context(source,page_url):
 
 
 def _check_dependency(reference):
-    if hashlib.sha256(read_evidence(reference['evidence_path'])).hexdigest()!=reference['evidence_sha256']:
+    if hashlib.sha256(read_evidence(reference['evidence_path'], infer_digest=False)).hexdigest()!=reference['evidence_sha256']:
         raise ValueError('THREE_NAV_HTML_SHA_MISMATCH')
 
 

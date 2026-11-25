@@ -12,7 +12,6 @@ import json
 from pathlib import Path
 import re
 import sqlite3
-import shutil
 import tempfile
 import os
 import uuid
@@ -379,7 +378,7 @@ class RunStore:
         for row in self.db.execute("SELECT data_json FROM responses WHERE run_id=?", (run_id,)):
             value = json.loads(row[0])
             if with_body:
-                data = read_evidence(value["html_path"])
+                data = read_evidence(value["html_path"], infer_digest=False)
                 if digest(data) != value["sha256"]:
                     raise ValueError("HIGH_SPEED_RESPONSE_EVIDENCE_CORRUPT")
                 value["text"] = value["body"] = data.decode("utf-8")
@@ -403,7 +402,7 @@ class RunStore:
             return None
         value = json.loads(row[0])
         if with_body:
-            data = read_evidence(value["html_path"])
+            data = read_evidence(value["html_path"], infer_digest=False)
             if digest(data) != value["sha256"]:
                 raise ValueError("HIGH_SPEED_RESPONSE_EVIDENCE_CORRUPT")
             value["text"] = value["body"] = data.decode("utf-8")
@@ -516,7 +515,7 @@ class RunStore:
                 (value["request_id"], run_id, value["kind"], value["local_day"], value["observed_at"], "RESERVED", _json(value)))
         for path in (directory / "responses").glob("*.json"):
             value = read_sealed(path)
-            data = read_evidence(value["html_path"])
+            data = read_evidence(value["html_path"], infer_digest=False)
             if digest(data) != value["sha256"]:
                 raise ValueError("HIGH_SPEED_RESPONSE_EVIDENCE_CORRUPT")
             with self._transaction():
@@ -526,7 +525,7 @@ class RunStore:
             value = read_sealed(path)
             page = value["page"]
             if page.get("evidence_path") and page.get("evidence_sha256"):
-                if digest(read_evidence(page["evidence_path"])) != page["evidence_sha256"]:
+                if digest(read_evidence(page["evidence_path"], infer_digest=False)) != page["evidence_sha256"]:
                     raise ValueError("HIGH_SPEED_PAGE_EVIDENCE_CORRUPT")
             self._index_page(value, path, plan)
             self.db.execute("DELETE FROM pending_pages WHERE run_id=? AND journal_path=?", (run_id,str(path)))
@@ -766,35 +765,85 @@ class ReadOnlyRunStore(RunStore):
         # SQLite mode=ro can still write WAL shared-memory read marks. Never
         # open the source database with SQLite: capture DB+WAL into an isolated
         # directory and reject concurrent source changes during that capture.
-        temp_root = Path(os.environ.get('SNAPSHOT_READ_TEMP', r'F:\ai文件\CodexStorage\temp')) if os.name == 'nt' else Path(tempfile.gettempdir())
-        temp_root.mkdir(parents=True, exist_ok=True)
-        if temp_root == self.root or temp_root.is_relative_to(self.root):
-            raise ValueError('READ_ONLY_COPY_OUTSIDE_SOURCE_REQUIRED')
-        self._read_copy = tempfile.TemporaryDirectory(prefix='snapshot_read_', dir=temp_root)
+        source_files = [database, database.with_name(database.name + '-wal')]
+
+        def tokens():
+            result = []
+            for path in source_files:
+                try:
+                    stat = path.stat()
+                    result.append((stat.st_size, stat.st_mtime_ns))
+                except FileNotFoundError:
+                    result.append(None)
+            return result
+
+        before = tokens()
+        manifest = self.root.parent / 'task_manifest.json'
+        self.db = None
         try:
-            source_files = [database, database.with_name(database.name + '-wal')]
-            def tokens():
-                return [(p.stat().st_size, p.stat().st_mtime_ns) if p.exists() else None for p in source_files]
-            before = tokens()
-            for source, token in zip(source_files, before):
-                if token is not None:
-                    shutil.copyfile(source, Path(self._read_copy.name) / source.name)
-            if tokens() != before:
-                raise ValueError('READ_ONLY_SOURCE_CHANGED_DURING_COPY_RETRY_LATER')
-            copied = Path(self._read_copy.name) / database.name
-            self.db = sqlite3.connect(copied.as_uri() + '?mode=ro', uri=True, timeout=20, isolation_level=None)
+            if self.root.name == 'store' and manifest.is_file():
+                from ..evidence_store import EvidenceStore
+                from ..task_workspace import TaskWorkspace
+                evidence = EvidenceStore(TaskWorkspace(self.root.parent))
+                wal_size = before[1][0] if before[1] else 0
+                # SQLite builds a fixed-size WAL index for private reads. The
+                # index is smaller than its WAL, with a minimum reserve for
+                # the first shared-memory region even when there are no frames.
+                maximum = sum(token[0] for token in before if token) + max(65536, wal_size)
+                with evidence.audit_scratch(maximum) as (directory, cleanup):
+                    self._cleanup_copy = cleanup
+                    try:
+                        self._open_copy(directory, source_files, before, tokens)
+                    except BaseException:
+                        if self.db is not None:
+                            self.db.close()
+                            self.db = None
+                        raise
+            else:
+                temp_root = Path(os.environ.get('SNAPSHOT_READ_TEMP', r'F:\ai文件\CodexStorage\temp')) if os.name == 'nt' else Path(tempfile.gettempdir())
+                temp_root.mkdir(parents=True, exist_ok=True)
+                if temp_root.resolve().is_relative_to(self.root):
+                    raise ValueError('READ_ONLY_COPY_OUTSIDE_SOURCE_REQUIRED')
+                scratch = tempfile.TemporaryDirectory(prefix='snapshot_read_', dir=temp_root)
+                self._cleanup_copy = scratch.cleanup
+                self._open_copy(Path(scratch.name), source_files, before, tokens)
         except BaseException:
-            self._read_copy.cleanup()
+            if self.db is not None:
+                self.db.close()
+            if hasattr(self, '_cleanup_copy'):
+                self._cleanup_copy()
             raise
+
+    def _open_copy(self, directory, sources, before, tokens):
+        for source, token in zip(sources, before):
+            if token is None:
+                continue
+            remaining = token[0]
+            try:
+                with source.open('rb') as original, (directory / source.name).open('xb') as copy:
+                    while remaining and (block := original.read(min(remaining, 256 * 1024))):
+                        copy.write(block)
+                        remaining -= len(block)
+            except FileNotFoundError as error:
+                raise ValueError('READ_ONLY_SOURCE_CHANGED_DURING_COPY_RETRY_LATER') from error
+            if remaining:
+                raise ValueError('READ_ONLY_SOURCE_CHANGED_DURING_COPY_RETRY_LATER')
+        if tokens() != before:
+            raise ValueError('READ_ONLY_SOURCE_CHANGED_DURING_COPY_RETRY_LATER')
+        copied = directory / sources[0].name
+        self.db = sqlite3.connect(copied.as_uri() + '?mode=ro', uri=True, timeout=20, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA query_only=ON')
+        self.db.execute('PRAGMA temp_store=MEMORY')
         self.db.execute('BEGIN')
+        # Materialize any WAL reader files before releasing the capacity lock.
+        self.db.execute('SELECT name FROM sqlite_master LIMIT 1').fetchone()
 
     def close(self):
         try:
             self.db.close()
         finally:
-            self._read_copy.cleanup()
+            self._cleanup_copy()
 
     def _deny(self, *args, **kwargs):
         raise ValueError('READ_ONLY_SNAPSHOT_STORE')

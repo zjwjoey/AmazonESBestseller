@@ -42,7 +42,7 @@ def audit_capacity(pages, observations, sources, execution, *, three_source=Fals
         for p in receipt_paths:
             r=read_sealed(p)
             if r['run_id']!=run_id or r['origin']!='LIVE_CAPTURE':raise ValueError('FOREIGN_RECEIPT')
-            if hashlib.sha256(read_evidence(r['html_path'])).hexdigest()!=r['sha256']:
+            if hashlib.sha256(read_evidence(r['html_path'], infer_digest=False)).hexdigest()!=r['sha256']:
                 raise ValueError('RECEIPT_BODY_SHA_MISMATCH')
             receipts.append(r)
         if {r['request_id'] for r in receipts}!={r['request_id'] for r in reservations}:

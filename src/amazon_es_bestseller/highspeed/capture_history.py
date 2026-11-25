@@ -28,7 +28,7 @@ def live_observation_capture_pages(store,run_id,rows):
                 or page.get('page_url') not in source['page_urls'] or page.get('origin')!='LIVE_CAPTURE'):
             raise ValueError('LIVE_CAPTURE_HISTORY_SOURCE_CONFLICT')
         evidence=Path(page['evidence_path']).resolve();sha=page['evidence_sha256']
-        if (str(evidence),sha) not in bodies:bodies[(str(evidence),sha)]=digest(read_evidence(evidence))==sha
+        if (str(evidence),sha) not in bodies:bodies[(str(evidence),sha)]=digest(read_evidence(evidence, infer_digest=False))==sha
         if not bodies[(str(evidence),sha)]:raise ValueError('LIVE_CAPTURE_HISTORY_PARENT_BODY_HASH_CONFLICT')
         parent={**page,'page_key':journal['page_key'],'journal_path':str(path.resolve())}
         capture=(sid,page['page_url'],str(evidence),sha,page['observed_at'],journal['page_key'])

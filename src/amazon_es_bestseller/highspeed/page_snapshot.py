@@ -97,6 +97,8 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         workspace = TaskWorkspace(plan['task_root'])
         if workspace.manifest['task_id'] != plan.get('task_id'):
             raise ValueError('SNAPSHOT_TASK_ID_MISMATCH')
+        if self.store.root.resolve() != workspace.root / 'store':
+            raise ValueError('SNAPSHOT_RUN_REQUIRES_TASK_STORE_DIRECTORY')
         workspace.bind(snapshot_run_id=plan['run_id'])
         self._page_audit = SnapshotPageAudit(workspace)
         self.store.task_evidence = self._page_audit.ledger.evidence

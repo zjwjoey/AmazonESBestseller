@@ -1,5 +1,7 @@
 # Main Consolidation V1 — 整合顺序与验收记录
 
+> 本文保留旧版本整合与历史诊断记录。新任务按[增量审查、证据与缓存](../INCREMENTAL_AUDIT_AND_CACHE_V1.md) 运行。
+
 ## 目标
 
 以 `origin/main` (`9d669b3`) 为正式基线，保留已经验证的 collection、identity、quality、translation、export 合同；只将有清晰依赖边界且能在离线测试中验收的功能逐步纳入。禁止在生产工作目录操作，禁止运行采集和真实翻译 provider。

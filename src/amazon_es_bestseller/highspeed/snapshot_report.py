@@ -87,7 +87,7 @@ def receipt_review(store, run):
             actual = dict(receipt); actual.pop('evidence_path', None)
             if saved != actual:
                 raise ValueError('RECEIPT_INDEX_CONTENT_MISMATCH')
-            body_path = Path(receipt['html_path']); body = read_evidence(body_path)
+            body_path = Path(receipt['html_path']); body = read_evidence(body_path, infer_digest=False)
             if hashlib.sha256(body).hexdigest() != receipt['sha256']:
                 raise ValueError('RECEIPT_BODY_SHA_MISMATCH')
             proofs.append({'path': str(body_path), 'sha256': receipt['sha256']})

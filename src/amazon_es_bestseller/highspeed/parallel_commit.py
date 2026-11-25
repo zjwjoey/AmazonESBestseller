@@ -80,7 +80,7 @@ class ParallelSnapshotCommitter:
                     raise ValueError('PARALLEL_PAGE_DOM_REVIEW_FAILED:'+str(quality['errors'][:2]))
             self.runner.after_page(plan,source,item['page_key'],parsed)
             self.queue.replay_committed(url,receipt['sha256'],verify=lambda u,h:
-                u==url and h==receipt['sha256'] and hashlib.sha256(read_evidence(receipt['html_path'])).hexdigest()==h)
+                u==url and h==receipt['sha256'] and hashlib.sha256(read_evidence(receipt['html_path'], infer_digest=False)).hexdigest()==h)
             return receipt
         except BaseException:
             self.stop('PAGE_COMMIT_OR_REVIEW_FAILURE')

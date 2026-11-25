@@ -169,8 +169,9 @@ python -c "import amazon_es_bestseller.cli as m; print(m.__file__)"
 
 Re-run `python -m pip install -e ".[test]"` from the intended tree if the path is wrong.
 
-Offline commands are `select-quota`, `enrich`, `repair-cache`, `reparse-details`, `audit-detail-cache`, `qa`,
-`audit-fields` and `export`. Live collection uses low-frequency browser access.
+Offline commands include `detail-plan`, `task-finalize`, `select-quota`, `enrich`,
+`repair-cache`, `reparse-details`, `audit-detail-cache`, `qa` and `export`.
+Live collection uses low-frequency browser access.
 Qwen and DeepSeek HTTP translation transports have been removed (2026-10-27).
 Live collection tests run only when `RUN_LIVE=1`
 is explicitly set. CI and the default test suite never access Amazon or DeepSeek, and the

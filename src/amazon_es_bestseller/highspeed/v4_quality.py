@@ -54,11 +54,11 @@ def verify_rendered_derivation(page,root_receipt,source):
                 or event.get('new_network_request') is not False
                 or aware_time(r['observed_at'])>aware_time(page['observed_at'])):
             raise ValueError('V4_RENDERED_DYNAMIC_ACTUAL_RECEIPT_REQUIRED')
-        if hashlib.sha256(read_evidence(r['html_path'])).hexdigest()!=r['sha256']:
+        if hashlib.sha256(read_evidence(r['html_path'], infer_digest=False)).hexdigest()!=r['sha256']:
             raise ValueError('V4_RENDERED_DYNAMIC_BODY_SHA_MISMATCH')
         validate_dynamic_descriptor(r['request_url'],source,{'allow_native_dynamic':True},
             {'run_id':page['run_id']},desc)
-        if (hashlib.sha256(read_evidence(frame['path'])).hexdigest()!=frame['sha256']
+        if (hashlib.sha256(read_evidence(frame['path'], infer_digest=False)).hexdigest()!=frame['sha256']
                 or aware_time(frame['observed_at'])<aware_time(r['observed_at'])):
             raise ValueError('V4_RENDERED_INTERMEDIATE_FRAME_INVALID')
         parent_sha=frame['sha256']
@@ -155,7 +155,7 @@ def audit_v4(pages, observations, sources, *, require_live=False, include_histor
                 capture_pages[key] = page
     for page in capture_pages.values():
         try:
-            path = Path(page['evidence_path']); body = read_evidence(path)
+            path = Path(page['evidence_path']); body = read_evidence(path, infer_digest=False)
             if hashlib.sha256(body).hexdigest() != page['evidence_sha256']:
                 raise ValueError('DOM_SHA_MISMATCH')
             runtime_source=page.get('source') or {}
@@ -166,7 +166,7 @@ def audit_v4(pages, observations, sources, *, require_live=False, include_histor
                 source = source_map[page['source_id']]
             acp = []
             for ref in page.get('acp_captures', []):
-                cp = Path(ref['evidence_path']); cb = read_evidence(cp)
+                cp = Path(ref['evidence_path']); cb = read_evidence(cp, infer_digest=False)
                 if hashlib.sha256(cb).hexdigest() != ref['evidence_sha256']:
                     raise ValueError('ACP_DOM_SHA_MISMATCH')
                 if require_live:
@@ -230,7 +230,7 @@ def audit_v4(pages, observations, sources, *, require_live=False, include_histor
                     raise ValueError('CURRENT_RUN_LIVE_RECEIPT_REQUIRED')
                 for name in ('document_html_reference', 'rendered_html_reference'):
                     reference = page.get(name) or {}
-                    if reference.get('path') and hashlib.sha256(read_evidence(reference['path'])).hexdigest() != reference.get('sha256'):
+                    if reference.get('path') and hashlib.sha256(read_evidence(reference['path'], infer_digest=False)).hexdigest() != reference.get('sha256'):
                         raise ValueError('PAIRED_CAPTURE_REPRESENTATION_SHA_MISMATCH')
             if parsed['page']['status'] != page['status']:
                 raise ValueError('PAGE_STATUS_DOM_MISMATCH')

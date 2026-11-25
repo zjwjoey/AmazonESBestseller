@@ -53,10 +53,11 @@ def verify_pagination_reference(reference, source, *, parent_page_url=None):
     Plans must additionally validate the complete ordered evidence chain.
     """
     path=Path(reference['evidence_path'])
-    if hashlib.sha256(read_evidence(path)).hexdigest()!=reference['evidence_sha256']:
+    body = read_evidence(path, infer_digest=False)
+    if hashlib.sha256(body).hexdigest()!=reference['evidence_sha256']:
         raise ValueError('V4_PAGINATION_EVIDENCE_SHA_MISMATCH')
     parent=reference['page_url']; url=reference['url']
-    soup=BeautifulSoup(read_evidence(path),'lxml')
+    soup=BeautifulSoup(body,'lxml')
     anchors=[a for a in soup.select('a.s-pagination-next[href], .a-pagination a[href]')
              if a['href']==reference['raw_href'] and a.get_text(' ',strip=True)==reference['label_raw']]
     expected_parent = source['actual_source_url'] if parent_page_url is None else parent_page_url
@@ -95,12 +96,15 @@ def verify_pagination_chain(source):
 def verify_discovered_source(source):
     e = source.get('navigation_evidence') or {}
     path = Path(e.get('evidence_path') or '__missing__')
-    if not evidence_path(path).is_file() or hashlib.sha256(read_evidence(path)).hexdigest() != e.get('evidence_sha256'):
+    if not evidence_path(path).is_file():
+        raise ValueError('V4_NAVIGATION_DOM_EVIDENCE_REQUIRED')
+    body = read_evidence(path, infer_digest=False)
+    if hashlib.sha256(body).hexdigest() != e.get('evidence_sha256'):
         raise ValueError('V4_NAVIGATION_DOM_EVIDENCE_REQUIRED')
     url = source['actual_source_url']; parent = e.get('page_url', '')
     if not amazon_url(parent) or not amazon_url(url) or urljoin(parent, e.get('raw_href', '')) != url:
         raise ValueError('V4_EXACT_DISCOVERED_HREF_REQUIRED')
-    soup = BeautifulSoup(read_evidence(path), 'lxml')
+    soup = BeautifulSoup(body, 'lxml')
     matches = [a for a in soup.select('a[href]') if a['href'] == e.get('raw_href')]
     if not matches or not any(a.get_text(' ', strip=True) == e.get('label_raw') for a in matches):
         raise ValueError('V4_NAVIGATION_NOT_PRESENT_IN_DOM')

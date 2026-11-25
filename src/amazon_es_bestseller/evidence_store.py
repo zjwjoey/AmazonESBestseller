@@ -5,7 +5,9 @@ import gzip
 import hashlib
 import os
 import shutil
+import tempfile
 import uuid
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from .task_workspace import TaskWorkspace, utc_now
@@ -31,7 +33,7 @@ def evidence_path(path) -> Path:
     return sibling if sibling.is_file() else path
 
 
-def read_evidence(path, expected: str | None = None) -> bytes:
+def read_evidence(path, expected: str | None = None, *, infer_digest: bool = True) -> bytes:
     requested = Path(path)
     resolved = evidence_path(requested)
     if resolved.suffix == ".gz":
@@ -48,7 +50,7 @@ def read_evidence(path, expected: str | None = None) -> bytes:
             with gzip.open(archived, "rb") as stream:
                 data = stream.read()
     name = requested.name.split(".")[0]
-    if expected is None and len(name) == 64 and all(char in "0123456789abcdef" for char in name):
+    if infer_digest and expected is None and len(name) == 64 and all(char in "0123456789abcdef" for char in name):
         expected = name
     if expected and sha256(data) != expected:
         raise ValueError("EVIDENCE_SHA256_MISMATCH:" + str(requested))
@@ -101,8 +103,29 @@ class EvidenceStore:
             conn.execute("INSERT OR IGNORE INTO cache_peak VALUES(1, 0)")
 
     def _bytes(self):
-        return sum(p.stat().st_size for root in (self.active, self.temporary)
-                   for p in root.rglob("*") if p.is_file())
+        total = 0
+        for root in (self.active, self.temporary):
+            for path in root.rglob("*"):
+                with suppress(FileNotFoundError):
+                    if path.is_file():
+                        total += path.stat().st_size
+        return total
+
+    @contextmanager
+    def audit_scratch(self, maximum_bytes):
+        """Admit bounded scratch creation under the same lock as evidence writes."""
+        directory = None
+        try:
+            with self.workspace.transaction() as conn:
+                if maximum_bytes > self._remaining(self._bytes()):
+                    raise CacheCapacityExceeded("ACTIVE_CACHE_HARD_LIMIT")
+                directory = tempfile.TemporaryDirectory(prefix="snapshot_read_", dir=self.temporary)
+                yield Path(directory.name), directory.cleanup
+                self._peak(conn, self._bytes())
+        except BaseException:
+            if directory is not None:
+                directory.cleanup()
+            raise
 
     def _peak(self, conn, total):
         conn.execute("UPDATE cache_peak SET bytes = max(bytes, ?) WHERE id = 1", (total,))

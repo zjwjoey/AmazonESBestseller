@@ -47,7 +47,7 @@ def restore_query_order_scope(store,plan,auth,source,approval,*,now=None):
         if (q['plan_sha256']!=digest(plan) or q['run_id']!=plan['run_id'] or q['source_id']!=source['source_id']
                 or q['url']!=initial or q['kind']!='PAGE' or q['origin']!='LIVE_CAPTURE'):
             raise ValueError('SCOPE_RECOVERY_RESERVATION_BINDING_MISMATCH')
-        body=read_evidence(r['html_path'])
+        body=read_evidence(r['html_path'], infer_digest=False)
         if (hashlib.sha256(body).hexdigest()!=r['sha256']
                 or detect_access_status(200,body.decode('utf8')).value!='NORMAL'
                 or inspect_delivery_location(body.decode('utf8')).is_spain is not True):

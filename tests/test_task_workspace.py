@@ -1,4 +1,5 @@
 import gzip
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,47 @@ def test_shared_cache_thresholds_and_capacity(tmp_path):
     with pytest.raises(CacheCapacityExceeded):
         store.archive(digest)
     assert page.exists()
+
+
+def test_read_only_snapshot_scratch_shares_capacity_and_preserves_source(tmp_path):
+    from amazon_es_bestseller.highspeed.store import ReadOnlyRunStore, RunStore
+
+    workspace = task(tmp_path, size=2 * 1024 * 1024)
+    evidence = AuditLedger(workspace).evidence
+    source = workspace.root / "store"
+    with closing(RunStore(source)) as writer:
+        # Keep the writer open to verify the private reader never touches the
+        # source WAL or its shared-memory reader marks.
+        original = {path.name: path.read_bytes() for path in source.glob("index.sqlite3*")}
+        with closing(ReadOnlyRunStore(source)) as reader:
+            assert reader.db.execute("SELECT name FROM sqlite_master").fetchone()
+            assert list(evidence.temporary.glob("snapshot_read_*/index.sqlite3"))
+            usage = evidence.capacity()["active_bytes"]
+            assert usage >= len(original["index.sqlite3"])
+            with pytest.raises(CacheCapacityExceeded, match="ACTIVE_CACHE_HARD_LIMIT"):
+                evidence.save(b"a" * (workspace.manifest["cache_limit_bytes"] - usage + 1))
+            assert {path.name: path.read_bytes() for path in source.glob("index.sqlite3*")} == original
+        assert evidence.capacity() == {"active_bytes": 0, "peak_bytes": usage, "state": "NORMAL"}
+        assert not list(evidence.temporary.iterdir())
+
+
+def test_snapshot_scratch_rejected_before_any_copy(tmp_path):
+    from amazon_es_bestseller.highspeed.store import ReadOnlyRunStore, RunStore
+    from amazon_es_bestseller.task_quality import finalize_task
+
+    workspace = task(tmp_path, size=1024)
+    workspace.bind(snapshot_run_id="snapshot")
+    evidence = AuditLedger(workspace).evidence
+    source = workspace.root / "store"
+    with closing(RunStore(source)):
+        with pytest.raises(CacheCapacityExceeded, match="ACTIVE_CACHE_HARD_LIMIT"):
+            ReadOnlyRunStore(source)
+        report = finalize_task(workspace.root)
+        assert report["state"] == "INCOMPLETE"
+        assert "SNAPSHOT_AUDIT_CACHE_CAPACITY" in report["errors"]
+        assert report["snapshot"]["run_status"] == "AUDIT_CAPACITY_BLOCKED"
+    assert evidence.capacity()["active_bytes"] == 0
+    assert not list(evidence.temporary.iterdir())
 
 
 def test_archive_requires_audit_deduplicates_and_recovers(tmp_path):

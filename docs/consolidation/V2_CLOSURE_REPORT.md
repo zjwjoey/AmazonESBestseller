@@ -1,5 +1,7 @@
 # Main Consolidation V2 Closure
 
+> 本文保留旧版本整合与历史诊断记录。新任务按[增量审查、证据与缓存](../INCREMENTAL_AUDIT_AND_CACHE_V1.md) 运行。
+
 ## Acceptance status
 
 Status: `OFFLINE_CONSOLIDATION_MERGED`.
