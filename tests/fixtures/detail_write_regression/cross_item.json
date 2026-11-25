@@ -1,0 +1,58 @@
+[
+  {
+    "record": {
+      "asin": "B000000003",
+      "requested_asin": "B000000003",
+      "resolved_asin": "B000000003",
+      "title_es_raw": "Timbre inalámbrico con cámara"
+    },
+    "evidence": {
+      "source_html_sha256": "fixture-snapshot-3"
+    },
+    "field": "product_details_zh",
+    "bad": "商品类型：天鹅绒丝带",
+    "corrected": "门铃采用电池供电"
+  },
+  {
+    "record": {
+      "asin": "B000000004",
+      "requested_asin": "B000000004",
+      "resolved_asin": "B000000004",
+      "title_es_raw": "Cinta de terciopelo marrón"
+    },
+    "evidence": {
+      "source_html_sha256": "fixture-snapshot-4"
+    },
+    "field": "feature_bullets_zh",
+    "bad": "套装含真空收纳袋和电泵",
+    "corrected": "棕色丝绒带，可用于礼品包装"
+  },
+  {
+    "record": {
+      "asin": "B000000005",
+      "requested_asin": "B000000005",
+      "resolved_asin": "B000000005",
+      "title_es_raw": "Soplador de hojas con batería"
+    },
+    "evidence": {
+      "source_html_sha256": "fixture-snapshot-5"
+    },
+    "field": "feature_bullets_zh",
+    "bad": "12节D型碱性电池",
+    "corrected": "随附一块可充电锂电池"
+  },
+  {
+    "record": {
+      "asin": "B000000006",
+      "requested_asin": "B000000006",
+      "resolved_asin": "B000000006",
+      "title_es_raw": "Linterna LED recargable"
+    },
+    "evidence": {
+      "source_html_sha256": "fixture-snapshot-6"
+    },
+    "field": "product_details_zh",
+    "bad": "圣诞老人铝箔气球，带底座",
+    "corrected": ""
+  }
+]

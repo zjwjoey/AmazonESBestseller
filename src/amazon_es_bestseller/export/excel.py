@@ -25,6 +25,8 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from ..translation.write_guard import translation_binding_issue, translation_content_issue
+
 # ---------- 样式常量（V2 头部 + V1 字体/对齐） ----------
 HDR_FILL = PatternFill('solid', fgColor='1F4E78')
 HDR_FONT = Font(bold=True, color='FFFFFF', size=11)
@@ -103,7 +105,7 @@ def _title_zh(rec: Mapping, translations: Optional[Mapping]) -> str:
     v = rec.get('title_zh')
     if v not in (None, ''):
         return str(v)
-    asin = rec.get('asin')
+    asin = str(rec.get('asin') or '').strip().upper()
     tr = (translations or {}).get(asin) if asin else None
     if isinstance(tr, dict):
         return tr.get('title_zh') or ''
@@ -128,6 +130,22 @@ def _zh_field(rec: Mapping, translations: Optional[Mapping], key: str, fallback:
     if isinstance(tr, dict) and usable(tr.get(key)):
         return str(tr[key])
     return str(fallback) if usable(fallback) else ''
+
+
+def _verify_chinese_write(record: Mapping, translations: Optional[Mapping]) -> None:
+    asin = str(record.get('asin') or '').strip().upper()
+    fields = ('selected_variation_zh', 'specification_zh', 'product_details_zh',
+              'feature_bullets_zh', 'description_zh', 'product_description_zh')
+    values = {'title_zh': _title_zh(record, translations)}
+    values.update((key, _zh_field(record, translations, key)) for key in fields)
+    uses_overlay = ((values['title_zh'] and not _title_zh(record, None))
+                    or any(values[key] and not _zh_field(record, None, key) for key in fields))
+    evidence = (translations or {}).get(asin) if uses_overlay else None
+    if issue := translation_binding_issue(record, evidence):
+        raise ValueError(f"{issue}: {asin}")
+    for key, value in values.items():
+        if value and (issue := translation_content_issue(record, value)):
+            raise ValueError(f"{issue}: {asin} {key}")
 
 
 # ---------- 行值（只读 canonical 字段，渲染不改源记录） ----------
@@ -328,6 +346,8 @@ def export_workbook(records: List[Mapping],
         records = merge_manual_fields(records, prev_workbook)
     # 确定性排序（QA_RULES §24）：ASIN 升序，中西两表同一顺序
     records.sort(key=lambda r: str(r.get('asin') or '').upper())
+    for record in records:
+        _verify_chinese_write(record, translations)
 
     wb = openpyxl.Workbook()
 

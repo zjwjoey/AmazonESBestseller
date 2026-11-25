@@ -53,11 +53,13 @@ def _hidden(node, *, allow_expanders: bool = False) -> bool:
     return False
 
 
-def _evidence_text(node, *, allow_expanders: bool = False) -> str:
+def _evidence_text(node, *, allow_expanders: bool = False, exclude=None) -> str:
     """Saved visible text, excluding scripts and explicitly hidden copies."""
     parts = []
     for text in node.strings:
         if _hidden(text.parent, allow_expanders=allow_expanders):
+            continue
+        if exclude is not None and exclude(text.parent):
             continue
         # Keep the saved full attribute rather than concatenating the visible
         # truncated preview and its full offscreen copy.
@@ -496,11 +498,26 @@ def _feature_bullets_raw(soup) -> list:
     return []
 
 
-def _product_description_raw(soup) -> str:
-    """product_description_raw：#productDescription_feature_div 正文。"""
-    for selector in ("#productDescription", _PROD_DESC_SEL):
+def _product_description_raw(soup, asin: str) -> str:
+    """Read the first dedicated description block containing product prose."""
+    def other_content(element) -> bool:
+        if _secondary_product(element):
+            return True
+        for ancestor in (element, *element.parents):
+            node_id = (ancestor.get("id") or "").lower()
+            if node_id.startswith(("aplus", "product-comparison", "safety", "legal")):
+                return True
+            owner = (ancestor.get("data-asin") or "").strip().upper()
+            if re.fullmatch(r"[A-Z0-9]{10}", owner) and owner != asin.upper():
+                return True
+        return False
+
+    heading = re.compile(r"^(?:descripción del producto\b\s*[:：]?\s*)+", re.I)
+    for selector in ("#productDescription", _PROD_DESC_SEL,
+                     "#bookDescription_feature_div", "#pqv-description"):
         for node in soup.select(selector):
-            value = _evidence_text(node, allow_expanders=True)
+            value = _evidence_text(node, allow_expanders=True, exclude=other_content)
+            value = heading.sub("", value).strip()
             if value:
                 return value
     return ""
@@ -795,7 +812,7 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
         "attributes": attributes,
         "current_model_comparison_visual_evidence": comparison_visuals,
         "feature_bullets_raw": _feature_bullets_raw(soup),
-        "product_description_raw": _product_description_raw(soup),
+        "product_description_raw": _product_description_raw(soup, asin),
         "aplus_content_raw": _aplus_content_raw(soup),
         "detail_bullets_raw": _detail_bullets_raw(soup),
     }

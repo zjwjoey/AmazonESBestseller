@@ -33,6 +33,7 @@ from .translation.full_detail import (
     render_details_es, render_details_zh, truncated_detail_labels)
 from .translation.ds import DeepSeekTranslator, TRANSLATION_SCHEMA_VERSION
 from .translation.product_type import detect_product_type
+from .translation.write_guard import translation_binding_issue
 
 _LEADING_NUM_RE = re.compile(r"^\(?\s*([\d.,]+)")  # 容忍前导 '('（现代评论数 "(8.819)"）
 
@@ -217,14 +218,16 @@ def normalize_product(prod: Mapping, translations: Optional[Mapping] = None) -> 
     # A translation overlay is valid only for the exact Spanish evidence it
     # was produced from; this prevents stale ASIN-only cache values from
     # surviving parser repairs or refreshed detail pages.
+    source_validated = isinstance(tr, dict) and (
+        tr.get("translation_source_hash") == DeepSeekTranslator.source_hash(out)
+        and tr.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION)
     translation_valid = isinstance(tr, dict) and (
-        (tr.get("translation_source_hash") == DeepSeekTranslator.source_hash(out)
-         and tr.get("translation_schema_version") == TRANSLATION_SCHEMA_VERSION)
+        source_validated
         # Explicitly supplied legacy overlays remain readable for backwards
         # compatibility; the DS client never reuses such entries silently and
         # the closure audit still flags any untranslated residuals.
         or ("translation_source_hash" not in tr and "translation_schema_version" not in tr))
-    if not translation_valid:
+    if not translation_valid or (tr and translation_binding_issue(out, tr, source_validated=source_validated)):
         tr = {}
     if isinstance(tr, dict):
         # DS is an optional display-layer overlay.  Only non-empty approved

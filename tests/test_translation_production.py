@@ -301,6 +301,22 @@ def test_export_revalidates_stored_ready_input_hash(tmp_path):
             "translation_status": "success", "qa_status": "pass", "qa_issues": []}}}}), encoding="utf-8")
     assert main(["translation-production", "--stage", "promote", "--run-dir", str(run_dir),
                  "--run-id", "hash-run"]) == 0
+    release_path = run_dir / "release" / "production_release_candidate.json"
+    original_release = release_path.read_bytes()
+    detached = json.loads(original_release)
+    detached["records"][0]["fields"]["title_zh"] = "另一个商品"
+    release_path.write_text(json.dumps(detached), encoding="utf-8")
+    with pytest.raises(SystemExit, match="release payload differs"):
+        main(["translation-production", "--stage", "export", "--run-dir", str(run_dir),
+              "--run-id", "hash-run", "--debug-export"])
+    release_path.write_bytes(original_release)
+    input_path = run_dir / "translation_input.json"
+    changed_variant = json.loads(input_path.read_bytes())
+    changed_variant["records"][0]["source_record"]["selected_variation_raw"] = "Otra variante"
+    input_path.write_text(json.dumps(changed_variant), encoding="utf-8")
+    with pytest.raises(SystemExit, match="source-hash revalidation"):
+        main(["translation-production", "--stage", "export", "--run-dir", str(run_dir),
+              "--run-id", "hash-run", "--debug-export"])
     # A changed Master snapshot invalidates a stored READY candidate even if the
     # old release files are still present.
     replacement = build_production_input([{"asin": "B000000001", "title_es_raw": "Producto cambiado"}], run_id="hash-run")

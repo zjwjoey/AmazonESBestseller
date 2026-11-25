@@ -18,10 +18,12 @@ from ..translation.production import (
     build_production_input, build_production_state, merge_translation_shards,
     records_for_preclean, release_gate, shard_batch_id, shard_immutable_equal,
 )
-from ..translation.production_contract import matches_category_filter, normalize_asin_filter
+from ..translation.production_contract import (
+    canonical_record, matches_category_filter, normalize_asin_filter, source_text,
+)
 from ..translation.providers.base import ProviderResponse, TranslationProvider
 from ..translation.schemas import TRANSLATION_SCHEMA_VERSION
-from ..translation.service import TranslationService
+from ..translation.service import TranslationService, source_hash
 
 
 class FakeTranslationProvider(TranslationProvider):
@@ -128,7 +130,8 @@ def _current_release_is_bound(state: Mapping[str, Any], production_input: Mappin
                 for item in production_input.get('records', [])}
     actual_rows = list(state.get('records') or [])
     actual = {str(row.get('asin') or '').upper(): row for row in actual_rows if row.get('asin')}
-    if not expected or set(actual) != set(expected):
+    if (not expected or set(actual) != set(expected)
+            or len(actual_rows) != len(expected) or len(production_input['records']) != len(expected)):
         return False
     for item in production_input.get('records', []):
         asin = str(item.get('asin') or '').upper()
@@ -139,7 +142,11 @@ def _current_release_is_bound(state: Mapping[str, Any], production_input: Mappin
         actual_fields = {field.get('field'): field for field in row.get('fields', []) if isinstance(field, Mapping)}
         if set(actual_fields) != set(expected_fields):
             return False
+        canonical = canonical_record(item.get('source_record') or {})
+        if canonical['asin'] != asin or 'selected_variation_raw' not in expected_fields:
+            return False
         if any(actual_fields[name].get('source_hash') != source.get('source_hash')
+               or source_hash(source_text(canonical.get(name))) != source.get('source_hash')
                for name, source in expected_fields.items()):
             return False
     return True
@@ -255,6 +262,8 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         release, state = load_json(str(release_path)), load_json(str(state_path))
         if not _current_release_is_bound(state, production_input):
             raise SystemExit('Release Gate blocked: stored READY failed source-hash revalidation')
+        if release != state.get('release_candidate'):
+            raise SystemExit('Release Gate blocked: release payload differs from promoted translation state')
         ready, status = release_gate(release)
         execution_mode = str(state.get('translation_execution_mode') or 'unknown').lower()
         fake_run = execution_mode != 'qwen-mt' or len(state.get('translation_providers') or []) != 1
@@ -263,8 +272,13 @@ def run_translation_production(args: Any, *, load_products: Callable[[str], list
         if not ready and not args.debug_export:
             raise SystemExit('Release Gate blocked: release_status=%s' % status)
         products = [dict(item.get('source_record') or {}) for item in production_input.get('records', [])]
-        translations = {str(item.get('asin') or '').upper(): item.get('fields') or {}
-                        for item in release.get('records', [])}
+        variants = {str(item['asin']).upper(): item['fields']['selected_variation_raw']['raw_value']
+                    for item in production_input['records']}
+        translations = {}
+        for item in release.get('records', []):
+            asin = str(item.get('asin') or '').upper()
+            translations[asin] = {**(item.get('fields') or {}), 'source_asin': asin,
+                                  'selected_variation_raw': variants[asin]}
         from ..export.excel import export_workbook
         from ..qa.field_closure import audit_field_closure
         from ..qa.run import blocking_issues

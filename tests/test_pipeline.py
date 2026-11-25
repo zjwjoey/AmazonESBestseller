@@ -165,7 +165,7 @@ def test_enrich_preserves_confirmed_parent_asin():
 
 
 def test_enrich_title_zh_from_translations():
-    tr = {"B078C6QR1C": {"title_zh": "玻璃便当盒 4 件套"}}
+    tr = {"B078C6QR1C": {"title_zh": "玻璃便当盒 4 件套", "selected_variation_raw": "4 piezas"}}
     p = enrich_products(RANKING, DETAIL, translations=tr)[0]
     assert p["title_zh"] == "玻璃便当盒 4 件套"
     # 无翻译 → 空（缺失不臆造）
@@ -175,22 +175,28 @@ def test_enrich_title_zh_from_translations():
 def test_enrich_applies_ds_translation_without_changing_spanish_source():
     tr = {
         "B078C6QR1C": {
-            "title_zh": "床垫保护垫",
+            "title_zh": "玻璃便当盒",
+            "selected_variation_raw": "4 piezas",
             "category_l2_zh": "收纳与整理",
             "selected_variation_zh": "4件套",
-            "specification_zh": "90×190厘米",
+            "specification_zh": "1升",
             "product_details_zh": "材质：玻璃",
-            "feature_bullets_zh": "防水",
+            "feature_bullets_zh": "4件套",
         }
     }
     p = enrich_products(RANKING, DETAIL, translations=tr)[0]
     assert p["title_es_raw"] == "Fiambrera de cristal con 4 piezas"
-    assert p["title_zh"] == "床垫保护垫"
+    assert p["title_zh"] == "玻璃便当盒"
     assert p["category_l2_zh"] == "收纳与整理"
     assert p["selected_variation_zh"] == "4件套"
-    assert p["specification_zh"] == "90×190厘米"
+    assert p["specification_zh"] == "1升"
     assert p["product_details_zh"] == "材质：玻璃"
-    assert p["feature_bullets_zh"] == "防水"
+    assert p["feature_bullets_zh"] == "4件套"
+
+
+def test_enrich_cannot_flatten_a_translation_from_another_variant():
+    tr = {"B078C6QR1C": {"title_zh": "玻璃便当盒 6 件套", "selected_variation_raw": "6 piezas"}}
+    assert enrich_products(RANKING, DETAIL, translations=tr)[0]["title_zh"] == ""
 
 
 def test_enrich_does_not_overlay_detail_translation_when_spanish_source_empty():
