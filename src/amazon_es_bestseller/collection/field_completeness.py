@@ -55,11 +55,15 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
     dom = BeautifulSoup(html, "lxml") if html else None
     title = _text(dom, "#productTitle") if dom else ""
     page_asins = _page_asin_candidates(dom) if dom else set()
+    replay = (checkpoint.get("source") == "saved_html_replay"
+              and meta.get("status_code") in {None, 200}
+              and meta.get("access_state") in {None, "NORMAL"})
     normal = bool(dom and (page_asins or dom.select_one("#productTitle"))) and (
-        meta.get("status_code") == 200 and meta.get("access_state") == "NORMAL"
+        ((meta.get("status_code") == 200 and meta.get("access_state") == "NORMAL") or replay)
         and not record.get("is_captcha"))
     final_asin = asin_from_url(meta.get("final_url"))
-    identity = (is_valid_asin(asin) and page_asins == {asin} and asin == final_asin
+    route_matches = final_asin == asin or (replay and not meta.get("final_url"))
+    identity = (is_valid_asin(asin) and page_asins == {asin} and route_matches
                 and all(record.get(k) == asin for k in ("asin", "requested_asin", "resolved_asin"))
                 and record.get("identity_status") == "MATCH")
     anomalies = []

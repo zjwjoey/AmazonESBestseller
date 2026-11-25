@@ -1,5 +1,8 @@
 # Three-window PAGE snapshot execution
 
+> 新任务的审查入口、工作区和最终对账以 [增量审查、证据与缓存](INCREMENTAL_AUDIT_AND_CACHE_V1.md) 为准。
+> 下文独立后置审查命令仅适用于历史产物诊断。
+
 The parallel entry is `python -m amazon_es_bestseller.highspeed.parallel_cli`.
 Use `check` with the original plan, authorization, an independently bound parallel
 amendment, tested source manifest, store root and code root. Checking reads an

@@ -1,5 +1,8 @@
 # Ranking Snapshot → Detail Planner → Incremental Detail Executor V1
 
+> 新任务的审查入口、工作区和最终对账以 [增量审查、证据与缓存](INCREMENTAL_AUDIT_AND_CACHE_V1.md) 为准。
+> 下文独立后置审查命令仅适用于历史产物诊断。
+
 ## 目标与边界
 
 V1 把榜单观察和详情生命周期分开：榜单每次运行生成一个不可变快照；planner 只读取快照、已有详情证据、状态、checkpoint 和 schema；executor 只执行 planner 已经批准的网络动作。

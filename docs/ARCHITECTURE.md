@@ -1,5 +1,8 @@
 # AmazonESBestseller — Architecture
 
+> 新任务的审查入口、工作区和最终对账以 [增量审查、证据与缓存](INCREMENTAL_AUDIT_AND_CACHE_V1.md) 为准。
+> 下文独立后置审查命令仅适用于历史产物诊断。
+
 Last updated: 2026-10-20
 
 This document describes the intended architecture of the `AmazonESBestseller` project based on the current working implementation and verified outputs.

@@ -1,5 +1,8 @@
 # Detail → source audit → translation → export
 
+> 新任务的审查入口、工作区和最终对账以 [增量审查、证据与缓存](INCREMENTAL_AUDIT_AND_CACHE_V1.md) 为准。
+> 下文独立后置审查命令仅适用于历史产物诊断。
+
 All stages below are offline and read-only toward collection inputs. They write
 new reports or derived artifacts; they do not update source Master data, saved
 HTML, checkpoints, receipts, notes, or an existing translation cache.

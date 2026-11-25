@@ -275,26 +275,10 @@ python -m pytest -q -rs
 `run_manifest.py` provides JSON-only run metadata helpers for a future orchestrator; no
 `amazon-es run` command or scheduler is implemented in the current phase.
 
-### Field Closure Audit
+### 增量质量检查
 
-The offline `audit-fields` command follows `collect → enrich → saved/model translation overlay → enrich → qa → audit-fields →
-export` and emits deterministic JSON plus Markdown. It diagnoses automatic-field
-gaps as `SOURCE_MISSING`, `PARSER_MISSED`, `MAPPING_MISSED` or `DERIVED_MISSING`;
-source-missing values remain empty rather than being guessed.
-
-```powershell
-amazon-es audit-fields --products outputs/products.json `
-  --details outputs/details.json --rankings outputs/rankings.json `
-  --out outputs/field_closure.json
-```
-
-审查开始时会立即打印 SKU 数量和 HTML 证据是否启用；由于大型详情 HTML
-需要离线解析，字段明细和最终统计会在整批处理完成后一次性写出。
-
-`export` applies the same closure audit as a gate. `--details` and `--rankings`
-default to `outputs/details.json` and `outputs/rankings.json`, so the gate runs
-without extra flags; when no evidence is reachable, export states that the
-field-closure gate did not run instead of skipping it silently.
+新任务从 [增量审查、证据与缓存](docs/INCREMENTAL_AUDIT_AND_CACHE_V1.md) 启动。
+标准快照和详情运行自动执行审查，最终统一对账。既有导出字段门禁仍随导出执行。
 
 ## 12. Documentation
 
@@ -355,12 +339,7 @@ amazon-es --offline detail-plan --snapshot outputs/candidate_selections/<selecti
   --out-dir outputs/detail_plans/<plan-id>
 ```
 
-`source-evidence-audit --run-dir <detail-run> --rankings <rankings.json> --out <report.json>`
-grades actual request evidence, hash-verified saved HTML and insufficient
-evidence, then runs the selected checks from the mainline Quality Gate. It does
-not manufacture Source Audit receipts or a formal Source Audit PASS. The legacy
-receipt/repair workflow and multi-lane runners remain experimental. Offline
-cross-module acceptance is documented in `docs/consolidation/V2_CLOSURE_REPORT.md`.
+候选身份确认和后续详情执行使用同一任务工作区。历史独立审查工具保留供旧产物诊断。
 ## 隔离多榜单快照 V1.1
 
 新模块保留生产 ASIN、翻译和 Excel 契约，支持五榜单适配、证据注册、内部商品身份审核、不可变快照、恢复、预算、日期比较和报告。四个新增榜单已通过离线夹具测试，实际官网来源及 75 组合仍待验证；P0、30,000 实时采集和真实14天观察均未自动启动。
@@ -387,6 +366,6 @@ $snapshotStore = Join-Path $snapshotWorktree 'outputs\multisource_user_check'
 均不启动采集。当前 20,000 候选／喜爱榜至少 3,000 的任务说明见
 [快照任务契约](docs/SNAPSHOT_MAIN_PRIORITY.md)。
 
-快照的全量离线审查和数量验收使用自己的合约，参见
+旧任务的快照全量离线诊断和数量验收参见
 [快照审查状态](docs/SNAPSHOT_REVIEW_STATUS.md)。`PASSED` 仅表示候选快照审查通过，
 不代表正式 ASIN 身份或生产验收通过；不会自动部署、迁移数据或启动采集。

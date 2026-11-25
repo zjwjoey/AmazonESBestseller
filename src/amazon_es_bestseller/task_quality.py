@@ -1,0 +1,120 @@
+"""Final reconciliation of task scope, persisted audits and original evidence."""
+from __future__ import annotations
+
+from collections import Counter
+from contextlib import closing
+from pathlib import Path
+
+from .audit_ledger import AuditLedger
+from .collection.field_completeness import FieldCompletenessMonitor
+from .collection.runtime_io import read_json
+from .monitoring.detail_planner import validate_detail_plan
+from .task_workspace import TaskWorkspace, atomic_json
+
+
+def finalize_task(root):
+    workspace = TaskWorkspace(root)
+    manifest = workspace.manifest
+    ledger = AuditLedger(workspace)
+    errors = []
+    snapshot = {"mode": "NOT_CONFIGURED"}
+    snapshot_id = manifest.get("snapshot_run_id")
+    if snapshot_id and not (workspace.root / "store").is_dir():
+        snapshot = {"mode": "WORKSPACE", "run_id": snapshot_id, "run_status": "NOT_STARTED"}
+        errors.append("SNAPSHOT_SCOPE_INCOMPLETE")
+    elif snapshot_id:
+        from .highspeed.incremental_audit import SnapshotPageAudit
+        from .highspeed.store import ReadOnlyRunStore
+        with closing(ReadOnlyRunStore(workspace.root / "store")) as store:
+            run = store.get_run(snapshot_id)
+            plan = run["plan"]
+            pages = store.pages(snapshot_id)
+            references = {(src["source_id"], url) for src in plan["sources"] for url in src["page_urls"]}
+            completed = {(r["source_id"], r["page_url"]) for r in pages}
+            requests = store.requests(snapshot_id)
+            unfinished = [r["request_id"] for r in requests if r["status"] == "RESERVED"]
+            audit = SnapshotPageAudit(workspace).coverage(plan, pages)
+            snapshot = {
+                "mode": "WORKSPACE", "run_id": snapshot_id, "run_status": run["status"],
+                "stop_reason": run.get("stop_reason"), "planned_base_pages": len(references),
+                "completed_base_pages": len(references & completed), "additional_pages": len(completed - references),
+                "missing_base_pages": [list(key) for key in sorted(references - completed)],
+                "unfinished_requests": unfinished, "request_statuses": dict(Counter(r["status"] for r in requests)),
+                "audit": audit,
+            }
+            if run["status"] != "STOPPED" or references - completed or unfinished:
+                errors.append("SNAPSHOT_SCOPE_INCOMPLETE")
+            if not audit["central_full_dom_review_passed"]:
+                errors.append("SNAPSHOT_AUDIT_INCOMPLETE")
+    elif manifest.get("external_snapshot"):
+        snapshot = {"mode": "EXTERNAL", "reference": manifest["external_snapshot"]}
+        import hashlib
+        try:
+            with Path(snapshot["reference"]["path"]).open("rb") as handle:
+                current_hash = hashlib.file_digest(handle, "sha256").hexdigest()
+            if current_hash != snapshot["reference"]["sha256"]:
+                errors.append("EXTERNAL_SNAPSHOT_CHANGED")
+        except OSError:
+            errors.append("EXTERNAL_SNAPSHOT_MISSING")
+
+    detail_root = workspace.root / "detail"
+    plan_path = Path(manifest.get("detail_plan_path") or (detail_root / "plan" / "detail_plan.json"))
+    plan = validate_detail_plan(read_json(plan_path)) if plan_path.is_file() else None
+    execution = read_json(detail_root / "detail_execution_manifest.json", {}) or {}
+    expected = {r.get("ranking_asin") or r.get("asin") for r in plan["records"]} if plan else set()
+    current = ledger.current("detail")
+    terminal = {r["unit_id"]: r for r in current if r["status"] != "ACCESS_STOP"
+                and r["parser_version"] == manifest["parser_version"]
+                and r["qa_version"] == manifest["audit_contract_version"]}
+    passed = {asin for asin, row in terminal.items() if row["status"] in {"PASS", "WARN"}}
+    output = read_json(detail_root / "details.json", []) or []
+    written = [r.get("asin") for r in output if r.get("title_es_raw") and r.get("identity_status") == "MATCH"]
+    coverage = {asin for asin, row in terminal.items() if row["batch_id"]}
+    if not plan or not expected or expected != terminal.keys():
+        errors.append("DETAIL_SCOPE_INCOMPLETE")
+    if plan and (plan.get("task_id") != manifest["task_id"]
+                 or plan.get("plan_id") != manifest.get("detail_plan_id")
+                 or plan.get("plan_hash") != execution.get("plan_hash")):
+        errors.append("DETAIL_PLAN_BINDING_MISMATCH")
+    if expected != coverage:
+        errors.append("DETAIL_BATCH_COVERAGE_INCOMPLETE")
+    if set(written) != passed or len(written) != len(output) or len(set(written)) != len(written):
+        errors.append("DETAIL_OUTPUT_AUDIT_MISMATCH")
+    completeness = FieldCompletenessMonitor(manifest["field_quality_thresholds"]).summarize(terminal.values())
+    if terminal and read_json(workspace.root / "audit" / "field_completeness.json") != completeness:
+        errors.append("FIELD_COMPLETENESS_MISMATCH")
+
+    archive = ledger.evidence.archive_stats(verify=True)
+    cache = ledger.evidence.capacity()
+    if archive["errors"]:
+        errors.append("ARCHIVE_VERIFICATION_FAILED")
+    if cache["active_bytes"]:
+        errors.append("ACTIVE_EVIDENCE_REMAINS")
+    if cache["peak_bytes"] > manifest["cache_limit_bytes"]:
+        errors.append("ACTIVE_CACHE_LIMIT_EXCEEDED")
+    with workspace.transaction() as conn:
+        uncovered = conn.execute("""SELECT count(*) FROM evidence WHERE archive_path IS NULL
+                                    OR NOT EXISTS (SELECT 1 FROM evidence_audits WHERE evidence.digest=evidence_audits.digest)""").fetchone()[0]
+    if uncovered:
+        errors.append("UNINDEXED_OR_UNARCHIVED_EVIDENCE")
+    if any(r["status"] == "ACCESS_STOP" for r in current) or execution.get("access_stop"):
+        errors.append("DETAIL_ACCESS_STOP")
+    if manifest["task_status"] == "QUALITY_PAUSED":
+        errors.append("DETAIL_QUALITY_PAUSED")
+
+    collection_complete = bool(expected and expected == terminal.keys()
+                               and not set(errors) & {"SNAPSHOT_SCOPE_INCOMPLETE", "DETAIL_ACCESS_STOP"})
+    reviewed = collection_complete and not errors
+    unresolved = sorted(asin for asin, row in terminal.items() if row["anomalies"] or asin not in passed)
+    research_ready = reviewed and not unresolved and snapshot["mode"] != "NOT_CONFIGURED"
+    state = ("RESEARCH_READY" if research_ready else "QUALITY_REVIEW_COMPLETE" if reviewed
+             else "COLLECTION_COMPLETE" if collection_complete else "INCOMPLETE")
+    summary = {"task_id": manifest["task_id"], "state": state, "collection_complete": collection_complete,
+               "quality_review_complete": reviewed, "research_ready": research_ready, "errors": errors,
+               "snapshot": snapshot, "detail": {
+                   "planned": len(expected), "terminal": len(terminal), "passed": len(passed),
+                   "batch_covered": len(coverage), "statuses": dict(Counter(r["status"] for r in current)),
+                   "field_completeness": completeness, "unresolved_asins": unresolved},
+               "archive": archive, "cache": cache}
+    atomic_json(workspace.root / "reports" / "task_quality_summary.json", summary)
+    return summary

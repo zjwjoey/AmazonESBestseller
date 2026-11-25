@@ -1,5 +1,7 @@
 """Offline phase measurements over immutable evidence. No supply extrapolation."""
 from pathlib import Path
+
+from ..evidence_store import read_evidence
 import time
 
 from .v4_adapters import parse_v4_page
@@ -14,7 +16,7 @@ def benchmark_saved_snapshot(store, run_id, output):
     run = store.get_run(run_id); pages = store.pages(run_id); rows = list(store.iter_observations(run_id))
     database_seconds = time.perf_counter() - start
     start = time.perf_counter()
-    bodies = {p['evidence_path']: Path(p['evidence_path']).read_bytes() for p in pages}
+    bodies = {p['evidence_path']: read_evidence(p['evidence_path']) for p in pages}
     file_seconds = time.perf_counter() - start
     start = time.perf_counter(); parsed_count = 0
     for p in pages:

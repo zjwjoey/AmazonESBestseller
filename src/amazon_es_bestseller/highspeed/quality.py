@@ -2,6 +2,8 @@
 from collections import Counter
 from pathlib import Path
 
+from ..evidence_store import read_evidence
+
 from ..multisource.contracts import SOURCE_ROOTS, RESEARCH_CATEGORIES
 from ..multisource.storage import digest, read_sealed
 from .adapters import parse_page
@@ -282,7 +284,7 @@ def _audit_run_v3(store, run_id, run):
                 fail('V3_LIVE_RUN_CONTAINS_HISTORICAL_DERIVATION',page_url=page['page_url'])
             if not live:
                 for row in raw:row_pages[row['observation_id']]=page
-            html=Path(page['evidence_path']).read_text(encoding='utf8')
+            html=read_evidence(page['evidence_path']).decode('utf8')
             if digest(html.encode('utf8'))!=page['evidence_sha256']:raise ValueError('SERVER_HTML_SHA_CONFLICT')
             fragments=[];seen=set()
             for row in raw:
@@ -295,7 +297,7 @@ def _audit_run_v3(store, run_id, run):
                     matches=[p for p in receipts.get(row['evidence_path'],[]) if p.get('kind')=='ACP' and p.get('page_key')==page['page_key'] and p.get('source_id')==source['source_id'] and p.get('observed_at')==row.get('observed_at') and p.get('sha256')==row.get('evidence_sha256')]
                     if not matches:raise ValueError('ACP_WITHOUT_EXACT_CAPTURE_RECEIPT')
                     proof=matches[-1]
-                text=Path(row['evidence_path']).read_text(encoding='utf8')
+                text=read_evidence(row['evidence_path']).decode('utf8')
                 if digest(text.encode('utf8'))!=proof['sha256']:raise ValueError('ACP_HTML_SHA_CONFLICT')
                 fragments.append({**proof,'body':text,'evidence_path':row['evidence_path']})
             if live:

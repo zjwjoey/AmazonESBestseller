@@ -11,7 +11,7 @@ from .field_completeness import FieldCompletenessMonitor, check_detail_fields
 
 def checkpoint_payload(checkpoint):
     return {key: checkpoint[key] for key in (
-        "status", "record", "detail_status", "capture_meta", "html_evidence", "attempt_count",
+        "status", "record", "source", "detail_status", "capture_meta", "html_evidence", "attempt_count",
     ) if key in checkpoint}
 
 
@@ -33,6 +33,12 @@ class DetailBatchAudit:
 
     def accept(self, asin, checkpoint, *, flush=True):
         """Called immediately after the authoritative checkpoint is durable."""
+        payload = checkpoint_payload(checkpoint)
+        previous = self.ledger.lookup("detail", asin, payload)
+        if previous:
+            if flush:
+                self.flush(partial=previous == "ACCESS_STOP", enforce_pause=previous != "ACCESS_STOP")
+            return previous
         meta = checkpoint.get("capture_meta") or {}
         ref = checkpoint.get("html_evidence") or {}
         source = ref.get("sha256")
@@ -51,7 +57,6 @@ class DetailBatchAudit:
             status = "WARN" if issues else "PASS"
         else:
             status = "TERMINAL_FAILURE"
-        payload = checkpoint_payload(checkpoint)
         self.ledger.record(stage="detail", unit_id=asin, digests=included, record=payload,
                            status=status, fields=fields, anomalies=issues)
         if flush:

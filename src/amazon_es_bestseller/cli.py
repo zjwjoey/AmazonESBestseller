@@ -495,15 +495,51 @@ def cmd_detail_plan(args, parser: argparse.ArgumentParser) -> None:
     """Build and write a completely offline incremental detail plan."""
     from .monitoring.detail_planner import build_detail_plan, write_detail_plan
     snapshot = _load_snapshot_input(args.snapshot)
+    workspace = None
+    if args.task_root:
+        import hashlib
+        from .task_workspace import TaskWorkspace
+        task_root = Path(args.task_root).resolve()
+        source = Path(args.snapshot).resolve()
+        if source.is_dir():
+            source = next(path for path in (source / "rankings.json", source / "identity.json") if path.is_file())
+        with source.open("rb") as handle:
+            reference = {"path": str(source), "sha256": hashlib.file_digest(handle, "sha256").hexdigest()}
+        if (task_root / "task_manifest.json").exists():
+            workspace = TaskWorkspace(task_root)
+            snapshot_run = workspace.manifest.get("snapshot_run_id")
+            if snapshot_run:
+                ids = {r.get("snapshot_id") for r in snapshot["records"]} - {None, ""}
+                if not source.is_relative_to(task_root) or (snapshot.get("snapshot_id") or ids) not in (snapshot_run, {snapshot_run}):
+                    parser.error("detail-plan requires the snapshot artifact bound to this workspace")
+            else:
+                workspace.bind(external_snapshot=reference)
+        else:
+            workspace = TaskWorkspace.create(task_root, task_root.name, external_snapshot=reference,
+                                             parser_version=args.target_parser_version or "v2")
     details = _load_json(args.details) if args.details else []
     state = _load_json(args.state) if args.state else []
     checkpoints = _load_checkpoint_input(args.checkpoints)
     plan = build_detail_plan(snapshot, details, state, saved_html=args.html_dir or None,
                              checkpoints=checkpoints,
                              current_access_state=args.current_access_state,
-                             target_parser_version=args.target_parser_version or None)
-    paths = write_detail_plan(plan, args.out_dir)
+                             target_parser_version=args.target_parser_version or (
+                                 workspace.manifest["parser_version"] if workspace else None))
+    if workspace:
+        plan.update(task_id=workspace.manifest["task_id"], task_root=str(workspace.root))
+    output = args.out_dir or (str(workspace.root / "detail" / "plan") if workspace else None)
+    if not output:
+        parser.error("detail-plan requires --task-root or --out-dir")
+    paths = write_detail_plan(plan, output)
+    if workspace:
+        workspace.bind(detail_plan_path=str(paths["json"].resolve()))
     print("detail plan 完成：%d 条 → %s" % (len(plan["records"]), paths["json"]))
+
+
+def cmd_task_finalize(args) -> None:
+    from .task_quality import finalize_task
+    result = finalize_task(args.task_root)
+    print(json.dumps({"state": result["state"], "errors": result["errors"]}, ensure_ascii=False))
 
 
 def cmd_detail_five_run(args) -> None:
@@ -529,24 +565,36 @@ def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
                 "snapshot_id": next(iter(snapshot_ids), "")}
     else:
         plan = plan_records
+    from .monitoring.detail_planner import validate_detail_plan
+    plan = validate_detail_plan(plan)
+    workspace = None
+    if plan.get("task_root"):
+        from .task_workspace import TaskWorkspace
+        workspace = TaskWorkspace(plan["task_root"])
+    output = args.out_dir or (str(workspace.root / "detail") if workspace else None)
+    if not output:
+        parser.error("legacy detail-run requires --out-dir")
+    if workspace and Path(output).resolve() != workspace.root / "detail":
+        parser.error("detail-run output must be the workspace detail directory")
+    parser_version = args.parser_version or (workspace.manifest["parser_version"] if workspace else "v1")
     pending = [row for row in plan.get("records", [])
                if row.get("detail_action") in NETWORK_ACTIONS]
     if args.offline and pending:
         parser.error("detail-run --offline 发现 %d 个网络动作；计划未执行且不会访问 Amazon" % len(pending))
     if not pending:
-        result = execute_detail_plan(plan, None, args.out_dir, offline=True,
+        result = execute_detail_plan(plan, None, output, offline=True,
                                      saved_html=args.html_dir or None,
-                                     parser_version=args.parser_version)
+                                     parser_version=parser_version)
     else:
         with BrowserSession(headless=not args.headful,
                             profile_dir=args.profile_dir or None) as session:
-            result = execute_detail_plan(plan, session, args.out_dir, offline=bool(args.offline),
+            result = execute_detail_plan(plan, session, output, offline=bool(args.offline),
                                          saved_html=args.html_dir or None,
-                                         parser_version=args.parser_version)
+                                         parser_version=parser_version)
     print("detail run %s：取得详情 %d，未完成 %d，计划网络动作 %d → %s" %
           (result.get("execution_status", "UNKNOWN"), result.get("completed_count", 0),
            result.get("incomplete_count", 0), result["requested_count"],
-           Path(args.out_dir) / "detail_execution_manifest.json"))
+           Path(output) / "detail_execution_manifest.json"))
 
 
 def _batch_countdown(seconds: int, category_name: str) -> None:
@@ -1657,6 +1705,10 @@ def build_parser() -> argparse.ArgumentParser:
     ria.add_argument("--out", default="")
     ria.set_defaults(func=lambda a, p=ria: cmd_ranking_identity_audit(a, p))
 
+    tf = sub.add_parser("task-finalize", help="离线核对任务计划、增量审计与归档，生成最终状态")
+    tf.add_argument("--task-root", required=True)
+    tf.set_defaults(func=cmd_task_finalize)
+
     dp = sub.add_parser("detail-plan", help="离线：按榜单快照与详情缓存生成增量详情计划")
     dp.add_argument("--snapshot", required=True, help="rankings.json 或快照 records JSON")
     dp.add_argument("--details", default="", help="已有详情缓存 JSON")
@@ -1667,19 +1719,20 @@ def build_parser() -> argparse.ArgumentParser:
                     help="当前 Access Gate 状态；恢复为 NORMAL 时允许历史受限记录重试")
     dp.add_argument("--target-parser-version", choices=("v1", "v2"), default="",
                     help="可选：要求详情缓存达到指定 parser contract；v2 缺失时必须重解析或重新抓取")
-    dp.add_argument("--out-dir", required=True, help="detail_plan.json/csv/summary 输出目录")
+    dp.add_argument("--task-root", help="统一任务工作区；不存在时为外部快照初始化")
+    dp.add_argument("--out-dir", help="detail_plan.json/csv/summary 输出目录")
     dp.set_defaults(func=lambda a, p=dp: cmd_detail_plan(a, p))
 
     dr = sub.add_parser("detail-run", help="按已保存的 detail plan 执行明确网络动作")
     dr.add_argument("--plan", required=True, help="detail_plan.json 或包含 records 的 JSON")
-    dr.add_argument("--out-dir", required=True)
+    dr.add_argument("--out-dir", help="旧版执行目录；工作区计划默认使用 detail/")
     dr.add_argument("--headful", action="store_true")
     dr.add_argument("--profile-dir", default="")
     dr.add_argument("--html-dir", default="", help="REPARSE_SAVED_HTML 使用的详情 HTML 目录")
     dr.add_argument("--offline", action="store_true",
                     help="禁止网络动作；REPARSE/VERIFY/BLOCK/REUSE 仍可离线执行")
-    dr.add_argument("--parser-version", choices=("v1", "v2"), default="v1",
-                    help="详情解析契约；v2 保留变体/身份/重复属性证据（默认 v1）")
+    dr.add_argument("--parser-version", choices=("v1", "v2"),
+                    help="详情解析契约；默认采用工作区设置，旧版计划默认 v1")
     dr.set_defaults(func=lambda a, p=dr: cmd_detail_run(a, p))
 
     five = sub.add_parser("detail-five-run", help="显式批准：单队列五窗口、统一V2、全局3.6秒起始间隔")

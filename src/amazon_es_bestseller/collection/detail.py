@@ -984,10 +984,10 @@ def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | 
     return identity
 
 
-def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1") -> list[dict]:
+def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1", on_replay=None) -> list[dict]:
     """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
-    from .runtime_io import read_text
+    from ..evidence_store import evidence_path, read_evidence
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
     wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
     out = []
@@ -995,15 +995,24 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
     for root in roots:
         if not root.is_dir():
             continue
-        for path in sorted(root.glob("*.html")):
+        paths = {p.name.removesuffix(".gz") for pattern in ("*.html", "*.html.gz") for p in root.glob(pattern)}
+        paths.update(p.name.removesuffix(".meta.json") + ".html" for p in root.glob("*.meta.json"))
+        for name in sorted(paths):
+            path = root / name
             asin = path.stem.upper()
             # Valid named-ASIN files cannot represent a different requested
             # identity under the existing parser contract. Filter before IO;
             # legacy page_*.html files still require identity discovery.
             if _ASIN_RE.fullmatch(asin) and ((wanted and asin not in wanted) or asin in seen_asins):
                 continue
+            meta = _load_detail_metadata(path.with_suffix(".meta.json"))
+            reference = meta.get("html_evidence") or {}
+            source_path = reference.get("path") or path
+            if not evidence_path(source_path).is_file():
+                continue
             try:
-                html = read_text(path)
+                data = read_evidence(source_path, reference.get("sha256"))
+                html = data.decode("utf-8")
             except UnicodeError:
                 continue
             if not _ASIN_RE.fullmatch(asin):
@@ -1013,8 +1022,6 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                 asin = match.group(1).upper() if match else ""
             if not asin or not _ASIN_RE.fullmatch(asin) or (wanted and asin not in wanted):
                 continue
-            meta_path = path.with_suffix(".meta.json")
-            meta = _load_detail_metadata(meta_path)
             classification, state_value, rec = _classify_saved_page(
                 html, asin, meta, parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":
@@ -1038,9 +1045,11 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                                              else identity["identity_status"]),
                         "identity_status_code": identity["identity_status"],
                         "identity_evidence": identity["identity_evidence"]})
+            if on_replay:
+                on_replay(asin, rec, data, meta)
             out.append(rec)
             seen_asins.add(asin)
-    if out:
+    if out and state is not None:
         state.update(out)
     return out
 
@@ -1061,6 +1070,7 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
     pages are always left in place.
     """
     from pathlib import Path
+    from ..evidence_store import evidence_path, read_evidence
     roots = [Path(html_dirs)] if isinstance(html_dirs, (str, Path)) else [Path(p) for p in (html_dirs or [])]
     wanted = {str(a).strip().upper() for a in (asins or []) if str(a).strip()}
     from shutil import copy2, move as move_file
@@ -1073,18 +1083,25 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
     for root in roots:
         if not root.is_dir():
             continue
-        for path in sorted(root.glob("*.html")):
+        names = {p.name.removesuffix(".gz") for pattern in ("*.html", "*.html.gz") for p in root.glob(pattern)}
+        names.update(p.name.removesuffix(".meta.json") + ".html" for p in root.glob("*.meta.json"))
+        for name in sorted(names):
+            path = root / name
             asin = path.stem.upper()
             if wanted and asin not in wanted:
                 continue
-            read_error = ""
-            try:
-                html = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeError) as exc:
-                html = ""
-                read_error = "%s: %s" % (type(exc).__name__, exc)
             meta_path = path.with_suffix(".meta.json")
             status_meta = _load_detail_metadata(meta_path)
+            reference = status_meta.get("html_evidence") or {}
+            physical = evidence_path(reference.get("path") or path)
+            if not reference and not physical.exists():
+                continue
+            read_error = ""
+            try:
+                html = read_evidence(physical, reference.get("sha256")).decode("utf-8")
+            except (OSError, ValueError, EOFError) as exc:
+                html = ""
+                read_error = "%s: %s" % (type(exc).__name__, exc)
             error = read_error or status_meta.get("_metadata_error", "")
             if read_error:
                 classification, access_state, parsed = "INVALID_OR_EMPTY", AccessState.UNKNOWN, None
@@ -1107,7 +1124,13 @@ def audit_saved_detail_cache(html_dirs, asins=None, quarantine_dir=None, state=N
                             "removed_from_cache": bool(move) and classification != "VALID_PRODUCT_PAGE"})
             if classification != "VALID_PRODUCT_PAGE" and quarantine:
                 transfer = move_file if move else copy2
-                transfer(str(path), str(quarantine / path.name))
+                if reference:
+                    # The task archive can be shared across stages and ASINs.
+                    # Quarantine only the per-ASIN pointer, which preserves the reference.
+                    if not meta_path.exists():
+                        raise ValueError("MANAGED_EVIDENCE_POINTER_MISSING")
+                elif physical.exists():
+                    transfer(str(physical), str(quarantine / physical.name))
                 if meta_path.exists():
                     transfer(str(meta_path), str(quarantine / meta_path.name))
             if state is not None:

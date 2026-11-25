@@ -508,3 +508,14 @@ must report partial results separately from failures.
 - Recovery and LIVE execution still require reviewed evidence, current Spain UI
   and access checks and the original task clock. Offline tests and a new local
   release do not authorize collection. See `docs/SNAPSHOT_FAULT_ALERTS.md`.
+
+
+## Unified task workspace
+
+Use one Task Workspace per new snapshot and detail workflow. Follow
+[Incremental Audit and Cache](docs/INCREMENTAL_AUDIT_AND_CACHE_V1.md).
+The snapshot PAGE audit and detail checkpoint and batch audits run in the
+collection path. Use task-finalize for the final reconciliation and consult the
+task quality summary before export or research. Legacy standalone audits are
+diagnostics only. Keep the existing access controls, approval checkpoints,
+frozen evidence and Excel contracts.

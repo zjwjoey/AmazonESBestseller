@@ -93,7 +93,7 @@ class TaskWorkspace:
             conn.close()
 
     def bind(self, **values):
-        allowed = {"snapshot_run_id", "detail_plan_id", "external_snapshot", "task_status"}
+        allowed = {"snapshot_run_id", "detail_plan_id", "detail_plan_path", "external_snapshot", "task_status"}
         if set(values) - allowed:
             raise ValueError("TASK_BINDING_FIELD")
         with self.transaction():

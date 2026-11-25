@@ -14,6 +14,8 @@ import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+
+from ..evidence_store import read_evidence
 from typing import Mapping, Sequence
 
 from ..collection.detail import CURRENT_DETAIL_SCHEMA_VERSION
@@ -228,7 +230,7 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
             candidate_evidence_path = Path(str(candidate.get("candidate_evidence_file_path") or ""))
             candidate_expected_hash = str(candidate.get("candidate_evidence_sha256") or "").lower()
             try:
-                actual_hash = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+                actual_hash = hashlib.sha256(read_evidence(evidence_path)).hexdigest()
             except OSError:
                 actual_hash = ""
             try:
@@ -453,13 +455,14 @@ def write_detail_plan(plan: Mapping, output_dir: str | Path) -> dict[str, Path]:
     schema_version = int(plan.get("plan_schema_version") or 1)
     payload = {"plan_schema_version": schema_version, "snapshot_id": snapshot_id,
                "records": records}
+    payload.update({name: checked[name] for name in ("task_id", "task_root") if name in checked})
     plan_hash = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
                                           separators=(",", ":")).encode("utf-8")).hexdigest()
     plan_id = str(plan.get("plan_id") or ("detail_plan_" + plan_hash[:16]))
     artifact = {"plan_schema_version": schema_version, "plan_id": plan_id,
                 "plan_hash": plan_hash, "snapshot_id": snapshot_id,
                 "created_at": created_at, "summary": dict(plan.get("summary") or {}),
-                "records": records}
+                "records": records, **{name: payload[name] for name in ("task_id", "task_root") if name in payload}}
     json_path = root / "detail_plan.json"
     csv_path = root / "detail_plan.csv"
     summary_path = root / "detail_plan_summary.json"
@@ -498,9 +501,12 @@ def validate_detail_plan(plan: Mapping) -> dict:
         if asin in seen:
             raise ValueError("DETAIL_PLAN_DUPLICATE_ASIN:%s" % asin)
         seen.add(asin)
+    if bool(plan.get("task_id")) != bool(plan.get("task_root")):
+        raise ValueError("DETAIL_PLAN_TASK_BINDING_INCOMPLETE")
     if plan.get("plan_hash"):
         payload = {"plan_schema_version": int(plan.get("plan_schema_version") or 1),
                    "snapshot_id": snapshot_id, "records": records}
+        payload.update({name: plan[name] for name in ("task_id", "task_root") if name in plan})
         expected = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
                                              separators=(",", ":")).encode("utf-8")).hexdigest()
         if expected != str(plan.get("plan_hash")):

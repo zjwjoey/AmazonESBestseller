@@ -129,6 +129,11 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
             raise ValueError("DETAIL_RUN_REQUIRES_TASK_DETAIL_DIRECTORY")
         if workspace.manifest["task_status"] == "QUALITY_PAUSED":
             raise DetailQualityPause("DETAIL_FIELD_QUALITY_PAUSED")
+        external = workspace.manifest.get("external_snapshot")
+        if external:
+            with Path(external["path"]).open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != external["sha256"]:
+                    raise ValueError("DETAIL_EXTERNAL_SNAPSHOT_EVIDENCE_CHANGED")
         workspace.bind(detail_plan_id=plan.get("plan_id"))
 
         def publish_batch(rows):
@@ -160,7 +165,7 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
             if capacity["state"] == "PAUSE":
                 raise CacheCapacityExceeded("ACTIVE_CACHE_HARD_LIMIT")
 
-    if len(state) == 0 and (root / "details.json").exists():
+    if not coordinator and len(state) == 0 and (root / "details.json").exists():
         # A damaged/unreadable legacy authority file is not an empty dataset.
         # Fail before requests or writes rather than rebuilding it as [].
         legacy = read_json(root / "details.json")
@@ -173,7 +178,18 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     # A verified candidate selection may carry a parser result bound to saved
     # HTML. Revalidate that file at execution time, then merge the parsed fact
     # into the normal DetailState without issuing a request.
+    def observe_replay(row, record, data, meta):
+        asin = _asin(row)
+        path, digest = coordinator.ledger.evidence.save(data)
+        checkpoint = {"asin": asin, "status": "success", "source": "saved_html_replay",
+                      "action": row["detail_action"], "snapshot_id": row.get("snapshot_id"),
+                      "record": record, "capture_meta": meta,
+                      "html_evidence": {"path": str(path), "sha256": digest}}
+        write_checkpoint(checkpoint_dir, asin, checkpoint)
+        return coordinator.accept(asin, checkpoint)
+
     verified_handoffs = []
+    handed_off = {}
     for row in records:
         detail_record = row.get("detail_record")
         evidence_path = Path(str(row.get("detail_evidence_path") or ""))
@@ -182,7 +198,8 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
             continue
         asin = _asin(row)
         try:
-            actual_hash = hashlib.sha256(read_evidence(evidence_path)).hexdigest()
+            data = read_evidence(evidence_path)
+            actual_hash = hashlib.sha256(data).hexdigest()
         except OSError:
             actual_hash = ""
         if (actual_hash != expected_hash
@@ -190,7 +207,18 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                 or str(detail_record.get("identity_status") or "").upper() != "MATCH"
                 or str(detail_record.get("resolved_asin") or "").upper() != asin):
             raise ValueError("DETAIL_HANDOFF_EVIDENCE_CHANGED_OR_IDENTITY_INVALID:%s" % asin)
-        verified_handoffs.append(dict(detail_record))
+        if coordinator:
+            from .detail import _classify_saved_page, _load_detail_metadata
+            name = evidence_path.name.removesuffix(".gz")
+            meta = _load_detail_metadata(evidence_path.with_name(Path(name).stem + ".meta.json"))
+            classification, _, replayed = _classify_saved_page(
+                data.decode("utf-8"), asin, meta, parser_version=parser_version)
+            if classification != "VALID_PRODUCT_PAGE":
+                raise ValueError("DETAIL_HANDOFF_NOT_VALID_PRODUCT:" + asin)
+            replayed.update(asin=asin, requested_asin=asin, resolved_asin=asin, identity_status="MATCH")
+            handed_off[asin] = observe_replay(row, replayed, data, meta)
+        else:
+            verified_handoffs.append(dict(detail_record))
     if verified_handoffs:
         state.update(verified_handoffs)
 
@@ -202,6 +230,22 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     for row in records:
         action = str(row.get("detail_action") or "")
         asin = _asin(row)
+        if asin in handed_off and action in {"REUSE_VALID_CACHE", "REPARSE_SAVED_HTML"}:
+            status = handed_off[asin]
+            skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
+                            "status": "REUSED" if status in {"PASS", "WARN"} else status})
+            continue
+        if coordinator and action in {"REUSE_VALID_CACHE", "REPARSE_SAVED_HTML"}:
+            html_root = saved_html or row.get("saved_html_dir") or (root / "html")
+            replay_status = []
+            def on_replay(_asin_value, record, data, meta):
+                replay_status.append(observe_replay(row, record, data, meta))
+            reparse_saved_details(html_root, None, asins=[asin], parser_version=parser_version,
+                                  on_replay=on_replay)
+            status = replay_status[0] if replay_status else "PENDING"
+            skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
+                            "status": "REUSED" if status in {"PASS", "WARN"} else status})
+            continue
         if action == "REPARSE_SAVED_HTML":
             reparse_rows.append(row)
             continue
@@ -244,16 +288,19 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
                             "status": "PLAN_SKIPPED"})
             continue
         checkpoint = read_checkpoint(checkpoint_dir, asin)
+        if coordinator and _checkpoint_matches(checkpoint, row) and checkpoint.get("status") in {
+            "success", "failed", "invalid", "asin_mismatch",
+        }:
+            status = coordinator.accept(asin, checkpoint)
+            skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
+                            "status": "ALREADY_SUCCESS" if status in {"PASS", "WARN"} else status})
+            continue
         if (_checkpoint_matches(checkpoint, row) and checkpoint.get("status") == "success"):
             recovered = _checkpoint_record(checkpoint)
             if _usable_record(recovered, asin):
-                if coordinator:
-                    status = coordinator.accept(asin, checkpoint)
-                else:
-                    state.update([recovered])
-                    status = "PASS"
+                state.update([recovered])
                 skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
-                                "status": "ALREADY_SUCCESS" if status in {"PASS", "WARN"} else status})
+                                "status": "ALREADY_SUCCESS"})
                 continue
         pending.append(row)
 
