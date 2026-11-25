@@ -38,7 +38,15 @@ def read_evidence(path, expected: str | None = None) -> bytes:
         with gzip.open(resolved, "rb") as stream:
             data = stream.read()
     else:
-        data = resolved.read_bytes()
+        try:
+            data = resolved.read_bytes()
+        except FileNotFoundError:
+            # Publication may retire the active name after resolution.
+            archived = evidence_path(requested)
+            if archived == resolved or archived.suffix != ".gz":
+                raise
+            with gzip.open(archived, "rb") as stream:
+                data = stream.read()
     name = requested.name.split(".")[0]
     if expected is None and len(name) == 64 and all(char in "0123456789abcdef" for char in name):
         expected = name

@@ -591,6 +591,9 @@ def cmd_detail_run(args, parser: argparse.ArgumentParser) -> None:
             result = execute_detail_plan(plan, session, output, offline=bool(args.offline),
                                          saved_html=args.html_dir or None,
                                          parser_version=parser_version)
+    if workspace:
+        from .task_quality import finalize_task
+        finalize_task(workspace.root)
     print("detail run %s：取得详情 %d，未完成 %d，计划网络动作 %d → %s" %
           (result.get("execution_status", "UNKNOWN"), result.get("completed_count", 0),
            result.get("incomplete_count", 0), result["requested_count"],

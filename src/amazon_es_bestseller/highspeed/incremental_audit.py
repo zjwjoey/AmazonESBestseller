@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from time import perf_counter
 
 from ..audit_ledger import AuditLedger, canonical_json
 from ..evidence_store import sha256
@@ -43,8 +44,10 @@ class SnapshotPageAudit:
                                    FROM audit_current c JOIN audit_attempts a USING(audit_id)
                                    WHERE c.stage='snapshot' AND c.unit_id=?""", (unit_id,)).fetchone()
         if last and tuple(last)[1:] == (fingerprint, parser, version):
+            self.last_audit_seconds = None
             return last["status"]
 
+        started = perf_counter()
         result = audit_v4([page], observations, plan["sources"],
                           require_live=require_live, include_history=False)
         warnings = Counter()
@@ -55,15 +58,23 @@ class SnapshotPageAudit:
                 warnings["IDENTITY_REVIEW"] += 1
             if not row.get("product_title_es"):
                 warnings["TITLE_MISSING"] += 1
+            price = row.get("current_price")
+            if price is not None and (not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0):
+                warnings["PRICE_INVALID"] += 1
+            rank = row.get("ranking_position")
+            if rank is not None and (type(rank) is not int or rank < 1):
+                warnings["RANK_INVALID"] += 1
         status = "FAIL" if result["errors"] else "WARN" if warnings else "PASS"
         self.ledger.record(
             stage="snapshot", unit_id=unit_id, digests=digests, record=record, status=status,
             fields={"observation_count": len(observations), "field_statuses": result["field_statuses"],
                     "card_warnings": dict(warnings), "source": page["source_type"],
+
                     "live_origin_required": require_live},
             anomalies=result["errors"], parser_version=parser, qa_version=version)
         for digest in digests:
             self.ledger.evidence.archive(digest)
+        self.last_audit_seconds = perf_counter() - started
         return status
 
     def coverage(self, plan, pages):

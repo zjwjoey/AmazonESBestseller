@@ -1,6 +1,7 @@
 """Final reconciliation of task scope, persisted audits and original evidence."""
 from __future__ import annotations
 
+import json
 from collections import Counter
 from contextlib import closing
 from pathlib import Path
@@ -76,7 +77,18 @@ def finalize_task(root):
                  or plan.get("plan_id") != manifest.get("detail_plan_id")
                  or plan.get("plan_hash") != execution.get("plan_hash")):
         errors.append("DETAIL_PLAN_BINDING_MISMATCH")
-    if expected != coverage:
+    coverage_matches = expected == coverage
+    if coverage:
+        expected_batch_ids = {row["batch_id"] for row in terminal.values() if row["batch_id"]}
+        with workspace.transaction() as conn:
+            batches = {row["batch_id"]: (row["status"], set(json.loads(row["ids"])))
+                       for row in conn.execute("SELECT * FROM detail_batches")}
+        coverage_matches = coverage_matches and expected_batch_ids <= batches.keys()
+        coverage_matches = coverage_matches and all(
+            batches[row["batch_id"]][0] == "COMMITTED"
+            and row["audit_id"] in batches[row["batch_id"]][1] for row in terminal.values()
+        )
+    if not coverage_matches:
         errors.append("DETAIL_BATCH_COVERAGE_INCOMPLETE")
     if set(written) != passed or len(written) != len(output) or len(set(written)) != len(written):
         errors.append("DETAIL_OUTPUT_AUDIT_MISMATCH")

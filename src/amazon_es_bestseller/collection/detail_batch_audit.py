@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from time import perf_counter
 
 from ..audit_ledger import AuditLedger, canonical_json
 from ..evidence_store import read_evidence, sha256
@@ -71,6 +72,7 @@ class DetailBatchAudit:
             pending = self._pending()
             if not pending or (len(pending) < self.batch_size and not partial):
                 break
+            started = perf_counter()
             rows = pending[:self.batch_size]
             ids = [row["audit_id"] for row in rows]
             batch_id = sha256(canonical_json(ids).encode("utf-8"))[:24]
@@ -87,6 +89,7 @@ class DetailBatchAudit:
             atomic_json(self.directory / "batches" / (batch_id + ".json"), {
                 "batch_id": batch_id, "asins": [row["unit_id"] for row in rows],
                 "quality_signals": signals, "fields": batch,
+                "publication_seconds": perf_counter() - started,
             })
             self._write_cumulative(current, cumulative, signals, batch_id)
             # An audit record was committed before any of these original files

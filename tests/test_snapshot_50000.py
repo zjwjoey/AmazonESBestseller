@@ -183,11 +183,19 @@ def test_incremental_metrics_equal_full_with_overlap_conflicts_and_exclusions():
     rows = real_rows()
     rows += [{**deepcopy(rows[0]), 'source_type':'NEW_RELEASES', 'observation_id':'TEST_ONLY_OVERLAP'},
              {**deepcopy(rows[0]), 'binding_doubts':['TEST_ONLY_CONFLICT'], 'observation_id':'TEST_ONLY_CONFLICT'},
-             {**deepcopy(rows[0]), 'origin':'OFFLINE_FIXTURE', 'observation_id':'TEST_ONLY_EXCLUDED'}]
+             {**deepcopy(rows[0]), 'origin':'OFFLINE_FIXTURE', 'observation_id':'TEST_ONLY_EXCLUDED'},
+             {**deepcopy(rows[0]), 'product_title_es':'Producto alternativo',
+              'current_price':712.5, 'observation_id':'TEST_ONLY_FIELD_DIFFERENCE'}]
     index = SnapshotMetricsIndex('TEST_ONLY', MAIN_PRIORITY_50000_POLICY)
     for n in range(0,len(rows),7):
         index.add(rows[n:n+7])
         assert index.measure() == measure_three(rows[:n+7], 'TEST_ONLY', target_policy=MAIN_PRIORITY_50000_POLICY)
+    quality = index.quality_signals()
+    assert quality['identity_pending_observations'] >= 1
+    assert quality['title_conflict_groups'] >= 1
+    assert quality['price_conflict_groups'] >= 1
+    assert quality['exact_link_duplicate_observations'] >= 2
+    assert quality['normalized_link_duplicate_observations'] >= 2
 
 
 def test_read_only_copy_sees_wal_without_touching_source_shm(tmp_path):

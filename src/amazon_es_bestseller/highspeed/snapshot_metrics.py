@@ -15,6 +15,13 @@ class SnapshotMetricsIndex:
         is_global_policy(policy)
         self.run_id = run_id; self.policy = policy; self.excluded = 0; self.invalid = 0
         self.rows = 0
+        self.link_observations = 0
+        self.valid_link_observations = 0
+        self.raw_urls = set()
+        self.valid_urls = set()
+        self.identity_pending = 0
+        self.values = {"title": {}, "price": {}}
+        self.conflicts = {"title": set(), "price": set()}
         self.sources = {k: {'raw': 0, 'raw_urls': set(), 'valid_urls': set(), 'urls': set(), 'groups': set(),
             'times': {}, 'fields': {f: Counter() for f in ('rating', 'rating_count', 'monthly_bought', 'price', 'product_title')}}
             for k in FAMILIES}
@@ -24,14 +31,36 @@ class SnapshotMetricsIndex:
         self.rows += len(rows); self.excluded += excluded; self.invalid += len(invalid)
         for row in current:
             own = self.sources[row['source_type']]; own['raw'] += 1
-            if row.get('raw_product_url'): own['raw_urls'].add(row['raw_product_url'])
-            if row.get('is_valid'): own['valid_urls'].add(row['normalized_product_url'])
+            if row.get('raw_product_url'):
+                self.link_observations += 1
+                own['raw_urls'].add(row['raw_product_url'])
+                self.raw_urls.add(row['raw_product_url'])
+            if row.get('is_valid'):
+                self.valid_link_observations += 1
+                own['valid_urls'].add(row['normalized_product_url'])
+                self.valid_urls.add(row['normalized_product_url'])
+            if row.get('binding_doubts') or not row.get('asin_url_hint'):
+                self.identity_pending += 1
             for field, counts in own['fields'].items(): counts[row.get(field+'_status', 'UNVERIFIED')] += 1
         for row in qualified:
             own = self.sources[row['source_type']]
             group = row['possible_duplicate_key'] or row['normalized_product_url']
             own['urls'].add(row['normalized_product_url']); own['groups'].add(group)
             own['times'].setdefault(aware_time(row['observed_at']), set()).add(group)
+            for kind, value in (("title", row.get("product_title_es")), ("price", row.get("current_price"))):
+                if value not in (None, ""):
+                    prior = self.values[kind].setdefault(group, value)
+                    if prior != value:
+                        self.conflicts[kind].add(group)
+
+    def quality_signals(self):
+        return {
+            'exact_link_duplicate_observations': self.link_observations - len(self.raw_urls),
+            'normalized_link_duplicate_observations': self.valid_link_observations - len(self.valid_urls),
+            'identity_pending_observations': self.identity_pending,
+            'title_conflict_groups': len(self.conflicts['title']),
+            'price_conflict_groups': len(self.conflicts['price']),
+        }
 
     def measure(self):
         targets = source_targets(self.policy); reports = {}; global_groups = set()

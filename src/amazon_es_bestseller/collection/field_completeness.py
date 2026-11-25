@@ -6,6 +6,7 @@ import re
 
 from bs4 import BeautifulSoup
 
+from ..access.detector import AccessState, detect_access_status
 from ..identity import asin_from_url
 from ..models import is_valid_asin
 from .detail import (
@@ -60,7 +61,8 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
               and meta.get("access_state") in {None, "NORMAL"})
     normal = bool(dom and (page_asins or dom.select_one("#productTitle"))) and (
         ((meta.get("status_code") == 200 and meta.get("access_state") == "NORMAL") or replay)
-        and not record.get("is_captcha"))
+        and not record.get("is_captcha")
+        and detect_access_status(meta.get("status_code") or 200, html) == AccessState.NORMAL)
     final_asin = asin_from_url(meta.get("final_url"))
     route_matches = final_asin == asin or (replay and not meta.get("final_url"))
     identity = (is_valid_asin(asin) and page_asins == {asin} and route_matches

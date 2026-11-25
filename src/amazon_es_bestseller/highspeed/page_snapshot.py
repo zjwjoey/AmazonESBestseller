@@ -306,6 +306,9 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         progress={'run_id':plan['run_id'],'observed_at':utc_text(self.engine.clock()),'metrics':metrics,
                   'source_id':source['source_id'],'page_url':parsed['committed_page']['page_url'],
                   'phase':'CAPTURING','status':'RUNNING','source_complete':False}
+        if getattr(self, '_metrics_index', None) is not None and getattr(self, '_page_audit', None):
+            progress['snapshot_quality_signals'] = self._metrics_index.quality_signals()
+            progress['last_page_audit_seconds'] = getattr(self._page_audit, 'last_audit_seconds', None)
         atomic_json(self.store.root/'snapshot_progress.json',progress)
         print('SNAPSHOT_PROGRESS qualified=%d target=%d favorites=%d/%d' %
               (metrics['F_global_conservative_review_groups'],metrics['global_target'],
