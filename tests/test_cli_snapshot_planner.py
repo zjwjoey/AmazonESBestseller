@@ -72,3 +72,32 @@ def test_detail_run_list_plan_preserves_snapshot_id(tmp_path):
                      "--out-dir", str(out_dir)]) == 0
     manifest = json.loads((out_dir / "detail_execution_manifest.json").read_text(encoding="utf-8"))
     assert manifest["snapshot_id"] == "snapshot_test"
+
+
+def test_workspace_plan_uses_saved_gzip_before_network(tmp_path):
+    import gzip
+    from amazon_es_bestseller.monitoring.detail_planner import validate_detail_plan
+
+    rankings = tmp_path / "rankings.json"
+    rankings.write_text(json.dumps([{
+        "asin": "B000000001", "bestseller_rank": 1,
+        "ranking_source_url": "https://www.amazon.es/zgbs/1",
+        "ranking_product_url_raw": "/Producto/dp/B000000001",
+        "ranking_product_url_normalized": "https://www.amazon.es/dp/B000000001",
+        "ranking_link_asin": "B000000001", "ranking_link_identity_status": "MATCH",
+    }]), encoding="utf-8")
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"snapshot_id": "fixture", "snapshot_status": "AUTHORITATIVE"}), encoding="utf-8")
+    source = tmp_path / "html"
+    source.mkdir()
+    (source / "B000000001.html.gz").write_bytes(gzip.compress(b'<html><input id="ASIN" value="B000000001">'
+        b'<span id="productTitle">Bolso de viaje</span></html>'))
+    task = tmp_path / "task"
+    assert cli.main(["--offline", "detail-plan", "--snapshot", str(rankings),
+                     "--task-root", str(task), "--html-dir", str(source)]) == 0
+    path = task / "detail" / "plan" / "detail_plan.json"
+    plan = validate_detail_plan(json.loads(path.read_bytes()))
+    assert plan["records"][0]["detail_action"] == "REPARSE_SAVED_HTML"
+    assert cli.main(["--offline", "detail-run", "--plan", str(path)]) == 0
+    report = json.loads((task / "reports" / "task_quality_summary.json").read_bytes())
+    assert report["state"] == "RESEARCH_READY", report

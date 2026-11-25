@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
-from ..evidence_store import read_evidence
+from ..evidence_store import evidence_path, read_evidence
 from typing import Mapping, Sequence
 
 from ..collection.detail import CURRENT_DETAIL_SCHEMA_VERSION
@@ -90,9 +90,16 @@ def _html_available(saved_html, asin: str) -> bool:
     if isinstance(saved_html, Mapping):
         return bool(saved_html.get(asin) or saved_html.get(asin.upper()))
     root = Path(saved_html)
-    if root.is_file():
+    if evidence_path(root).is_file():
+        name = root.name.removesuffix(".gz").removesuffix(".html")
+        return name.upper() == asin
+    candidate = root / (asin + ".html")
+    if evidence_path(candidate).is_file():
         return True
-    return (root / (asin + ".html")).exists()
+    from ..collection.runtime_io import read_json
+    meta = read_json(candidate.with_suffix(".meta.json"), {}) or {}
+    reference = meta.get("html_evidence") or {}
+    return bool(reference.get("path") and evidence_path(reference["path"]).is_file())
 
 
 def _schema(record: Mapping) -> int:
@@ -379,6 +386,9 @@ def build_detail_plan(ranking_snapshot, detail_cache=None, detail_state=None, *,
         elif cache_state == "INVALID":
             action = DetailAction.REFETCH_INVALID_CACHE.value
             reason = "缓存分类为无效或空页面，保留旧证据后重抓"
+        elif html_exists:
+            action = DetailAction.REPARSE_SAVED_HTML.value
+            reason = "已有保存 HTML，先离线核对身份与原始字段"
         else:
             action = DetailAction.FETCH_NEW.value
             reason = "榜单出现新 ASIN，暂无有效详情缓存"
