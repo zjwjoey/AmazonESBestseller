@@ -132,6 +132,17 @@ def finalize_task(root):
                  or plan.get("plan_id") != manifest.get("detail_plan_id")
                  or plan.get("plan_hash") != execution.get("plan_hash")):
         errors.append("DETAIL_PLAN_BINDING_MISMATCH")
+    outcomes = execution.get("records") or []
+    successful_statuses = {"ALREADY_SUCCESS", "SUCCESS", "REUSED"}
+    closed_statuses = successful_statuses | {"FAILED", "INVALID", "ASIN_MISMATCH",
+                                             "QUARANTINED", "TERMINAL_FAILURE"}
+    closed_outcomes = [row for row in outcomes if str(row.get("status")).upper() in closed_statuses]
+    reported_successes = {row.get("ranking_asin") for row in closed_outcomes
+                          if str(row.get("status")).upper() in successful_statuses}
+    if plan and (len(outcomes) != len(expected) or len(closed_outcomes) != len(expected)
+                 or {row.get("ranking_asin") for row in closed_outcomes} != expected
+                 or reported_successes != passed):
+        errors.append("DETAIL_EXECUTION_SCOPE_MISMATCH")
     coverage_matches = expected == coverage
     if coverage:
         expected_batch_ids = {row["batch_id"] for row in terminal.values() if row["batch_id"]}
@@ -191,7 +202,8 @@ def finalize_task(root):
         errors.append("DETAIL_QUALITY_PAUSED")
 
     collection_complete = bool(expected and expected == terminal.keys()
-                               and not set(errors) & {"SNAPSHOT_SCOPE_INCOMPLETE", "DETAIL_ACCESS_STOP"})
+                               and not set(errors) & {"SNAPSHOT_SCOPE_INCOMPLETE", "DETAIL_ACCESS_STOP",
+                                                       "DETAIL_EXECUTION_SCOPE_MISMATCH"})
     reviewed = collection_complete and not errors
     unresolved = sorted(asin for asin, row in terminal.items() if row["anomalies"] or asin not in passed)
     research_ready = reviewed and not unresolved and snapshot["mode"] != "NOT_CONFIGURED"

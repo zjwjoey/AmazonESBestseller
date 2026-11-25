@@ -32,10 +32,12 @@ def test_known_source_miss_absence_and_low_quality_are_distinct():
 
 
 def test_success_tag_cannot_override_wrong_identity_or_blank_title():
-    valid, _, anomalies = check_detail_fields(ASIN, RECORD, {"status": "success"},
+    valid, fields, anomalies = check_detail_fields(ASIN, RECORD, {"status": "success"},
         PRODUCT.replace(ASIN, "B000000002"), META)
     assert not valid
     assert {"field": "asin", "code": "DETAIL_IDENTITY_UNCONFIRMED"} in anomalies
+    assert not fields["title_es_raw"]["eligible"]
+    assert not fields["title_es_raw"]["source_present"]
     valid, fields, _ = check_detail_fields(ASIN, {}, {"status": "invalid"},
         PRODUCT.replace("Bolso azul", ""), META)
     assert not valid and fields["title_es_raw"]["eligible"]

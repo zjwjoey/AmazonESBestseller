@@ -77,8 +77,8 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
         and detect_access_status(meta.get("status_code") or 200, html) == AccessState.NORMAL)
     final_asin = asin_from_url(meta.get("final_url"))
     route_matches = final_asin == asin or (replay and not meta.get("final_url"))
-    identity = (is_valid_asin(asin) and page_asins == {asin} and route_matches
-                and all(record.get(k) == asin for k in ("asin", "requested_asin", "resolved_asin"))
+    page_identity = is_valid_asin(asin) and page_asins == {asin} and route_matches
+    identity = (page_identity and all(record.get(k) == asin for k in ("asin", "requested_asin", "resolved_asin"))
                 and record.get("identity_status") == "MATCH")
     anomalies = []
     if not normal:
@@ -86,7 +86,7 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
     elif not identity:
         anomalies.append({"field": "asin", "code": "DETAIL_IDENTITY_UNCONFIRMED"})
     field_source = dict.fromkeys(FIELDS)
-    if normal and dom:
+    if normal and page_identity:
         field_source.update({
             "asin": asin if identity else None,
             "title_es_raw": title,
@@ -100,7 +100,8 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
         })
     fields = {}
     for key, source in field_source.items():
-        value = record.get(key) if normal else None
+        eligible = bool(normal and (page_identity or key == "asin"))
+        value = record.get(key) if eligible and identity else None
         state = (_state(value, source, title=title if key == "product_description_raw" else "")
                  if key != "asin" else (EXTRACTED if identity and normal else UNKNOWN))
         source_present = _is_substantive(source, title if key == "product_description_raw" else "")
@@ -112,11 +113,11 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
                 anomalies.append({"field": key, "code": "DETAIL_FIELD_NOT_BOUND_TO_SOURCE"})
             elif observed - extracted:
                 state = PARSER_MISSED
-        fields[key] = {"state": state, "eligible": bool(normal and dom),
+        fields[key] = {"state": state, "eligible": eligible,
                        "source_present": source_present}
         if state in {PARSER_MISSED, LOW_QUALITY}:
             anomalies.append({"field": key, "code": state})
-    if normal and (not _is_substantive(title) or not _is_substantive(record.get("title_es_raw"))
+    if normal and page_identity and (not _is_substantive(title) or not _is_substantive(record.get("title_es_raw"))
                    or " ".join(title.split()) != " ".join(record["title_es_raw"].split())):
         anomalies.append({"field": "title_es_raw", "code": "DETAIL_TITLE_MISSING_OR_UNBOUND"})
     for key in ("attributes",):

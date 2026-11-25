@@ -181,12 +181,32 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
     def observe_replay(row, record, data, meta):
         asin = _asin(row)
         path, digest = coordinator.ledger.evidence.save(data)
-        checkpoint = {"asin": asin, "status": "success", "source": "saved_html_replay",
+        checkpoint = {"asin": asin, "status": "success" if record is not None else "invalid",
+                      "source": "saved_html_replay",
                       "action": row["detail_action"], "snapshot_id": row.get("snapshot_id"),
                       "record": record, "capture_meta": meta,
                       "html_evidence": {"path": str(path), "sha256": digest}}
         write_checkpoint(checkpoint_dir, asin, checkpoint)
         return coordinator.accept(asin, checkpoint, evidence_bytes=data)
+
+    def resume_replay(row, checkpoint, *, data=None, meta=None, expected_hash=None):
+        from .detail_batch_audit import checkpoint_payload
+
+        if not _checkpoint_matches(checkpoint, row) or checkpoint.get("source") != "saved_html_replay":
+            return None
+        asin = _asin(row)
+        reference = checkpoint.get("html_evidence") or {}
+        source_hash = reference.get("sha256")
+        if not source_hash or (expected_hash is not None and expected_hash != source_hash):
+            return None
+        if data is not None and (hashlib.sha256(data).hexdigest() != source_hash
+                                 or meta != checkpoint.get("capture_meta")):
+            return None
+        if not coordinator.ledger.lookup("detail", asin, checkpoint_payload(checkpoint)):
+            return None
+        # A checkpoint cannot cover a lost or damaged shared archive.
+        read_evidence(reference["path"], source_hash)
+        return coordinator.accept(asin, checkpoint)
 
     verified_handoffs = []
     handed_off = {}
@@ -197,10 +217,16 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if not isinstance(detail_record, Mapping) or not expected_hash:
             continue
         asin = _asin(row)
+        checkpoint = read_checkpoint(checkpoint_dir, asin) if coordinator else None
         try:
             data = read_evidence(evidence_path)
             actual_hash = hashlib.sha256(data).hexdigest()
-        except OSError:
+        except OSError as error:
+            status = (resume_replay(row, checkpoint, expected_hash=expected_hash)
+                      if coordinator and isinstance(error, FileNotFoundError) else None)
+            if status:
+                handed_off[asin] = status
+                continue
             actual_hash = ""
         if (actual_hash != expected_hash
                 or str(detail_record.get("asin") or "").upper() != asin
@@ -211,6 +237,10 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
             from .detail import _classify_saved_page, _load_detail_metadata
             name = evidence_path.name.removesuffix(".gz")
             meta = _load_detail_metadata(evidence_path.with_name(Path(name).stem + ".meta.json"))
+            status = resume_replay(row, checkpoint, data=data, meta=meta, expected_hash=expected_hash)
+            if status:
+                handed_off[asin] = status
+                continue
             classification, _, replayed = _classify_saved_page(
                 data.decode("utf-8"), asin, meta, parser_version=parser_version)
             if classification != "VALID_PRODUCT_PAGE":
@@ -238,11 +268,30 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if coordinator and action in {"REUSE_VALID_CACHE", "REPARSE_SAVED_HTML"}:
             html_root = saved_html or row.get("saved_html_dir") or (root / "html")
             replay_status = []
+            source_candidate = []
+            checkpoint = read_checkpoint(checkpoint_dir, asin)
+
             def on_replay(_asin_value, record, data, meta):
                 replay_status.append(observe_replay(row, record, data, meta))
+
+            def resume_saved(_asin_value, data, meta):
+                if not source_candidate:
+                    source_candidate.append((data, meta))
+                if not checkpoint or checkpoint.get("status") != "success":
+                    return False
+                status = resume_replay(row, checkpoint, data=data, meta=meta)
+                if status:
+                    replay_status.append(status)
+                return bool(status)
+
             reparse_saved_details(html_root, None, asins=[asin], parser_version=parser_version,
-                                  on_replay=on_replay)
-            status = replay_status[0] if replay_status else "PENDING"
+                                  on_replay=on_replay, resume_saved=resume_saved)
+            if replay_status:
+                status = replay_status[-1]
+            elif source_candidate:
+                status = observe_replay(row, None, *source_candidate[0])
+            else:
+                status = resume_replay(row, checkpoint) or "PENDING"
             skipped.append({"asin": asin, "ranking_asin": asin, "action": action,
                             "status": "REUSED" if status in {"PASS", "WARN"} else status})
             continue

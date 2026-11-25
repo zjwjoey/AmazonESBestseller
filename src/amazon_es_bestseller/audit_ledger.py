@@ -29,7 +29,7 @@ class AuditLedger:
 
     def qa_version(self, stage):
         contract = self.workspace.manifest["audit_contract_version"]
-        return contract + ":detail-source-binding-v2" if stage == "detail" else contract
+        return contract + ":detail-source-binding-v3" if stage == "detail" else contract
 
     def record(self, *, stage, unit_id, digests, record, status, fields, anomalies,
                parser_version=None, qa_version=None, batch_id=None):

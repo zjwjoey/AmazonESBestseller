@@ -984,7 +984,8 @@ def _resolve_page_identity(asin: str, html: str, final_url: str, record: dict | 
     return identity
 
 
-def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1", on_replay=None) -> list[dict]:
+def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str = "v1",
+                          on_replay=None, resume_saved=None) -> list[dict]:
     """Offline reparse saved detail HTML; first valid directory wins per ASIN."""
     from pathlib import Path
     from ..evidence_store import evidence_path, read_evidence
@@ -1019,6 +1020,9 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                 continue
             try:
                 data = read_evidence(source_path, reference.get("sha256"))
+                if _ASIN_RE.fullmatch(asin) and resume_saved and resume_saved(asin, data, meta):
+                    seen_asins.add(asin)
+                    continue
                 html = data.decode("utf-8")
             except UnicodeError:
                 continue
@@ -1028,6 +1032,9 @@ def reparse_saved_details(html_dirs, state, asins=None, *, parser_version: str =
                     match = re.search(r'(?:data-asin|parentASIN)["\']?\s*[:=]\s*["\']([A-Z0-9]{10})', html, re.I)
                 asin = match.group(1).upper() if match else ""
             if not asin or not _ASIN_RE.fullmatch(asin) or (wanted and asin not in wanted):
+                continue
+            if not _ASIN_RE.fullmatch(path.stem.upper()) and resume_saved and resume_saved(asin, data, meta):
+                seen_asins.add(asin)
                 continue
             classification, state_value, rec = _classify_saved_page(
                 html, asin, meta, parser_version=parser_version)

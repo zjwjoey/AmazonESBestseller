@@ -69,9 +69,56 @@ def test_cli_managed_offline_replay_and_final_reconciliation(tmp_path):
     assert recalculated["state"] == "COLLECTION_COMPLETE"
     assert recalculated["detail"]["mismatched_output_asins"] == [asin]
     products.write_bytes(original)
+    execution = workspace.root / "detail" / "detail_execution_manifest.json"
+    recorded_execution = execution.read_bytes()
+    pending = json.loads(recorded_execution)
+    pending["records"][0]["status"] = "PENDING"
+    execution.write_text(json.dumps(pending), encoding="utf8")
+    assert "DETAIL_EXECUTION_SCOPE_MISMATCH" in finalize_task(workspace.root)["errors"]
+    execution.write_bytes(recorded_execution)
     archive, = (workspace.root / "evidence" / "archive").glob("*.gz")
     archive.write_bytes(b"fixture corrupted")
     assert finalize_task(workspace.root)["state"] == "COLLECTION_COMPLETE"
+
+
+def test_offline_resume_uses_archived_audit_and_rechecks_changed_source(tmp_path, monkeypatch):
+    from amazon_es_bestseller.audit_ledger import AuditLedger
+    from amazon_es_bestseller.monitoring.detail_planner import write_detail_plan
+    from amazon_es_bestseller.task_quality import finalize_task
+
+    workspace = TaskWorkspace.create(tmp_path / "task", "resume")
+    source = tmp_path / "saved"
+    source.mkdir()
+    asin = "B000000001"
+    html = source / (asin + ".html")
+    html.write_text(f'<input id="ASIN" value="{asin}"><h1 id="productTitle">Bolso</h1>', encoding="utf8")
+    plan = {"task_id": "resume", "task_root": str(workspace.root), "snapshot_id": "fixture",
+            "records": [{"ranking_asin": asin, "snapshot_id": "fixture", "detail_action": "REPARSE_SAVED_HTML"}]}
+    path = write_detail_plan(plan, workspace.root / "detail" / "plan")["json"]
+    plan = json.loads(path.read_bytes())
+
+    def run():
+        return execute_detail_plan(plan, None, str(workspace.root / "detail"),
+                                   offline=True, parser_version="v2", saved_html=source)
+
+    assert run()["completed_count"] == 1
+    with monkeypatch.context() as offline_resume:
+        def unexpected_parser(*args, **kwargs):
+            pytest.fail("unchanged evidence must reuse its audit")
+        offline_resume.setattr(detail, "_classify_saved_page", unexpected_parser)
+        assert run()["completed_count"] == 1
+        html.rename(source / "retired.txt")
+        assert run()["completed_count"] == 1
+    assert finalize_task(workspace.root)["state"] == "QUALITY_REVIEW_COMPLETE"
+    ledger = AuditLedger(workspace)
+    assert ledger.current("detail")[0]["status"] == "PASS"
+    html.write_text('<input id="ASIN" value="B000000002"><h1 id="productTitle">Otro producto</h1>', encoding="utf8")
+    assert run()["records"][0]["status"] == "TERMINAL_FAILURE"
+    result = finalize_task(workspace.root)
+    assert result["state"] == "QUALITY_REVIEW_COMPLETE", result["errors"]
+    assert result["detail"]["passed"] == 0
+    assert result["archive"]["files"] == 2
+    assert json.loads((workspace.root / "detail" / "details.json").read_bytes()) == []
 
 @pytest.mark.parametrize(("count", "sizes"), [(1, [1]), (49, [49]), (50, [50]),
                                              (51, [50, 1]), (100, [50, 50]), (137, [50, 50, 37])])
