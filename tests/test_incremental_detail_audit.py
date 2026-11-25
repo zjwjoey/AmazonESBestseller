@@ -98,3 +98,27 @@ def test_interrupted_batch_republishes_without_new_attempt(tmp_path):
     resumed.accept("B000000002", data)
     assert applied == [["B000000001", "B000000002"]]
     assert len(resumed.ledger.current("detail")) == 2
+
+def test_access_stop_preserves_partial_batch_and_prevents_next_request(tmp_path, monkeypatch):
+    from amazon_es_bestseller.access.detector import AccessStopError
+    monkeypatch.setattr(detail, "time", SimpleNamespace(sleep=lambda _: None))
+    workspace = TaskWorkspace.create(tmp_path / "task", "access-stop")
+    asins = [f"B{i:09d}" for i in range(1, 4)]
+    plan = {"task_id": "access-stop", "task_root": str(workspace.root), "plan_id": "scope",
+            "snapshot_id": "fixture", "records": [
+                {"ranking_asin": asin, "snapshot_id": "fixture", "detail_action": "FETCH_NEW"} for asin in asins]}
+    root = workspace.root / "detail"
+
+    class Restricted(Session):
+        def goto(self, url):
+            super().goto(url)
+            return 429 if len(self.calls) == 2 else 200
+
+    transport = Restricted()
+    with pytest.raises(AccessStopError):
+        execute_detail_plan(plan, transport, str(root), parser_version="v2")
+    assert len(transport.calls) == 2
+    assert [row["asin"] for row in json.loads((root / "details.json").read_bytes())] == [asins[0]]
+    report = json.loads((root / "detail_execution_manifest.json").read_bytes())
+    assert report["execution_status"] == "ACCESS_STOP"
+    assert len(list((workspace.root / "audit" / "batches").glob("*.json"))) == 1
