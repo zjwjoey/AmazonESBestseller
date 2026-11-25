@@ -1,3 +1,4 @@
+from amazon_es_bestseller.collection.detail import parse_detail_page
 from amazon_es_bestseller.collection.field_completeness import (
     EXTRACTED, LOW_QUALITY, PARSER_MISSED, SOURCE_ABSENT,
     FieldCompletenessMonitor, check_detail_fields,
@@ -93,3 +94,18 @@ def test_numeric_asin_counts_as_present_source():
     assert fields["asin"] == {"state": EXTRACTED, "eligible": True, "source_present": True}
     stats = FieldCompletenessMonitor(DEFAULT_THRESHOLDS).summarize([{"fields": fields}])
     assert stats["asin"]["effective_extraction_rate"] == 1
+
+
+def test_same_page_variant_conflict_keeps_selected_option_and_both_raw_values():
+    html = (PRODUCT + '<div id="variation_name"><span class="selection">Azul</span></div>'
+            '<div id="productOverview_feature_div"><table>'
+            '<tr><td>Color</td><td>Azul</td></tr></table></div>'
+            '<table id="productDetails_techSpec_section_1">'
+            '<tr><th>Color</th><td>Rojo</td></tr></table>')
+    record = {**parse_detail_page(html, ASIN), **RECORD}
+    valid, fields, anomalies = check_detail_fields(ASIN, record, {"status": "success"}, html, META)
+    assert valid
+    assert record["selected_variation_raw"] == "Azul"
+    assert {attr["value_raw"] for attr in record["attributes"] if attr["label_raw"] == "Color"} == {"Azul", "Rojo"}
+    assert fields["selected_variation_raw"]["state"] == EXTRACTED
+    assert {"field": "attributes", "code": "ATTRIBUTE_VARIANT_OR_ROLE_CONFLICT", "label": "color"} in anomalies
