@@ -29,7 +29,7 @@ class AuditLedger:
 
     def qa_version(self, stage):
         contract = self.workspace.manifest["audit_contract_version"]
-        return contract + ":detail-source-binding-v3" if stage == "detail" else contract
+        return contract + ":detail-source-binding-v4" if stage == "detail" else contract
 
     def record(self, *, stage, unit_id, digests, record, status, fields, anomalies,
                parser_version=None, qa_version=None, batch_id=None):
@@ -62,14 +62,14 @@ class AuditLedger:
                              [(digest, stage, unit_id, audit_id, status, parser, qa) for digest in digests])
         return audit_id
 
-    def lookup(self, stage, unit_id, record):
+    def lookup(self, stage, unit_id, record, *, require_current_qa=True):
         digest = sha256(canonical_json(record).encode("utf-8"))
         with self.workspace.transaction() as conn:
             row = conn.execute("""SELECT status FROM audit_current c JOIN audit_attempts a USING(audit_id)
                                   WHERE c.stage=? AND c.unit_id=? AND a.record_digest=?
-                                  AND a.parser_version=? AND a.qa_version=?""",
+                                  AND a.parser_version=? AND (a.qa_version=? OR ?)""",
                                (stage, unit_id, digest, self.workspace.manifest["parser_version"],
-                                self.qa_version(stage))).fetchone()
+                                self.qa_version(stage), not require_current_qa)).fetchone()
         return row["status"] if row else None
 
     def current(self, stage, *, pending_limit=None, current_versions=False):

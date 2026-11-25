@@ -685,6 +685,31 @@ def parse_detail_page(html: str, asin: str) -> dict:
     return _parse_detail_page_soup(BeautifulSoup(html or "", "lxml"), html or "", asin)
 
 
+def _brand_evidence(soup, attributes):
+    # 品牌（Byline，剥双前缀）
+    brand_raw = ""
+    brand_evidence = []
+    byline = soup.select_one("#bylineInfo")
+    if byline is not None and not _hidden(byline) and not _secondary_product(byline):
+        brand_raw = _evidence_text(byline)
+        brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
+        brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
+        brand_raw = _clean(brand_raw)
+        if brand_raw:
+            brand_evidence.append({'source': 'bylineInfo', 'value_raw': _evidence_text(byline)})
+    if not brand_raw:
+        # Some pages omit the byline but expose an explicit Marca row in the
+        # product-overview table.  This is reliable page evidence, unlike a
+        # title-prefix fallback (which is forbidden by the data rules).
+        for row in attributes:
+            if _attribute_label_key(row["label_raw"]) in {"marca", "brand"}:
+                brand_raw = row["value_raw"]
+                brand_evidence.append({'source': row['source'], 'label_raw': row['label_raw'],
+                                       'value_raw': row['value_raw']})
+                break
+    return brand_raw, brand_evidence
+
+
 def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
     """Internal parser entry used by V2 to share one DOM for one HTML page."""
     body = soup.find("body")
@@ -733,30 +758,10 @@ def _parse_detail_page_soup(soup, html: str, asin: str) -> dict:
                       or bool(re.search(r"Vendido y enviado por Amazon|Vendido por Amazon", buybox_text)))
     fulfilled_by_amazon = bool(re.search(r"Enviado por Amazon|Vendido y enviado por Amazon", buybox_text))
 
-    # 品牌（Byline，剥双前缀）
-    brand_raw = ""
-    brand_evidence = []
-    byline = soup.select_one("#bylineInfo")
-    if byline is not None and not _hidden(byline) and not _secondary_product(byline):
-        brand_raw = _evidence_text(byline)
-        brand_raw = re.sub(r"^Visita la tienda de\s*", "", brand_raw, flags=re.I)
-        brand_raw = re.sub(r"^Marca:\s*", "", brand_raw, flags=re.I)
-        brand_raw = _clean(brand_raw)
-        if brand_raw:
-            brand_evidence.append({'source': 'bylineInfo', 'value_raw': _evidence_text(byline)})
     attributes = _collect_attributes(soup)
     comparison_attributes, comparison_visuals = _current_model_comparison_attributes(soup, asin)
     attributes.extend(comparison_attributes)
-    if not brand_raw:
-        # Some pages omit the byline but expose an explicit Marca row in the
-        # product-overview table.  This is reliable page evidence, unlike a
-        # title-prefix fallback (which is forbidden by the data rules).
-        for row in attributes:
-            if _attribute_label_key(row["label_raw"]) in {"marca", "brand"}:
-                brand_raw = row["value_raw"]
-                brand_evidence.append({'source': row['source'], 'label_raw': row['label_raw'],
-                                       'value_raw': row['value_raw']})
-                break
+    brand_raw, brand_evidence = _brand_evidence(soup, attributes)
     manufacturer_raw = next((row["value_raw"] for row in attributes
         if _attribute_label_key(row["label_raw"]) in {"fabricante", "manufacturer"}), "")
 

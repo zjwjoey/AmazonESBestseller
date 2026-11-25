@@ -109,7 +109,13 @@ def test_offline_resume_uses_archived_audit_and_rechecks_changed_source(tmp_path
         assert run()["completed_count"] == 1
         html.rename(source / "retired.txt")
         assert run()["completed_count"] == 1
-    assert finalize_task(workspace.root)["state"] == "QUALITY_REVIEW_COMPLETE"
+        version = AuditLedger.qa_version
+        offline_resume.setattr(AuditLedger, "qa_version",
+                               lambda self, stage: version(self, stage) + ":updated-rule")
+        assert run()["completed_count"] == 1
+        assert finalize_task(workspace.root)["state"] == "QUALITY_REVIEW_COMPLETE"
+        with workspace.transaction() as connection:
+            assert connection.execute("SELECT count(*) FROM audit_attempts").fetchone()[0] == 2
     ledger = AuditLedger(workspace)
     assert ledger.current("detail")[0]["status"] == "PASS"
     html.write_text('<input id="ASIN" value="B000000002"><h1 id="productTitle">Otro producto</h1>', encoding="utf8")

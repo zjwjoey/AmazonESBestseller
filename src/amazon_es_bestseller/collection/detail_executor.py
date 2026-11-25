@@ -202,11 +202,11 @@ def execute_detail_plan(plan: Mapping, session, out_dir: str, *, collector: Call
         if data is not None and (hashlib.sha256(data).hexdigest() != source_hash
                                  or meta != checkpoint.get("capture_meta")):
             return None
-        if not coordinator.ledger.lookup("detail", asin, checkpoint_payload(checkpoint)):
+        if not coordinator.ledger.lookup("detail", asin, checkpoint_payload(checkpoint), require_current_qa=False):
             return None
         # A checkpoint cannot cover a lost or damaged shared archive.
-        read_evidence(reference["path"], source_hash)
-        return coordinator.accept(asin, checkpoint)
+        archived_bytes = read_evidence(reference["path"], source_hash)
+        return coordinator.accept(asin, checkpoint, evidence_bytes=archived_bytes)
 
     verified_handoffs = []
     handed_off = {}

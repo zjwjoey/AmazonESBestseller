@@ -10,7 +10,7 @@ from ..access.detector import AccessState, detect_access_status
 from ..identity import asin_from_url
 from ..models import is_valid_asin
 from .detail import (
-    _attribute_label_key, _collect_attributes, _current_model_comparison_attributes,
+    _attribute_label_key, _brand_evidence, _collect_attributes, _current_model_comparison_attributes,
     _feature_bullets_raw, _first_available_date_raw, _page_asin_candidates,
     _product_description_raw, _selected_variation, _seller_evidence, _text,
 )
@@ -87,14 +87,15 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
         anomalies.append({"field": "asin", "code": "DETAIL_IDENTITY_UNCONFIRMED"})
     field_source = dict.fromkeys(FIELDS)
     if normal and page_identity:
+        attributes = _collect_attributes(dom) + _current_model_comparison_attributes(dom, asin)[0]
         field_source.update({
             "asin": asin if identity else None,
             "title_es_raw": title,
             "feature_bullets_raw": _feature_bullets_raw(dom),
-            "attributes": _collect_attributes(dom) + _current_model_comparison_attributes(dom, asin)[0],
+            "attributes": attributes,
             "product_description_raw": _product_description_raw(dom, asin),
             "selected_variation_raw": _selected_variation(dom),
-            "brand_raw": _text(dom, "#bylineInfo") or _text(dom, "#productOverview_feature_div .po-brand"),
+            "brand_raw": _brand_evidence(dom, attributes)[0],
             "seller_raw": _seller_evidence(dom, html)[0],
             "date_first_available_raw": _first_available_date_raw(dom),
         })
@@ -105,12 +106,13 @@ def check_detail_fields(asin, record, checkpoint, html, meta):
         state = (_state(value, source, title=title if key == "product_description_raw" else "")
                  if key != "asin" else (EXTRACTED if identity and normal else UNKNOWN))
         source_present = _is_substantive(source, title if key == "product_description_raw" else "")
-        if key in (*KEY_FIELDS, "selected_variation_raw") and state == EXTRACTED:
+        if key != "asin" and state == EXTRACTED:
             observed = _evidence_values(key, source) if source_present else set()
             extracted = _evidence_values(key, value)
             if extracted - observed:
                 state = LOW_QUALITY
-                anomalies.append({"field": key, "code": "DETAIL_FIELD_NOT_BOUND_TO_SOURCE"})
+                if key in (*KEY_FIELDS, "selected_variation_raw"):
+                    anomalies.append({"field": key, "code": "DETAIL_FIELD_NOT_BOUND_TO_SOURCE"})
             elif observed - extracted:
                 state = PARSER_MISSED
         fields[key] = {"state": state, "eligible": eligible,

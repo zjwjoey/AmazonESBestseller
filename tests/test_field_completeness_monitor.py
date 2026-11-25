@@ -68,3 +68,17 @@ def test_informational_content_is_not_a_missing_product_description():
     for name in ("feature_bullets_raw", "product_description_raw", "selected_variation_raw", "seller_raw"):
         assert fields[name]["state"] == SOURCE_ABSENT
         assert not fields[name]["source_present"]
+
+
+def test_optional_fields_are_counted_only_when_source_bound():
+    html = (PRODUCT + '<div id="productOverview_feature_div"><table>'
+            '<tr><td>Marca</td><td>Marca real</td></tr></table></div>')
+    candidates = {**RECORD, "brand_raw": "Marca real", "seller_raw": "Vendedor inventado"}
+    valid, fields, _ = check_detail_fields(ASIN, candidates, {"status": "success"}, html, META)
+    assert valid
+    assert fields["brand_raw"]["source_present"]
+    assert fields["brand_raw"]["state"] == EXTRACTED
+    assert fields["seller_raw"]["state"] == LOW_QUALITY
+    stats = FieldCompletenessMonitor(DEFAULT_THRESHOLDS).summarize([{"fields": fields}])
+    assert stats["brand_raw"]["effective_extraction_rate"] == 1
+    assert stats["seller_raw"]["extracted_count"] == 0
