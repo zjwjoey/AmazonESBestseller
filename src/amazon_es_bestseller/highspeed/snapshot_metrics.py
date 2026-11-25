@@ -107,10 +107,17 @@ class SnapshotMetricsIndex:
 
 def update_from_store(index, store, run_id, cursor):
     import json
-    pages = {p['page_key']: p for p in store.pages(run_id)}
     rows = []
-    for row in store.db.execute('SELECT rowid,data_json,page_key FROM observations WHERE run_id=? AND rowid>? ORDER BY rowid', (run_id,cursor)):
-        cursor = row[0]; value=json.loads(row[1]); page=pages.get(row[2],{})
+    page = {}
+    last_page = None
+    for row in store.db.execute("""SELECT o.rowid,o.data_json,o.page_key,p.data_json
+        FROM observations o LEFT JOIN pages p ON p.run_id=o.run_id AND p.page_key=o.page_key
+        WHERE o.run_id=? AND o.rowid>? ORDER BY o.rowid""", (run_id, cursor)):
+        cursor = row[0]
+        value = json.loads(row[1])
+        if row[2] != last_page:
+            page = json.loads(row[3]) if row[3] else {}
+            last_page = row[2]
         value.setdefault('source_evidence_eligible', page.get('access_status')=='NORMAL' and
             page.get('source_type_verified') is True and page.get('source_context_valid') is True)
         if value['source_evidence_eligible'] is False:value['target_eligible']=False

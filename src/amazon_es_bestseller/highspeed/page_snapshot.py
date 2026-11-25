@@ -124,6 +124,8 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         if getattr(self, '_page_audit', None):
             status = self._page_audit.check(plan, page, observations, require_live=require_live)
             if status == 'FAIL':
+                self.store.update_run(plan['run_id'],
+                    snapshot_page_audit_counts=self._page_audit.progress_counts(plan['run_id']))
                 raise ValueError('SNAPSHOT_PAGE_AUDIT_FAILED:' + page['page_key'])
             return True
         return False
@@ -304,13 +306,18 @@ class CurrentPageSnapshotRunner(V4T1Runner):
                       and u==parsed['committed_page']['page_url'])
         if metrics['sources']['CUSTOMER_FAVORITES']['A_raw_observations']:
             promote_favorite_page(self._work,position,minimum_met=metrics['sources']['CUSTOMER_FAVORITES']['target_met'])
-        self.store.update_run(plan['run_id'],snapshot_metrics=metrics)
         progress={'run_id':plan['run_id'],'observed_at':utc_text(self.engine.clock()),'metrics':metrics,
                   'source_id':source['source_id'],'page_url':parsed['committed_page']['page_url'],
                   'phase':'CAPTURING','status':'RUNNING','source_complete':False}
-        if getattr(self, '_metrics_index', None) is not None and getattr(self, '_page_audit', None):
-            progress['snapshot_quality_signals'] = self._metrics_index.quality_signals()
+        run_updates = {'snapshot_metrics': metrics}
+        if getattr(self, '_page_audit', None):
+            counts = self._page_audit.progress_counts(plan['run_id'])
+            progress['snapshot_page_audit_counts'] = counts
+            run_updates['snapshot_page_audit_counts'] = counts
             progress['last_page_audit_seconds'] = getattr(self._page_audit, 'last_audit_seconds', None)
+            if getattr(self, '_metrics_index', None) is not None:
+                progress['snapshot_quality_signals'] = self._metrics_index.quality_signals()
+        self.store.update_run(plan['run_id'], **run_updates)
         atomic_json(self.store.root/'snapshot_progress.json',progress)
         print('SNAPSHOT_PROGRESS qualified=%d target=%d favorites=%d/%d' %
               (metrics['F_global_conservative_review_groups'],metrics['global_target'],

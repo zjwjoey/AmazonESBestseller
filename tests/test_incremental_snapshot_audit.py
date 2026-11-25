@@ -35,6 +35,7 @@ def test_single_page_replay_is_idempotent_and_new_bytes_are_rechecked(tmp_path, 
     page, rows = capture(body)
     assert audit.check(plan, page, rows, require_live=False) in {"PASS", "WARN"}, audit.coverage(plan, [page])
     assert audit.check(plan, page, rows, require_live=False) in {"PASS", "WARN"}, audit.coverage(plan, [page])
+    assert sum(audit.progress_counts(plan["run_id"]).values()) == 1
     assert audit.coverage(plan, [page])["central_full_dom_review_passed"]
     changed, changed_rows = capture(body + "<!-- second capture -->")
     assert not audit.coverage(plan, [changed])["central_full_dom_review_passed"]
@@ -44,8 +45,38 @@ def test_single_page_replay_is_idempotent_and_new_bytes_are_rechecked(tmp_path, 
     invalid[0]["product_title_es"] = "Título distinto de la evidencia"
     assert audit.check(plan, changed, invalid, require_live=False) == "FAIL"
     assert not audit.coverage(plan, [changed])["central_full_dom_review_passed"]
+    assert audit.progress_counts(plan["run_id"]) == {"PASS": 0, "WARN": 0, "FAIL": 1}
+    assert SnapshotPageAudit(workspace).progress_counts(plan["run_id"]) == audit.progress_counts(plan["run_id"])
     assert checked == [1, 1, 1]
     assert audit.ledger.evidence.archive_stats(verify=True)["files"] == 2
+
+
+def test_snapshot_metrics_reads_only_new_observations_and_their_parent_pages():
+    import json
+    import sqlite3
+    from contextlib import closing
+    from types import SimpleNamespace
+
+    from amazon_es_bestseller.highspeed.snapshot_metrics import update_from_store
+
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.executescript("""
+            CREATE TABLE pages (run_id TEXT, page_key TEXT, data_json TEXT, PRIMARY KEY(run_id,page_key));
+            CREATE TABLE observations (run_id TEXT, page_key TEXT, data_json TEXT);
+            INSERT INTO pages VALUES ('run','previous','not a JSON document');
+            INSERT INTO observations VALUES ('run','previous','not a JSON document');
+        """)
+        eligible_page = json.dumps({
+            "access_status": "NORMAL", "source_type_verified": True, "source_context_valid": True,
+        })
+        db.execute("INSERT INTO pages VALUES ('run','new',?)", (eligible_page,))
+        db.execute("INSERT INTO observations VALUES ('run','new','{}')")
+        db.execute("INSERT INTO observations VALUES ('run','missing','{}')")
+        captured = []
+        cursor = update_from_store(SimpleNamespace(add=captured.extend), SimpleNamespace(db=db), "run", 1)
+        assert cursor == 3
+        assert captured == [{"source_evidence_eligible": True},
+                            {"source_evidence_eligible": False, "target_eligible": False}]
 
 def test_final_snapshot_receipt_reconciliation_uses_sealed_records_not_dom(tmp_path):
     from types import SimpleNamespace

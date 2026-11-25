@@ -26,9 +26,25 @@ class SnapshotPageAudit:
     def __init__(self, workspace):
         self.workspace = workspace
         self.ledger = AuditLedger(workspace)
+        self._progress_runs = {}
+
+    def _progress(self, run_id):
+        if run_id not in self._progress_runs:
+            prefix = run_id + ":"
+            statuses = {row["unit_id"]: row["status"] for row in self.ledger.current("snapshot")
+                        if row["unit_id"].startswith(prefix)
+                        and row["qa_version"] == self.ledger.qa_version("snapshot")}
+            self._progress_runs[run_id] = statuses, Counter(statuses.values())
+        return self._progress_runs[run_id]
+
+    def progress_counts(self, run_id):
+        _, counts = self._progress(run_id)
+        return {status: counts[status] for status in ("PASS", "WARN", "FAIL")}
 
     def check(self, plan, page, observations, *, require_live=True):
-        unit_id = plan["run_id"] + ":" + page["page_key"]
+        run_id = plan["run_id"]
+        unit_id = run_id + ":" + page["page_key"]
+        statuses, counts = self._progress(run_id)
         parser = page.get("parser_version") or self.workspace.manifest["parser_version"]
         version = self.workspace.manifest["audit_contract_version"]
         digests = page_evidence_digests(page)
@@ -72,6 +88,10 @@ class SnapshotPageAudit:
 
                     "live_origin_required": require_live},
             anomalies=result["errors"], parser_version=parser, qa_version=version)
+        if unit_id in statuses:
+            counts[statuses[unit_id]] -= 1
+        statuses[unit_id] = status
+        counts[status] += 1
         for digest in digests:
             self.ledger.evidence.archive(digest)
         self.last_audit_seconds = perf_counter() - started
