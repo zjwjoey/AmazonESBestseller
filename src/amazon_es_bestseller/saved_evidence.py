@@ -7,6 +7,8 @@ from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
+from .evidence_store import evidence_path, read_evidence
+
 
 class SavedEvidenceChanged(RuntimeError):
     """An input changed while the audit was using it; never reuse stale bytes."""
@@ -27,10 +29,12 @@ def html_asin(html: str) -> str:
 class SavedHtmlIndex:
     """No persistent cache: directory index, hashes and a bounded body LRU."""
 
-    def __init__(self, roots=None, *, max_bodies: int = 8, progress=None):
+    def __init__(self, roots=None, *, max_bodies: int = 8, max_body_bytes: int = 128 * 1024 ** 2, progress=None):
         roots = [roots] if isinstance(roots, (str, Path)) else list(roots or [])
         self.roots = [Path(root) for root in roots]
         self.max_bodies = max(1, max_bodies)
+        self.max_body_bytes = max(0, max_body_bytes)
+        self.body_bytes = 0
         self._paths = None
         self._bodies = OrderedDict()
         self._signatures = {}
@@ -43,7 +47,9 @@ class SavedHtmlIndex:
         if self._paths is None:
             paths = []
             for root in self.roots:
-                paths.extend(sorted(root.rglob("*.html")) if root.is_dir() else [root])
+                paths.extend(sorted(p for p in root.rglob("*")
+                                    if p.name.endswith((".html", ".html.gz")))
+                             if root.is_dir() else [root])
             self._paths = list(dict.fromkeys(paths))
         return self._paths
 
@@ -54,14 +60,15 @@ class SavedHtmlIndex:
 
     def read(self, path):
         path = Path(path).resolve()
-        before = self._signature(path)
+        resolved = evidence_path(path)
+        before = self._signature(resolved)
         if path in self._signatures and before != self._signatures[path]:
             raise SavedEvidenceChanged("Saved evidence changed during audit: %s" % path)
         if path in self._bodies:
             self._bodies.move_to_end(path)
-            return self._bodies[path]
-        body = path.read_bytes()
-        if self._signature(path) != before:
+            return self._bodies[path][0]
+        body = read_evidence(path)
+        if self._signature(evidence_path(path)) != before:
             raise SavedEvidenceChanged("Saved evidence changed during read: %s" % path)
         self.read_count += 1
         self._signatures[path] = before
@@ -70,9 +77,15 @@ class SavedHtmlIndex:
             raise SavedEvidenceChanged("Saved evidence hash changed during audit: %s" % path)
         self.sha256[path] = digest
         text = body.decode("utf-8", errors="replace")
-        self._bodies[path] = text
-        if len(self._bodies) > self.max_bodies:
-            self._bodies.popitem(last=False)
+        # Charge both source bytes and the actual decoded string allocation.
+        from sys import getsizeof
+        size = max(len(body), getsizeof(text))
+        if size <= self.max_body_bytes:
+            self._bodies[path] = (text, size)
+            self.body_bytes += size
+            while len(self._bodies) > self.max_bodies or self.body_bytes > self.max_body_bytes:
+                _, (_, evicted) = self._bodies.popitem(last=False)
+                self.body_bytes -= evicted
         return text
 
     def detail_paths(self, asins=None, *, prefer_filename=False):
@@ -85,7 +98,8 @@ class SavedHtmlIndex:
                 if self.progress:
                     self.progress({"event": "progress", "check": "evidence_index",
                                    "completed": position, "total": len(paths)})
-                named = path.stem.upper() if re.fullmatch(r"[A-Z0-9]{10}", path.stem, re.I) else ""
+                stem = path.name.removesuffix(".gz").removesuffix(".html")
+                named = stem.upper() if re.fullmatch(r"[A-Z0-9]{10}", stem, re.I) else ""
                 if selected and named and named not in selected:
                     continue
                 if named and prefer_filename:
