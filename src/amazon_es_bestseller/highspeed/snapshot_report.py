@@ -17,6 +17,9 @@ from .v4_workflows import csv_bytes
 from .snapshot_control import stop_category, pause_pending
 
 
+from ..evidence_store import read_evidence
+
+
 def receipt_review(store, run):
     """Reconcile ALL reservations, including interrupted/failed non-page work."""
     errors = []
@@ -84,7 +87,7 @@ def receipt_review(store, run):
             actual = dict(receipt); actual.pop('evidence_path', None)
             if saved != actual:
                 raise ValueError('RECEIPT_INDEX_CONTENT_MISMATCH')
-            body_path = Path(receipt['html_path']); body = body_path.read_bytes()
+            body_path = Path(receipt['html_path']); body = read_evidence(body_path)
             if hashlib.sha256(body).hexdigest() != receipt['sha256']:
                 raise ValueError('RECEIPT_BODY_SHA_MISMATCH')
             proofs.append({'path': str(body_path), 'sha256': receipt['sha256']})
@@ -150,7 +153,12 @@ def export_page_snapshot(store, run_id, output):
     loaded = time.perf_counter()
     from .v4_authorization import prerequisite_review_session
     with prerequisite_review_session():
-        quality = audit_v4(pages, rows, plan['sources'], require_live=True)
+        if plan.get('task_root'):
+            from ..task_workspace import TaskWorkspace
+            from .incremental_audit import SnapshotPageAudit
+            quality = SnapshotPageAudit(TaskWorkspace(plan['task_root'])).coverage(plan, pages)
+        else:
+            quality = audit_v4(pages, rows, plan['sources'], require_live=True)
         receipts = receipt_review(store, run)
     reviewed = time.perf_counter()
     metrics = measure_three(rows, run_id, target_policy=plan['target_policy'])

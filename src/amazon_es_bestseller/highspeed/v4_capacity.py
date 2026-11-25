@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from ..evidence_store import read_evidence
 from ..multisource.storage import read_sealed, digest
 from .budgets import aware_time, madrid_day
 from .v4_quality import audit_v4, build_candidates_v4
@@ -41,7 +42,7 @@ def audit_capacity(pages, observations, sources, execution, *, three_source=Fals
         for p in receipt_paths:
             r=read_sealed(p)
             if r['run_id']!=run_id or r['origin']!='LIVE_CAPTURE':raise ValueError('FOREIGN_RECEIPT')
-            if hashlib.sha256(Path(r['html_path']).read_bytes()).hexdigest()!=r['sha256']:
+            if hashlib.sha256(read_evidence(r['html_path'])).hexdigest()!=r['sha256']:
                 raise ValueError('RECEIPT_BODY_SHA_MISMATCH')
             receipts.append(r)
         if {r['request_id'] for r in receipts}!={r['request_id'] for r in reservations}:

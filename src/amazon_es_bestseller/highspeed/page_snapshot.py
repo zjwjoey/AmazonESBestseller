@@ -80,7 +80,51 @@ def validate_page_snapshot(plan):
 
 class CurrentPageSnapshotRunner(V4T1Runner):
     def before_central_review(self, plan):
-        self.store.update_run(plan['run_id'], snapshot_phase='FINAL_DOM_REVIEW')
+        phase = 'FINAL_LEDGER_RECONCILIATION' if getattr(self, '_page_audit', None) else 'FINAL_DOM_REVIEW'
+        self.store.update_run(plan['run_id'], snapshot_phase=phase)
+
+    def final_page_quality(self, plan, pages, rows):
+        if getattr(self, '_page_audit', None):
+            return self._page_audit.coverage(plan, pages)
+        return super().final_page_quality(plan, pages, rows)
+
+    def attach_workspace(self, plan):
+        self._page_audit = None
+        if not plan.get('task_root'):
+            return
+        from ..task_workspace import TaskWorkspace
+        from .incremental_audit import SnapshotPageAudit
+        workspace = TaskWorkspace(plan['task_root'])
+        if workspace.manifest['task_id'] != plan.get('task_id'):
+            raise ValueError('SNAPSHOT_TASK_ID_MISMATCH')
+        workspace.bind(snapshot_run_id=plan['run_id'])
+        self._page_audit = SnapshotPageAudit(workspace)
+        self.store.task_evidence = self._page_audit.ledger.evidence
+
+    def recover_page_audits(self, plan):
+        if not getattr(self, '_page_audit', None):
+            return
+        pages = self.store.pages(plan['run_id'])
+        status = self._page_audit.coverage(plan, pages)
+        missing = {row['unit_id'] for row in status['errors'] if row.get('code') == 'PAGE_AUDIT_MISSING'}
+        for page in pages:
+            unit = plan['run_id'] + ':' + page['page_key']
+            if unit in missing:
+                saved = read_sealed(page['journal_path'])
+                if saved['run_id'] != plan['run_id'] or saved['page_key'] != page['page_key']:
+                    raise ValueError('PAGE_AUDIT_JOURNAL_BINDING')
+                self.audit_committed_page(plan, page, saved['observations'],
+                                          require_live=page.get('origin') != 'OFFLINE_FIXTURE')
+        evidence = self._page_audit.ledger.evidence
+        evidence.recover()
+
+    def audit_committed_page(self, plan, page, observations, *, require_live=True):
+        if getattr(self, '_page_audit', None):
+            status = self._page_audit.check(plan, page, observations, require_live=require_live)
+            if status == 'FAIL':
+                raise ValueError('SNAPSHOT_PAGE_AUDIT_FAILED:' + page['page_key'])
+            return True
+        return False
 
     def pause_requested(self, plan):
         from .snapshot_control import pause_pending
@@ -105,6 +149,8 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         return True
 
     def mark_run_running(self,plan):
+        self.attach_workspace(plan)
+        self.recover_page_audits(plan)
         from .snapshot_review import snapshot_review_fields,publish_snapshot_review
         self._metrics_index = None
         self._favorite_minimum_confirmed = False
@@ -220,6 +266,16 @@ class CurrentPageSnapshotRunner(V4T1Runner):
         return True
 
     def before_source(self,plan,source):
+        if getattr(self, '_page_audit', None):
+            from ..task_workspace import atomic_json
+            evidence = self._page_audit.ledger.evidence
+            capacity = evidence.capacity()
+            if capacity['state'] in {'COMPACT', 'PAUSE'}:
+                evidence.recover()
+                capacity = evidence.capacity()
+            atomic_json(evidence.workspace.root / 'cache' / 'cache_state.json', capacity)
+            if capacity['state'] == 'PAUSE':
+                raise ValueError('ACTIVE_CACHE_HARD_LIMIT')
         key=source['collection_category_key']
         schedule={'current':key,'next':None,'deadline':None}
         self.store.update_run(plan['run_id'],category_schedule=schedule,snapshot_phase='CAPTURING')
@@ -232,6 +288,8 @@ class CurrentPageSnapshotRunner(V4T1Runner):
 
     def after_page(self,plan,source,key,parsed):
         self._admit_navigation(plan,source,key,parsed)
+        self.audit_committed_page(plan, parsed['committed_page'], parsed['observations'],
+                                  require_live=parsed['committed_page'].get('origin') != 'OFFLINE_FIXTURE')
         self._target_quantity_confirmed = False
         if getattr(self, '_metrics_index', None) is not None:
             from .snapshot_metrics import update_from_store

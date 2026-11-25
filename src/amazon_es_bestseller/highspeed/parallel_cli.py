@@ -91,6 +91,8 @@ def _main(argv=None):
     try:
         with store.run_lock(plan['run_id']),file_lock(Path(plan['shared_access_gate_path']).parent/'highspeed_live.lock'):
             check_parallel_start(runner,plan,auth,amendment,manifest,code_root=args.code_root,now=runner.engine.clock())
+            runner.attach_workspace(plan)
+            runner.recover_page_audits(plan)
             queue=load_parallel_checkpoint(runner,plan,auth,store.root/'parallel_queue.sqlite',now=runner.engine.clock())
             if queue.snapshot()['config'][0] not in {None,'USER_PAUSED'}:
                 raise ValueError('QUEUE_STOP_REQUIRES_SEPARATE_HUMAN_HANDLING')
@@ -130,11 +132,10 @@ def _main(argv=None):
             # final audit. A review failure must not leave a dead run RUNNING.
             store.update_run(plan['run_id'],status='STOPPED',stop_reason=result['stop_reason'] or 'SOURCE_SCOPE_EXHAUSTED',
                 finished_at=utc_text(),quality_gate_passed=False)
-            from .v4_quality import audit_v4
             from .three_metrics import measure_three
             from .snapshot_review import snapshot_review_fields,publish_snapshot_review
             pages=store.pages(plan['run_id']);rows=list(store.iter_observations(plan['run_id']))
-            qa=audit_v4(pages,rows,plan['sources'],require_live=True)
+            qa=runner.final_page_quality(plan,pages,rows)
             run=store.update_run(plan['run_id'],status='STOPPED',stop_reason=result['stop_reason'] or 'SOURCE_SCOPE_EXHAUSTED',
                 finished_at=utc_text(),qa=qa)
             metrics=measure_three(rows,plan['run_id'],target_policy=plan['target_policy'])

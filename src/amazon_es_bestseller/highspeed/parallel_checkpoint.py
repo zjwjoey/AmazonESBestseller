@@ -1,6 +1,7 @@
 """Import/reopen a PAGE queue without changing the sealed plan or task clock."""
 import hashlib,json,sqlite3
 from pathlib import Path
+from ..evidence_store import read_evidence
 from collections import Counter
 from .parallel_page_ledger import ParallelPageLedger
 from .budgets import aware_time
@@ -21,7 +22,7 @@ def load_parallel_checkpoint(runner,plan,authorization,path,*,now):
     for r in receipts:
         if r['access_state']!='NORMAL' or r['status_code']!=200:
             raise ValueError('HISTORICAL_ACCESS_STOP_REQUIRES_HANDLING')
-        if hashlib.sha256(Path(r['html_path']).read_bytes()).hexdigest()!=r['sha256']:
+        if hashlib.sha256(read_evidence(r['html_path'])).hexdigest()!=r['sha256']:
             raise ValueError('RESPONSE_EVIDENCE_CORRUPT')
     from .v4_quality import audit_v4
     quality=audit_v4(pages,list(store.iter_observations(plan['run_id'])),plan['sources'],require_live=True)

@@ -59,6 +59,9 @@ def _plan_normalizer_version(plan, *, validate_evidence=True):
     return NORMALIZER_VERSION
 
 
+from ..evidence_store import read_evidence
+
+
 class RunStore:
     def normalizer_version(self, run_id):
         # Plans are immutable. Cache only their resolver selection, avoiding a
@@ -283,6 +286,10 @@ class RunStore:
 
     def save_html(self, html):
         data = html.encode("utf-8") if isinstance(html, str) else bytes(html)
+        if getattr(self, "task_evidence", None) is not None:
+            path, hashed = self.task_evidence.save(data)
+            return {"evidence_path": str(path), "html_path": str(path),
+                    "sha256": hashed, "evidence_sha256": hashed}
         hashed = digest(data)
         path = self.root / "html" / hashed[:2] / (hashed + ".html")
         immutable_bytes(path, data)
@@ -369,7 +376,7 @@ class RunStore:
         for row in self.db.execute("SELECT data_json FROM responses WHERE run_id=?", (run_id,)):
             value = json.loads(row[0])
             if with_body:
-                data = Path(value["html_path"]).read_bytes()
+                data = read_evidence(value["html_path"])
                 if digest(data) != value["sha256"]:
                     raise ValueError("HIGH_SPEED_RESPONSE_EVIDENCE_CORRUPT")
                 value["text"] = value["body"] = data.decode("utf-8")
@@ -393,7 +400,7 @@ class RunStore:
             return None
         value = json.loads(row[0])
         if with_body:
-            data = Path(value["html_path"]).read_bytes()
+            data = read_evidence(value["html_path"])
             if digest(data) != value["sha256"]:
                 raise ValueError("HIGH_SPEED_RESPONSE_EVIDENCE_CORRUPT")
             value["text"] = value["body"] = data.decode("utf-8")
@@ -506,7 +513,7 @@ class RunStore:
                 (value["request_id"], run_id, value["kind"], value["local_day"], value["observed_at"], "RESERVED", _json(value)))
         for path in (directory / "responses").glob("*.json"):
             value = read_sealed(path)
-            data = Path(value["html_path"]).read_bytes()
+            data = read_evidence(value["html_path"])
             if digest(data) != value["sha256"]:
                 raise ValueError("HIGH_SPEED_RESPONSE_EVIDENCE_CORRUPT")
             with self._transaction():
@@ -516,7 +523,7 @@ class RunStore:
             value = read_sealed(path)
             page = value["page"]
             if page.get("evidence_path") and page.get("evidence_sha256"):
-                if digest(Path(page["evidence_path"]).read_bytes()) != page["evidence_sha256"]:
+                if digest(read_evidence(page["evidence_path"])) != page["evidence_sha256"]:
                     raise ValueError("HIGH_SPEED_PAGE_EVIDENCE_CORRUPT")
             self._index_page(value, path, plan)
             self.db.execute("DELETE FROM pending_pages WHERE run_id=? AND journal_path=?", (run_id,str(path)))

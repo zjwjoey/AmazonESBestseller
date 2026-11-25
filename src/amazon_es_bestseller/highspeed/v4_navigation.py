@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from ..evidence_store import evidence_path, read_evidence
 from urllib.parse import urljoin, urlsplit, parse_qs, unquote_plus
 
 from bs4 import BeautifulSoup
@@ -52,10 +53,10 @@ def verify_pagination_reference(reference, source, *, parent_page_url=None):
     Plans must additionally validate the complete ordered evidence chain.
     """
     path=Path(reference['evidence_path'])
-    if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['evidence_sha256']:
+    if hashlib.sha256(read_evidence(path)).hexdigest()!=reference['evidence_sha256']:
         raise ValueError('V4_PAGINATION_EVIDENCE_SHA_MISMATCH')
     parent=reference['page_url']; url=reference['url']
-    soup=BeautifulSoup(path.read_bytes(),'lxml')
+    soup=BeautifulSoup(read_evidence(path),'lxml')
     anchors=[a for a in soup.select('a.s-pagination-next[href], .a-pagination a[href]')
              if a['href']==reference['raw_href'] and a.get_text(' ',strip=True)==reference['label_raw']]
     expected_parent = source['actual_source_url'] if parent_page_url is None else parent_page_url
@@ -94,12 +95,12 @@ def verify_pagination_chain(source):
 def verify_discovered_source(source):
     e = source.get('navigation_evidence') or {}
     path = Path(e.get('evidence_path') or '__missing__')
-    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != e.get('evidence_sha256'):
+    if not evidence_path(path).is_file() or hashlib.sha256(read_evidence(path)).hexdigest() != e.get('evidence_sha256'):
         raise ValueError('V4_NAVIGATION_DOM_EVIDENCE_REQUIRED')
     url = source['actual_source_url']; parent = e.get('page_url', '')
     if not amazon_url(parent) or not amazon_url(url) or urljoin(parent, e.get('raw_href', '')) != url:
         raise ValueError('V4_EXACT_DISCOVERED_HREF_REQUIRED')
-    soup = BeautifulSoup(path.read_bytes(), 'lxml')
+    soup = BeautifulSoup(read_evidence(path), 'lxml')
     matches = [a for a in soup.select('a[href]') if a['href'] == e.get('raw_href')]
     if not matches or not any(a.get_text(' ', strip=True) == e.get('label_raw') for a in matches):
         raise ValueError('V4_NAVIGATION_NOT_PRESENT_IN_DOM')

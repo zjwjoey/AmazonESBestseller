@@ -6,6 +6,7 @@ anything, approves discovered destinations, or treats facets as categories.
 from copy import deepcopy
 import hashlib
 from pathlib import Path
+from ..evidence_store import read_evidence
 import re
 from urllib.parse import urljoin, urlsplit, urlunsplit, parse_qs
 from bs4 import BeautifulSoup
@@ -32,7 +33,7 @@ def category_key(url):
 
 
 def _body(page):
-    body = Path(page['evidence_path']).read_bytes()
+    body = read_evidence(page['evidence_path'])
     if hashlib.sha256(body).hexdigest() != page['evidence_sha256']:
         raise ValueError('THREE_NAV_HTML_SHA_MISMATCH')
     return BeautifulSoup(body, 'lxml')
@@ -69,7 +70,7 @@ def _source_context(source,page_url):
 
 
 def _check_dependency(reference):
-    if hashlib.sha256(Path(reference['evidence_path']).read_bytes()).hexdigest()!=reference['evidence_sha256']:
+    if hashlib.sha256(read_evidence(reference['evidence_path'])).hexdigest()!=reference['evidence_sha256']:
         raise ValueError('THREE_NAV_HTML_SHA_MISMATCH')
 
 

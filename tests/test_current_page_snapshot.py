@@ -140,6 +140,9 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
                   'max_requests_per_run','max_requests_per_day','max_pages_per_run','source_budgets'):auth[k]=deepcopy(plan[k])
         if profile=='main-priority-50000':
             plan['snapshot_field_contract']=auth['snapshot_field_contract']='CARD_IMAGE_V1'
+            from amazon_es_bestseller.task_workspace import TaskWorkspace
+            workspace = TaskWorkspace.create(tmp_path / 'managed', 'managed-task')
+            plan.update(task_id='managed-task', task_root=str(workspace.root))
         auth.update(plan_sha256=digest(plan),expires_at=(NOW+timedelta(hours=24)).isoformat(),
             task_clock_reference=start_task_clock(plan['task_clock_path'],plan,'TEST_ONLY',now=NOW),sources={})
         for source in sources:
@@ -205,6 +208,12 @@ def test_page_task_replays_uncommitted_receipt_without_repeat_or_legacy_pass(tmp
             calls_after_resume=len(transport.calls)
             assert transport.calls.count(fav['actual_source_url'])==1
             assert result['quality']['central_full_dom_review_passed'],result['quality']['errors'][:3]
+            if plan.get('task_root'):
+                from amazon_es_bestseller.audit_ledger import AuditLedger
+                ledger = AuditLedger(workspace)
+                assert result['quality']['review_status'] == 'INCREMENTAL_LEDGER_RECONCILED'
+                assert len(ledger.current('snapshot')) == len(store.pages(plan['run_id']))
+                assert ledger.evidence.archive_stats(verify=True)['errors'] == []
             replayed=next(p for p in store.pages(plan['run_id']) if p['source_type']=='CUSTOMER_FAVORITES')
             assert replayed['capture_receipt_reference']==ref(receipt_path)
             assert result['snapshot_metrics']['sources']['CUSTOMER_FAVORITES']['E_qualified_review_groups']>0

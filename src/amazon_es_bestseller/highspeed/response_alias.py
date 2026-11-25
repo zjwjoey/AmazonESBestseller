@@ -1,6 +1,7 @@
 """Explicit, literal response aliases. Never authorize an extra initial URL."""
 import hashlib,json
 from pathlib import Path
+from ..evidence_store import read_evidence
 from bs4 import BeautifulSoup
 from .budgets import aware_time,utc_text
 from .v4_authorization import authorize_v4_request
@@ -32,7 +33,7 @@ def _body(receipt,source,alias):
             or receipt.get('request_url')!=alias['initial_url'] or receipt.get('final_url')!=alias['final_url']
             or receipt.get('source_id')!=source['source_id'] or receipt.get('run_id')!=alias['run_id']):
         raise ValueError('ACTUAL_NORMAL_ALIAS_RECEIPT_REQUIRED')
-    body=Path(receipt['html_path']).read_bytes()
+    body=read_evidence(receipt['html_path'])
     if hashlib.sha256(body).hexdigest()!=receipt['sha256']:raise ValueError('ALIAS_BODY_SHA_MISMATCH')
     if detect_access_status(200,body.decode('utf8')).value!='NORMAL':raise ValueError('ALIAS_ACCESS_NOT_NORMAL')
     soup=BeautifulSoup(body,'lxml')
@@ -111,7 +112,7 @@ def restore_reviewed_alias_gate(store,plan,auth):
             check=read_sealed(evidence['normal_verification_receipt'])
             if (previous.get('state')!='NORMAL' or check.get('status_code')!=200 or check.get('access_state')!='NORMAL'
                     or check.get('run_id')!=plan['run_id'] or check.get('origin')!='LIVE_CAPTURE'
-                    or hashlib.sha256(Path(check['html_path']).read_bytes()).hexdigest()!=check['sha256']):
+                    or hashlib.sha256(read_evidence(check['html_path'])).hexdigest()!=check['sha256']):
                 raise ValueError('PRIOR_NETWORK_HANDLING_PROOF_REQUIRED')
         failures={q['request_id'] for q in store.requests(plan['run_id']) if q['status'] not in {'NORMAL','RESERVED'}}
         if failures-set(handled):raise ValueError('UNHANDLED_ACCESS_FAILURE_NOT_SCOPE_ALIAS')

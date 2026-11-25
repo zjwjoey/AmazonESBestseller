@@ -16,6 +16,7 @@ from .budgets import utc_text, aware_time, budget_reason
 from .v4_authorization import validate_v4_authorization
 from .v4_adapters import parse_v4_page
 from .v4_sources import RANKED
+from ..evidence_store import read_evidence
 from .v4_quality import audit_v4
 
 
@@ -277,7 +278,7 @@ class V4T1Runner:
             deferred=self.defer_central_review_to_capacity()
             quality = ({'central_full_dom_review_passed':False,'errors':[],
                 'review_status':'PENDING_COMBINED_CAPACITY_REVIEW'} if deferred else
-                audit_v4(pages, rows, plan['sources'], require_live=True))
+                self.final_page_quality(plan, pages, rows))
             from .v4_coverage import loading_coverage
             loading=loading_coverage(pages,plan['sources']) if quality['central_full_dom_review_passed'] and self.stage!='T3' and plan.get('collection_contract')!='CURRENT_THREE_SOURCE_PAGE_SNAPSHOT_V1' else None
             self.store.append_event(run_id, {'kind': 'V4_CENTRAL_DOM_REVIEW_DEFERRED' if deferred else 'V4_CENTRAL_DOM_REVIEW',
@@ -292,7 +293,7 @@ class V4T1Runner:
 
     @staticmethod
     def _acp(receipt):
-        return {**receipt, 'body': Path(receipt['html_path']).read_text(encoding='utf8'),
+        return {**receipt, 'body': read_evidence(receipt['html_path'], receipt['sha256']).decode('utf8'),
                 'evidence_path': receipt['html_path'], 'evidence_sha256': receipt['sha256']}
 
     def should_collect_source(self,plan,source):
@@ -324,6 +325,9 @@ class V4T1Runner:
 
     def defer_central_review_to_capacity(self):
         return False
+
+    def final_page_quality(self, plan, pages, rows):
+        return audit_v4(pages, rows, plan['sources'], require_live=True)
 
     def _record_approval(self,plan,authorization):
         pass

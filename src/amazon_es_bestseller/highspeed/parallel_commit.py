@@ -9,6 +9,7 @@ from ..multisource.storage import digest
 from ..access.detector import detect_access_status
 from ..access.location import inspect_delivery_location
 from .v4_adapters import parse_v4_page
+from ..evidence_store import read_evidence
 from .v4_quality import audit_v4
 
 
@@ -73,12 +74,13 @@ class ParallelSnapshotCommitter:
             # Discovered children remain bound to the original approved roots.
             # Supplying only the child loses snapshot_admission_root authority
             # and prevents the central audit from replaying genuine pages.
-            quality=audit_v4([page],parsed['observations'],plan['sources'],require_live=not self.fixture_mode)
-            if not quality['central_full_dom_review_passed']:
-                raise ValueError('PARALLEL_PAGE_DOM_REVIEW_FAILED:'+str(quality['errors'][:2]))
+            if not getattr(self.runner, '_page_audit', None):
+                quality=audit_v4([page],parsed['observations'],plan['sources'],require_live=not self.fixture_mode)
+                if not quality['central_full_dom_review_passed']:
+                    raise ValueError('PARALLEL_PAGE_DOM_REVIEW_FAILED:'+str(quality['errors'][:2]))
             self.runner.after_page(plan,source,item['page_key'],parsed)
             self.queue.replay_committed(url,receipt['sha256'],verify=lambda u,h:
-                u==url and h==receipt['sha256'] and hashlib.sha256(Path(receipt['html_path']).read_bytes()).hexdigest()==h)
+                u==url and h==receipt['sha256'] and hashlib.sha256(read_evidence(receipt['html_path'])).hexdigest()==h)
             return receipt
         except BaseException:
             self.stop('PAGE_COMMIT_OR_REVIEW_FAILURE')

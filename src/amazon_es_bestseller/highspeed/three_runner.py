@@ -1,6 +1,7 @@
 """Three-source scheduling through the verified serial V4 receipt engine."""
 import hashlib
 from pathlib import Path
+from ..evidence_store import read_evidence
 from ..multisource.storage import immutable_json
 from .three_navigation import CONTRACT, discover_navigation
 from .three_contract import validate_three_plan
@@ -104,7 +105,7 @@ class V4ThreeSourceRunner(V4T2Runner):
                 or page.get('legacy_page',{}).get('expected_count')):
             return False
         from bs4 import BeautifulSoup
-        soup=BeautifulSoup(Path(page['evidence_path']).read_bytes(),'lxml')
+        soup=BeautifulSoup(read_evidence(page['evidence_path']),'lxml')
         from .v4_frontier import _excluded
         if any(not _excluded(n) for n in soup.select('[data-asin], [data-client-recs-list], [data-expected-count]')):
             return False

@@ -11,7 +11,7 @@ from pathlib import Path
 from .task_workspace import TaskWorkspace, utc_now
 
 
-class CacheCapacityExceeded(RuntimeError):
+class CacheCapacityExceeded(ValueError):
     pass
 
 

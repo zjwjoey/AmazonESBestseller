@@ -111,6 +111,9 @@ def prepare_page_task(base_plan, base_approval, config, output, runtime_root, ta
     # Do not carry old-run page expansion/amendment proofs into a new batch.
     if any(s.get('snapshot_admission_root') or s.get('favorite_budget_reference') for s in plan['sources']):
         raise ValueError('FRESH_REVIEWED_ROOT_SOURCES_REQUIRED')
+    from ..task_workspace import TaskWorkspace
+    task = TaskWorkspace.create(Path(runtime_root) / run_id, run_id, snapshot_run_id=run_id)
+    plan.update(task_id=task.manifest['task_id'], task_root=str(task.root))
     validate_plan_v4(plan);validate_page_snapshot(plan)
     approval = deepcopy(base_approval)
     approval['sources']={s['source_id']:approval['sources'][s['source_id']] for s in plan['sources']}
